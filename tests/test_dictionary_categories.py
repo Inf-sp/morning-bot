@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -29,3 +30,74 @@ def test_dictionary_migration_repairs_pos_from_grammar_breakdown(monkeypatch):
     assert result[0]["pos"] == "прилагательное"
     assert learning_dictionary._dictionary_category(result[0]) == "Прилагательные"
     assert saved[0][0]["pos"] == "прилагательное"
+
+
+def test_dictionary_migration_extracts_article_and_repairs_legacy_noun(monkeypatch):
+    words = [{
+        "id": "word-1", "lang": "nl", "term": "het huis",
+        "translation": "дом", "pos": "глагол", "breakdown": "глагол",
+        "examples": [],
+    }]
+    saved = []
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(
+        learning_dictionary.store, "set_list",
+        lambda _key, _cid, value: saved.append(value),
+    )
+
+    result = learning_dictionary.normalize_user_dictionary("42")
+
+    assert result[0]["term"] == "Huis"
+    assert result[0]["article"] == "het"
+    assert result[0]["pos"] == "существительное"
+    assert result[0]["breakdown"] == "существительное · het-слово"
+    assert learning_dictionary._dictionary_category(result[0]) == "Существительные"
+    assert saved
+
+
+def test_dictionary_format_migration_reclassifies_all_legacy_cards(monkeypatch):
+    words = [
+        {
+            "id": "noun", "lang": "nl", "term": "Huis", "translation": "Дом",
+            "pos": "глагол", "breakdown": "глагол", "srs_level": 4,
+            "srs_due_at": "2026-08-30T10:00:00+02:00",
+        },
+        {
+            "id": "adjective", "lang": "nl", "term": "Mooi",
+            "translation": "Красивый", "pos": "noun", "breakdown": "существительное",
+        },
+    ]
+    saved = []
+
+    async def analyze(*_args, **_kwargs):
+        return {"items": [
+            {
+                "pos": "существительное", "article": "het",
+                "breakdown": "существительное · het-слово", "plural": "huizen",
+            },
+            {
+                "pos": "прилагательное", "article": "",
+                "breakdown": "прилагательное", "plural": "",
+            },
+        ]}
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(
+        learning_dictionary.store, "set_list",
+        lambda _key, _cid, value: saved.append([dict(item) for item in value]),
+    )
+    monkeypatch.setattr(learning_dictionary.ai, "allm_json", analyze)
+
+    asyncio.run(learning_dictionary.migrate_dict_entries_for_srs("42", "nl"))
+
+    assert words[0]["article"] == "het"
+    assert words[0]["pos"] == "существительное"
+    assert words[0]["breakdown"] == "существительное · het-слово"
+    assert words[0]["srs_level"] == 4
+    assert words[1]["pos"] == "прилагательное"
+    assert words[1]["article"] == ""
+    assert all(
+        item["dictionary_format_version"] == learning_dictionary._DICTIONARY_FORMAT_VERSION
+        for item in words
+    )
+    assert saved

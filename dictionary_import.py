@@ -19,6 +19,7 @@ import util
 import learning_dictionary as dictionary
 import learning_data_quality
 from dictionary_model import (
+    DICTIONARY_FORMAT_VERSION,
     example_matches_term,
     canonical_part_of_speech,
     normalize_translation_case,
@@ -1269,6 +1270,7 @@ def _save_normalized_dict_entry(cid, entry):
                 "status": item.get("status") or "new",
                 "last_shown_at": item.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),
+                "dictionary_format_version": DICTIONARY_FORMAT_VERSION,
                 **verb_fields,
             })
             if entry.get("analysis_provider"):
@@ -1298,6 +1300,7 @@ def _save_normalized_dict_entry(cid, entry):
         "added_at": entry["added_at"],
         "status": entry.get("status") or "new",
         "last_shown_at": entry.get("last_shown_at"),
+        "dictionary_format_version": DICTIONARY_FORMAT_VERSION,
         **({"analysis_pending": True} if entry.get("analysis_pending") else {}),
         **srs_fields,
         **verb_fields,

@@ -8,10 +8,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import config
+import learning_data_quality
 import secure
 import store
 from dictionary_model import (
     CANONICAL_ENTRY_OVERRIDES,
+    DICTIONARY_FORMAT_VERSION,
     PHRASE_CORRECTIONS,
     entry_language,
     entry_term,
@@ -127,10 +129,17 @@ def normalize_user_dictionary(cid):
     result = []
     seen = {}
     for item in words:
-        if not isinstance(item, dict):
-            item = normalize_entry(item)
-        else:
-            item = normalize_entry(item)
+        item, _quality_changed = learning_data_quality.normalize_entry(item)
+        canonical_pos = canonical_part_of_speech(item)
+        if canonical_pos:
+            item["pos"] = canonical_pos
+        explicit_article = str(item.get("article") or "").strip().casefold()
+        if explicit_article in {"de", "het"} and entry_language(item) == "nl":
+            # Старые записи нередко хранили артикль внутри term и ошибочный
+            # AI-разбор рядом. Явный de/het надёжнее legacy pos/breakdown.
+            item["pos"] = "существительное"
+            item["breakdown"] = f"существительное · {explicit_article}-слово"
+            item["kind"] = "word"
         lang = "en" if entry_language(item) == "en" else "nl"
         item["lang"] = lang
         correction = PHRASE_CORRECTIONS.get(normalize_key(entry_term(item)))
@@ -394,6 +403,7 @@ def _dict_counts(cid):
 
 
 _SRS_MIGRATION_BATCH_SIZE = 40  # ограничивает размер одного промпта на очень больших словарях
+_DICTIONARY_FORMAT_VERSION = DICTIONARY_FORMAT_VERSION
 
 
 def _srs_migration_prompt(lang, entries):
@@ -414,6 +424,9 @@ def _srs_migration_prompt(lang, entries):
 
 Для каждой записи верни:
 - pos: часть речи одним словом.
+- article: "de" или "het" для каждого нидерландского существительного, иначе пусто.
+- breakdown: короткий правильный разбор части речи; для существительного укажи
+  `существительное · de-слово` или `существительное · het-слово`.
 - Нидерландскую конструкцию «инфинитив + фиксированный предлог» определяй как глагол,
   а не как фразу; construction сохраняй целиком.
 - plural: множественное число, если применимо к существительному, иначе пусто.
@@ -428,7 +441,7 @@ def _srs_migration_prompt(lang, entries):
 
 Верни строго JSON-объект с ключом "items" — массив в ТОМ ЖЕ ПОРЯДКЕ, что записи выше,
 без markdown:
-{{"items": [{{"pos": "...", "plural": "", "forms": [], "topic": "...", "difficulty": "B1",
+{{"items": [{{"pos": "...", "article": "de|het|", "breakdown": "...", "plural": "", "forms": [], "topic": "...", "difficulty": "B1",
    "construction": "", "situation_type": "", "alt_translations": []}}, ...]}}"""
 
 
@@ -443,7 +456,10 @@ async def migrate_dict_entries_for_srs(cid, lang):
     words = store.get_list(config.DICT_KEY, cid)
     pending_idx = [
         i for i, w in enumerate(words)
-        if _dict_lang(w) == lang and _entry_needs_srs_migration(w)
+        if _dict_lang(w) == lang and (
+            _entry_needs_srs_migration(w)
+            or int(w.get("dictionary_format_version") or 0) < _DICTIONARY_FORMAT_VERSION
+        )
     ]
     if not pending_idx:
         return
@@ -462,6 +478,42 @@ async def migrate_dict_entries_for_srs(cid, lang):
             extra = _extract_srs_fields(fields)
             for k, v in extra.items():
                 words[idx].setdefault(k, v)
+            canonical_pos = canonical_part_of_speech(fields)
+            valid_pos = canonical_pos in {
+                "прилагательное", "глагол", "существительное", "местоимение",
+                "наречие", "предлог", "фраза",
+            }
+            if not valid_pos:
+                continue
+            article = str(fields.get("article") or "").strip().casefold()
+            existing_article = str(words[idx].get("article") or "").strip().casefold()
+            if existing_article in {"de", "het"}:
+                article = existing_article
+                canonical_pos = "существительное"
+            if canonical_pos != "существительное" or article not in {"de", "het"}:
+                article = ""
+            if lang == "nl" and canonical_pos == "существительное" and not article:
+                # Не закрепляем неполный разбор: следующая попытка ещё сможет
+                # получить обязательный артикль, не угадывая его локально.
+                continue
+            words[idx]["pos"] = canonical_pos
+            words[idx]["article"] = article
+            breakdown = str(fields.get("breakdown") or "").strip()
+            if canonical_pos == "существительное":
+                breakdown = f"существительное · {article}-слово"
+            elif breakdown:
+                words[idx]["breakdown"] = breakdown
+            else:
+                words[idx]["breakdown"] = canonical_pos
+            if canonical_pos == "существительное":
+                words[idx]["breakdown"] = breakdown
+            for field in (
+                "plural", "forms", "topic", "difficulty", "construction",
+                "situation_type", "alt_translations",
+            ):
+                if field in fields:
+                    words[idx][field] = fields[field]
+            words[idx]["dictionary_format_version"] = _DICTIONARY_FORMAT_VERSION
     store.set_list(config.DICT_KEY, cid, words)
 
 async def _show_screen(
@@ -512,6 +564,8 @@ async def send_dict(bot, cid, back="m_learn", q=None):
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     """Главный экран языкового словаря: категории вместо плоской сетки."""
+    normalize_user_dictionary(cid)
+    await migrate_dict_entries_for_srs(cid, lang)
     entries = _dict_lang_entries(cid, lang)
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []

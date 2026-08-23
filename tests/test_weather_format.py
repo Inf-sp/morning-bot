@@ -35,8 +35,8 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
         "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱",
         None,
         [
-            {"title": "☀️ Утро · 08:00–12:00", "lines": ["Температура до +18°C", "Ветер 4 м/с"]},
-            {"title": "🌧️ Днём · 12:00–18:00", "lines": ["Температура до +20°C", "Дождь 70% · Облачность 80%"]},
+            {"title": "☀️ Утром", "lines": ["Температура до +18°C", "Ветер 4 м/с"]},
+            {"title": "🌧️ Днём", "lines": ["Температура до +20°C", "Дождь 70% · Облачность 80%"]},
         ],
         "Восход 06:25",
         "Закат 21:02",
@@ -46,11 +46,13 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert message.text.startswith(
         "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱\n\n"
         "Восход 06:25\n\n"
-        "☀️ Утро · 08:00–12:00"
+        "☀️ Утром"
     )
     assert "Сейчас" not in message.text
     assert "• Ветер 4 м/с" in message.text
-    assert "🌧️ Днём · 12:00–18:00" in message.text
+    assert "🌧️ Днём" in message.text
+    assert "08:00–12:00" not in message.text
+    assert "12:00–18:00" not in message.text
     assert "• Температура до +20°C" in message.text
     assert "• Дождь 70% · Облачность 80%" in message.text
     assert "Вероятность" not in message.text

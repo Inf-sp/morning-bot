@@ -82,12 +82,21 @@ def _now_playing_week_key():
     return f"{year}-W{week:02d}"
 
 
-def _now_playing_catalog_get(cid, city):
+def _previous_now_playing_week_key():
+    previous = datetime.now(config.TZ).date() - timedelta(days=7)
+    year, week, _weekday = previous.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _now_playing_catalog_get(cid, city, *, allow_previous=False):
     data = store._load(config.MOVIE_NOW_PLAYING_CACHE_KEY) or {}
     entry = data.get(str(cid)) if isinstance(data, dict) else None
+    allowed_weeks = {_now_playing_week_key()}
+    if allow_previous:
+        allowed_weeks.add(_previous_now_playing_week_key())
     if (not isinstance(entry, dict)
             or entry.get("city") != city
-            or entry.get("week") != _now_playing_week_key()):
+            or entry.get("week") not in allowed_weeks):
         return None
     items = entry.get("items")
     if not isinstance(items, list) or not items:
@@ -140,6 +149,10 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
     prefs = _movie_prefs(cid)
     items = None if refresh else _now_playing_catalog_get(cid, city)
     if items is None:
+        previous_items = (
+            None if refresh else
+            _now_playing_catalog_get(cid, city, allow_previous=True)
+        )
         listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
         if listed:
             items = []
@@ -167,7 +180,14 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
                 for movie in regional
                 if str(getattr(movie, "title", "") or "").strip()
             ]
-        _now_playing_catalog_set(cid, city, items)
+        has_featured = bool(
+            _featured_now_playing(items, require_overview=True)
+            or _featured_now_playing(items)
+        )
+        if not has_featured and previous_items:
+            items = previous_items
+        else:
+            _now_playing_catalog_set(cid, city, items)
     items.sort(key=lambda item: _local_movie_score(item, prefs), reverse=True)
     return items[:max(1, int(limit or 20))]
 

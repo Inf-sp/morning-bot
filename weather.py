@@ -435,7 +435,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             if stamp.startswith(dt.strftime("%Y-%m-%dT%H")) and index < len(probs)
         ), d["precipitation_probability_max"][0] or 0)
         periods = []
-        parts = [("Утро", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 23)]
+        parts = [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 23)]
         for label, h1, h2 in parts:
             t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
             for i, ts in enumerate(hours):
@@ -461,7 +461,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                 sky_parts.append(f"Облачность {max(cloud_vals):.0f}%")
             lines.append(" · ".join(sky_parts))
             periods.append({
-                "title": f"{icon} {label} · {h1:02d}:00–{h2:02d}:00",
+                "title": f"{icon} {label}",
                 "lines": lines,
             })
         _tmin, daytime_tmax = _daytime_temperature_range(

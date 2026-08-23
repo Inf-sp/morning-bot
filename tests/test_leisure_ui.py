@@ -1270,6 +1270,37 @@ def test_local_cinema_catalogue_is_reused_for_a_week(monkeypatch):
     assert calls == {"cinema": 1, "tmdb": 1}
 
 
+def test_movie_home_keeps_last_week_releases_when_new_catalogue_has_no_featured_movies(monkeypatch):
+    previous = [{
+        "title": "Премьера прошлой недели", "overview": "Описание",
+        "rating": 7.4, "vote_count": 240, "popularity": 70,
+    }]
+    cache = {
+        config.MOVIE_NOW_PLAYING_CACHE_KEY: {
+            "42": {"city": "Алкмар", "week": "2026-W33", "items": previous},
+        },
+    }
+
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda key: cache.get(key))
+    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
+    monkeypatch.setattr(leisure_movies, "_now_playing_week_key", lambda: "2026-W34")
+    monkeypatch.setattr(leisure_movies, "_previous_now_playing_week_key", lambda: "2026-W33")
+    monkeypatch.setattr(
+        leisure_movies.local_cinema, "get_city_movies",
+        lambda *_args, **_kwargs: [leisure_movies.local_cinema.LocalCinemaMovie("Совсем новая")],
+    )
+    monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
+    monkeypatch.setattr(leisure_movies.tmdb, "search_id", lambda *_args: {
+        "name": "Совсем новая", "year": 2026, "rating": 8.5,
+        "vote_count": 12, "popularity": 100, "genre_ids": [18],
+    })
+
+    result = asyncio.run(leisure_movies.get_local_now_playing("42", limit=3))
+
+    assert [item["title"] for item in result] == ["Премьера прошлой недели"]
+
+
 def test_lille_cinema_uses_current_french_theatrical_releases_when_local_listing_is_empty(monkeypatch):
     requested = {}
     regional_movies = [
@@ -1283,7 +1314,7 @@ def test_lille_cinema_uses_current_french_theatrical_releases_when_local_listing
         "city": "Лилль", "country": "Франция", "cc": "FR",
     })
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
-    monkeypatch.setattr(leisure_movies, "_now_playing_catalog_get", lambda *_args: None)
+    monkeypatch.setattr(leisure_movies, "_now_playing_catalog_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(leisure_movies, "_now_playing_catalog_set", lambda *_args: None)
     monkeypatch.setattr(leisure_movies.local_cinema, "get_city_movies", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")

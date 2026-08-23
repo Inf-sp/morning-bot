@@ -3,6 +3,9 @@
 import re
 
 
+DICTIONARY_FORMAT_VERSION = 2
+
+
 _LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an)\s+", re.I)
 _EXAMPLE_STOP_WORDS = {
     "de", "het", "een", "the", "a", "an", "wat", "wie", "waar",
