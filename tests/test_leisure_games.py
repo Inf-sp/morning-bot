@@ -133,7 +133,7 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
 
     assert "👾 Игры на сегодня · Новинки 2026" in status.call[0]
     assert "Новинки лета:" in status.call[0]
-    assert "Ребус недели:" in status.call[0]
+    assert "Ребус дня:" in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
@@ -301,6 +301,18 @@ def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypa
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert status.call[1]["reply_markup"].inline_keyboard[0][0].callback_data == "vg_next_board"
+
+
+def test_next_board_game_never_repeats_the_current_game(monkeypatch):
+    _profile_store(monkeypatch)
+    monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
+
+    picks = [
+        leisure_games.pick_game("42", genre="board", refresh=True)["id"]
+        for _index in range(8)
+    ]
+
+    assert all(current != previous for previous, current in zip(picks, picks[1:]))
 
 
 def test_favorite_games_influence_recommendation_and_are_not_repeated(monkeypatch):

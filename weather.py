@@ -480,7 +480,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         else:
             advice = f"В {s['city']} сегодня без сильных погодных помех — можно планировать дела на улице."
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌦️ Погода на неделю", callback_data="a_w_week")],
+            [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"),
              InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])

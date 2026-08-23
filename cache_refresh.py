@@ -41,6 +41,7 @@ async def _run(bot, cid):
     import leisure_movies
     import leisure_music
     import myday
+    import monthly_rebuses
     import recipe_generation
     import travel
     import wardrobe
@@ -70,6 +71,11 @@ async def _run(bot, cid):
         myday.reset_day_cache(cid)
         await myday.warm_day_cache(cid)
 
+    async def rebus_step(category, fallback):
+        await monthly_rebuses.for_day(
+            category, datetime.now(config.TZ).date(), fallback, refresh=True,
+        )
+
     steps = (
         ("weather", weather_step),
         ("wardrobe", wardrobe_step),
@@ -78,6 +84,11 @@ async def _run(bot, cid):
         ("dinner", lambda: cooking_step(18)),
         ("learning", learning_step),
         ("myday", myday_step),
+        ("movie rebuses", lambda: rebus_step("movies", leisure_movies._CINEMA_REBUSES)),
+        ("book rebuses", lambda: rebus_step("books", leisure_books._BOOK_REBUSES)),
+        ("music rebuses", lambda: rebus_step("music", leisure_music._MUSIC_REBUSES)),
+        ("game rebuses", lambda: rebus_step("games", leisure_games._GAME_DAILY_CONTENT)),
+        ("travel rebuses", lambda: rebus_step("travel", travel._TRAVEL_REBUSES)),
         ("travel", lambda: travel.warm_home_cache(cid, refresh=True)),
         ("cinema", lambda: leisure_movies.get_local_now_playing(cid, limit=20, refresh=True)),
         ("books", lambda: leisure_books.warm_books_home_cache(cid, refresh=True)),

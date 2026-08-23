@@ -142,9 +142,11 @@ def test_travel_home_shows_a_daily_tourist_emoji_rebus():
     }
 
     message = travel_ui.home_screen(
-        idea, 2, rebus={"emoji": "🌋 ♨️ ❄️", "answer": "Исландия"},
+        idea, rebus={"emoji": "🌋 ♨️ ❄️", "answer": "Исландия"},
     )
 
+    assert "Прогресс:" not in message.text
+    assert "посещено" not in message.text
     assert "Туристический ребус: 🌋 ♨️ ❄️ → Исландия" in message.text
     assert message.text.index("Маршрут:") < message.text.index("Туристический ребус:") < message.text.index("💡 Полезно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)

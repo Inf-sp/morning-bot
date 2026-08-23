@@ -273,7 +273,7 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
     b.spacer()
-    b.bold("Ребус недели:")
+    b.bold("Ребус дня:")
     b.newline()
     b.text_line(str(daily.get("emoji") or "🎮 ❓"))
     b.text_line(" → ")
@@ -735,8 +735,10 @@ def book_text(item):
         b.line(plot)
     if item.get("quote"):
         quote = str(item["quote"]).strip().strip("«»\"")
+        quote_author = str(item.get("quote_author") or item.get("author") or "").strip()
+        quote_line = f"💭 «{quote}»" + (f" — {quote_author}" if quote_author else "")
         b.spacer()
-        b.add(f"💭 «{quote}»", MessageEntity.ITALIC)
+        b.add(quote_line, MessageEntity.ITALIC)
         b.newline()
     return b.build_stripped()
 

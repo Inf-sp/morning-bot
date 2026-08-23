@@ -681,13 +681,23 @@ def _home_idea_context(cid, now=None) -> dict:
         "cuisines": _cuisine_context(cid),
         "cuisine_codes": cuisine_codes,
     }
+    pool_signature_data = {
+        **signature_data,
+        "month": now.strftime("%Y-%m"),
+    }
+    pool_signature_data.pop("date", None)
     signature = hashlib.sha256(
         json.dumps(signature_data, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    pool_signature = hashlib.sha256(
+        json.dumps(pool_signature_data, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
     return {
         **signature_data,
         "has_fridge": bool(fridge),
         "signature": signature,
+        "month": pool_signature_data["month"],
+        "pool_signature": pool_signature,
     }
 
 
@@ -719,7 +729,9 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         f"{source_block}"
         "Правила:\n"
         "• Все пользовательские поля пиши только по-русски.\n"
-        "• Предложи ровно одно понятное блюдо, без рекламного названия.\n"
+        "• Предложи ровно одно понятное блюдо, без рекламного названия. "
+        "При равных условиях выбирай известный популярный рецепт с удачным сочетанием вкусов, "
+        "а не случайный эксперимент.\n"
         "• cuisine — обязательный машиночитаемый код реальной кухни блюда, даже если этой кухни нет "
         "в предпочтениях пользователя. Используй один из кодов: "
         f"{', '.join(RECIPE_CUISINE_CODES)}. Если точную страну определить нельзя, но состав и техника "
@@ -774,6 +786,19 @@ def _home_local_idea(context: dict) -> dict:
     }, context)
 
 
+def _home_month_pool(profile: dict, context: dict) -> list[dict]:
+    """Варианты текущего месяца для одного приёма пищи и актуального профиля."""
+    pools = profile.get("cooking_home_month_pools") or {}
+    entry = pools.get(context["meal"]) if isinstance(pools, dict) else None
+    if not isinstance(entry, dict):
+        return []
+    if (entry.get("month") != context["month"]
+            or entry.get("signature") != context["pool_signature"]):
+        return []
+    ideas = entry.get("ideas") or []
+    return [idea for idea in ideas if isinstance(idea, dict)]
+
+
 def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     """Возвращает готовый рецепт без AI и без побочных эффектов.
 
@@ -816,15 +841,24 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         if ready is not None:
             return ready
 
+    month_pool = _home_month_pool(profile, context)
+    month_names = [str(idea.get("name") or "") for idea in month_pool if idea.get("name")]
+    avoided_names = list(dict.fromkeys(
+        [name for name in [previous_name, *month_names] if name]
+    ))
+
     sources = _recipe_sources(
         _HOME_MEAL_LABELS[context["meal"]],
         ingredients=", ".join(context.get("available") or []),
         limit=10,
-        avoid=[previous_name] if previous_name else [],
+        avoid=avoided_names,
     )
     prompt = _home_idea_prompt(context, sources=sources)
-    if refresh and previous_name:
-        prompt += f"\nНе повторяй блюдо: {secure.wrap_untrusted(previous_name, 'предыдущий рецепт')}."
+    if avoided_names:
+        prompt += (
+            "\nНе повторяй уже собранные в этом месяце блюда: "
+            f"{secure.wrap_untrusted(', '.join(avoided_names[-31:]), 'история рецептов')}."
+        )
     idea = {}
     for attempt in range(2):
         llm_failed = False
@@ -888,6 +922,20 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         profile["cooking_home_ideas"] = entries
         # Старое поле оставляем как последний использованный рецепт для совместимости.
         profile["cooking_home_idea"] = cache_entry
+
+        pools = profile.get("cooking_home_month_pools")
+        pools = dict(pools) if isinstance(pools, dict) else {}
+        current_pool = _home_month_pool(profile, context)
+        idea_name = str(idea.get("name") or "").casefold()
+        if idea_name and all(str(item.get("name") or "").casefold() != idea_name
+                             for item in current_pool):
+            current_pool.append(idea)
+        pools[context["meal"]] = {
+            "month": context["month"],
+            "signature": context["pool_signature"],
+            "ideas": current_pool[-31:],
+        }
+        profile["cooking_home_month_pools"] = pools
         return profile, None
 
     store.mutate_profile(cid, save_idea)

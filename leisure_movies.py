@@ -21,6 +21,7 @@ import inclusive_recommendations
 import verify
 import tracking
 import local_cinema
+import monthly_rebuses
 from util import _MONTHS
 from ui import leisure as leisure_ui
 from leisure_collection import (

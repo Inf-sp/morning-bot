@@ -138,7 +138,7 @@ def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
         )
 
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Основной · gpt-oss-20b · 5 сегодня"
+        "🟢 Groq · Основной · 5 сегодня"
     )
 
 
@@ -148,12 +148,12 @@ def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
 
     provider_runtime.record_result("groq", True, quota_remaining=998, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Основной · gpt-oss-20b · 998/1 000 осталось"
+        "🟢 Groq · Основной · 998/1 000 осталось"
     )
 
     provider_runtime.record_result("groq", True, quota_remaining=499, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟡 Groq · Основной · gpt-oss-20b · 499/1 000 осталось"
+        "🟡 Groq · Основной · 499/1 000 осталось"
     )
 
 
@@ -197,7 +197,10 @@ def test_groq_and_cloudflare_rows_show_actual_usage_without_claiming_a_quota(mon
 
     rows = service_monitor.rows()
 
-    assert any("Groq · Основной · gpt-oss-20b · 3 сегодня" in row for row in rows)
+    groq_rows = [row for row in rows if "Groq" in row]
+    assert len(groq_rows) == 1
+    assert groq_rows[0].endswith("Groq · Основной · 3 сегодня")
+    assert not any("gpt-oss" in row or "qwen" in row for row in rows)
     assert any("Cloudflare AI · Резерв · 158 нейронов сегодня" in row for row in rows)
 
 

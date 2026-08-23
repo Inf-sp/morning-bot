@@ -16,6 +16,7 @@ import recommendation_stoplist
 import secure
 import settings
 import store
+import monthly_rebuses
 import youtube_tracks
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
@@ -509,7 +510,7 @@ async def _daily_music_content(cid):
     today = datetime.now(config.TZ).date()
     week_anchor = today - timedelta(days=today.weekday())
     return {
-        "rebus": _daily_music_rebus(week_anchor),
+        "rebus": await monthly_rebuses.for_day("music", today, _MUSIC_REBUSES),
         "legend": await asyncio.to_thread(_load_music_legend, week_anchor),
     }
 

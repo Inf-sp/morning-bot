@@ -5,6 +5,7 @@ import store
 import dictionary_morning
 import learning_settings as learning_preferences
 from ui import settings as settings_ui
+from ui import weather as weather_ui
 from ui.constants import cuisine_label, ui_label
 
 _log = logging.getLogger(__name__)
@@ -484,7 +485,7 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "evening_weather":
         import weather as _w
         kb = notification_markup("evening_weather", [[
-            InlineKeyboardButton("🌦️ Погода на неделю", callback_data="a_w_week"),
+            InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]])
         await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)

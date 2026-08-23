@@ -154,6 +154,7 @@ BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — теку
 MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, tm}} — персональная карточка кино на день
 BOOK_WEEKLY_CACHE_KEY = "book_weekly_cache.json"  # {week, season, items} — новинки книжного сезона
 BOOK_DAILY_CACHE_KEY = "book_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный литературный именинник на день
+MONTHLY_REBUSES_CACHE_KEY = "monthly_rebuses_cache.json"  # {category: {month, items[28..31]}}
 LOCAL_CINEMA_CACHE_KEY = "local_cinema_cache.json"  # {cid: {city, ts, movies}} — подтверждённая городская афиша
 MOVIE_NOW_PLAYING_CACHE_KEY = "movie_now_playing_cache.json"  # {cid: {city, week, items}} — стабильный каталог проката на неделю
 MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, items}} — новые региональные релизы на неделю

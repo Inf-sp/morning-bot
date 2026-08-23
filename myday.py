@@ -23,6 +23,7 @@ import util
 from util import esc, _WEEKDAY_SHORT, _MONTHS
 import verify
 from ui import myday as myday_ui
+from ui import weather as weather_ui
 
 TZ = config.TZ
 
@@ -1038,7 +1039,7 @@ def _save_day_cache(cid, today, text, entities, ts):
 def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
-        [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
+        [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

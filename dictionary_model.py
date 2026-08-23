@@ -168,6 +168,35 @@ def normalize_term_case(term, kind=""):
     return text.lower().capitalize() if text and is_dictionary_word(text, kind) else text
 
 
+_POS_PATTERNS = (
+    ("прилагательное", r"\b(?:прилагательное|adjective|adj|bijvoeglijk naamwoord)\b"),
+    ("глагол", r"\b(?:глагол|verb|werkwoord)\b"),
+    ("существительное", r"\b(?:существительное|noun|zelfstandig naamwoord)\b"),
+    ("местоимение", r"\b(?:местоимение|pronoun|voornaamwoord)\b"),
+    ("наречие", r"\b(?:наречие|adverb|bijwoord)\b"),
+    ("предлог", r"\b(?:предлог|preposition|voorzetsel)\b"),
+    ("фраза", r"\b(?:фраза|предложение|выражение|конструкция|phrase|sentence|expression|construction)\b"),
+)
+
+
+def canonical_part_of_speech(entry) -> str:
+    """Сводит pos и грамматический разбор к одному значению.
+
+    Разбор появляется после лексикографической проверки, поэтому при
+    конфликте он исправляет legacy-pos. Глагольная конструкция остаётся глаголом.
+    """
+    source = entry if isinstance(entry, dict) else {}
+    breakdown = " ".join(str(source.get("breakdown") or "").casefold().split())
+    for canonical, pattern in _POS_PATTERNS:
+        if re.search(pattern, breakdown, re.I):
+            return canonical
+    raw_pos = " ".join(str(source.get("pos") or "").casefold().split())
+    for canonical, pattern in _POS_PATTERNS:
+        if re.fullmatch(pattern, raw_pos, re.I):
+            return canonical
+    return raw_pos
+
+
 def normalize_entry(entry, *, language=None):
     """Возвращает единую схему поверх legacy term/word/base_form и ru."""
     source = dict(entry) if isinstance(entry, dict) else {"term": str(entry)}
@@ -176,6 +205,9 @@ def normalize_entry(entry, *, language=None):
     source["translation"] = normalize_translation_case(entry_translation(source))
     source["lang"] = language or entry_language(source)
     source.setdefault("kind", "phrase" if " " in source["term"].strip() else "word")
+    canonical_pos = canonical_part_of_speech(source)
+    if canonical_pos:
+        source["pos"] = canonical_pos
     # Legacy AI records sometimes marked a whole construction as a noun and
     # attached ``de/het``.  An article belongs only to a single noun entry.
     if not is_dictionary_word(source["term"], source.get("kind", "")):

@@ -1233,8 +1233,10 @@ def test_daily_category_block_titles_are_bold():
 
 
 def test_book_quote_uses_the_my_day_italic_format():
-    message = leisure_books._book_text({"title": "1984", "quote": "Война - это мир."})
-    assert "💭 «Война - это мир.»" in message.text
+    message = leisure_books._book_text({
+        "title": "1984", "author": "Джордж Оруэлл", "quote": "Война - это мир.",
+    })
+    assert "💭 «Война - это мир.» — Джордж Оруэлл" in message.text
     assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)
 
 
@@ -1492,6 +1494,57 @@ def test_literary_vibe_recovers_three_verified_books_through_publishers(monkeypa
     assert all(item["author"] and item["isbn"] and item["cover_url"] for item in items)
 
 
+def test_publisher_books_do_not_depend_on_google_books(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    monkeypatch.setattr(leisure_books.research, "tavily_search", lambda *_args, **_kwargs: [
+        {"title": "Publisher books", "url": "https://publisher.test/new", "content": "New novel."},
+    ])
+    monkeypatch.setattr(leisure_books.ai, "llm_json", lambda *_args, **_kwargs: {
+        "books": [{
+            "title": "Independent Book", "author": "Writer",
+            "published_date": (today - timedelta(days=20)).isoformat(),
+            "publisher": "Publisher", "isbn": "9780000000999",
+            "source_url": "https://publisher.test/new",
+        }],
+    })
+    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        leisure_books.open_library, "cover_for_isbn",
+        lambda _isbn: "https://covers.openlibrary.org/b/isbn/9780000000999-L.jpg",
+        raising=False,
+    )
+
+    items = asyncio.run(leisure_books._publisher_book_candidates())
+
+    assert items[0]["title"] == "Independent Book"
+    assert items[0]["isbn"] == "9780000000999"
+
+
+def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda *_args: None)
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [])
+
+    async def no_publishers():
+        return []
+
+    async def open_library_books():
+        return [{
+            "title": f"Open Book {index}", "author": f"Author {index}",
+            "published_date": (today - timedelta(days=index * 10)).isoformat(),
+            "isbn": f"97800000001{index}", "cover_url": f"https://covers.openlibrary.org/{index}.jpg",
+            "publisher_date_confirmed": True,
+        } for index in range(1, 4)]
+
+    monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_publishers)
+    monkeypatch.setattr(leisure_books, "_open_library_book_candidates", open_library_books, raising=False)
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Open Book 1", "Open Book 2", "Open Book 3"]
+
+
 def test_literary_vibe_shows_short_title_and_author_line():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Свежая книга",
@@ -1558,7 +1611,8 @@ def test_weekly_books_do_not_fall_back_outside_current_season(monkeypatch):
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
-    assert items == []
+    assert items
+    assert all(item["title"] != "Неудачная" for item in items)
 
 
 def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monkeypatch):
@@ -1573,7 +1627,25 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
 
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
-    assert items == []
+    assert items
+    assert all(item["title"] != "Мастер и Маргарита" for item in items)
+
+
+def test_weekly_books_use_verified_season_reserve_when_all_apis_are_empty(monkeypatch):
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda *_args: None)
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [])
+
+    async def no_candidates():
+        return []
+
+    monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_candidates)
+    monkeypatch.setattr(leisure_books, "_open_library_book_candidates", no_candidates)
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert len(items) == 3
+    assert all(item["author"] and item["isbn"] and item["url"] for item in items)
 
 
 def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():

@@ -18,6 +18,7 @@ import research
 import secure
 import settings
 import store
+import monthly_rebuses
 from ui import leisure as leisure_ui
 
 
@@ -372,7 +373,10 @@ def pick_game(cid, *, genre=None, refresh=False):
                     if len(favorite_genres.intersection(item.get("genres") or [])) == best_overlap]
     seen = [str(value) for value in profile.get("game_seen", []) if str(value)]
     fresh = [item for item in pool if item["id"] not in seen]
-    candidates = fresh or pool
+    # После полного круга все элементы находятся в seen. Не начинаем новый
+    # круг с текущей карточки: кнопка «Другая игра» обязана видимо менять игру.
+    without_current = [item for item in pool if not seen or item["id"] != seen[-1]]
+    candidates = fresh or without_current or pool
     seed = int(hashlib.sha256(f"{cid}|{week_key}|{genre or ''}".encode()).hexdigest()[:8], 16)
     item = candidates[seed % len(candidates)]
     seen = [value for value in seen if value != item["id"]]
@@ -666,7 +670,7 @@ async def send_games_home(bot, cid, *, q=None, status=None):
     today = datetime.now(config.TZ).date()
     week_anchor = today - timedelta(days=today.weekday())
     _season_start, _season_end, season = _game_season(today)
-    daily = dict(_GAME_DAILY_CONTENT[(week_anchor.toordinal() - 1) % len(_GAME_DAILY_CONTENT)])
+    daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
     home_items = []
     items = _rotated_season_items(items, week_anchor)
     for source in items[:3]:

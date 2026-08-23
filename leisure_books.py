@@ -18,6 +18,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import ai
 import config
 import google_books
+import open_library
+import monthly_rebuses
 import recommendation_stoplist
 import research
 import secure
@@ -98,6 +100,36 @@ _PREMIERE_SUMMARIES = {
     "the tenant": "Женщина снимает комнату в идеальном доме и замечает, что хозяева скрывают опасную тайну.",
     "atmosphere": "Астронавтка пытается совместить мечту о космосе с любовью, которую нельзя назвать вслух.",
 }
+
+# Проверенный сезонный резерв на случай, когда Google Books,
+# Tavily/LLM и Open Library одновременно не дали выдачу. Даты, ISBN и
+# авторы взяты с официальных страниц издателей.
+_VERIFIED_SEASON_RELEASES = (
+    {
+        "title": "Hunger and Thirst", "author": "Claire Fuller",
+        "published_date": "2026-06-02", "isbn": "9781963108729",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9781963108729",
+        "info_link": "https://www.penguinrandomhouse.com/books/816559/hunger-and-thirst-by-claire-fuller/",
+        "publisher": "Penguin Random House", "publisher_date_confirmed": True,
+        "description": "Атмосферный роман о дружбе, принадлежности и цене принятия.",
+    },
+    {
+        "title": "When Mikan Road Was Ours", "author": "D. K. Furutani",
+        "published_date": "2026-07-28", "isbn": "9781668086940",
+        "cover_url": "https://images.simonandschuster.com/BookImages/Products/9781668086940.jpg",
+        "info_link": "https://www.simonandschuster.com/books/When-Mikan-Road-Was-Ours/D-K-Furutani/9781668086940",
+        "publisher": "Atria Books", "publisher_date_confirmed": True,
+        "description": "Семейная сага о четырёх поколениях японо-американской семьи.",
+    },
+    {
+        "title": "Few and Far Between", "author": "Jan Carson",
+        "published_date": "2026-07-28", "isbn": "9781668056639",
+        "cover_url": "https://images.simonandschuster.com/BookImages/Products/9781668056639.jpg",
+        "info_link": "https://www.simonandschuster.com/books/Few-and-Far-Between/Jan-Carson/9781668056639",
+        "publisher": "Scribner", "publisher_date_confirmed": True,
+        "description": "Тёмная и ироничная альтернативная история о семье и общественной травме.",
+    },
+)
 
 
 def _item_text(item):
@@ -612,7 +644,7 @@ async def _daily_book_content():
     today = datetime.now(config.TZ).date()
     week_anchor = today - timedelta(days=today.weekday())
     return {
-        "rebus": _daily_book_rebus(week_anchor),
+        "rebus": await monthly_rebuses.for_day("books", today, _BOOK_REBUSES),
         "birthday": await asyncio.to_thread(_load_book_birthday, week_anchor),
     }
 
@@ -777,6 +809,16 @@ def _fallback_book_showcase(candidates):
     return _showcase_items(seasonal, "season")[:3]
 
 
+def _verified_season_releases(today=None):
+    """Оставляет из ручно проверенного резерва только текущий сезон."""
+    season_start, season_end, _season = _book_season(today)
+    return [
+        dict(item) for item in _VERIFIED_SEASON_RELEASES
+        if (released := _release_date(item.get("published_date")))
+        and season_start <= released <= season_end
+    ]
+
+
 async def get_weekly_new_books(*, refresh=False):
     cached = None if refresh else _weekly_book_cache_get()
     if cached is not None:
@@ -794,13 +836,27 @@ async def get_weekly_new_books(*, refresh=False):
             })
     if len(_rank_weekly_books(prepared)) < 3:
         prepared.extend(await _publisher_book_candidates())
+    if len(_rank_weekly_books(prepared)) < 3:
+        prepared.extend(await _open_library_book_candidates())
     items = _rank_weekly_books(prepared)[:3]
     if not items and stale:
         return stale
+    if not items:
+        items = _rank_weekly_books(_verified_season_releases())[:3]
     items = _books_with_premiere_summaries(items)
     if items:
         _weekly_book_cache_set(items)
     return items
+
+
+async def _open_library_book_candidates():
+    """Независимый fallback без API-ключа и без LLM."""
+    try:
+        return await asyncio.to_thread(
+            open_library.search_recent_releases, datetime.now(config.TZ).date(), 60,
+        )
+    except Exception:
+        return []
 
 
 def _rank_weekly_books(candidates):
@@ -863,15 +919,24 @@ async def _publisher_book_candidates():
         try:
             volume = await asyncio.to_thread(google_books.find_volume, title, author=author)
         except Exception:
-            continue
+            volume = None
         if not volume:
-            continue
+            isbn = _normalized_isbn(extracted.get("isbn"))
+            cover_url = await asyncio.to_thread(open_library.cover_for_isbn, isbn)
+            if not isbn or not cover_url:
+                continue
+            volume = {
+                "title": title, "author": author, "isbn": isbn,
+                "cover_url": cover_url,
+                "info_link": str(extracted.get("source_url") or ""),
+            }
         item = {
             **volume,
             "title": str(volume.get("title") or title).strip(),
             "author": str(volume.get("author") or author).strip(),
             "published_date": str(extracted.get("published_date") or volume.get("published_date") or ""),
             "publisher": str(extracted.get("publisher") or volume.get("publisher") or ""),
+            "isbn": str(volume.get("isbn") or extracted.get("isbn") or ""),
             "publisher_date_confirmed": True,
             "publisher_source_url": str(extracted.get("source_url") or ""),
         }

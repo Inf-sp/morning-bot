@@ -20,6 +20,7 @@ from dictionary_model import (
     normalize_translation_case,
     language_code as _code,
     normalize_entry,
+    canonical_part_of_speech,
     normalize_key,
     normalize_term_case,
 )
@@ -694,7 +695,7 @@ _DICT_CATEGORY_ORDER = (
 
 def _dictionary_category(entry):
     """Локально раскладывает записи по семи пользовательским категориям."""
-    pos = str((entry or {}).get("pos") or "").strip().casefold()
+    pos = canonical_part_of_speech(entry)
     aliases = {
         "adjective": "Прилагательные", "adj": "Прилагательные",
         "прилагательное": "Прилагательные", "bijvoeglijk naamwoord": "Прилагательные",

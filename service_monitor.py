@@ -138,7 +138,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     state = state or provider_runtime.get_state(service)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if service == "groq":
-        return _format_groq_row(config.GROQ_SIMPLE_MODEL, "Основной", state)
+        return _format_groq_row(state)
     if service in ("gemini", "cloudflare", "openrouter"):
         return _format_ai_row(service, state)
     if service == "google_books":
@@ -165,22 +165,25 @@ def format_row(service: str, state: dict | None = None) -> str:
     return " · ".join(parts)
 
 
-def _display_model(model: str) -> str:
-    return str(model or "").rsplit("/", 1)[-1]
-
-
-def _format_groq_row(model: str, role: str, state: dict | None = None) -> str:
+def _format_groq_row(state: dict | None = None) -> str:
+    """Одна пользовательская строка Groq без раскрытия внутренних моделей."""
     state = state or provider_runtime.get_state("groq")
     if not _configured("groq"):
-        return f"🔴 Groq · {role} · {_display_model(model)} · API-ключ не настроен"
-    usage_service = api_usage.groq_model_service(model)
-    remaining, total = _confirmed_quota(usage_service, state)
+        return "🔴 Groq · Основной · API-ключ не настроен"
+    remaining, total = _confirmed_quota("groq", state)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if (status in (OK, UNKNOWN) and remaining is not None and total
             and int(remaining) * 2 < int(total)):
         status = WARNING
-    detail = _quota_text(remaining, total) if remaining is not None and total is not None else _usage_detail(usage_service)
-    return f"{_DOT[status]} Groq · {role} · {_display_model(model)} · {detail}"
+    if remaining is not None and total is not None:
+        detail = _quota_text(remaining, total)
+    else:
+        used = sum(
+            int(api_usage.service_usage(api_usage.groq_model_service(model)).get("requests_today") or 0)
+            for model in {model for _kind, model, _role in _GROQ_MODELS}
+        )
+        detail = f"{_number(used)} сегодня"
+    return f"{_DOT[status]} Groq · Основной · {detail}"
 
 
 def _format_ai_row(service: str, state: dict | None = None) -> str:
@@ -218,7 +221,7 @@ def rows() -> list[str]:
     for service in ("groq", "gemini", "cloudflare", "openrouter"):
         state = current.get(service) or provider_runtime.get_state(service)
         if service == "groq":
-            out.extend(_format_groq_row(model, role, state) for _, model, role in _GROQ_MODELS)
+            out.append(_format_groq_row(state))
         else:
             out.append(format_row(service, state))
     out.append("Данные")

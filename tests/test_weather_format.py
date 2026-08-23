@@ -194,7 +194,7 @@ def test_evening_weather_is_at_twenty_and_links_to_week_and_home(monkeypatch):
     assert calls[0][:4] == (notification_bot, "42", "tomorrow_plain", None)
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
         [("🔕 Отключить уведомления", "set_notifpush_evening_weather")],
-        [("🌦️ Погода на неделю", "a_w_week")],
+        [("🗓️ Погода на неделю", "a_w_week")],
         [("#️⃣ Главная", "m_menu")],
     ]
 

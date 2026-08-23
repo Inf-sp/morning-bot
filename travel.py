@@ -11,6 +11,7 @@ import ai
 import country_catalog
 import config
 import memory
+import monthly_rebuses
 import recommendation_stoplist
 import research
 import settings
@@ -210,8 +211,9 @@ def _home_kb():
 
 async def send_home(bot, cid, q=None, status=None):
     idea = await asyncio.to_thread(_home_idea, cid)
-    visited_count = len(_visited_codes(cid))
-    msg = travel_ui.home_screen(idea, visited_count, rebus=_daily_travel_rebus())
+    today = datetime.now(config.TZ).date()
+    rebus = await monthly_rebuses.for_day("travel", today, _TRAVEL_REBUSES)
+    msg = travel_ui.home_screen(idea, rebus=rebus)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=_home_kb())
         return

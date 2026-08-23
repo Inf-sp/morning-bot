@@ -167,6 +167,19 @@ def test_recipe_card_hides_time_and_image():
     assert "img.spoonacular.com" not in message.text
 
 
+def test_selected_meal_card_uses_meal_and_cuisine_in_header():
+    message = food_card({
+        "name": "Тосты с томатами",
+        "cuisine": "italian",
+        "ingredients": "хлеб, томаты",
+        "steps": ["Поджарь хлеб", "Добавь томаты"],
+    }, label="Завтрак", meal="breakfast", show_cuisine_emoji=False)
+
+    assert "🥐 Завтрак · Итальянская кухня" in message.text
+    assert "Готовим сегодня" not in message.text
+    assert "🇮🇹" not in message.text
+
+
 def test_all_llms_down_still_returns_spoonacular_card(monkeypatch):
     monkeypatch.setattr(recipe_generation.config, "SPOONACULAR_API_KEY", "configured")
     monkeypatch.setattr(recipe_generation.spoonacular, "source_recipes", lambda *_args, **_kwargs: [_source()])

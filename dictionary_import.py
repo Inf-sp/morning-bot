@@ -20,6 +20,7 @@ import learning_dictionary as dictionary
 import learning_data_quality
 from dictionary_model import (
     example_matches_term,
+    canonical_part_of_speech,
     normalize_translation_case,
     normalize_term_case,
 )
@@ -1175,17 +1176,26 @@ def _save_normalized_dict_entry(cid, entry):
     см. _extract_srs_fields). Возвращает (status, saved_entry) где status —
     added/updated/duplicate."""
     entry = dict(entry)
+    canonical_pos = canonical_part_of_speech(entry)
+    if canonical_pos:
+        entry["pos"] = canonical_pos
     srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
     verb_fields = _verb_analysis_fields(entry)
     words = store.ensure_list_ids(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
     for idx, item in enumerate(words):
+        item = dict(item)
+        stored_pos = str(item.get("pos") or "")
+        canonical_pos = canonical_part_of_speech(item)
+        if canonical_pos:
+            item["pos"] = canonical_pos
+        pos_repaired = bool(canonical_pos and canonical_pos != stored_pos)
         existing_term = _entry_term(item)
         if _dict_lang(item) != entry["lang"]:
             continue
         if existing_term.casefold() == entry["term"].casefold():
             duplicate = dict(item)
-            changed = False
+            changed = pos_repaired
             for field in ("raw_user_term", "normalized_term"):
                 if not duplicate.get(field) and entry.get(field):
                     duplicate[field] = entry[field]

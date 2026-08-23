@@ -135,7 +135,7 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
         label=food_ui.MEAL_LABEL.get(meal, "Рецепт"),
         meal=meal,
         cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK,
-        show_cuisine_emoji=True,
+        show_cuisine_emoji=meal == "fridge",
     )
     store.last_answer[str(cid)] = card.text
     kb = _recipe_kb(cid, d)

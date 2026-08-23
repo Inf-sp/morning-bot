@@ -30,7 +30,7 @@ def test_system_ui_has_no_last_raw_error_block():
 
 def test_system_ui_separates_ai_and_data_sections_without_heading_emojis():
     message = admin_ui.api_ai(
-        ["AI", "🟢 Groq · Основной · gpt-oss-20b · 1 000/1 000 осталось",
+        ["AI", "🟢 Groq · Основной · 1 000/1 000 осталось",
          "Данные", "🟢 TMDB · Кино · 1 сегодня"],
         "21:44",
     )
@@ -38,7 +38,7 @@ def test_system_ui_separates_ai_and_data_sections_without_heading_emojis():
     assert message.text == (
         "🛠 Система\n\n"
         "AI\n"
-        "🟢 Groq · Основной · gpt-oss-20b · 1 000/1 000 осталось\n\n"
+        "🟢 Groq · Основной · 1 000/1 000 осталось\n\n"
         "Данные\n"
         "🟢 TMDB · Кино · 1 сегодня\n\n"
         "Обновлено в 21:44"

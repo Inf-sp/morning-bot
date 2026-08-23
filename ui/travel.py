@@ -16,7 +16,7 @@ def visited_summary(n):
     return f"{verb} {n} {plural_countries(n)}"
 
 
-def home_screen(idea, visited_count, rebus=None):
+def home_screen(idea, rebus=None):
     b = MessageBuilder()
     b.text_line(f"{idea['emoji']} ")
     b.bold(f"Поездка на сегодня · {idea['transport_title']}")
@@ -31,9 +31,6 @@ def home_screen(idea, visited_count, rebus=None):
     b.newline()
     for item in idea.get("route", [])[:3]:
         b.bullet(str(item).replace(" = ", " → "))
-    b.spacer()
-    b.bold("Прогресс:")
-    b.line(f" посещено {visited_count} {plural_countries(visited_count)}")
     if rebus and rebus.get("emoji") and rebus.get("answer"):
         b.spacer()
         b.bold("Туристический ребус:")

@@ -28,6 +28,8 @@ from .builder import MessageBuilder, MessageSpec, from_html
 from .constants import ui_label
 from util import cap_sentence, country_flag, flag_from_cc
 
+WEEK_FORECAST_BUTTON = "🗓️ Погода на неделю"
+
 
 def weather_warning(events, when="", advice=None):
     """Новый формат погодного предупреждения: события → когда → что сделать.

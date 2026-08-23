@@ -171,8 +171,10 @@ def food_card(
     header = f"{meal_emoji} {label}".strip()
     if cuisine_label:
         cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label
+        if meal in ("breakfast", "lunch", "dinner"):
+            header = f"{header} · {cuisine_part}"
     b.section(header)
-    if cuisine_label:
+    if cuisine_label and meal not in ("breakfast", "lunch", "dinner"):
         b.spacer()
         b.line(cuisine_part)
     if name:

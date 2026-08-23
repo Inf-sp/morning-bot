@@ -20,6 +20,33 @@ def test_home_meal_time_windows():
     assert recipe_generation._home_meal_for_hour(21) == "dinner"
 
 
+def test_month_recipe_pool_only_uses_current_profile_and_month():
+    context = {
+        "meal": "breakfast",
+        "month": "2026-08",
+        "pool_signature": "current-profile",
+    }
+    profile = {
+        "cooking_home_month_pools": {
+            "breakfast": {
+                "month": "2026-08",
+                "signature": "current-profile",
+                "ideas": [{"name": "Сырники"}, {"name": "Омлет"}],
+            },
+        },
+    }
+
+    assert [item["name"] for item in recipe_generation._home_month_pool(profile, context)] == [
+        "Сырники", "Омлет",
+    ]
+    assert recipe_generation._home_month_pool(
+        profile, {**context, "month": "2026-09"},
+    ) == []
+    assert recipe_generation._home_month_pool(
+        profile, {**context, "pool_signature": "changed-fridge"},
+    ) == []
+
+
 def test_nightly_cooking_warm_prepares_all_meals(monkeypatch):
     hours = []
 

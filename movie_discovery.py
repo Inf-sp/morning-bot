@@ -221,8 +221,7 @@ async def _with_trailer_urls(items):
 
 def _daily_rebus(day):
     """Один ребус и связанный факт на календарную дату, без случайных повторов в течение дня."""
-    index = (day.timetuple().tm_yday - 216) % len(_CINEMA_REBUSES)
-    return dict(_CINEMA_REBUSES[index])
+    return monthly_rebuses.cached_for_day("movies", day, _CINEMA_REBUSES)
 
 
 def daily_movie_rebus(day):
@@ -322,7 +321,7 @@ def _load_cinema_birthday(day):
 async def _daily_cinema_content():
     now = datetime.now(config.TZ)
     return {
-        "rebus": _daily_rebus(now.date()),
+        "rebus": await monthly_rebuses.for_day("movies", now.date(), _CINEMA_REBUSES),
         "birthday": await asyncio.to_thread(_load_cinema_birthday, now.date()),
     }
 
