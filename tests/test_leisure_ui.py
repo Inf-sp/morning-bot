@@ -951,7 +951,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Onyx Storm — Ребекка Яррос" in books.text
     assert "Автор недели: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
-    assert books.text.index("Новинки сезона") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
+    assert books.text.index("Новинки сезона:") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня" not in music.text
@@ -1009,7 +1009,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
         "overview": "Семья пытается сохранить дом после большого наводнения",
         "trailer_url": "https://www.youtube.com/watch?v=premiere",
     }])
-    books = leisure_books.leisure_ui.book_premieres_screen("Август 2026", [{
+    books = leisure_books.leisure_ui.book_premieres_screen("Августа 2026", [{
         "title": "Новая книга", "author": "Автор", "summary": "Героиня ищет сестру в незнакомом городе",
         "published_date": "2026-08-15", "categories": ["Fiction"],
         "url": "https://books.google.com/books?id=new",
@@ -1024,7 +1024,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
         and entity.url == "https://www.youtube.com/watch?v=premiere"
         for entity in movie.entities
     )
-    assert "Премьеры книг · Август 2026" in books.text
+    assert books.text.startswith("🆕 Премьеры книг · Августа 2026")
     assert "«Новая книга»\nАвтор\nХудожественная проза\nПремьера: 15 августа 2026" in books.text
     assert "Героиня ищет сестру в незнакомом городе." in books.text
     assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
@@ -1226,7 +1226,7 @@ def test_daily_category_block_titles_are_bold():
     assert {"Ребус дня:", "Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
     assert {"Литературный ребус:", "Автор недели:",
-            "Новинки сезона", "💡 Интересно:"}.issubset(_bold_values(books))
+            "Новинки сезона:", "💡 Интересно:"}.issubset(_bold_values(books))
     assert {"Музыкальный ребус:", "Артист недели:",
             "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
@@ -1360,6 +1360,35 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
         "https://www.youtube.com/watch?v=trailer5",
     ]
     assert sent[0]["disable_web_page_preview"] is True
+
+
+def test_movie_home_keeps_current_movies_when_tmdb_overviews_are_missing(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def local_movies(_cid, *, limit):
+        assert limit == 20
+        return [
+            {"id": index, "title": title, "genres": ["drama"], "rating": 7.0,
+             "vote_count": 100, "popularity": 100 - index}
+            for index, title in enumerate(("Первый", "Второй", "Третий"), start=1)
+        ]
+
+    async def cinema_day():
+        return {"rebus": {"emoji": "🎬", "answer": "Ответ"}}
+
+    monkeypatch.setattr(leisure_movies, "get_local_now_playing", local_movies)
+    monkeypatch.setattr(leisure_movies, "_daily_cinema_content", cinema_day)
+    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(leisure_movies.tmdb, "trailer_url", lambda *_args: None)
+
+    asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
+
+    assert "• «Первый» (драма)" in sent[0]["text"]
+    assert "Пока не удалось подтвердить актуальные показы." not in sent[0]["text"]
 
 
 def test_cinema_rebus_changes_with_calendar_day():
@@ -1553,7 +1582,7 @@ def test_literary_vibe_shows_short_title_and_author_line():
         "summary": "История о возвращении домой.",
     }])
 
-    assert "Новинки сезона\nСвежая книга — Автор" in message.text
+    assert "Новинки сезона:\nСвежая книга — Автор" in message.text
     assert "Художественная проза" not in message.text
 
 
@@ -1655,7 +1684,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
         "url": "https://books.google.com/books?id=test",
     }])
 
-    assert "Новинки сезона\nНедавний бестселлер — Автор" in message.text
+    assert "Новинки сезона:\nНедавний бестселлер — Автор" in message.text
     assert "Популярное чтение" not in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK

@@ -301,3 +301,17 @@ def test_book_premieres_refresh_bypasses_empty_cache(monkeypatch):
 
     assert calls == ["search"]
     assert [item["title"] for item in items] == ["Новая книга"]
+
+
+def test_book_premieres_use_verified_current_month_reserve_with_summaries(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda _limit: [])
+
+    items = asyncio.run(leisure_books.get_book_premieres(refresh=True))
+
+    assert len(items) >= 3
+    assert all(leisure_books._released_this_month(item["published_date"]) for item in items)
+    assert all(item.get("summary") for item in items)
+    assert saved["items"] == items

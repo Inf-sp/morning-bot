@@ -273,8 +273,8 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
     b.spacer()
-    b.bold("Ребус дня:")
-    b.newline()
+    b.bold("Игровой ребус:")
+    b.text_line(" ")
     b.text_line(str(daily.get("emoji") or "🎮 ❓"))
     b.text_line(" → ")
     b.add(str(daily.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
@@ -884,7 +884,7 @@ def weekly_books_screen(city, daily_book, items, *, season=""):
 
     premieres = _book_premiere_items(items)
     b.spacer()
-    b.bold(f"Новинки {str(season or 'сезона').strip()}")
+    b.bold(f"Новинки {str(season or 'сезона').strip()}:")
     if premieres:
         b.newline()
         for premiere in premieres:

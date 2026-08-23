@@ -328,9 +328,13 @@ async def _daily_cinema_content():
 
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
-    featured = _featured_now_playing(
-        await get_local_now_playing(cid, limit=20), require_overview=True,
-    )[:3]
+    local_movies = await get_local_now_playing(cid, limit=20)
+    featured = _featured_now_playing(local_movies, require_overview=True)
+    if not featured:
+        # Описание TMDb полезно для проверки качества, но его временное
+        # отсутствие не должно скрывать всю подтверждённую киноафишу.
+        featured = _featured_now_playing(local_movies)
+    featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()
     msg = leisure_ui.movie_now_playing_screen(city, now_playing, cinema_day)

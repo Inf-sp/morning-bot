@@ -106,6 +106,33 @@ _PREMIERE_SUMMARIES = {
 # авторы взяты с официальных страниц издателей.
 _VERIFIED_SEASON_RELEASES = (
     {
+        "title": "The Residency", "author": "C. D. Major",
+        "published_date": "2026-08-04", "isbn": "9798217269495",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9798217269495",
+        "info_link": "https://www.penguinrandomhouse.com/books/818091/the-residency-by-c-d-major/",
+        "publisher": "Canelo", "publisher_date_confirmed": True,
+        "categories": ["Thrillers"],
+        "description": "Молодая художница приезжает в изолированную резиденцию, где невозможно отличить шанс на новую жизнь от опасной ловушки.",
+    },
+    {
+        "title": "Hello Baby", "author": "Kim Eui-Kyung",
+        "published_date": "2026-08-18", "isbn": "9780593734896",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9780593734896",
+        "info_link": "https://www.penguinrandomhouse.com/books/769778/hello-baby-by-kim-eui-kyung/9780593734896/",
+        "publisher": "Hogarth", "publisher_date_confirmed": True,
+        "categories": ["Fiction"],
+        "description": "Шесть женщин поддерживают друг друга во время ЭКО, но неожиданная новость испытывает их дружбу и надежды.",
+    },
+    {
+        "title": "Appetite", "author": "P. Paramita",
+        "published_date": "2026-08-04", "isbn": "9780593978580",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9780593978580",
+        "info_link": "https://www.penguinrandomhouse.com/books/783084/appetite-by-p-paramita/",
+        "publisher": "Dial Press", "publisher_date_confirmed": True,
+        "categories": ["Fiction"],
+        "description": "Молодая шеф-повар идёт к мечте, пока встреча с любимой звездой рестлинга не меняет её представление о славе и близости.",
+    },
+    {
         "title": "Hunger and Thirst", "author": "Claire Fuller",
         "published_date": "2026-06-02", "isbn": "9781963108729",
         "cover_url": "https://images1.penguinrandomhouse.com/cover/9781963108729",
@@ -1003,6 +1030,13 @@ async def get_book_premieres(*, refresh=False):
             continue
         seen.add(title.casefold())
     fresh = month_items or recent_items
+    if not fresh:
+        reserve = [
+            _with_book_url({**item, "summary": _premiere_summary(item)})
+            for item in _verified_season_releases(today)
+            if _released_this_month(item.get("published_date"))
+        ]
+        fresh = reserve
     fresh.sort(key=lambda item: (
         str(item.get("published_date") or ""),
         float(item.get("rating") or 0),

@@ -467,7 +467,10 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         )
         sunrise = _clock((d.get("sunrise") or [""])[0])
         sunset = _clock((d.get("sunset") or [""])[0])
-        sun_line = "☀️ Солнце" + (f" · Восход {sunrise}" if sunrise else "") + (f" · Закат {sunset}" if sunset else "")
+        sun_line = " · ".join(filter(None, (
+            f"Восход {sunrise}" if sunrise else "",
+            f"Закат {sunset}" if sunset else "",
+        )))
         today_probs = [
             float(probs[index] or 0) for index, stamp in enumerate(hours)
             if stamp.startswith(day_str) and index < len(probs)

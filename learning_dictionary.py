@@ -511,11 +511,12 @@ async def send_dict(bot, cid, back="m_learn", q=None):
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
-    """Главный экран языкового словаря: семь категорий вместо плоской сетки."""
+    """Главный экран языкового словаря: категории вместо плоской сетки."""
     entries = _dict_lang_entries(cid, lang)
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
-    for index, category in enumerate(_DICT_CATEGORY_ORDER):
+    for category in _DICT_VISIBLE_CATEGORY_ORDER:
+        index = _DICT_CATEGORY_ORDER.index(category)
         count = sum(1 for item in entries if _dictionary_category(item) == category)
         rows.append([InlineKeyboardButton(
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
@@ -690,6 +691,9 @@ _DICT_LIST_PAGE_SIZE = 10
 _DICT_CATEGORY_ORDER = (
     "Прилагательные", "Глаголы", "Существительные", "Местоимения",
     "Наречия", "Предлоги", "Предложения",
+)
+_DICT_VISIBLE_CATEGORY_ORDER = tuple(
+    category for category in _DICT_CATEGORY_ORDER if category != "Местоимения"
 )
 
 

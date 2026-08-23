@@ -133,7 +133,7 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
 
     assert "👾 Игры на сегодня · Новинки 2026" in status.call[0]
     assert "Новинки лета:" in status.call[0]
-    assert "Ребус дня:" in status.call[0]
+    assert "Игровой ребус:" in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
@@ -165,6 +165,8 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
     assert message.text.count("• Игра ") == 3
     assert "• Игра 0 (RPG) · ПК, PS5" in message.text
     assert "Игра 3" not in message.text
+    assert "Игровой ребус: 🧙 🚪 3️⃣ → Baldur’s Gate 3" in message.text
+    assert "Игровой ребус:\n" not in message.text
     assert {
         entity.url for entity in message.entities if entity.type == "text_link"
     } == {f"https://www.youtube.com/watch?v=game{index}" for index in range(3)}

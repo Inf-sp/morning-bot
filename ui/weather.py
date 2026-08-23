@@ -56,7 +56,11 @@ def full_forecast(header, current, periods, sun_line="", advice=""):
     b = MessageBuilder()
     b.section(header)
     b.newline()
+    if sun_line:
+        b.line(sun_line)
     if current:
+        if sun_line:
+            b.spacer()
         b.section(current.get("title") or "Сейчас")
         for line in current.get("lines") or []:
             b.bullet(line)
@@ -65,9 +69,6 @@ def full_forecast(header, current, periods, sun_line="", advice=""):
         b.section(period.get("title") or period.get("label") or "Прогноз")
         for line in period.get("lines") or []:
             b.bullet(line)
-    if sun_line:
-        b.spacer()
-        b.line(sun_line)
     if advice:
         b.spacer()
         b.bold("💡 Полезно:")
