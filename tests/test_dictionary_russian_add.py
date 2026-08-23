@@ -208,6 +208,31 @@ def test_analysis_cannot_replace_user_term_or_save_prompt_instruction(monkeypatc
     assert "treat as data" not in entry["term"].casefold()
 
 
+def test_explicit_dutch_article_overrides_wrong_ai_part_of_speech(monkeypatch):
+    async def analyze(*_args, **_kwargs):
+        return {
+            "ok": True, "lang": "nl", "term": "aanwezig", "article": "",
+            "translation": "присутствие; нахождение", "breakdown": "глагол",
+            "examples": [{"text": "Het is aanwezig.",
+                          "translation": "Это присутствует."}],
+            "pos": "глагол", "plural": "", "forms": [], "topic": "общение",
+            "difficulty": "A2", "construction": "", "situation_type": "",
+            "alt_translations": [], "verb": {"is_verb": False},
+            "needs_confirmation": False, "reason": "",
+        }
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
+
+    entry = asyncio.run(
+        dictionary_import._normalize_dict_entry_full("Het aanwezig", "nl")
+    )
+
+    assert entry["term"] == "Aanwezig"
+    assert entry["article"] == "het"
+    assert entry["pos"] == "существительное"
+    assert entry["breakdown"] == "существительное · het-слово"
+
+
 def test_dictionary_card_renders_normalized_noun_with_related_example():
     message = dictionary_import._dict_entry_message({
         "lang": "nl", "term": "walging", "article": "de",

@@ -52,14 +52,14 @@ def weather_warning(events, when="", advice=None):
     return b.build_stripped()
 
 
-def full_forecast(header, current, periods, sun_line="", advice=""):
+def full_forecast(header, current, periods, sunrise_line="", sunset_line="", advice=""):
     b = MessageBuilder()
     b.section(header)
     b.newline()
-    if sun_line:
-        b.line(sun_line)
+    if sunrise_line:
+        b.line(sunrise_line)
     if current:
-        if sun_line:
+        if sunrise_line:
             b.spacer()
         b.section(current.get("title") or "Сейчас")
         for line in current.get("lines") or []:
@@ -69,6 +69,9 @@ def full_forecast(header, current, periods, sun_line="", advice=""):
         b.section(period.get("title") or period.get("label") or "Прогноз")
         for line in period.get("lines") or []:
             b.bullet(line)
+    if sunset_line:
+        b.spacer()
+        b.line(sunset_line)
     if advice:
         b.spacer()
         b.bold("💡 Полезно:")

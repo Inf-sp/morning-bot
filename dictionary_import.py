@@ -1081,10 +1081,22 @@ INPUT_JSON: {input_payload}
     breakdown = re.sub(r"\s+", " ", str(d.get("breakdown") or "").strip())[:180]
     if not breakdown or _contains_suspicious_analysis_text(breakdown):
         return None
+    explicit_article_match = (
+        re.match(r"^(de|het)\s+", raw_user_term, flags=re.I)
+        if lang == "nl" else None
+    )
+    explicit_article = (
+        explicit_article_match.group(1).casefold() if explicit_article_match else ""
+    )
     article = str(d.get("article") or "").strip() if lang == "nl" else ""
     if lang == "nl" and article not in {"de", "het"}:
         article = ""
-    if article and "глагол" in breakdown.lower():
+    if explicit_article:
+        # Явный словарный артикль — более надёжный сигнал существительного,
+        # чем противоречивый AI-разбор. Артикль уже отделён от term выше.
+        article = explicit_article
+        breakdown = f"существительное · {article}-слово"
+    elif article and "глагол" in breakdown.lower():
         # У глаголов нет артикля de/het — модель иногда всё равно его возвращает.
         article = ""
     entry = {
@@ -1104,6 +1116,8 @@ INPUT_JSON: {input_payload}
         "reason": str(d.get("reason") or "").strip(),
         **_extract_srs_fields(d),
     }
+    if explicit_article:
+        entry["pos"] = "существительное"
     if lang == "nl" and str(entry.get("pos") or "").casefold() == "глагол":
         fixed_structure = learning_data_quality.dutch_verb_with_preposition(entry["term"])
         analysis_term = fixed_structure[0] if fixed_structure else entry["term"]

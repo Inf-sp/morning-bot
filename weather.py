@@ -452,14 +452,16 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             mm = sum(float(value or 0) for value in mm_vals)
             icon = weather_icon(d["weathercode"][0], tmx, rn, wd, mm)
             lines = [
+                f"Температура до {tmx:+.0f}°C",
                 f"Ветер {_speed_range(w_vals)} м/с"
                 + (f" · порывы до {max(g_vals):.0f} м/с" if g_vals else ""),
-                f"Вероятность дождя {rn:.0f}%",
             ]
+            sky_parts = [f"Дождь {rn:.0f}%"]
             if cloud_vals:
-                lines.append(f"Облачность {max(cloud_vals):.0f}%")
+                sky_parts.append(f"Облачность {max(cloud_vals):.0f}%")
+            lines.append(" · ".join(sky_parts))
             periods.append({
-                "title": f"{icon} {label} · {h1:02d}:00–{h2:02d}:00 до {tmx:+.0f}°C",
+                "title": f"{icon} {label} · {h1:02d}:00–{h2:02d}:00",
                 "lines": lines,
             })
         _tmin, daytime_tmax = _daytime_temperature_range(
@@ -467,10 +469,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         )
         sunrise = _clock((d.get("sunrise") or [""])[0])
         sunset = _clock((d.get("sunset") or [""])[0])
-        sun_line = " · ".join(filter(None, (
-            f"Восход {sunrise}" if sunrise else "",
-            f"Закат {sunset}" if sunset else "",
-        )))
+        sunrise_line = f"Восход {sunrise}" if sunrise else ""
+        sunset_line = f"Закат {sunset}" if sunset else ""
         today_probs = [
             float(probs[index] or 0) for index, stamp in enumerate(hours)
             if stamp.startswith(day_str) and index < len(probs)
@@ -487,7 +487,9 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"),
              InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ])
-        msg = weather_ui.full_forecast(header, None, periods, sun_line, advice)
+        msg = weather_ui.full_forecast(
+            header, None, periods, sunrise_line, sunset_line, advice,
+        )
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
 

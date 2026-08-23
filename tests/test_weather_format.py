@@ -35,23 +35,29 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
         "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱",
         None,
         [
-            {"title": "☀️ Утро · 08:00–12:00 до +18°C", "lines": ["Ветер 4 м/с"]},
-            {"title": "☀️ Днём · 12:00–18:00 до +20°C", "lines": ["Вероятность дождя 70%"]},
+            {"title": "☀️ Утро · 08:00–12:00", "lines": ["Температура до +18°C", "Ветер 4 м/с"]},
+            {"title": "🌧️ Днём · 12:00–18:00", "lines": ["Температура до +20°C", "Дождь 70% · Облачность 80%"]},
         ],
-        "Восход 06:25 · Закат 21:02",
+        "Восход 06:25",
+        "Закат 21:02",
         "Alkmaar сегодня мокрый. Лучше взять дождевик и зонт.",
     )
 
     assert message.text.startswith(
         "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱\n\n"
-        "Восход 06:25 · Закат 21:02\n\n"
-        "☀️ Утро · 08:00–12:00 до +18°C"
+        "Восход 06:25\n\n"
+        "☀️ Утро · 08:00–12:00"
     )
     assert "Сейчас" not in message.text
     assert "• Ветер 4 м/с" in message.text
-    assert "☀️ Днём · 12:00–18:00 до +20°C" in message.text
+    assert "🌧️ Днём · 12:00–18:00" in message.text
+    assert "• Температура до +20°C" in message.text
+    assert "• Дождь 70% · Облачность 80%" in message.text
+    assert "Вероятность" not in message.text
     assert "Осадки до" not in message.text
-    assert "Восход 06:25 · Закат 21:02" in message.text
+    assert "Восход 06:25" in message.text
+    assert message.text.index("Закат 21:02") < message.text.index("💡 Полезно:")
+    assert message.text.index("🌧️ Днём") < message.text.index("Закат 21:02")
     assert "☀️ Солнце" not in message.text
     assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
 
