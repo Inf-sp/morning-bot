@@ -113,7 +113,10 @@ async def love_add_start(bot, cid, key, origin="base"):
         "games": "игру",
     }[key]
     if key == "books":
-        text = "Напиши название книги, можно с автором или годом.\n\nНапример: Марсианин 2011"
+        text = (
+            "Напиши название книги. Автора и год можно не указывать — "
+            "покажу варианты.\n\nНапример: Марсианин"
+        )
     else:
         text = f"Напиши {name} — добавлю в любимые."
     await bot.send_message(chat_id=cid, text=text)
@@ -210,7 +213,7 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
 
         await settings.send_home(bot, cid)
         return
-    if not confirmed and key == "books":
+    if key == "books":
         import leisure_books
 
         await leisure_books.offer_manual_favorite_book(bot, cid, text, origin)
@@ -219,25 +222,7 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
     store_key, collection_id = collection
-    if key == "books":
-        import leisure_books
-
-        item, error = await leisure_books.resolve_manual_favorite_book(text)
-        if item is None:
-            prefix = "loveaddls" if origin == "leisure" else "loveadd"
-            store.pending_input[str(cid)] = f"{prefix}_books"
-            message = (
-                "Уточни книгу: напиши название и автора или год.\n\n"
-                "Например: Дюна — Фрэнк Герберт\n"
-                "или: Дюна (1965)"
-                if error == "clarify" else
-                "Не получилось однозначно найти эту книгу. Напиши название и автора или год издания."
-            )
-            await bot.send_message(chat_id=cid, text=message)
-            return
-        items = [item]
-    else:
-        items = _unique_items(re.split(r"[,;\n]+", text or ""))
+    items = _unique_items(re.split(r"[,;\n]+", text or ""))
     if key == "movies":
         import asyncio
 

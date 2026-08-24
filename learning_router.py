@@ -126,6 +126,20 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act == "dictlang_active":
         await dictionary.send_dict_lang(bot, cid, dictionary._active_language_code(cid), q=q)
+    elif act.startswith("dictcatdelok_"):
+        parts = act[len("dictcatdelok_"):].split("_", 3)
+        if (len(parts) == 4 and parts[0] in ("nl", "en")
+                and parts[1].isdigit() and parts[2].isdigit()):
+            await dictionary.del_dict_category_entry(
+                bot, cid, parts[0], int(parts[1]), int(parts[2]), parts[3], q=q,
+            )
+    elif act.startswith("dictcatdel_"):
+        parts = act[len("dictcatdel_"):].split("_", 3)
+        if (len(parts) == 4 and parts[0] in ("nl", "en")
+                and parts[1].isdigit() and parts[2].isdigit()):
+            await dictionary.confirm_delete_dict_category_entry(
+                bot, cid, parts[0], int(parts[1]), int(parts[2]), parts[3], q=q,
+            )
     elif act.startswith("dictcat_"):
         parts = act.split("_")
         if len(parts) == 4 and parts[1] in ("nl", "en") and parts[2].isdigit() and parts[3].isdigit():

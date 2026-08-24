@@ -425,6 +425,21 @@ async def _find_manual_book_candidates(query):
         )
     except Exception:
         volumes = []
+    if not volumes:
+        try:
+            volumes = await asyncio.wait_for(
+                asyncio.to_thread(
+                    open_library.search_books,
+                    query.get("title", ""),
+                    alternative_title=query.get("alternative_title", ""),
+                    author=query.get("author", ""),
+                    year=query.get("year", ""),
+                    max_results=12,
+                ),
+                timeout=8.0,
+            )
+        except Exception:
+            volumes = []
     result = []
     seen_authors = set()
     for volume in volumes or []:
@@ -511,7 +526,7 @@ async def offer_manual_favorite_book(bot, cid, value, origin="base"):
         await bot.send_message(
             chat_id=cid,
             text="Не получилось найти подтверждённую книгу с обложкой. "
-                 "Уточни название, автора или год.",
+                 "Попробуй уточнить название, автора или год.",
         )
         return
     now = time.time()
@@ -605,7 +620,8 @@ async def handle_manual_book_add_callback(bot, cid, q, data):
         store.pending_input[str(cid)] = f"{prefix}_books"
         await bot.send_message(
             chat_id=cid,
-            text="Других подтверждённых вариантов не нашлось. Уточни автора или год.",
+            text="Других подтверждённых вариантов не нашлось. "
+                 "Можно уточнить автора или год либо написать другое название.",
         )
         return
     await _show_manual_book_candidate(bot, cid, token, next_index, q=q)

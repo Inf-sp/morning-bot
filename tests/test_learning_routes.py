@@ -58,6 +58,7 @@ def test_cooking_learning_and_travel_menu_callbacks_are_routable():
             "m_learn", "a_train", "a_train_nl", "a_train_en", "a_train_progress",
             "a_game", "game_again", "game_hint", "game_reveal", "a_dictadd_smart_nl",
             "a_dictseed_start_nl", "a_dictlang_nl_from_menu", "a_dictlang_nl", "a_dictlang_active", "a_dictcat_nl_2_0",
+            "a_dictcatdel_nl_2_0_word", "a_dictcatdelok_nl_2_0_word",
             "a_dictedit_nl", "a_dictviewid_0_word", "set_learning", "set_learning_dict",
             "toggle_learning_language", "toggle_learning_language_dict", "set_learning_global", "set_learning_language_nl", "set_learning_language_en_dict", "set_learning_language_none", "set_learning_language_nl_settings", "set_learning_level_easy", "set_learning_level_easy_dict",
         ),

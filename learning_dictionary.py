@@ -28,9 +28,11 @@ from dictionary_model import (
 )
 from dictionary_management import (
     confirm_delete_dict_entry,
+    confirm_delete_dict_category_entry,
     confirm_delete_dict_entry_by_id,
     confirm_move_dict_entry_by_id,
     del_dict_entry_by_id,
+    del_dict_category_entry,
     del_dict_entry_by_term,
     del_word,
     dict_entry_view_kb as _dict_entry_view_kb,
@@ -43,7 +45,10 @@ from ui.navigation import back_menu_keyboard
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
 __all__ = [
-    "confirm_delete_dict_entry", "confirm_delete_dict_entry_by_id", "confirm_move_dict_entry_by_id", "del_dict_entry_by_id", "del_dict_entry_by_term", "del_word", "move_dict_entry_by_id",
+    "confirm_delete_dict_entry", "confirm_delete_dict_category_entry",
+    "confirm_delete_dict_entry_by_id", "confirm_move_dict_entry_by_id",
+    "del_dict_category_entry", "del_dict_entry_by_id", "del_dict_entry_by_term",
+    "del_word", "move_dict_entry_by_id",
 ]
 
 
@@ -594,34 +599,44 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
         item for item in _dict_lang_entries(cid, lang)
         if _dictionary_category(item) == category
     ]
-    total_pages = max(1, (len(entries) + _DICT_LIST_PAGE_SIZE - 1) // _DICT_LIST_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    start = page * _DICT_LIST_PAGE_SIZE
-    chunk = entries[start:start + _DICT_LIST_PAGE_SIZE]
-    rows = []
-    word_buttons = [
-        InlineKeyboardButton(
-            display_term(_entry_term(item), item.get("article") or "")[:24],
-            callback_data=f"a_dictviewid_{page}_{item.get('id')}",
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    if not entries:
+        rows = [[
+            InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+        ]]
+        await _show_screen(
+            bot, cid, f"{flag} {category}\n\nПока здесь нет записей.", None,
+            InlineKeyboardMarkup(rows), q=q,
         )
-        for item in chunk if item.get("id")
-    ]
-    rows.extend(word_buttons[index:index + 2] for index in range(0, len(word_buttons), 2))
-    if total_pages > 1:
+        return
+    page = max(0, min(int(page), len(entries) - 1))
+    entry = entries[page]
+    if _entry_needs_ai_refresh(entry):
+        entry = await _refresh_dict_entry(cid, entry)
+    msg = dict_ui.dict_category_entry(category, page, len(entries), entry)
+    rows = []
+    if len(entries) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page - 1) % total_pages}"),
-            InlineKeyboardButton(f"{page + 1} / {total_pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % total_pages}"),
+            InlineKeyboardButton("◀️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page - 1) % len(entries)}"),
+            InlineKeyboardButton(f"{page + 1} / {len(entries)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % len(entries)}"),
         ])
+    rows.extend(_dict_tts_row(entry))
+    word_id = str(entry.get("id") or "")
+    if word_id:
+        rows.append([InlineKeyboardButton(
+            delete_label("Удалить"),
+            callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
+        )])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
-    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    text = f"{flag} {category} · {len(entries)}"
-    if not entries:
-        text += "\n\nПока здесь нет записей."
-    await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
+    await _show_screen(
+        bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows),
+        q=q, persistent_inline=True,
+    )
 
 
 async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):

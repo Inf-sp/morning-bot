@@ -176,15 +176,79 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
             self.message = kwargs
 
     entries = [
-        {"id": str(index), "term": f"Word {index}", "pos": "noun"}
+        {
+            "id": str(index), "lang": "nl", "term": f"Word {index}",
+            "translation": f"Слово {index}", "pos": "noun",
+        }
         for index in range(21)
     ]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: False)
     bot = Bot()
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))
 
-    assert ["◀️", "2 / 3", "▶️"] in _labels(bot.message["reply_markup"])
+    assert bot.message["text"].startswith("🇳🇱 Существительные · 2/21")
+    assert "Word 1 → Слово 1" in bot.message["text"]
+    assert ["◀️", "2 / 21", "▶️"] in _labels(bot.message["reply_markup"])
+    navigation = bot.message["reply_markup"].inline_keyboard[0]
+    assert navigation[0].callback_data == "a_dictcat_nl_2_0"
+    assert navigation[2].callback_data == "a_dictcat_nl_2_2"
+
+
+def test_dictionary_category_opens_a_full_word_card(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    entry = {
+        "id": "noun-1", "lang": "nl", "term": "huis", "article": "het",
+        "translation": "дом", "pos": "noun", "plural": "huizen",
+        "examples": [{"text": "Dit huis is groot.", "translation": "Этот дом большой."}],
+    }
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [entry])
+    monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: False)
+    bot = Bot()
+
+    asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2))
+
+    assert bot.message["text"].startswith("🇳🇱 Существительные · 1/1")
+    assert "Het huis → Дом" in bot.message["text"]
+    assert "Разбор: существительное · het-слово" in bot.message["text"]
+    assert "Множественное число: de huizen" in bot.message["text"]
+    assert _labels(bot.message["reply_markup"]) == [
+        ["🔊 Прослушать"], ["❌ Удалить"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_dictionary_category_delete_returns_to_the_next_card(monkeypatch):
+    entries = [
+        {"id": "first", "lang": "nl", "term": "huis", "pos": "noun"},
+        {"id": "second", "lang": "nl", "term": "boek", "pos": "noun"},
+    ]
+    shown = []
+    monkeypatch.setattr(learning_dictionary, "normalize_user_dictionary", lambda _cid: list(entries))
+
+    def save(_key, _cid, values):
+        entries[:] = values
+
+    monkeypatch.setattr(learning_dictionary.store, "set_list", save)
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: list(entries))
+
+    async def show(_bot, _cid, lang, category_index, page=0, q=None):
+        shown.append((lang, category_index, page, q))
+
+    monkeypatch.setattr(learning_dictionary, "send_dict_category", show)
+    query = object()
+
+    asyncio.run(learning_dictionary.del_dict_category_entry(
+        object(), "42", "nl", 2, 1, "second", q=query,
+    ))
+
+    assert [entry["id"] for entry in entries] == ["first"]
+    assert shown == [("nl", 2, 0, query)]
 
 
 def test_learning_preferences_return_to_active_dictionary():

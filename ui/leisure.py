@@ -1128,6 +1128,10 @@ def _write_book_premiere(
             builder.text_line(title)
         if author:
             builder.text_line(f" — {author}")
+        builder.text_line(f" · {genres or 'Жанр не указан'}")
+        builder.text_line(
+            f" · {_book_premiere_date(item) or 'Дата не указана'}"
+        )
         builder.newline()
         return
 
@@ -1187,6 +1191,16 @@ def _book_premiere_summary(summary, *, limit):
 
 def _book_premiere_date(item):
     raw = str(_item_value(item, "published_date", "") or "").strip()
+    month_match = re.fullmatch(r"(\d{4})-(\d{2})", raw)
+    if month_match:
+        year, month = int(month_match.group(1)), int(month_match.group(2))
+        month_names = (
+            "", "январь", "февраль", "март", "апрель", "май", "июнь",
+            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
+        )
+        return f"{month_names[month]} {year}" if 1 <= month <= 12 else ""
+    if re.fullmatch(r"\d{4}", raw):
+        return raw
     try:
         value = date.fromisoformat(raw)
     except ValueError:

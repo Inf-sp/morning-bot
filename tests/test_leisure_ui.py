@@ -922,6 +922,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     }, [{
         "title": "Onyx Storm", "author": "Ребекка Яррос",
         "categories": ["Fantasy"],
+        "published_date": "2026-08-15",
         "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
     }])
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
@@ -948,7 +949,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "📚 Литературный вайб · Алкмар" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
-    assert "Onyx Storm — Ребекка Яррос" in books.text
+    assert "Onyx Storm — Ребекка Яррос · Фэнтези · 15 августа 2026" in books.text
     assert "Автор недели: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
     assert "Книга под настроение:" not in books.text
     assert books.text.index("Новинки сезона:") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
@@ -1662,16 +1663,19 @@ def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(mon
     assert [item["title"] for item in items] == ["Open Book 1", "Open Book 2", "Open Book 3"]
 
 
-def test_literary_vibe_shows_short_title_and_author_line():
+def test_literary_vibe_shows_genre_and_publication_date():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Свежая книга",
         "author": "Автор",
         "categories": ["Fiction"],
+        "published_date": "2026-08",
         "summary": "История о возвращении домой.",
     }])
 
-    assert "Новинки сезона:\nСвежая книга — Автор" in message.text
-    assert "Художественная проза" not in message.text
+    assert (
+        "Новинки сезона:\nСвежая книга — Автор · "
+        "Художественная проза · август 2026"
+    ) in message.text
 
 
 def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeypatch):

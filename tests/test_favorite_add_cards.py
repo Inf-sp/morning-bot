@@ -41,14 +41,14 @@ class _FailingQuery:
         raise RuntimeError("media edit failed")
 
 
-def test_book_add_prompt_explains_author_or_year_input():
+def test_book_add_prompt_says_author_and_year_are_optional():
     bot = _Bot()
 
     asyncio.run(personal_collections.love_add_start(bot, "42", "books"))
 
     assert bot.messages[0]["text"] == (
-        "Напиши название книги, можно с автором или годом.\n\n"
-        "Например: Марсианин 2011"
+        "Напиши название книги. Автора и год можно не указывать — покажу варианты.\n\n"
+        "Например: Марсианин"
     )
     personal_collections.store.pending_input.pop("42", None)
 
@@ -117,6 +117,33 @@ def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
     assert _labels(message["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
 
 
+def test_manual_book_add_accepts_bare_title_even_from_existing_choice(monkeypatch):
+    async def analyze(text):
+        assert text == "Марсианин"
+        return {"title": text, "alternative_title": "The Martian",
+                "author": "", "year": ""}
+
+    async def find(query):
+        assert query["author"] == ""
+        assert query["year"] == ""
+        return [{
+            "title": "Марсианин", "value": "Марсианин", "author": "Энди Вейер",
+            "year": "2011", "cover_url": "https://images.test/martian.jpg",
+        }]
+
+    leisure_books._manual_book_choices.clear()
+    monkeypatch.setattr(leisure_books, "_analyze_manual_book_query", analyze)
+    monkeypatch.setattr(leisure_books, "_find_manual_book_candidates", find)
+    bot = _Bot()
+
+    asyncio.run(personal_collections.love_add_done(
+        bot, "42", "books", "Марсианин", confirmed=True,
+    ))
+
+    assert bot.messages[0]["photo"] == "https://images.test/martian.jpg"
+    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+
+
 def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch):
     token = "booknext"
     leisure_books._manual_book_choices[token] = {
@@ -157,6 +184,27 @@ def test_manual_book_candidates_keep_one_best_edition_per_author(monkeypatch):
 
     assert [item["author"] for item in choices] == ["Энди Вейер", "Джордж Дюморье"]
     assert choices[0]["cover_url"] == "https://images.test/weir-popular.jpg"
+
+
+def test_manual_book_candidates_fall_back_for_flowers_for_algernon(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        leisure_books.open_library, "search_books",
+        lambda title, **_kwargs: [{
+            "title": "Цветы для Элджернона", "author": "Дэниел Киз",
+            "authors": ["Дэниел Киз"], "year": "1959",
+            "cover_url": "https://covers.openlibrary.org/b/id/123-L.jpg",
+        }] if title == "Цветы для Элджернона" else [],
+        raising=False,
+    )
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Цветы для Элджернона", "alternative_title": "Flowers for Algernon",
+        "author": "", "year": "",
+    }))
+
+    assert choices[0]["title"] == "Цветы для Элджернона"
+    assert choices[0]["author"] == "Дэниел Киз"
 
 
 def test_manual_book_candidate_keeps_the_verified_catalog_title(monkeypatch):
@@ -308,7 +356,8 @@ def test_manual_book_other_reopens_input_when_variants_are_exhausted():
 
     assert leisure_books.store.pending_input["42"] == "loveaddls_books"
     assert bot.messages[0]["text"] == (
-        "Других подтверждённых вариантов не нашлось. Уточни автора или год."
+        "Других подтверждённых вариантов не нашлось. "
+        "Можно уточнить автора или год либо написать другое название."
     )
     leisure_books.store.pending_input.pop("42", None)
 
@@ -320,27 +369,46 @@ def test_manual_book_add_saves_verified_metadata_and_shows_full_card(monkeypatch
         personal_collections.store, "add_to_list",
         lambda _key, _cid, value: added.append(value),
     )
-    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda title, **kwargs: {
+    item = {
         "title": "Дюна", "author": "Фрэнк Герберт", "year": "1965",
         "categories": ["Science Fiction"], "description": "История борьбы за Арракис.",
         "cover_url": "https://images.test/dune.jpg",
         "info_link": "https://books.google.test/dune",
-    })
+    }
+
+    async def analyze(_text):
+        return {"title": "Дюна", "alternative_title": "Dune",
+                "author": "Фрэнк Герберт", "year": ""}
+
+    async def find(_query):
+        return [leisure_books._manual_book_candidate(item)]
+
+    leisure_books._manual_book_choices.clear()
+    monkeypatch.setattr(leisure_books, "_analyze_manual_book_query", analyze)
+    monkeypatch.setattr(leisure_books, "_find_manual_book_candidates", find)
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
     bot = _Bot()
 
     asyncio.run(personal_collections.love_add_done(
         bot, "42", "books", "Дюна — Фрэнк Герберт", confirmed=True,
     ))
 
+    assert added == []
+    callback = bot.messages[0]["reply_markup"].inline_keyboard[0][0].callback_data
+    query = _Query()
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        bot, "42", query, callback,
+    ))
+
     assert added[0]["author"] == "Фрэнк Герберт"
     assert added[0]["year"] == "1965"
     assert added[0]["categories"] == ["Science Fiction"]
-    message = bot.messages[0]
-    assert message["photo"] == "https://images.test/dune.jpg"
-    assert "✅ Добавлена в «🎚️ Мои книги»" in message["caption"]
-    assert "📚 Дюна · 1965 · Фантастика" in message["caption"]
-    assert "Автор: Фрэнк Герберт" in message["caption"]
-    assert "История борьбы за Арракис." in message["caption"]
+    assert bot.messages[0]["photo"] == "https://images.test/dune.jpg"
+    message = query.edits[0]["media"]
+    assert "✅ Добавлена в «🎚️ Мои книги»" in message.caption
+    assert "📚 Дюна · 1965 · Фантастика" in message.caption
+    assert "Автор: Фрэнк Герберт" in message.caption
+    assert "История борьбы за Арракис." in message.caption
 
 
 def test_collection_choice_saves_only_the_selected_candidate(monkeypatch):

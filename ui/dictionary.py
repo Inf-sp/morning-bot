@@ -1,6 +1,7 @@
 from dictionary_model import display_term
 
 from .builder import MessageBuilder
+from .learning_entry import render_learning_entry
 
 
 def dict_overview(nl_total, en_total):
@@ -31,4 +32,14 @@ def dict_deleted(removed=None):
         if translation:
             b.text_line(f" → {translation[:1].upper() + translation[1:]}")
         b.newline()
+    return b.build_stripped()
+
+
+def dict_category_entry(category, index, total, entry):
+    """Одна полная карточка внутри перелистываемой категории словаря."""
+    lang = str((entry or {}).get("lang") or "nl")
+    flag = "🇬🇧" if lang == "en" else "🇳🇱"
+    b = MessageBuilder()
+    b.section(f"{flag} {category} · {index + 1}/{total}")
+    render_learning_entry(b, entry or {})
     return b.build_stripped()
