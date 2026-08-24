@@ -529,6 +529,42 @@ def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
 
 
+def test_reopening_favorite_book_does_not_replace_it_with_same_title_match(monkeypatch):
+    saved = {
+        "id": "book-martian", "value": "Марсианин", "title": "Марсианин",
+        "author": "Энди Вейер", "year": "2014", "genre_label": "Без жанра",
+        "description": "Астронавт остаётся один на Марсе.",
+        "cover_url": "https://images.test/martian.jpg",
+        "google_books_id": "real-martian",
+    }
+    monkeypatch.setattr(leisure_books.store, "ensure_list_ids", lambda *_args: [saved])
+    persisted = []
+    monkeypatch.setattr(
+        leisure_books.store, "set_list",
+        lambda _key, _cid, values: persisted.extend(values),
+    )
+    async def genre_ai(*_args, **_kwargs):
+        return {"items": [{"id": 0, "genre": "Фантастика"}]}
+    monkeypatch.setattr(leisure_books.ai, "allm_json", genre_ai)
+    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda *_args, **_kwargs: {
+        "google_books_id": "ridley-biography", "title": "Марсианин",
+        "author": "Иэн Нейтан", "year": "2014",
+        "categories": ["Ридли Скотт. Гений визуальных миров. От «Чужого» до «Марсианина»"],
+        "description": "Биография режиссёра Ридли Скотта.",
+        "cover_url": "https://images.test/ridley.jpg",
+    })
+
+    records = asyncio.run(leisure_books._favorite_book_records("42"))
+    book = records[0]["book"]
+
+    assert book["google_books_id"] == "real-martian"
+    assert book["author"] == "Энди Вейер"
+    assert book["description"] == "Астронавт остаётся один на Марсе."
+    assert book["cover_url"] == "https://images.test/martian.jpg"
+    assert records[0]["genre"] == "Фантастика"
+    assert persisted[0]["genre_label"] == "Фантастика"
+
+
 def test_favorite_book_with_multiple_categories_uses_primary_genre_once():
     assert leisure_books._favorite_book_genre({
         "categories": ["Fantasy", "Romance"],
@@ -1002,6 +1038,59 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
     assert "📚 Литературный вайб · Алкмар" in sent[0]["text"]
     assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
     assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
+
+
+def test_books_home_does_not_wait_for_catalog_when_weekly_cache_is_empty(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def daily():
+        return {"rebus": {"emoji": "🧙 ⚡", "answer": "Гарри Поттер", "fact": "Факт."}}
+
+    def slow_catalog(*_args, **_kwargs):
+        import time
+        time.sleep(0.25)
+        return []
+
+    monkeypatch.setattr(leisure_books, "_daily_book_content", daily)
+    monkeypatch.setattr(leisure_books, "_weekly_book_cache_get", lambda **_kwargs: None)
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", slow_catalog)
+    monkeypatch.setattr(leisure_books, "_book_city", lambda _cid: "Алкмар")
+
+    import time
+    started = time.monotonic()
+    asyncio.run(leisure_books.send_books_home(Bot(), "42"))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.1
+    assert sent
+
+
+def test_books_home_daily_content_reads_cache_without_provider_calls(monkeypatch):
+    monkeypatch.setattr(
+        leisure_books.monthly_rebuses, "cached_for_day",
+        lambda *_args: {"emoji": "🐋 ⚓", "answer": "Моби Дик", "fact": "Факт."},
+    )
+    monkeypatch.setattr(
+        leisure_books.monthly_rebuses, "for_day",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI called")),
+    )
+    monkeypatch.setattr(
+        leisure_books, "_book_birthday_cache_get",
+        lambda _day: {"name": "Автор", "detail": "писатель"},
+    )
+    monkeypatch.setattr(
+        leisure_books, "_load_book_birthday",
+        lambda _day: (_ for _ in ()).throw(AssertionError("Wikidata called")),
+    )
+
+    content = asyncio.run(leisure_books._daily_book_content())
+
+    assert content["rebus"]["answer"] == "Моби Дик"
+    assert content["birthday"]["name"] == "Автор"
 
 
 def test_premiere_screens_are_compact_and_keep_book_links():
@@ -1541,7 +1630,7 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
         {"title": "Старая", "published_date": "2025-01-01", "rating": 4.9, "ratings_count": 900},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Заметная"]
     assert stored["items"] == items
@@ -1561,7 +1650,7 @@ def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
          "rating": 4.9, "ratings_count": 5000},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Свежая книга"]
 
@@ -1578,7 +1667,7 @@ def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
         "categories": ["Fiction"],
     }])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Сезонная новинка"]
 
@@ -1606,7 +1695,7 @@ def test_literary_vibe_recovers_three_verified_books_through_publishers(monkeypa
         "rating": 4.4, "ratings_count": 200, "info_link": "https://books.google.test/book",
     })
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert len(items) == 3
     assert all(item["author"] and item["isbn"] and item["cover_url"] for item in items)
@@ -1658,7 +1747,7 @@ def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(mon
     monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_publishers)
     monkeypatch.setattr(leisure_books, "_open_library_book_candidates", open_library_books, raising=False)
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Open Book 1", "Open Book 2", "Open Book 3"]
 
@@ -1690,7 +1779,7 @@ def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeyp
          "cover_url": "https://covers.test/2.jpg", "rating": 4.2, "ratings_count": 2},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Премьера месяца"]
     assert stored["items"] == items
@@ -1713,7 +1802,7 @@ def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
          "cover_url": "https://covers.test/3.jpg", "rating": 4.4, "ratings_count": 120},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert [item["title"] for item in items] == ["Новая витрина"]
     assert stored["items"] == items
@@ -1730,7 +1819,7 @@ def test_weekly_books_do_not_fall_back_outside_current_season(monkeypatch):
          "rating": 4.9, "ratings_count": 5000},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert items
     assert all(item["title"] != "Неудачная" for item in items)
@@ -1746,7 +1835,7 @@ def test_weekly_books_never_show_classics_when_catalogue_has_no_fresh_hits(monke
          "rating": 4.9, "ratings_count": 5000},
     ])
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert items
     assert all(item["title"] != "Мастер и Маргарита" for item in items)
@@ -1763,7 +1852,7 @@ def test_weekly_books_use_verified_season_reserve_when_all_apis_are_empty(monkey
     monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_candidates)
     monkeypatch.setattr(leisure_books, "_open_library_book_candidates", no_candidates)
 
-    items = asyncio.run(leisure_books.get_weekly_new_books())
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
     assert len(items) == 3
     assert all(item["author"] and item["isbn"] and item["url"] for item in items)

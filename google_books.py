@@ -265,6 +265,11 @@ def find_volume(title: str, alternative_title: str = "", author: str = "") -> di
         key=lambda pair: pair[0],
         reverse=True,
     )
+    if _norm(author):
+        ranked = [
+            pair for pair in ranked
+            if _author_match_score(pair[1], author) >= 0.55
+        ]
     if not ranked or ranked[0][0] < 0.58:
         return None
     return ranked[0][1]

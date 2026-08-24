@@ -207,6 +207,29 @@ def test_manual_book_candidates_fall_back_for_flowers_for_algernon(monkeypatch):
     assert choices[0]["author"] == "Дэниел Киз"
 
 
+def test_manual_book_candidate_determines_missing_genre_with_ai(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
+        "title": "Цветы для Элджернона", "author": "Дэниел Киз",
+        "year": "1959", "description": "Научный эксперимент меняет интеллект героя.",
+        "cover_url": "https://images.test/algernon.jpg",
+    }])
+
+    async def genre_ai(*_args, **kwargs):
+        assert kwargs["tier"] == "leisure"
+        assert kwargs["module"] == "leisure_collection_add"
+        return {"items": [{"id": 0, "genre": "Фантастика"}]}
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", genre_ai)
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Цветы для Элджернона", "alternative_title": "Flowers for Algernon",
+        "author": "", "year": "",
+    }))
+
+    assert choices[0]["genre_label"] == "Фантастика"
+    assert leisure_books._favorite_book_genre(choices[0]) == "Фантастика"
+
+
 def test_manual_book_candidate_keeps_the_verified_catalog_title(monkeypatch):
     monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
         "title": "The Martian", "author": "Andy Weir", "authors": ["Andy Weir"],
