@@ -155,6 +155,28 @@ def test_find_volumes_prefers_newest_only_after_popularity(monkeypatch):
     ]
 
 
+def test_find_volumes_prioritizes_popular_adult_book_over_childrens_match(monkeypatch):
+    monkeypatch.setattr(google_books.config, "GOOGLE_BOOKS_API_KEY", "books-secret")
+    monkeypatch.setattr(google_books, "_search_items", lambda *_args, **_kwargs: [
+        {"id": "childrens", "volumeInfo": {
+            "title": "Остров", "authors": ["Малоизвестный автор"],
+            "publishedDate": "2020", "ratingsCount": 50_000,
+            "categories": ["Juvenile Fiction"],
+            "imageLinks": {"thumbnail": "https://example.com/child.jpg"},
+        }},
+        {"id": "popular-adult", "volumeInfo": {
+            "title": "Остров", "authors": ["Популярный автор"],
+            "publishedDate": "2015", "ratingsCount": 5_000,
+            "categories": ["Fiction"],
+            "imageLinks": {"thumbnail": "https://example.com/adult.jpg"},
+        }},
+    ])
+
+    result = google_books.find_volumes("Остров")
+
+    assert [book["google_books_id"] for book in result] == ["popular-adult"]
+
+
 def test_find_volumes_uses_alternative_title_and_filters_wrong_author(monkeypatch):
     calls = []
     monkeypatch.setattr(google_books.config, "GOOGLE_BOOKS_API_KEY", "books-secret")

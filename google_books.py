@@ -297,6 +297,14 @@ def _edition_key(volume: dict) -> tuple[str, tuple[str, ...], str]:
     return _norm(volume.get("title")), authors, str(volume.get("year") or "")
 
 
+def _is_children_volume(volume: dict) -> bool:
+    categories = " ".join(str(value) for value in (volume.get("categories") or [])).casefold()
+    return any(marker in categories for marker in (
+        "juvenile fiction", "juvenile nonfiction", "children's", "children books",
+        "детская литература", "книги для детей",
+    ))
+
+
 def find_volumes(
     title: str,
     alternative_title: str = "",
@@ -345,6 +353,8 @@ def find_volumes(
     scored = []
     normalized_titles = {_norm(value) for value in titles}
     for volume in raw_volumes:
+        if _is_children_volume(volume):
+            continue
         title_score = _match_score(volume, titles, "")
         if title_score < 0.58:
             continue

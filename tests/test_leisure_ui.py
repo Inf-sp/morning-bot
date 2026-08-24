@@ -1867,6 +1867,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
 
     assert "Новинки сезона:\nНедавний бестселлер — Автор" in message.text
     assert "Популярное чтение" not in message.text
+    assert "Жанр не указан" not in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
         and entity.url == "https://books.google.com/books?id=test"

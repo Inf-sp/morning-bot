@@ -1128,7 +1128,8 @@ def _write_book_premiere(
             builder.text_line(title)
         if author:
             builder.text_line(f" — {author}")
-        builder.text_line(f" · {genres or 'Жанр не указан'}")
+        if genres:
+            builder.text_line(f" · {genres}")
         builder.text_line(
             f" · {_book_premiere_date(item) or 'Дата не указана'}"
         )

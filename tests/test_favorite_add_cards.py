@@ -230,6 +230,45 @@ def test_manual_book_candidate_determines_missing_genre_with_ai(monkeypatch):
     assert leisure_books._favorite_book_genre(choices[0]) == "Фантастика"
 
 
+def test_manual_book_candidate_translates_description_to_russian(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
+        "title": "Flowers for Algernon", "author": "Daniel Keyes", "year": "1959",
+        "categories": ["Science Fiction"],
+        "description": "A scientific experiment dramatically changes Charlie's intelligence.",
+        "cover_url": "https://images.test/algernon.jpg",
+    }])
+
+    async def metadata_ai(*_args, **_kwargs):
+        return {"items": [{
+            "id": 0, "genre": "Фантастика",
+            "description_ru": "Научный эксперимент резко меняет интеллект Чарли.",
+        }]}
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", metadata_ai)
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Цветы для Элджернона", "alternative_title": "Flowers for Algernon",
+        "author": "", "year": "",
+    }))
+
+    assert choices[0]["description"] == "Научный эксперимент резко меняет интеллект Чарли."
+    assert choices[0]["cover_url"] == "https://images.test/algernon.jpg"
+
+
+def test_manual_book_candidate_without_cover_is_not_offered(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
+        "title": "Книга без обложки", "author": "Автор", "year": "2020",
+        "description": "Описание на русском.", "cover_url": "",
+    }])
+    monkeypatch.setattr(leisure_books.open_library, "search_books", lambda *_args, **_kwargs: [])
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Книга без обложки", "alternative_title": "", "author": "", "year": "",
+    }))
+
+    assert choices == []
+
+
 def test_manual_book_candidate_keeps_the_verified_catalog_title(monkeypatch):
     monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
         "title": "The Martian", "author": "Andy Weir", "authors": ["Andy Weir"],
