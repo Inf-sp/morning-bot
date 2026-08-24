@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import leisure_movies
 import leisure_music
 import leisure_games
+import leisure_books
 import leisure_collection
 import personal_collections
 import config
@@ -23,6 +24,9 @@ class _Bot:
     async def send_message(self, **kwargs):
         self.messages.append(kwargs)
 
+    async def send_photo(self, **kwargs):
+        self.messages.append(kwargs)
+
 
 def test_manual_artist_add_shows_a_card_and_collection_link(monkeypatch):
     monkeypatch.setattr(leisure_music, "_cached_artist", lambda _cid: None)
@@ -35,7 +39,7 @@ def test_manual_artist_add_shows_a_card_and_collection_link(monkeypatch):
     assert message["text"] == (
         "✅ Добавлен в «🎚️ Мои артисты»\n\n"
         "🎸 The National\n\n"
-        "Учту в подборках: 🌿 Инди · 🎸 Рок"
+        "Учту в подборках: Инди · Рок"
     )
     assert _labels(message["reply_markup"]) == [
         ["🎚️ Мои артисты"], ["⬅️ Назад", "#️⃣ Главная"],
@@ -57,6 +61,104 @@ def test_manual_movie_add_uses_verified_metadata_when_available(monkeypatch):
     assert _labels(message["reply_markup"])[0] == ["🎚️ Моё кино"]
 
 
+def test_manual_book_add_asks_for_author_or_year_before_saving(monkeypatch):
+    added = []
+    monkeypatch.setattr(personal_collections.store, "add_to_list", lambda *_args: added.append(_args))
+    async def analyze(_key, _text):
+        return [
+            {"value": "Марсианин — Энди Вейер", "label": "Марсианин · Энди Вейер · 2011"},
+            {"value": "Марсианин — Джордж Дюморье", "label": "Марсианин · Джордж Дюморье · 1897"},
+        ]
+    monkeypatch.setattr(personal_collections, "_analyze_collection_candidates", analyze)
+    bot = _Bot()
+
+    asyncio.run(personal_collections.love_add_done(bot, "42", "books", "Марсианин"))
+
+    assert added == []
+    assert bot.messages[0]["text"] == "Что именно добавить? Выбери книгу:"
+    assert _labels(bot.messages[0]["reply_markup"])[:2] == [
+        ["Марсианин · Энди Вейер · 2011"],
+        ["Марсианин · Джордж Дюморье · 1897"],
+    ]
+
+
+def test_manual_book_add_saves_verified_metadata_and_shows_full_card(monkeypatch):
+    added = []
+    monkeypatch.setattr(personal_collections, "_love_items", lambda _cid, _key: [])
+    monkeypatch.setattr(
+        personal_collections.store, "add_to_list",
+        lambda _key, _cid, value: added.append(value),
+    )
+    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda title, **kwargs: {
+        "title": "Дюна", "author": "Фрэнк Герберт", "year": "1965",
+        "categories": ["Science Fiction"], "description": "История борьбы за Арракис.",
+        "cover_url": "https://images.test/dune.jpg",
+        "info_link": "https://books.google.test/dune",
+    })
+    bot = _Bot()
+
+    asyncio.run(personal_collections.love_add_done(
+        bot, "42", "books", "Дюна — Фрэнк Герберт", confirmed=True,
+    ))
+
+    assert added[0]["author"] == "Фрэнк Герберт"
+    assert added[0]["year"] == "1965"
+    assert added[0]["categories"] == ["Science Fiction"]
+    message = bot.messages[0]
+    assert message["photo"] == "https://images.test/dune.jpg"
+    assert "✅ Добавлена в «🎚️ Мои книги»" in message["caption"]
+    assert "📚 Дюна · 1965 · Фантастика" in message["caption"]
+    assert "Автор: Фрэнк Герберт" in message["caption"]
+    assert "История борьбы за Арракис." in message["caption"]
+
+
+def test_collection_choice_saves_only_the_selected_candidate(monkeypatch):
+    selected = []
+    token = "choice123"
+    personal_collections._add_choices[token] = {
+        "cid": "42", "key": "movies", "origin": "base",
+        "created_at": personal_collections.time.time(),
+        "choices": [
+            {"value": "Марсианин (фильм, 2015)", "label": "Фильм"},
+            {"value": "Марсианин (сериал, 2020)", "label": "Сериал"},
+        ],
+    }
+
+    async def save(_bot, cid, key, value, origin="base", *, confirmed=False):
+        selected.append((cid, key, value, origin, confirmed))
+
+    monkeypatch.setattr(personal_collections, "love_add_done", save)
+
+    asyncio.run(personal_collections.confirm_collection_choice(
+        _Bot(), "42", None, token, 0,
+    ))
+
+    assert selected == [
+        ("42", "movies", "Марсианин (фильм, 2015)", "base", True),
+    ]
+
+
+def test_collection_candidates_use_premium_ai_route(monkeypatch):
+    captured = {}
+
+    async def analyze(_prompt, _tokens, **kwargs):
+        captured.update(kwargs)
+        return {"items": [{
+            "value": "Марсианин — Энди Вейер",
+            "label": "Марсианин · Энди Вейер · 2011",
+        }]}
+
+    monkeypatch.setattr(personal_collections.ai, "allm_json", analyze)
+
+    choices = asyncio.run(personal_collections._analyze_collection_candidates(
+        "books", "Марсианин",
+    ))
+
+    assert choices[0]["value"] == "Марсианин — Энди Вейер"
+    assert captured["tier"] == "leisure"
+    assert captured["module"] == "leisure_collection_add"
+
+
 def test_manual_collection_add_routes_to_artist_card(monkeypatch):
     added = []
     cards = []
@@ -73,7 +175,9 @@ def test_manual_collection_add_routes_to_artist_card(monkeypatch):
 
     monkeypatch.setattr(leisure_music, "send_favorite_artists_added_card", send_card)
 
-    asyncio.run(personal_collections.love_add_done(_Bot(), "42", "artists", "The National"))
+    asyncio.run(personal_collections.love_add_done(
+        _Bot(), "42", "artists", "The National", confirmed=True,
+    ))
 
     assert added == ["The National"]
     assert cards == [["The National"]]
@@ -104,7 +208,7 @@ def test_manual_game_add_saves_detected_genre_and_platform(monkeypatch):
     monkeypatch.setattr(leisure_games, "send_favorite_games_added_card", send_card)
 
     asyncio.run(personal_collections.love_add_done(
-        _Bot(), "42", "games", "Unknown Adventure",
+        _Bot(), "42", "games", "Unknown Adventure", confirmed=True,
     ))
 
     assert added[0]["genres"] == ["adventure"]

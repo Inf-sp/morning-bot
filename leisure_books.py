@@ -307,6 +307,87 @@ def _favorite_book_value(record):
     return str(record.get("value") or record.get("title") or record.get("name") or "").strip()
 
 
+def _manual_book_parts(value):
+    """Разбирает «Название — Автор» или «Название (год)» без угадывания издания."""
+    text = " ".join(str(value or "").split()).strip(" ,;.-")
+    year_match = re.match(r"^(?P<title>.+?)\s*(?:\(|,?\s)(?P<year>\d{4})\)?$", text)
+    if year_match:
+        return year_match.group("title").strip(" ,;.-"), "", year_match.group("year")
+    author_parts = re.split(r"\s+[—–-]\s+", text, maxsplit=1)
+    if len(author_parts) == 2 and all(part.strip() for part in author_parts):
+        return author_parts[0].strip(), author_parts[1].strip(), ""
+    return text, "", ""
+
+
+def _book_identity(value):
+    return " ".join(re.findall(r"[a-zа-яё0-9]+", str(value or "").casefold(), flags=re.I))
+
+
+async def resolve_manual_favorite_book(value):
+    """Возвращает проверенную карточку или причину для короткого уточнения."""
+    title, author, year = _manual_book_parts(value)
+    if not title or not (author or year):
+        return None, "clarify"
+    try:
+        volume = await asyncio.wait_for(
+            asyncio.to_thread(google_books.find_volume, title, author=author),
+            timeout=5.0,
+        )
+    except Exception:
+        volume = None
+    if not isinstance(volume, dict):
+        return None, "not_found"
+    if year and str(volume.get("year") or "") != year:
+        return None, "not_found"
+    if author:
+        expected = _book_identity(author)
+        actual = _book_identity(volume.get("author"))
+        if not actual or (expected not in actual and actual not in expected):
+            return None, "not_found"
+    item = dict(volume)
+    item["title"] = str(item.get("title") or title).strip()
+    item["value"] = item["title"]
+    item["author"] = str(item.get("author") or author).strip()
+    item["year"] = str(item.get("year") or year).strip()
+    item = _with_book_url(item)
+    item["genre_label"] = _favorite_book_genre(item)
+    return item, ""
+
+
+def _favorite_book_added_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def send_favorite_books_added_card(bot, cid, items):
+    items = [dict(item) for item in items or [] if isinstance(item, dict)]
+    if not items:
+        return
+    if len(items) != 1:
+        await send_favorite_books(bot, cid)
+        return
+    item = items[0]
+    msg = leisure_ui.favorite_book_added_card(item)
+    kb = _favorite_book_added_kb()
+    cover = str(item.get("cover_url") or "").strip()
+    if cover:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=cover, caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities,
+        reply_markup=kb, disable_web_page_preview=True,
+    )
+
+
 def _favorite_book_genre(item):
     categories = item.get("categories") or []
     if isinstance(categories, str):
@@ -321,7 +402,7 @@ async def _favorite_book_records(cid):
 
     async def enrich(record):
         value = _favorite_book_value(record)
-        metadata = {"title": value}
+        metadata = {**dict(record), "title": value}
         if value:
             async with semaphore:
                 try:
@@ -1067,46 +1148,45 @@ async def get_book_premieres(*, refresh=False):
     return items
 
 
-async def send_book_premieres(bot, cid, *, status=None):
-    today = datetime.now(config.TZ).date()
-    month = f"{_MONTHS[today.month - 1].capitalize()} {today.year}"
+async def _book_premieres_with_covers():
     items = await get_book_premieres()
     if not items:
-        # Ночной прогрев мог ещё не выполниться после запуска или смены месяца.
-        # Пользовательский вход восстанавливает только отсутствующий кэш; готовая
-        # витрина по-прежнему открывается без дополнительного запроса.
         items = await get_book_premieres(refresh=True)
-    items = [
+    return [
         item for item in items
         if str(item.get("cover_url") or "").strip()
     ][:7]
+
+
+def _book_premieres_view(items, page=0):
+    today = datetime.now(config.TZ).date()
+    month = f"{_MONTHS[today.month - 1].capitalize()} {today.year}"
     period = month if all(_released_this_month(item.get("published_date")) for item in items) \
         else "Свежие новинки"
-    msg = leisure_ui.book_premieres_screen(period, items)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.book_premieres_screen(period, [items[page]] if items else [])
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"book_premiere_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"book_premiere_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
-    covers = [
-        InputMediaPhoto(media=str(item.get("cover_url") or "").strip())
-        for item in items
-    ]
-    if len(covers) >= 2:
-        try:
-            await bot.send_media_group(
-                chat_id=cid,
-                media=covers,
-                caption=msg.text,
-                caption_entities=msg.entities,
-            )
-            return
-        except Exception:
-            pass
-    if len(covers) == 1:
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def send_book_premieres(bot, cid, *, status=None):
+    items = await _book_premieres_with_covers()
+    msg, kb, page = _book_premieres_view(items)
+    if items:
         try:
             await bot.send_photo(
                 chat_id=cid,
-                photo=covers[0].media,
+                photo=str(items[page].get("cover_url") or "").strip(),
                 caption=msg.text,
                 caption_entities=msg.entities,
                 reply_markup=kb,
@@ -1114,14 +1194,27 @@ async def send_book_premieres(bot, cid, *, status=None):
             return
         except Exception:
             pass
-    if covers:
-        msg = leisure_ui.book_premieres_screen(month, [])
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
                              disable_web_page_preview=True)
         return
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
                            disable_web_page_preview=True)
+
+
+async def show_book_premiere_page(q, page):
+    items = await _book_premieres_with_covers()
+    if not items:
+        return
+    msg, kb, page = _book_premieres_view(items, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(
+            media=str(items[page].get("cover_url") or "").strip(),
+            caption=msg.text,
+            caption_entities=msg.entities,
+        ),
+        reply_markup=kb,
+    )
 
 
 def _book_genre_menu_kb():

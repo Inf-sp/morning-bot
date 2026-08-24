@@ -1172,6 +1172,63 @@ def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
     ]
 
 
+def test_book_premieres_are_sent_as_one_poster_carousel(monkeypatch):
+    sent = []
+    items = [{
+        "title": f"Книга {index}", "author": f"Автор {index}",
+        "published_date": "2026-08-15", "categories": ["Fiction"],
+        "summary": f"Короткое описание {index}.",
+        "cover_url": f"https://images.test/book{index}.jpg",
+    } for index in range(3)]
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(
+        leisure_books, "_book_premieres_with_covers",
+        lambda: asyncio.sleep(0, result=items),
+    )
+
+    asyncio.run(leisure_books.send_book_premieres(Bot(), "42"))
+
+    assert sent[0]["photo"] == items[0]["cover_url"]
+    assert "Книга 0" in sent[0]["caption"]
+    assert "Книга 1" not in sent[0]["caption"]
+    assert _labels(sent[0]["reply_markup"]) == [
+        ["◀️", "1/3", "▶️"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
+def test_book_premiere_carousel_edits_the_same_message(monkeypatch):
+    items = [{
+        "title": f"Книга {index}", "author": f"Автор {index}",
+        "published_date": "2026-08-15", "categories": ["Fiction"],
+        "summary": f"Короткое описание {index}.",
+        "cover_url": f"https://images.test/book{index}.jpg",
+    } for index in range(3)]
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    monkeypatch.setattr(
+        leisure_books, "_book_premieres_with_covers",
+        lambda: asyncio.sleep(0, result=items),
+    )
+
+    asyncio.run(leisure_books.show_book_premiere_page(Query(), 1))
+
+    assert edited[0]["media"].media == items[1]["cover_url"]
+    assert "Книга 1" in edited[0]["media"].caption
+    assert _labels(edited[0]["reply_markup"]) == [
+        ["◀️", "2/3", "▶️"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+
+
 def test_series_premiere_card_marks_favorite_season_and_rating():
     message = leisure_movies.leisure_ui.series_premiere_screen({
         "name": "Разделение",

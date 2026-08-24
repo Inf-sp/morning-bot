@@ -44,6 +44,44 @@ def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
+def test_main_game_recommendation_button_requests_a_fresh_game(monkeypatch):
+    calls = []
+
+    class Status:
+        mode = "inline"
+
+        async def stop(self, delete=True):
+            calls.append(("stop", delete))
+
+    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
+        return Status()
+
+    async def send_game_recommendation(bot, cid, **kwargs):
+        calls.append((cid, kwargs.get("refresh")))
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(
+        bot_callbacks.leisure_games,
+        "send_game_recommendation",
+        send_game_recommendation,
+    )
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+
+    class Query:
+        data = "vg_reco"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = object()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls[0] == ("42", True)
+
+
 def test_weather_warning_opens_myday_without_replacing_the_warning(monkeypatch):
     calls = []
 

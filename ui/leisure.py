@@ -671,35 +671,35 @@ def _fmt_date(iso):
 
 
 def book_text(item):
-    """Составная карточка (условные блоки) -> MessageBuilder."""
-    author = item.get("author", "")
-    title = item.get("title", "")
-    en = item.get("title_en", "")
-    year = str(item.get("year", ""))
-    head_meta = ", ".join(x for x in [en, year] if x)
-    head = f"{author} • «{title}»" if author else f"«{title}»"
+    """Карточка книги в том же ритме, что карточка кино: название → метаданные → описание."""
+    author = str(item.get("author") or "").strip()
+    title = str(item.get("title") or "Книга").strip()
+    en = str(item.get("title_en") or "").strip()
+    year = str(item.get("year") or "").strip()
     url = str(item.get("url") or "").strip()
+    categories = item.get("categories") or []
+    if isinstance(categories, str):
+        categories = [categories]
+    genre_names = {
+        "fiction": "Художественная проза", "fantasy": "Фэнтези",
+        "science fiction": "Фантастика", "mystery & detective": "Детектив",
+        "thrillers": "Триллер", "romance": "Романтика", "history": "История",
+        "biography & autobiography": "Биография", "psychology": "Психология",
+    }
+    genre = next((genre_names.get(str(value).casefold(), str(value).strip())
+                  for value in categories if str(value).strip()), "")
 
     b = MessageBuilder()
     b.text_line("📚 ")
     if url:
-        if author:
-            b.bold(f"{author} • ")
-        b.link(f"«{title}»", url)
-        if head_meta:
-            b.bold(f" ({head_meta})")
-    elif not head_meta:
-        b.bold(head)
+        b.link(title, url)
     else:
-        # "(meta)" одновременно жирный (продолжение заголовка) и курсивный —
-        # как в исходном "<b>...<i>(meta)</i></b>": вложенные entity на одном диапазоне,
-        # весь head+" (meta)" остаётся одной непрерывной bold-entity.
-        meta_text = f"({head_meta})"
-        head_and_gap_offset = u16_len(b.text)
-        b.bold(f"{head} {meta_text}")
-        meta_offset = head_and_gap_offset + u16_len(head) + 1
-        b._entities.append(MessageEntity(MessageEntity.ITALIC, meta_offset, u16_len(meta_text)))
+        b.bold(title)
     b.newline()
+    metadata = [value for value in (author, en if en.casefold() != title.casefold() else "", year, genre)
+                if value]
+    if metadata:
+        b.line(" · ".join(metadata))
     if item.get("lgbt"):
         b.line("🏳️‍🌈 ЛГБТ")
     try:
@@ -712,8 +712,9 @@ def book_text(item):
         b.spacer()
         count_text = f"{ratings_count:,}".replace(",", " ")
         b.line(f"⭐ Оценка читателей: {rating:.1f}/5 · {count_text} оценок")
-    if item.get("desc"):
-        desc = str(item["desc"]).strip()
+    description = item.get("desc") or item.get("description")
+    if description:
+        desc = str(description).strip()
         if desc and desc[-1] not in ".!?…":
             desc += "."
         b.spacer()
@@ -854,6 +855,44 @@ def favorite_movie_added_card(title, tm=None):
         b.text_line(" · " + " · ".join(details))
     b.spacer()
     b.line("Учту в следующих подборках.")
+    return b.build_stripped()
+
+
+def favorite_book_added_card(data):
+    """Подтверждение ручного добавления книги с проверенными метаданными."""
+    data = data if isinstance(data, dict) else {}
+    title = str(data.get("title") or data.get("value") or "Книга").strip()
+    url = str(data.get("url") or data.get("info_link") or "").strip()
+    details = [
+        str(data.get("year") or "").strip(),
+        str(data.get("genre_label") or "").strip(),
+    ]
+    b = MessageBuilder()
+    b.line("✅ Добавлена в «🎚️ Мои книги»")
+    b.spacer()
+    b.text_line("📚 ")
+    if url:
+        b.link(title, url)
+    else:
+        b.bold(title)
+    details = [value for value in details if value]
+    if details:
+        b.text_line(" · " + " · ".join(details))
+    b.newline()
+    author = str(data.get("author") or "").strip()
+    if author:
+        b.labeled_line("Автор", author, lowercase=False)
+    try:
+        rating = float(data.get("rating") or 0)
+        ratings_count = int(data.get("ratings_count") or 0)
+    except (TypeError, ValueError):
+        rating, ratings_count = 0, 0
+    if rating and ratings_count:
+        b.line(f"⭐ {rating:.1f}/5 · {ratings_count:,} оценок".replace(",", " "))
+    description = str(data.get("description") or data.get("desc") or "").strip()
+    if description:
+        b.spacer()
+        b.line(clip(description, limit=260))
     return b.build_stripped()
 
 
@@ -1027,7 +1066,7 @@ def series_premiere_screen(item):
 
 
 def book_premieres_screen(month, items):
-    """Подпись книжной Telegram-галереи: до семи премьер с обложками."""
+    """Одна карточка книжной премьеры для перелистываемой витрины."""
     b = MessageBuilder()
     b.text_line("🆕 ")
     b.bold(f"Премьеры книг · {month}")
@@ -1038,7 +1077,7 @@ def book_premieres_screen(month, items):
     if not items:
         b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
-    for item in list(items or [])[:7]:
+    for item in list(items or [])[:1]:
         card = MessageBuilder()
         _write_book_premiere(card, item, summary_limit=90)
         card = card.build_stripped()

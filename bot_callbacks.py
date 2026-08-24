@@ -138,6 +138,9 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("ob_"):
         await onboard.handle_callback(bot, cid, q, data)
         return
+    if data.startswith("collection_pick:"):
+        await personal_collections.handle_collection_callback(bot, cid, q, data)
+        return
 
     # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
     if data.startswith("fav_"):
@@ -477,6 +480,9 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True,
         )
         return
+    if data.startswith("book_premiere_page:"):
+        await leisure_books.show_book_premiere_page(q, int(data.split(":", 1)[1]))
+        return
     if data == "book_genre_menu":
         await _ack(q)
         await leisure_books.send_book_genre_menu(bot, cid, q)
@@ -510,7 +516,7 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "vg_reco":
         await _inline_status(
             lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status,
+                bot, cid, status=status, refresh=True,
             ),
             preserve_message=True,
         )
