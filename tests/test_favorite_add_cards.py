@@ -28,6 +28,31 @@ class _Bot:
         self.messages.append(kwargs)
 
 
+class _Query:
+    def __init__(self):
+        self.edits = []
+
+    async def edit_message_media(self, **kwargs):
+        self.edits.append(kwargs)
+
+
+class _FailingQuery:
+    async def edit_message_media(self, **_kwargs):
+        raise RuntimeError("media edit failed")
+
+
+def test_book_add_prompt_explains_author_or_year_input():
+    bot = _Bot()
+
+    asyncio.run(personal_collections.love_add_start(bot, "42", "books"))
+
+    assert bot.messages[0]["text"] == (
+        "Напиши название книги, можно с автором или годом.\n\n"
+        "Например: Марсианин 2011"
+    )
+    personal_collections.store.pending_input.pop("42", None)
+
+
 def test_manual_artist_add_shows_a_card_and_collection_link(monkeypatch):
     monkeypatch.setattr(leisure_music, "_cached_artist", lambda _cid: None)
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
@@ -61,25 +86,231 @@ def test_manual_movie_add_uses_verified_metadata_when_available(monkeypatch):
     assert _labels(message["reply_markup"])[0] == ["🎚️ Моё кино"]
 
 
-def test_manual_book_add_asks_for_author_or_year_before_saving(monkeypatch):
+def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
     added = []
     monkeypatch.setattr(personal_collections.store, "add_to_list", lambda *_args: added.append(_args))
-    async def analyze(_key, _text):
-        return [
-            {"value": "Марсианин — Энди Вейер", "label": "Марсианин · Энди Вейер · 2011"},
-            {"value": "Марсианин — Джордж Дюморье", "label": "Марсианин · Джордж Дюморье · 1897"},
-        ]
-    monkeypatch.setattr(personal_collections, "_analyze_collection_candidates", analyze)
+
+    async def analyze(_text):
+        return {"title": "Марсианин", "alternative_title": "The Martian",
+                "author": "", "year": "2011"}
+
+    async def find(_query):
+        return [{
+            "title": "Марсианин", "value": "Марсианин", "author": "Энди Вейер",
+            "year": "2011", "categories": ["Science Fiction"],
+            "description": "Инженер выживает на Марсе.",
+            "cover_url": "https://images.test/martian.jpg",
+        }]
+
+    leisure_books._manual_book_choices.clear()
+    monkeypatch.setattr(leisure_books, "_analyze_manual_book_query", analyze)
+    monkeypatch.setattr(leisure_books, "_find_manual_book_candidates", find)
     bot = _Bot()
 
-    asyncio.run(personal_collections.love_add_done(bot, "42", "books", "Марсианин"))
+    asyncio.run(personal_collections.love_add_done(bot, "42", "books", "Марсианин 2011"))
 
     assert added == []
-    assert bot.messages[0]["text"] == "Что именно добавить? Выбери книгу:"
-    assert _labels(bot.messages[0]["reply_markup"])[:2] == [
-        ["Марсианин · Энди Вейер · 2011"],
-        ["Марсианин · Джордж Дюморье · 1897"],
-    ]
+    message = bot.messages[0]
+    assert message["photo"] == "https://images.test/martian.jpg"
+    assert "Марсианин" in message["caption"]
+    assert "Энди Вейер · 2011" in message["caption"]
+    assert _labels(message["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+
+
+def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch):
+    token = "booknext"
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(), "choices": [
+            {"title": "Марсианин", "author": "Энди Вейер", "year": "2011",
+             "cover_url": "https://images.test/weir.jpg"},
+            {"title": "Марсианин", "author": "Джордж Дюморье", "year": "1897",
+             "cover_url": "https://images.test/dumaurier.jpg"},
+        ],
+    }
+    added = []
+    monkeypatch.setattr(leisure_books.store, "add_to_list", lambda *_args: added.append(_args))
+    query = _Query()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        _Bot(), "42", query, f"book_add_next:{token}:0",
+    ))
+
+    assert added == []
+    assert query.edits[0]["media"].media == "https://images.test/dumaurier.jpg"
+    assert "Джордж Дюморье · 1897" in query.edits[0]["media"].caption
+    assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+
+
+def test_manual_book_candidates_keep_one_best_edition_per_author(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [
+        {"title": "Марсианин", "author": "Энди Вейер", "year": "2011",
+         "cover_url": "https://images.test/weir-popular.jpg"},
+        {"title": "The Martian", "author": "Andy Weir", "year": "2014",
+         "cover_url": "https://images.test/weir-edition.jpg"},
+        {"title": "Марсианин", "author": "Джордж Дюморье", "year": "1897",
+         "cover_url": "https://images.test/dumaurier.jpg"},
+    ])
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Марсианин", "alternative_title": "", "author": "", "year": "2011",
+    }))
+
+    assert [item["author"] for item in choices] == ["Энди Вейер", "Джордж Дюморье"]
+    assert choices[0]["cover_url"] == "https://images.test/weir-popular.jpg"
+
+
+def test_manual_book_candidate_keeps_the_verified_catalog_title(monkeypatch):
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_args, **_kwargs: [{
+        "title": "The Martian", "author": "Andy Weir", "authors": ["Andy Weir"],
+        "year": "2011", "cover_url": "https://images.test/weir.jpg",
+    }])
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates({
+        "title": "Марсианин", "alternative_title": "The Martian",
+        "author": "", "year": "2011",
+    }))
+
+    assert choices[0]["title"] == "The Martian"
+    assert choices[0]["value"] == "The Martian"
+
+
+def test_manual_book_other_invalidates_old_buttons_when_media_edit_fails():
+    token = "bookeditfail"
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(), "current_index": 0,
+        "choices": [
+            {"title": "Марсианин", "author": "Энди Вейер", "year": "2011",
+             "cover_url": "https://images.test/weir.jpg"},
+            {"title": "Марсианин", "author": "Другой Автор", "year": "2020",
+             "cover_url": "https://images.test/other.jpg"},
+        ],
+    }
+    bot = _Bot()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        bot, "42", _FailingQuery(), f"book_add_next:{token}:0",
+    ))
+
+    assert token not in leisure_books._manual_book_choices
+    assert bot.messages[0]["photo"] == "https://images.test/other.jpg"
+    callback = bot.messages[0]["reply_markup"].inline_keyboard[0][0].callback_data
+    new_token = callback.split(":", 2)[1]
+    assert new_token != token
+    assert leisure_books._manual_book_choices[new_token]["current_index"] == 1
+    leisure_books._manual_book_choices.pop(new_token, None)
+
+
+def test_manual_book_add_button_saves_only_shown_card(monkeypatch):
+    token = "booksave"
+    previous = {
+        "title": "Марсианин", "value": "Марсианин", "author": "Другой Автор",
+        "year": "2010", "cover_url": "https://images.test/previous.jpg",
+    }
+    chosen = {
+        "title": "Марсианин", "value": "Марсианин", "author": "Энди Вейер",
+        "year": "2011", "cover_url": "https://images.test/weir.jpg",
+        "genre_label": "Фантастика",
+    }
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(),
+        "current_index": 1, "choices": [previous, chosen],
+    }
+    added = []
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(
+        leisure_books.store, "add_to_list",
+        lambda _key, _cid, value: added.append(value),
+    )
+    query = _Query()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        # Даже устаревшая кнопка первой карточки сохраняет реально показанную вторую.
+        _Bot(), "42", query, f"book_add_ok:{token}:0",
+    ))
+
+    assert added == [chosen]
+    assert token not in leisure_books._manual_book_choices
+    assert "✅ Добавлена в «🎚️ Мои книги»" in query.edits[0]["media"].caption
+
+
+def test_manual_book_add_upgrades_legacy_title_to_structured_card(monkeypatch):
+    token = "booklegacy"
+    chosen = {
+        "title": "Марсианин", "value": "Марсианин", "author": "Энди Вейер",
+        "year": "2011", "cover_url": "https://images.test/weir.jpg",
+    }
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(),
+        "current_index": 0, "choices": [chosen],
+    }
+    saved = []
+    added = []
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: ["Марсианин"])
+    monkeypatch.setattr(
+        leisure_books.store, "set_list",
+        lambda _key, _cid, values: saved.extend(values),
+    )
+    monkeypatch.setattr(
+        leisure_books.store, "add_to_list", lambda *_args: added.append(_args),
+    )
+    query = _Query()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        _Bot(), "42", query, f"book_add_ok:{token}:0",
+    ))
+
+    assert added == []
+    assert saved[0]["author"] == "Энди Вейер"
+    assert saved[0]["cover_url"] == "https://images.test/weir.jpg"
+    assert "✅ Добавлена в «🎚️ Мои книги»" in query.edits[0]["media"].caption
+
+
+def test_manual_book_add_reports_an_existing_structured_book(monkeypatch):
+    token = "bookduplicate"
+    chosen = {
+        "title": "Марсианин", "value": "Марсианин", "author": "Энди Вейер",
+        "year": "2011", "cover_url": "https://images.test/weir.jpg",
+    }
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "created_at": leisure_books.time.time(),
+        "current_index": 0, "choices": [chosen],
+    }
+    added = []
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [chosen])
+    monkeypatch.setattr(
+        leisure_books.store, "add_to_list", lambda *_args: added.append(_args),
+    )
+    query = _Query()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        _Bot(), "42", query, f"book_add_ok:{token}:0",
+    ))
+
+    assert added == []
+    assert "✅ Уже в «🎚️ Мои книги»" in query.edits[0]["media"].caption
+
+
+def test_manual_book_other_reopens_input_when_variants_are_exhausted():
+    token = "booklast"
+    leisure_books._manual_book_choices[token] = {
+        "cid": "42", "origin": "leisure", "created_at": leisure_books.time.time(),
+        "choices": [{
+            "title": "Марсианин", "author": "Энди Вейер", "year": "2011",
+            "cover_url": "https://images.test/weir.jpg",
+        }],
+    }
+    leisure_books.store.pending_input.pop("42", None)
+    bot = _Bot()
+
+    asyncio.run(leisure_books.handle_manual_book_add_callback(
+        bot, "42", _Query(), f"book_add_next:{token}:0",
+    ))
+
+    assert leisure_books.store.pending_input["42"] == "loveaddls_books"
+    assert bot.messages[0]["text"] == (
+        "Других подтверждённых вариантов не нашлось. Уточни автора или год."
+    )
+    leisure_books.store.pending_input.pop("42", None)
 
 
 def test_manual_book_add_saves_verified_metadata_and_shows_full_card(monkeypatch):
@@ -138,25 +369,59 @@ def test_collection_choice_saves_only_the_selected_candidate(monkeypatch):
     ]
 
 
-def test_collection_candidates_use_premium_ai_route(monkeypatch):
+def test_manual_book_query_uses_premium_ai_and_keeps_explicit_year(monkeypatch):
     captured = {}
 
     async def analyze(_prompt, _tokens, **kwargs):
         captured.update(kwargs)
-        return {"items": [{
-            "value": "Марсианин — Энди Вейер",
-            "label": "Марсианин · Энди Вейер · 2011",
-        }]}
+        return {
+            "title": "Марсианин", "alternative_title": "The Martian",
+            "author": "", "year": "2015",
+        }
 
-    monkeypatch.setattr(personal_collections.ai, "allm_json", analyze)
+    monkeypatch.setattr(leisure_books.ai, "allm_json", analyze)
 
-    choices = asyncio.run(personal_collections._analyze_collection_candidates(
-        "books", "Марсианин",
-    ))
+    query = asyncio.run(leisure_books._analyze_manual_book_query("Марсианин 2011"))
 
-    assert choices[0]["value"] == "Марсианин — Энди Вейер"
+    assert query == {
+        "title": "Марсианин", "alternative_title": "The Martian",
+        "author": "", "year": "2011",
+    }
     assert captured["tier"] == "leisure"
     assert captured["module"] == "leisure_collection_add"
+
+
+def test_manual_book_query_drops_ai_author_and_year_missing_from_input(monkeypatch):
+    async def analyze(_prompt, _tokens, **_kwargs):
+        return {
+            "title": "Марсианин", "alternative_title": "The Martian",
+            "author": "Энди Вейер", "year": "2011",
+        }
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", analyze)
+
+    query = asyncio.run(leisure_books._analyze_manual_book_query("Марсианин"))
+
+    assert query["title"] == "Марсианин"
+    assert query["alternative_title"] == "The Martian"
+    assert query["author"] == ""
+    assert query["year"] == ""
+
+
+def test_manual_book_query_accepts_transliterated_author_present_in_input(monkeypatch):
+    async def analyze(_prompt, _tokens, **_kwargs):
+        return {
+            "title": "Марсианин", "alternative_title": "The Martian",
+            "author": "Andy Weir", "year": "",
+        }
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", analyze)
+
+    query = asyncio.run(leisure_books._analyze_manual_book_query(
+        "Марсианин Энди Вейер",
+    ))
+
+    assert query["author"] == "Andy Weir"
 
 
 def test_manual_collection_add_routes_to_artist_card(monkeypatch):

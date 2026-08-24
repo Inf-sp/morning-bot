@@ -141,6 +141,9 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("collection_pick:"):
         await personal_collections.handle_collection_callback(bot, cid, q, data)
         return
+    if data.startswith(("book_add_ok:", "book_add_next:")):
+        await leisure_books.handle_manual_book_add_callback(bot, cid, q, data)
+        return
 
     # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
     if data.startswith("fav_"):

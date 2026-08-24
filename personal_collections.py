@@ -112,7 +112,11 @@ async def love_add_start(bot, cid, key, origin="base"):
         "books": "книгу",
         "games": "игру",
     }[key]
-    await bot.send_message(chat_id=cid, text=f"Напиши {name} — добавлю в любимые.")
+    if key == "books":
+        text = "Напиши название книги, можно с автором или годом.\n\nНапример: Марсианин 2011"
+    else:
+        text = f"Напиши {name} — добавлю в любимые."
+    await bot.send_message(chat_id=cid, text=text)
 
 
 async def _analyze_collection_candidates(key, text):
@@ -206,7 +210,12 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
 
         await settings.send_home(bot, cid)
         return
-    if not confirmed and key in {"books", "movies", "games", "artists"}:
+    if not confirmed and key == "books":
+        import leisure_books
+
+        await leisure_books.offer_manual_favorite_book(bot, cid, text, origin)
+        return
+    if not confirmed and key in {"movies", "games", "artists"}:
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
     store_key, collection_id = collection

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import time
 import unicodedata
@@ -54,6 +55,12 @@ def _cover_url(image_links: dict) -> str:
     return ""
 
 
+def _plain_description(value: str) -> str:
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _volume(item: dict) -> dict:
     info = (item or {}).get("volumeInfo") or {}
     authors = [str(author).strip() for author in (info.get("authors") or []) if str(author).strip()]
@@ -71,7 +78,7 @@ def _volume(item: dict) -> dict:
         "publisher": str(info.get("publisher") or "").strip(),
         "published_date": str(info.get("publishedDate") or "").strip(),
         "year": _year(info.get("publishedDate")),
-        "description": str(info.get("description") or "").strip(),
+        "description": _plain_description(info.get("description")),
         "categories": [str(value).strip() for value in (info.get("categories") or []) if str(value).strip()],
         "rating": _float_value(info.get("averageRating")),
         "ratings_count": _int_value(info.get("ratingsCount")),
@@ -109,7 +116,11 @@ def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevanc
     if not config.GOOGLE_BOOKS_API_KEY or not str(query or "").strip():
         return []
     order_by = "newest" if order_by == "newest" else "relevance"
-    cache_key = f"{_norm(query)}|{order_by}"
+    try:
+        result_limit = max(1, min(40, int(max_results)))
+    except (TypeError, ValueError):
+        result_limit = 8
+    cache_key = f"{_norm(query)}|{order_by}|{result_limit}"
     cached = util.ttl_get("google_books", cache_key, _CACHE_TTL)
     if isinstance(cached, list):
         return cached
@@ -135,7 +146,7 @@ def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevanc
                 params={
                     "q": query,
                     "key": config.GOOGLE_BOOKS_API_KEY,
-                    "maxResults": max(1, min(40, int(max_results))),
+                    "maxResults": result_limit,
                     "orderBy": order_by,
                     "printType": "books",
                     "projection": "lite",
@@ -257,6 +268,114 @@ def find_volume(title: str, alternative_title: str = "", author: str = "") -> di
     if not ranked or ranked[0][0] < 0.58:
         return None
     return ranked[0][1]
+
+
+def _author_match_score(volume: dict, author: str) -> float:
+    wanted = _norm(author)
+    candidate = _norm(volume.get("author"))
+    if not wanted or not candidate:
+        return 0.0
+    score = SequenceMatcher(None, wanted, candidate).ratio()
+    if wanted in candidate or candidate in wanted:
+        score = max(score, 0.9)
+    return score
+
+
+def _edition_key(volume: dict) -> tuple[str, tuple[str, ...], str]:
+    authors = tuple(sorted(
+        _norm(author)
+        for author in (volume.get("authors") or [])
+        if _norm(author)
+    ))
+    if not authors and volume.get("author"):
+        authors = (_norm(volume.get("author")),)
+    return _norm(volume.get("title")), authors, str(volume.get("year") or "")
+
+
+def find_volumes(
+    title: str,
+    alternative_title: str = "",
+    author: str = "",
+    year: str = "",
+    max_results: int = 8,
+) -> list[dict]:
+    """Возвращает ранжированные проверенные варианты книги из Google Books.
+
+    Одинаковые карточки, найденные по локальному и оригинальному названию,
+    объединяются. Одноимённые книги разных авторов остаются отдельными
+    вариантами, чтобы пользователь мог переключиться на следующую.
+    """
+    titles = []
+    seen_titles = set()
+    for value in (title, alternative_title):
+        value = str(value or "").strip()
+        normalized = _norm(value)
+        if not normalized or normalized in seen_titles:
+            continue
+        seen_titles.add(normalized)
+        titles.append(value)
+    if not titles or not config.GOOGLE_BOOKS_API_KEY:
+        return []
+
+    try:
+        limit = max(1, min(40, int(max_results)))
+    except (TypeError, ValueError):
+        limit = 8
+    wanted_year = _year(year)
+    raw_volumes = []
+    for query_title in titles:
+        query = " ".join(
+            value
+            for value in (query_title, str(author or "").strip(), wanted_year)
+            if value
+        )
+        for item in _search_items(query, max_results=limit):
+            try:
+                volume = _volume(item)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if volume.get("title"):
+                raw_volumes.append(volume)
+
+    scored = []
+    normalized_titles = {_norm(value) for value in titles}
+    for volume in raw_volumes:
+        title_score = _match_score(volume, titles, "")
+        if title_score < 0.58:
+            continue
+        candidate_title = _norm(volume.get("title"))
+        author_score = _author_match_score(volume, author)
+        published_year = _int_value(volume.get("year"))
+        rank = (
+            int(candidate_title in normalized_titles),
+            int(bool(wanted_year) and volume.get("year") == wanted_year),
+            title_score,
+            author_score,
+            int(bool(volume.get("cover_url"))),
+            _int_value(volume.get("ratings_count")),
+            float(volume.get("rating") or 0),
+            published_year,
+        )
+        scored.append((rank, author_score, volume))
+
+    wanted_author = _norm(author)
+    if wanted_author:
+        scored = [entry for entry in scored if entry[1] >= 0.55]
+    scored.sort(key=lambda entry: entry[0], reverse=True)
+
+    results = []
+    seen_editions = set()
+    for _rank, _author_score, volume in scored:
+        edition = _edition_key(volume)
+        if edition in seen_editions:
+            continue
+        seen_editions.add(edition)
+        verified = dict(volume)
+        verified["google_books_verified"] = True
+        results.append(verified)
+        if len(results) >= limit:
+            break
+    return results
 
 
 def enrich_book(item: dict) -> dict:

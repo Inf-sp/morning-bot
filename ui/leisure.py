@@ -744,6 +744,18 @@ def book_text(item):
     return b.build_stripped()
 
 
+def book_add_candidate_card(data):
+    """Короткая карточка подтверждения: факты каталога без длинного служебного текста."""
+    item = dict(data or {})
+    description = str(item.get("description") or item.get("desc") or "").strip()
+    if description:
+        item["description"] = clip(description, limit=320)
+        item.pop("desc", None)
+    for field in ("why", "plot", "quote", "quote_author"):
+        item.pop(field, None)
+    return book_text(item)
+
+
 def artist_card(data):
     """Составная карточка (условные блоки) -> MessageBuilder."""
     artist = data.get("artist", "")
@@ -858,7 +870,7 @@ def favorite_movie_added_card(title, tm=None):
     return b.build_stripped()
 
 
-def favorite_book_added_card(data):
+def favorite_book_added_card(data, *, already=False):
     """Подтверждение ручного добавления книги с проверенными метаданными."""
     data = data if isinstance(data, dict) else {}
     title = str(data.get("title") or data.get("value") or "Книга").strip()
@@ -868,7 +880,8 @@ def favorite_book_added_card(data):
         str(data.get("genre_label") or "").strip(),
     ]
     b = MessageBuilder()
-    b.line("✅ Добавлена в «🎚️ Мои книги»")
+    b.line("✅ Уже в «🎚️ Мои книги»" if already
+           else "✅ Добавлена в «🎚️ Мои книги»")
     b.spacer()
     b.text_line("📚 ")
     if url:
