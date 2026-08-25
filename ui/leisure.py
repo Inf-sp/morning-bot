@@ -1213,20 +1213,19 @@ def _book_premiere_date(item):
     return _format_date_label(value, include_year=True)
 
 
-def music_week_screen(city, daily_music, concerts):
-    """Короткая недельная витрина Музыки без чартов и таблиц."""
-    city = str(city or "твоего города").strip()
+def music_week_screen(_city, daily_music, concerts, *, day=None):
+    """Короткая витрина Музыки с ближайшими концертами и ребусом."""
+    day = day or datetime.now().date()
     daily_music = daily_music or {}
     rebus = daily_music.get("rebus") or {}
-    legend = daily_music.get("legend") or {}
     b = MessageBuilder()
     b.text_line("🎧 ")
-    b.bold(f"Музыка этой недели · {city}")
+    b.bold(f"Музыка рядом · {_format_date_label(day)}")
     b.newline()
 
     b.spacer()
     events = [item for item in concerts or [] if _item_value(item, "artist")][:3]
-    b.bold("Концерты рядом:")
+    b.bold("В ближайшее время:")
     if events:
         b.newline()
         for event in events:
@@ -1234,30 +1233,23 @@ def music_week_screen(city, daily_music, concerts):
             date = str(_item_value(event, "date", "") or "").strip()
             place = str(_item_value(event, "place", "") or "").strip()
             context = _concert_context_text(_item_value(event, "context", ""))
+            description = str(_item_value(event, "description", "") or "").strip()
             url = str(_item_value(event, "url", "") or "").strip()
-            details = " · ".join(value for value in (date, place) if value)
+            details = " · ".join(value for value in (
+                _lower_initial(context), date, place,
+            ) if value)
             b.text_line("• ")
             if url:
                 b.link(artist, url)
             else:
                 b.text_line(artist)
-            if context:
-                b.text_line(f" ({_lower_initial(context)})")
             if details:
-                b.text_line(f" · {details}")
+                b.text_line(f" ({details})")
+            if description:
+                b.text_line(f" · {description}")
             b.newline()
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
-
-    if legend.get("name"):
-        b.spacer()
-        b.bold("Артист недели:")
-        b.text_line(" ")
-        b.bold(str(legend["name"]))
-        birth_date = _birthday_date_label(legend.get("birth"))
-        if birth_date:
-            b.text_line(f" · {birth_date}")
-        b.line(f" — {str(legend.get('detail') or 'музыкант').strip()}.")
 
     fact = _safe_rebus_fact(rebus, rebus.get("fact"), daily_music.get("fact"))
     b.spacer()

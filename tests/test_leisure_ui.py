@@ -967,6 +967,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     },
         [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен",
           "url": "https://tickets.example/romy"}],
+        day=date(2026, 8, 25),
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
@@ -990,17 +991,17 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Книга под настроение:" not in books.text
     assert books.text.index("Свежие релизы:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
-    assert "🎧 Музыка этой недели · Алкмар" in music.text
+    assert "🎧 Музыка рядом · 25 августа" in music.text
     assert "Вайб дня" not in music.text
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
-    assert "Артист недели: Луи Армстронг · 4 августа 1901 — трубач и певец." in music.text
-    assert "Концерты рядом:\n• Romy · 21 августа · Биддингхёйзен" in music.text
+    assert "Артист недели:" not in music.text
+    assert "В ближайшее время:\n• Romy (21 августа · Биддингхёйзен)" in music.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
         and entity.url == "https://tickets.example/romy"
         for entity in music.entities
     )
-    assert music.text.index("Артист недели:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
+    assert music.text.index("В ближайшее время:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
@@ -1374,8 +1375,8 @@ def test_daily_category_block_titles_are_bold():
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
     assert {"Литературный ребус:",
             "Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
-    assert {"Музыкальный ребус:", "Артист недели:",
-            "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
+    assert {"Музыкальный ребус:",
+            "В ближайшее время:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
 
 

@@ -508,10 +508,8 @@ def _music_city(cid):
 
 async def _daily_music_content(cid):
     today = datetime.now(config.TZ).date()
-    week_anchor = today - timedelta(days=today.weekday())
     return {
         "rebus": await monthly_rebuses.for_day("music", today, _MUSIC_REBUSES),
-        "legend": await asyncio.to_thread(_load_music_legend, week_anchor),
     }
 
 
@@ -547,7 +545,10 @@ async def send_music_home(bot, cid, q=None, status=None):
         _daily_music_content(cid),
         _weekly_concerts(cid),
     )
-    msg = leisure_ui.music_week_screen(_music_city(cid), daily_music, concerts)
+    msg = leisure_ui.music_week_screen(
+        _music_city(cid), daily_music, concerts,
+        day=datetime.now(config.TZ).date(),
+    )
     kb = music_home_keyboard()
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)

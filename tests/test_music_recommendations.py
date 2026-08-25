@@ -158,7 +158,7 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
     asyncio.run(leisure_music.send_music_home(Bot(), "42"))
 
     assert len(sent) == 1
-    assert "🎧 Музыка этой недели · Алкмар" in sent[0]["text"]
+    assert "🎧 Музыка рядом ·" in sent[0]["text"]
     assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
     assert [row[0].text for row in sent[0]["reply_markup"].inline_keyboard[:2]] == [
         "✨ Подобрать новую музыку", "🎫 Концерты",
@@ -167,14 +167,16 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
 
 def test_music_home_shows_three_nearby_concerts_as_separate_items():
     message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [
-        {"artist": "Romy", "date": "21 августа", "place": "Алкмар"},
+        {"artist": "Romy", "date": "21 августа", "place": "Алкмар",
+         "description": "Тёплая электроника и сильное живое шоу."},
         {"artist": "FKA twigs", "date": "3 сентября", "place": "Амстердам"},
         {"artist": "The National", "date": "14 сентября", "place": "Утрехт"},
-    ])
+    ], day=date(2026, 8, 25))
 
-    assert "Концерты рядом:\n• Romy · 21 августа · Алкмар" in message.text
-    assert "• FKA twigs · 3 сентября · Амстердам" in message.text
-    assert "• The National · 14 сентября · Утрехт" in message.text
+    assert "🎧 Музыка рядом · 25 августа" in message.text
+    assert "В ближайшее время:\n• Romy (21 августа · Алкмар) · Тёплая электроника и сильное живое шоу." in message.text
+    assert "• FKA twigs (3 сентября · Амстердам)" in message.text
+    assert "• The National (14 сентября · Утрехт)" in message.text
 
 
 def test_music_home_keeps_concert_type_in_compact_preview():
@@ -183,7 +185,7 @@ def test_music_home_keeps_concert_type_in_compact_preview():
         "context": "Фестиваль · Lowlands",
     }])
 
-    assert "• Romy (фестиваль · Lowlands) · 21 августа · Биддингхёйзен" in message.text
+    assert "• Romy (фестиваль · Lowlands · 21 августа · Биддингхёйзен)" in message.text
 
 
 def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
