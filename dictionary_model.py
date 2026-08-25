@@ -3,7 +3,7 @@
 import re
 
 
-DICTIONARY_FORMAT_VERSION = 2
+DICTIONARY_FORMAT_VERSION = 3
 
 
 _LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an)\s+", re.I)

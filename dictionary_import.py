@@ -1217,6 +1217,20 @@ def _save_normalized_dict_entry(cid, entry):
         if existing_term.casefold() == entry["term"].casefold():
             duplicate = dict(item)
             changed = pos_repaired
+            # Повторное добавление уже прошло свежий структурированный разбор.
+            # Он должен исправлять старую грамматику, а не только заполнять
+            # пустые поля: иначе `vaststellen` навсегда остаётся «выражением»
+            # и попадает не в глаголы. SRS-поля ниже по-прежнему не затираются.
+            if entry.get("analysis_provider") and not entry.get("analysis_pending"):
+                for field in (
+                    "pos", "article", "breakdown", "plural", "forms", "topic",
+                    "difficulty", "construction", "entry_type", "situation_type",
+                    "alt_translations",
+                ):
+                    if field in entry and duplicate.get(field) != entry[field]:
+                        duplicate[field] = entry[field]
+                        changed = True
+                duplicate["dictionary_format_version"] = DICTIONARY_FORMAT_VERSION
             for field in ("raw_user_term", "normalized_term"):
                 if not duplicate.get(field) and entry.get(field):
                     duplicate[field] = entry[field]

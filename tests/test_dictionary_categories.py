@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import learning_dictionary
+import dictionary_import
 
 
 def test_dictionary_migration_repairs_pos_from_grammar_breakdown(monkeypatch):
@@ -100,4 +101,57 @@ def test_dictionary_format_migration_reclassifies_all_legacy_cards(monkeypatch):
         item["dictionary_format_version"] == learning_dictionary._DICTIONARY_FORMAT_VERSION
         for item in words
     )
+    assert saved
+
+
+def test_dictionary_migration_rechecks_current_but_misclassified_vaststellen(monkeypatch):
+    words = [{
+        "id": "vaststellen", "lang": "nl", "term": "Vaststellen",
+        "translation": "Устанавливать", "pos": "существительное",
+        "breakdown": "выражение",
+        "dictionary_format_version": learning_dictionary._DICTIONARY_FORMAT_VERSION - 1,
+        "srs_level": 4, "srs_due_at": "2026-09-01T10:00:00+02:00",
+    }]
+
+    async def analyze(*_args, **_kwargs):
+        return {"items": [{
+            "pos": "глагол", "article": "", "breakdown": "глагол",
+            "plural": "", "infinitive": "vaststellen",
+        }]}
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(learning_dictionary.ai, "allm_json", analyze)
+
+    asyncio.run(learning_dictionary.migrate_dict_entries_for_srs("42", "nl"))
+
+    assert words[0]["pos"] == "глагол"
+    assert words[0]["breakdown"] == "глагол"
+    assert learning_dictionary._dictionary_category(words[0]) == "Глаголы"
+    assert words[0]["srs_level"] == 4
+
+
+def test_duplicate_word_replaces_wrong_category_with_fresh_analysis(monkeypatch):
+    words = [{
+        "id": "vaststellen", "lang": "nl", "term": "Vaststellen",
+        "translation": "Устанавливать", "pos": "существительное",
+        "breakdown": "выражение", "srs_level": 4,
+        "srs_due_at": "2026-09-01T10:00:00+02:00",
+    }]
+    saved = []
+    monkeypatch.setattr(dictionary_import.store, "ensure_list_ids", lambda *_args: words)
+    monkeypatch.setattr(dictionary_import.store, "set_list", lambda _key, _cid, value: saved.append(value))
+
+    status, entry = dictionary_import._save_normalized_dict_entry("42", {
+        "lang": "nl", "term": "Vaststellen", "translation": "Устанавливать",
+        "pos": "глагол", "article": "", "breakdown": "глагол",
+        "examples": [{"text": "We stellen de oorzaak vast.", "translation": "Мы устанавливаем причину."}],
+        "analysis_provider": "checked", "added_at": "2026-08-25T10:00:00+02:00",
+    })
+
+    assert status == "duplicate"
+    assert entry["pos"] == "глагол"
+    assert entry["breakdown"] == "глагол"
+    assert learning_dictionary._dictionary_category(entry) == "Глаголы"
+    assert entry["srs_level"] == 4
     assert saved

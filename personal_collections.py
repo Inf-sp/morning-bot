@@ -5,10 +5,10 @@
 """
 
 import io
-import json
 import re
 import secrets
 import time
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -20,6 +20,7 @@ from leisure_collection import (
 )
 import secure
 import store
+from ui import data_export as export_ui
 
 
 _ARCHIVED_CONTENT_RECORDS_KEY = "content_records.json"
@@ -60,36 +61,148 @@ def _unique_items(values):
     return result
 
 
-def _export_payload(cid):
-    archived = store.get_list(_ARCHIVED_CONTENT_RECORDS_KEY, cid)
-    payload = {
-        "settings": store.get_settings(cid),
-        "wardrobe": store.load_wardrobe(cid),
-        "fridge": store.get_list(config.FRIDGE_KEY, cid),
-        "dictionary": store.get_list(config.DICT_KEY, cid),
-        "favorites": {
-            "movies": store.get_list(config.FAVORITE_MOVIES_KEY, cid),
-            "books": store.get_list(config.FAVORITE_BOOKS_KEY, cid),
-            "artists": store.get_list(config.FAVORITE_ARTISTS_KEY, cid),
-            "games": store.get_list(config.FAVORITE_GAMES_KEY, cid),
-        },
-        "visited_countries": store.get_list(config.SAVED_COUNTRIES_KEY, cid),
-        "thoughts": store.get_list(config.THOUGHTS_KEY, cid),
+_EXPORT_LABELS = {
+    "all": "Все данные", "wardrobe": "Мой шкаф", "fridge": "Мой холодильник",
+    "dictionary": "Мой словарь", "favorites": "Любимое", "travel": "Поездки",
+}
+
+
+def _clean_text(value):
+    return " ".join(str(value or "").split()).strip()
+
+
+def _named_items(items):
+    result = []
+    for item in items or []:
+        if isinstance(item, dict):
+            text = _clean_text(
+                item.get("name") or item.get("title") or item.get("value")
+                or item.get("term") or item.get("text") or item.get("content")
+            )
+        else:
+            text = _clean_text(item)
+        if text:
+            result.append(text)
+    return result
+
+
+def _section(title, lines):
+    values = [line for line in lines if _clean_text(line)]
+    return [title, "=" * len(title), *([f"• {line}" for line in values] or ["Пока пусто"]), ""]
+
+
+def _wardrobe_lines(cid):
+    wardrobe = store.load_wardrobe(cid) or {}
+    lines = []
+    for zone, subcategories in (wardrobe.get("zones") or {}).items():
+        names = []
+        for items in (subcategories or {}).values():
+            names.extend(_named_items(items))
+        if names:
+            lines.append(f"{zone}: {', '.join(names)}")
+    return lines
+
+
+def _fridge_lines(cid):
+    lines = []
+    for item in store.get_list(config.FRIDGE_KEY, cid):
+        if isinstance(item, dict):
+            name = _clean_text(item.get("name") or item.get("value"))
+            category = _clean_text(item.get("category") or item.get("cat"))
+            amount = _clean_text(item.get("amount") or item.get("quantity"))
+            details = " · ".join(part for part in (category, amount) if part)
+            if name:
+                lines.append(f"{name} — {details}" if details else name)
+        elif _clean_text(item):
+            lines.append(_clean_text(item))
+    return lines
+
+
+def _dictionary_lines(cid):
+    lines = []
+    for item in store.get_list(config.DICT_KEY, cid):
+        if not isinstance(item, dict):
+            continue
+        term = _clean_text(item.get("term") or item.get("word"))
+        article = _clean_text(item.get("article"))
+        if article and term and not term.casefold().startswith(article.casefold() + " "):
+            term = f"{article} {term}"
+        translation = _clean_text(item.get("translation") or item.get("ru"))
+        if term:
+            lines.append(f"{term} → {translation}" if translation else term)
+    return lines
+
+
+def _favorite_sections(cid):
+    groups = (
+        ("Кино", config.FAVORITE_MOVIES_KEY), ("Книги", config.FAVORITE_BOOKS_KEY),
+        ("Артисты", config.FAVORITE_ARTISTS_KEY), ("Игры", config.FAVORITE_GAMES_KEY),
+    )
+    lines = []
+    for label, key in groups:
+        values = _named_items(store.get_list(key, cid))
+        if values:
+            lines.append(f"{label}: {', '.join(values)}")
+    return lines
+
+
+def _settings_lines(cid):
+    current = store.get_settings(cid) or {}
+    profile = store.get_profile(cid) or {}
+    city = _clean_text(current.get("city"))
+    language = {"nl": "Нидерландский", "en": "Английский"}.get(profile.get("learning_language"), "Не изучаю")
+    lines = [f"Город: {city}" if city else "", f"Язык обучения: {language}"]
+    level = _clean_text(profile.get(f"learning_level_{profile.get('learning_language', '')}"))
+    if level:
+        lines.append(f"Уровень: {level}")
+    return lines
+
+
+def _export_text(cid, kind="all"):
+    parts = ["МОИ ДАННЫЕ", f"Создано: {datetime.now(config.TZ):%d.%m.%Y}", ""]
+    sections = {
+        "wardrobe": ("Мой шкаф", _wardrobe_lines(cid)),
+        "fridge": ("Мой холодильник", _fridge_lines(cid)),
+        "dictionary": ("Мой словарь", _dictionary_lines(cid)),
+        "favorites": ("Любимое", _favorite_sections(cid)),
+        "travel": ("Поездки", _named_items(store.get_list(config.SAVED_COUNTRIES_KEY, cid))),
     }
-    if archived:
-        payload["archive"] = {"saved_cards": archived}
-    return payload
+    if kind == "all":
+        parts.extend(_section("Настройки", _settings_lines(cid)))
+        for title, lines in sections.values():
+            parts.extend(_section(title, lines))
+        archive = _named_items(store.get_list(config.THOUGHTS_KEY, cid))
+        archive.extend(_named_items(store.get_list(_ARCHIVED_CONTENT_RECORDS_KEY, cid)))
+        if archive:
+            parts.extend(_section("Архив", archive))
+    elif kind in sections:
+        title, lines = sections[kind]
+        parts.extend(_section(title, lines))
+    return "\n".join(parts).rstrip() + "\n"
 
 
-async def export_data(bot, cid):
-    body = json.dumps(_export_payload(cid), ensure_ascii=False, indent=2, default=str)
+async def send_export_choice(bot, cid, q=None):
+    msg = export_ui.export_choice()
+    markup = export_ui.export_choice_keyboard()
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=markup, transient=True)
+
+
+async def export_data(bot, cid, kind="all"):
+    body = _export_text(cid, kind)
     document = io.BytesIO(body.encode("utf-8"))
-    document.name = "daily-manager-data.json"
+    document.name = f"moi-dannye-{kind}.txt"
     await bot.send_document(
         chat_id=cid,
         document=document,
         filename=document.name,
-        caption="📤 Готово. Это копия твоих данных.",
+        caption=f"📤 Готово · {_EXPORT_LABELS.get(kind, 'Данные')}",
     )
 
 
@@ -337,7 +450,10 @@ async def handle_collection_callback(bot, cid, q, data):
         await confirm_collection_choice(bot, cid, q, token, int(index))
         return
     if data == "as_export":
-        await export_data(bot, cid)
+        await send_export_choice(bot, cid, q)
+        return
+    if data.startswith("as_export_"):
+        await export_data(bot, cid, data.removeprefix("as_export_"))
         return
     if data.startswith("ls_loveadd_"):
         await love_add_start(bot, cid, data[len("ls_loveadd_"):], origin="leisure")
