@@ -225,7 +225,7 @@ def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
     monkeypatch.setattr(
         dictionary_morning,
         "_build_morning_word",
-        lambda *_args: (MessageSpec(text="📚 Слова и фразы дня"), []),
+        lambda *_args: (MessageSpec(text="🇳🇱 Слово дня"), []),
     )
 
     asyncio.run(settings._send_scheduled_notification(Bot(), "42", "daily_words"))
@@ -238,18 +238,78 @@ def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
     ]
 
 
-def test_morning_words_show_examples_rule_tip_and_task():
+def test_morning_word_shows_deep_dive_and_spoiler_answer():
     msg = learning_ui.morning_words("🇳🇱", entries=[{
-        "term": "Inmiddels",
-        "translation": "Уже · тем временем",
-        "example": "Inmiddels woon ik hier al twee jaar.",
-        "example_translation": "Я уже два года здесь живу.",
-    }], rule="наречие", tip="Свяжи слово со знакомой ситуацией.")
+        "term": "Immers", "pronunciation": "[и́ммерс]", "translation": "ведь · же",
+        "essence": "Так напоминают о том, что собеседнику уже должно быть известно.",
+        "examples": [
+            {"text": "Het is immers weekend!", "translation": "Сейчас ведь выходные!", "context": "Когда спишь до обеда"},
+            {"text": "Je bent immers mijn vriend.", "translation": "Ты же мой друг.", "context": "Когда просишь о помощи"},
+        ],
+        "memory_hook": "ИМею МЕРу — я ВЕДЬ разумный.",
+        "usage_note": "Обычно immers стоит в середине предложения.",
+        "exercise_ru": "Я ведь читаю книгу.",
+        "exercise_answer": "Ik lees immers een boek.",
+    }])
 
-    assert "1. Inmiddels → Уже · тем временем" in msg.text
-    assert "Пример: Inmiddels woon ik hier al twee jaar. → Я уже два года здесь живу." in msg.text
-    assert "Правило: наречие" in msg.text
-    assert "Как запомнить: Свяжи слово со знакомой ситуацией." in msg.text
-    assert "🎯 Задание: составь одно предложение" in msg.text
+    assert "🇳🇱 Слово дня" in msg.text
+    assert "Immers\n[и́ммерс] · ведь · же" in msg.text
+    assert "В чём суть" in msg.text
+    assert "Het is immers weekend! → Сейчас ведь выходные! (Когда спишь до обеда)" in msg.text
+    assert "Крючок для памяти" in msg.text
+    assert "🎯 Твоя очередь:" in msg.text
+    assert "Ответ: Ik lees immers een boek." in msg.text
     spoilers = [entity for entity in msg.entities if entity.type == "spoiler"]
-    assert spoilers
+    assert len(spoilers) == 1
+
+
+def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):
+    words = [
+        {"term": "Immers", "translation": "ведь", "lang": "nl"},
+        {"term": "Inmiddels", "translation": "тем временем", "lang": "nl"},
+        {"term": "Eigenlijk", "translation": "вообще-то", "lang": "nl"},
+        {"term": "Laat maar", "translation": "забудь", "lang": "nl"},
+    ]
+    monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
+    monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
+
+    shown = [
+        dictionary_morning.build_daily_practice("42", "nl", mark_shown=True)["entries"][0]["term"]
+        for _ in range(3)
+    ]
+
+    assert set(shown) == {"Immers", "Inmiddels", "Eigenlijk"}
+    assert "Laat maar" not in shown
+    assert dictionary_morning.build_daily_practice("42", "nl", mark_shown=True)["entries"] == []
+
+
+def test_daily_word_deep_dive_is_generated_once_and_saved_hidden(monkeypatch):
+    words = [{
+        "term": "Immers", "translation": "ведь", "lang": "nl",
+        "breakdown": "наречие", "examples": [{"text": "Het is immers weekend.", "translation": "Ведь выходные."}],
+    }]
+    calls = []
+    deep_dive = {
+        "pronunciation": "[и́ммерс]", "translation": "ведь · же",
+        "essence": "Напоминает об известной причине.",
+        "examples": [
+            {"text": "Het is immers weekend.", "translation": "Ведь выходные.", "context": "Объяснение"},
+            {"text": "Je weet het immers.", "translation": "Ты же это знаешь.", "context": "Напоминание"},
+        ],
+        "memory_hook": "ИМ-МЕР-С — ВЕДЬ.", "usage_note": "Обычно стоит в середине.",
+        "exercise_ru": "Ты же это знаешь.", "exercise_answer": "Je weet het immers.",
+    }
+
+    async def fake_allm_json(*_args, **_kwargs):
+        calls.append(True)
+        return deep_dive
+
+    monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
+    monkeypatch.setattr(dictionary_morning.ai, "allm_json", fake_allm_json)
+    monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
+
+    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
+    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
+
+    assert len(calls) == 1
+    assert words[0]["daily_word_deep_dive"] == deep_dive

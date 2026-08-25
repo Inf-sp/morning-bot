@@ -284,47 +284,52 @@ def translate_result(flag, lang, ru, answer, result):
 
 
 def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", rule=""):
-    """Ежедневная карточка повторения ранее изученных слов и фраз."""
+    """Глубокая карточка одного слова дня."""
     b = MessageBuilder()
-    b.section(f"📚{flag} Слова и фразы дня")
+    b.section(f"{flag} Слово дня")
     if empty_hint:
-        b.line("В прошлых занятиях пока нет слов и фраз для повторения.")
+        b.line("В словаре пока нет одиночных слов для разбора.")
         b.spacer()
         b.text_line("🎯 ")
         b.label("Мини-задача", "пройди короткую тренировку — следующая подборка соберётся из неё.")
         msg = b.build()
         msg.text = msg.text.rstrip("\n")
         return msg
-    b.line("Сегодня повторяем слова и фразы из прошлых занятий. Сначала вспомни перевод сам, потом проверь себя.")
     prepared = list(entries or [])
     if not prepared and words:
         prepared = [{"term": word, "translation": ru} for word, ru in words]
     if prepared:
-        b.spacer()
-        for index, entry in enumerate(prepared[:3], 1):
-            b.bold(f"{index}. {entry.get('term', '')}")
-            b.text_line(" → ")
-            b.add(str(entry.get("translation") or ""), MessageEntity.SPOILER)
-            b.newline()
-            example = str(entry.get("example") or "").strip()
-            example_translation = str(entry.get("example_translation") or "").strip()
-            if example:
-                b.text_line("Пример: ")
-                b.italic(example)
-                if example_translation:
-                    b.text_line(f" → {example_translation}")
-                b.newline()
-            if index < min(3, len(prepared)):
-                b.spacer()
-        if rule:
-            b.spacer()
-            b.labeled_line("Правило", rule, lowercase=False)
-        if tip:
-            b.spacer()
-            b.labeled_line("Как запомнить", tip, lowercase=False)
-        b.spacer()
-        b.text_line("🎯 ")
-        b.label("Задание", "составь одно предложение с любым словом или фразой.")
+        entry = prepared[0]
+        b.bold(str(entry.get("term") or ""))
+        b.newline()
+        pronunciation = str(entry.get("pronunciation") or "").strip()
+        translation = str(entry.get("translation") or "").strip()
+        b.line(" · ".join(part for part in (pronunciation, translation) if part))
+        essence = str(entry.get("essence") or "").strip()
+        if essence:
+            b.spacer(); b.bold("В чём суть"); b.newline(); b.line(essence)
+        examples = entry.get("examples") or []
+        if examples:
+            b.spacer(); b.bold("Живые примеры"); b.newline()
+            for example in examples[:2]:
+                if not isinstance(example, dict):
+                    continue
+                line = f"{example.get('text', '')} → {example.get('translation', '')}".strip()
+                context = str(example.get("context") or "").strip()
+                b.line(f"{line} ({context})" if context else line)
+        hook = str(entry.get("memory_hook") or "").strip()
+        note = str(entry.get("usage_note") or "").strip()
+        if hook or note:
+            b.spacer(); b.bold("Крючок для памяти"); b.newline()
+            if hook: b.line(hook)
+            if note: b.line(note)
+        exercise = str(entry.get("exercise_ru") or "").strip()
+        answer = str(entry.get("exercise_answer") or "").strip()
+        if exercise:
+            b.spacer(); b.text_line("🎯 "); b.bold("Твоя очередь:"); b.newline()
+            b.line(f"«{exercise}»")
+            if answer:
+                b.text_line("Ответ: "); b.add(answer, MessageEntity.SPOILER); b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
