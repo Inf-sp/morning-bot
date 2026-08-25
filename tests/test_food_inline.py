@@ -8,6 +8,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import menu
 import recipe_generation
 import util
+import bot_callbacks
 
 
 def test_home_meal_time_windows():
@@ -99,3 +100,66 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
         "entities": [], "reply_markup": "food-kb",
     })
     assert calls[-1] == ("stop", True)
+
+
+def test_food_home_uses_fast_fallback_when_cache_is_empty(monkeypatch):
+    shown = []
+
+    class Status:
+        async def replace(self, text, **_kwargs):
+            shown.append(text)
+
+    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
+    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        recipe_generation, "get_fast_cooking_home_idea",
+        lambda *_args, **_kwargs: {"name": "Быстрый ужин"},
+        raising=False,
+    )
+
+    def slow_generation(*_args, **_kwargs):
+        import time
+        time.sleep(0.25)
+        return {"name": "Медленный рецепт"}
+
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", slow_generation)
+    monkeypatch.setattr(menu.menu_ui, "food_menu", lambda idea: SimpleNamespace(
+        text=idea["name"], entities=[], reply_markup="food-kb",
+    ))
+
+    import time
+    started = time.monotonic()
+    asyncio.run(menu.send_food_menu(object(), "42", status=Status()))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.1
+    assert shown == ["Быстрый ужин"]
+
+
+def test_dinner_button_uses_dinner_cache_without_forced_refresh(monkeypatch):
+    calls = []
+
+    class Status:
+        async def stop(self, delete=True):
+            return None
+
+    async def start_inline(*_args, **_kwargs):
+        return Status()
+
+    async def send_food_menu(_bot, _cid, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.menu, "send_food_menu", send_food_menu)
+    query = SimpleNamespace(
+        data="a_recipe_dinner",
+        message=SimpleNamespace(chat_id="42", message_id=1),
+    )
+    update = SimpleNamespace(callback_query=query)
+    context = SimpleNamespace(bot=object())
+
+    asyncio.run(bot_callbacks.handle(update, context, lambda *_args: None))
+
+    assert calls[0]["meal"] == "dinner"
+    assert calls[0]["refresh"] is False

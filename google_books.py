@@ -76,6 +76,7 @@ def _volume(item: dict) -> dict:
         "authors": authors,
         "author": ", ".join(authors),
         "publisher": str(info.get("publisher") or "").strip(),
+        "language": str(info.get("language") or "").strip().casefold(),
         "published_date": str(info.get("publishedDate") or "").strip(),
         "year": _year(info.get("publishedDate")),
         "description": _plain_description(info.get("description")),
@@ -311,6 +312,7 @@ def find_volumes(
     author: str = "",
     year: str = "",
     max_results: int = 8,
+    english_only: bool = False,
 ) -> list[dict]:
     """Возвращает ранжированные проверенные варианты книги из Google Books.
 
@@ -353,6 +355,8 @@ def find_volumes(
     scored = []
     normalized_titles = {_norm(value) for value in titles}
     for volume in raw_volumes:
+        if english_only and str(volume.get("language") or "").casefold() != "en":
+            continue
         if _is_children_volume(volume):
             continue
         title_score = _match_score(volume, titles, "")

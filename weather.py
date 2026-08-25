@@ -401,6 +401,19 @@ def _clock(value):
         return ""
 
 
+def _full_forecast_parts(now):
+    """Возвращает только ещё актуальные дневные периоды без ночного блока."""
+    hour = int(now.hour)
+    parts = [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
+    if hour < 8:
+        return parts
+    return [
+        (label, max(start, hour), end)
+        for label, start, end in parts
+        if hour < end
+    ]
+
+
 # ---------- отправка ----------
 async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     s = store.get_settings(cid)
@@ -435,7 +448,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             if stamp.startswith(dt.strftime("%Y-%m-%dT%H")) and index < len(probs)
         ), d["precipitation_probability_max"][0] or 0)
         periods = []
-        parts = [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 23)]
+        parts = _full_forecast_parts(dt)
         for label, h1, h2 in parts:
             t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
             for i, ts in enumerate(hours):

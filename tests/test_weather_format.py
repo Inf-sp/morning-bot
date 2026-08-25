@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 from types import SimpleNamespace
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -62,6 +63,22 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert message.text.index("🌧️ Днём") < message.text.index("Закат 21:02")
     assert "☀️ Солнце" not in message.text
     assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
+
+
+def test_full_forecast_at_23_keeps_only_weather_until_midnight():
+    parts = weather._full_forecast_parts(datetime(2026, 8, 25, 23, 0, tzinfo=weather.TZ))
+
+    assert parts == [("Вечером", 23, 24)]
+
+
+def test_full_forecast_after_midnight_starts_with_the_coming_morning():
+    parts = weather._full_forecast_parts(datetime(2026, 8, 26, 0, 15, tzinfo=weather.TZ))
+
+    assert parts == [
+        ("Утром", 8, 12),
+        ("Днём", 12, 18),
+        ("Вечером", 18, 24),
+    ]
 
 
 def test_weather_adapter_keeps_sunset_from_current_conditions():

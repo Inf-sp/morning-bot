@@ -177,6 +177,29 @@ def test_find_volumes_prioritizes_popular_adult_book_over_childrens_match(monkey
     assert [book["google_books_id"] for book in result] == ["popular-adult"]
 
 
+def test_find_volumes_for_manual_addition_keeps_only_english_editions(monkeypatch):
+    monkeypatch.setattr(google_books.config, "GOOGLE_BOOKS_API_KEY", "books-secret")
+    monkeypatch.setattr(google_books, "_search_items", lambda *_args, **_kwargs: [
+        {"id": "russian", "volumeInfo": {
+            "title": "Марсианин", "authors": ["Энди Вейер"], "language": "ru",
+            "publishedDate": "2014", "ratingsCount": 50_000,
+            "imageLinks": {"thumbnail": "https://example.com/russian-cover.jpg"},
+        }},
+        {"id": "english", "volumeInfo": {
+            "title": "The Martian", "authors": ["Andy Weir"], "language": "en",
+            "publishedDate": "2014", "ratingsCount": 5_000,
+            "imageLinks": {"thumbnail": "https://example.com/english-cover.jpg"},
+        }},
+    ])
+
+    result = google_books.find_volumes(
+        "Марсианин", alternative_title="The Martian", english_only=True,
+    )
+
+    assert [book["google_books_id"] for book in result] == ["english"]
+    assert result[0]["cover_url"] == "https://example.com/english-cover.jpg"
+
+
 def test_find_volumes_uses_alternative_title_and_filters_wrong_author(monkeypatch):
     calls = []
     monkeypatch.setattr(google_books.config, "GOOGLE_BOOKS_API_KEY", "books-secret")

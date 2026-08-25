@@ -96,21 +96,20 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
             hour=_FOOD_MEAL_HOURS[meal], minute=0, second=0, microsecond=0,
         )
     if not refresh:
-        cached = recipe_generation.get_cached_cooking_home_idea(cid, now=recipe_now)
-        if cached is not None:
-            msg = menu_ui.food_menu(cached)
-            if status is not None:
-                await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-            elif q is not None:
-                try:
-                    await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-                except Exception:
-                    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                                           reply_markup=msg.reply_markup)
-            else:
+        ready = recipe_generation.get_fast_cooking_home_idea(cid, now=recipe_now)
+        msg = menu_ui.food_menu(ready)
+        if status is not None:
+            await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+        elif q is not None:
+            try:
+                await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            except Exception:
                 await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                                        reply_markup=msg.reply_markup)
-            return
+        else:
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                                   reply_markup=msg.reply_markup)
+        return
 
     owns_status = status is None
     if status is None:

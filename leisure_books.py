@@ -516,6 +516,7 @@ async def _find_manual_book_candidates(query):
                 author=query.get("author", ""),
                 year=query.get("year", ""),
                 max_results=12,
+                english_only=True,
             ),
             timeout=8.0,
         )
@@ -531,6 +532,7 @@ async def _find_manual_book_candidates(query):
                     author=query.get("author", ""),
                     year=query.get("year", ""),
                     max_results=12,
+                    english_only=True,
                 ),
                 timeout=8.0,
             )

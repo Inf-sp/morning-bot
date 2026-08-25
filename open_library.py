@@ -22,7 +22,10 @@ def _norm(value):
     return " ".join(re.findall(r"[a-zа-яё0-9]+", text, flags=re.I))
 
 
-def search_books(title, alternative_title="", author="", year="", max_results=12):
+def search_books(
+    title, alternative_title="", author="", year="", max_results=12,
+    english_only=False,
+):
     """Ищет проверяемые варианты книги без API-ключа."""
     titles = []
     for value in (title, alternative_title):
@@ -54,7 +57,7 @@ def search_books(title, alternative_title="", author="", year="", max_results=12
                     "q": query, "limit": limit,
                     "fields": (
                         "key,title,author_name,first_publish_year,publish_year,isbn,cover_i,"
-                        "publisher,ratings_average,ratings_count,subject"
+                        "publisher,ratings_average,ratings_count,subject,language"
                     ),
                 },
                 headers=_HEADERS,
@@ -73,6 +76,9 @@ def search_books(title, alternative_title="", author="", year="", max_results=12
         if not isinstance(doc, dict):
             continue
         candidate_title = str(doc.get("title") or "").strip()
+        languages = [str(value).casefold() for value in (doc.get("language") or [])]
+        if english_only and not any(value in ("eng", "en") for value in languages):
+            continue
         authors = [str(value).strip() for value in doc.get("author_name") or [] if str(value).strip()]
         cover_id = doc.get("cover_i")
         published_year = str(doc.get("first_publish_year") or "").strip()
@@ -94,6 +100,7 @@ def search_books(title, alternative_title="", author="", year="", max_results=12
             "author": ", ".join(authors),
             "authors": authors,
             "year": published_year,
+            "language": "en" if any(value in ("eng", "en") for value in languages) else "",
             "isbn": next((str(value) for value in doc.get("isbn") or [] if str(value)), ""),
             "cover_url": f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg",
             "publisher": ", ".join(str(value) for value in (doc.get("publisher") or [])[:2]),

@@ -823,6 +823,18 @@ def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     return normalized if _home_idea_complete(normalized) else None
 
 
+def get_fast_cooking_home_idea(cid, now=None) -> dict:
+    """Возвращает экран Готовки без сети: раздельный кэш или локальный рецепт."""
+    cached = get_cached_cooking_home_idea(cid, now=now)
+    if cached is not None:
+        return cached
+    context = _home_idea_context(cid, now=now)
+    idea = _home_local_idea(context)
+    if not _home_idea_complete(idea):
+        raise ValueError("Нет готового рецепта для главного экрана Готовки")
+    return idea
+
+
 def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
     context = _home_idea_context(cid, now=now)
