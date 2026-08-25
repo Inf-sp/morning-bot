@@ -275,6 +275,7 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
     asyncio.run(wardrobe.send_home(bot, "cached-fast", q=q))
 
     assert len(q.message.edits) == 1
+    assert "Модный ребус: 🧥 🌧️ 👢 → Тренчкот" in q.message.edits[0][0][0]
     assert bot.sends == []
 
 
@@ -342,13 +343,18 @@ def test_wardrobe_home_actions_use_one_column():
     assert "📝 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
-def test_purchase_hub_explains_the_flow_without_purchase_check():
-    message = wardrobe.wardrobe_ui.shopping_home_screen()
+def test_purchase_menu_immediately_recommends_a_missing_item(monkeypatch):
+    calls = []
 
-    assert "Подберу вещь, которая будет работать с твоим шкафом" in message.text
-    assert "худи»" in message.text
+    async def recommend(_bot, cid):
+        calls.append(cid)
+
+    monkeypatch.setattr(wardrobe, "recommend_missing_purchase", recommend)
+
+    asyncio.run(wardrobe.handle_callback(object(), "42", None, "w_buy"))
+
+    assert calls == ["42"]
     assert _labels(wardrobe._purchase_hub_kb()) == [
-        ["✨ Подобрать вещь"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -369,7 +375,7 @@ def test_purchase_suggestions_show_colors_and_three_real_outfits():
     assert "• Худи + белые кеды." in message.text
 
 
-def test_other_purchase_immediately_recommends_a_wardrobe_gap(monkeypatch):
+def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypatch):
     sent = []
     wardrobe_data = {
         "zones": {
@@ -390,9 +396,14 @@ def test_other_purchase_immediately_recommends_a_wardrobe_gap(monkeypatch):
 
     asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
 
-    assert "💳 Что докупить · Серые широкие джинсы" in sent[0]["text"]
-    assert "закроют пробел в шкафу" in sent[0]["text"]
-    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать другую вещь"]
+    assert sent[0]["text"].startswith("💳 Что докупить\n\nРекомендую добавить в гардероб:")
+    assert sent[0]["text"].count("\n• ") == 3
+    assert "Серые широкие джинсы" in sent[0]["text"]
+    assert "Закроют пробел в шкафу" in sent[0]["text"]
+    assert "Напиши, что ищешь: например «худи», «осенние ботинки»" in sent[0]["text"]
+    assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
+    assert _labels(sent[0]["reply_markup"]) == [["⬅️ Назад", "#️⃣ Главная"]]
+    wardrobe.store.pending_input.pop("42", None)
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

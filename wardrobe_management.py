@@ -334,12 +334,11 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
-        reply_markup=_kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]))
+        reply_markup=_kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]))
 
 
 def _purchase_hub_kb():
     return _kb([
-        [("✨ Подобрать вещь", "w_buy_pick")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -347,54 +346,46 @@ def _purchase_hub_kb():
 def _purchase_result_kb():
     return _kb([
         [("✨ Подобрать другую вещь", "w_buy_gap")],
-        [("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")],
+        [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
 
 
 async def send_purchase_hub(bot, cid):
-    """Открывает понятный сценарий покупки, не заменяя полезный образ дня."""
-    msg = wardrobe_ui.shopping_home_screen()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=_purchase_hub_kb())
+    """Совместимость со старыми маршрутами: сразу запускает подбор покупки."""
+    await recommend_missing_purchase(bot, cid)
 
 
-def _missing_purchase_candidate(cid, wardrobe):
-    """Берёт актуальный пробел из дневного образа или рассчитывает его локально."""
+def _missing_purchase_candidates(cid, wardrobe):
+    """Берёт актуальный пробел из образа и добирает ещё две полезные покупки."""
     cached = _get_cached_look(cid) or {}
     recommended = (cached.get("look_data") or {}).get("purchase_recommendation") or {}
-    if _clean_text(recommended.get("item")) and _clean_text(recommended.get("reason")):
-        return recommended
-    return _purchase_candidate(wardrobe, {}, _settings.wardrobe_styles(cid))
+    primary = recommended if (
+        _clean_text(recommended.get("item")) and _clean_text(recommended.get("reason"))
+        and recommended.get("version") == PURCHASE_RECOMMENDATION_VERSION
+    ) else None
+    return _purchase_candidates(
+        wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3,
+    )
 
 
 async def recommend_missing_purchase(bot, cid):
-    """Сразу советует одну вещь, которой не хватает для более полных образов."""
+    """Сразу советует три вещи и принимает уточнение покупки следующим сообщением."""
     wardrobe = store.load_wardrobe(cid)
     if not has_wardrobe_items(cid):
         await bot.send_message(
             chat_id=cid,
             text="Сначала заполни шкаф — тогда я смогу понять, каких вещей не хватает именно тебе.",
             reply_markup=_kb([[("🆕 Заполнить шкаф", "w_fill")],
-                              [("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
+                              [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
-    candidate = _missing_purchase_candidate(cid, wardrobe)
-    if not candidate:
-        await bot.send_message(
-            chat_id=cid,
-            text="Сейчас не вижу одного явного пробела в шкафу. Напиши вещь, которую хочешь купить, — подберу цвета и сочетания.",
-            reply_markup=_purchase_hub_kb(),
-        )
-        return
-    item = _clean_text(candidate.get("item"))
-    result = _normalize_purchase_suggestions(
-        {"item": item, "headline": _clean_text(candidate.get("reason"))}, item, wardrobe,
-    )
-    text_out, entities = _build_purchase_suggestions_message(result)
+    candidates = _missing_purchase_candidates(cid, wardrobe)
+    store.pending_input[str(cid)] = "wardrobe_buy"
+    text_out, entities = _build_purchase_recommendations_message(candidates)
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
-                           reply_markup=_purchase_result_kb())
+                           reply_markup=_purchase_hub_kb())
 
 
 def _local_purchase_suggestions(item, wardrobe):
@@ -479,7 +470,7 @@ async def recommend_purchase(bot, cid, item):
             chat_id=cid,
             text="Сначала заполни шкаф — тогда я смогу подобрать цвет и сочетания именно к твоим вещам.",
             reply_markup=_kb([[("🆕 Заполнить шкаф", "w_fill")],
-                              [("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
+                              [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
     prefs = _settings.wardrobe_prefs_context(cid)

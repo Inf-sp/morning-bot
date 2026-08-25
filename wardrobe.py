@@ -47,9 +47,56 @@ if TYPE_CHECKING:
 
 WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 11
-PURCHASE_RECOMMENDATION_VERSION = 2
+PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
+_FASHION_REBUS = {
+    "emoji": "🧥 🌧️ 👢",
+    "answer": "Тренчкот",
+    "fact": (
+        "Изначально плащ-тренчкот был разработан Томасом Бёрберри для солдат "
+        "британской армии в годы Первой мировой войны, а слово «trench» "
+        "буквально переводится как «окоп»."
+    ),
+}
+_PURCHASE_IDEAS = (
+    {
+        "item": "Тёмно-синий оверсайз-пиджак",
+        "category": "Верхняя одежда", "style": "Smart Casual", "season": "Осень",
+        "reason": "закроет потребность в многослойности и легко свяжет базовые футболки с денимом и брюками",
+        "markers": ("пиджак", "блейзер"),
+    },
+    {
+        "item": "Кожаные лоферы на утолщённой подошве",
+        "category": "Обувь", "style": "Кэжуал", "season": "Всесезон",
+        "reason": "сбалансируют расслабленные повседневные образы и добавят структуры широким брюкам",
+        "markers": ("лофер",),
+    },
+    {
+        "item": "Текстурный трикотажный жилет",
+        "category": "Трикотаж", "style": "Минимализм", "season": "Слои",
+        "reason": "добавит объёма и интереса монохромным рубашкам без утяжеления силуэта",
+        "markers": ("жилет",),
+    },
+    {
+        "item": "Молочная оверсайз-рубашка",
+        "category": "Верх", "style": "Минимализм", "season": "Всесезон",
+        "reason": "даст светлый верх для денима, брюк и многослойных комплектов",
+        "markers": ("молочная рубашка", "белая рубашка"),
+    },
+    {
+        "item": "Структурная сумка через плечо",
+        "category": "Аксессуары", "style": "Городской", "season": "Всесезон",
+        "reason": "соберёт повседневные комплекты и добавит им чёткую городскую линию",
+        "markers": ("сумка",),
+    },
+    {
+        "item": "Кожаный ремень средней ширины",
+        "category": "Аксессуары", "style": "Кэжуал", "season": "Всесезон",
+        "reason": "свяжет обувь с брюками и поможет сделать свободный силуэт собраннее",
+        "markers": ("ремень",),
+    },
+)
 
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
@@ -163,6 +210,12 @@ def _build_look_message(look_data):
     return msg.text, msg.entities
 
 
+def _with_fashion_rebus(look_data):
+    result = dict(look_data or {})
+    result["fashion_rebus"] = dict(_FASHION_REBUS)
+    return result
+
+
 def _purchase_recommendation_text(recommendation):
     recommendation = recommendation or {}
     item = _clean_text(recommendation.get("item"))
@@ -180,6 +233,7 @@ def _purchase_candidate(w, weather_ctx, selected_styles=None):
         return {
             "version": PURCHASE_RECOMMENDATION_VERSION,
             "item": "Лёгкая непромокаемая ветровка",
+            "category": "Верхняя одежда", "style": "Практичный", "season": "Дождь",
             "reason": "закроет важный пробел в шкафу и защитит образ от дождя",
             "priority": 100,
         }
@@ -191,6 +245,7 @@ def _purchase_candidate(w, weather_ctx, selected_styles=None):
             return {
                 "version": PURCHASE_RECOMMENDATION_VERSION,
                 "item": "Белая свободная футболка",
+                "category": "Верх", "style": "Городской", "season": "Всесезон",
                 "reason": "добавит современную городскую базу к брюкам и кедам",
                 "priority": 60,
             }
@@ -207,10 +262,45 @@ def _purchase_candidate(w, weather_ctx, selected_styles=None):
             return {
                 "version": PURCHASE_RECOMMENDATION_VERSION,
                 "item": "Серые широкие джинсы",
+                "category": "Низ", "style": "Повседневный", "season": "Всесезон",
                 "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
                 "priority": 40,
             }
     return None
+
+
+def _purchase_candidates(w, weather_ctx=None, selected_styles=None, *, primary=None, limit=3):
+    """Возвращает несколько конкретных недостающих вещей без сетевого запроса."""
+    weather_ctx = weather_ctx or {}
+    items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
+    facts = " ".join(str(item.get("name") or "") for item in items).casefold()
+    candidates, seen = [], set()
+
+    def add(candidate):
+        candidate = dict(candidate or {})
+        name = _clean_text(candidate.get("item"))
+        key = name.casefold()
+        if not name or key in seen:
+            return
+        seen.add(key)
+        candidate["version"] = PURCHASE_RECOMMENDATION_VERSION
+        candidates.append(candidate)
+
+    add(primary or _purchase_candidate(w, weather_ctx, selected_styles))
+    for idea in _PURCHASE_IDEAS:
+        if any(marker in facts for marker in idea["markers"]):
+            continue
+        add({key: value for key, value in idea.items() if key != "markers"})
+        if len(candidates) >= limit:
+            break
+    # Если шкаф уже очень полный, предлагаем другой крой или цвет знакомой
+    # категории: экран всё равно должен дать три конкретных направления покупки.
+    if len(candidates) < limit:
+        for idea in _PURCHASE_IDEAS:
+            add({key: value for key, value in idea.items() if key != "markers"})
+            if len(candidates) >= limit:
+                break
+    return candidates[:limit]
 
 
 def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="", selected_styles=None,
@@ -317,6 +407,11 @@ def _build_purchase_message(data):
 
 def _build_purchase_suggestions_message(data):
     msg = wardrobe_ui.purchase_suggestions_card(data)
+    return msg.text, msg.entities
+
+
+def _build_purchase_recommendations_message(items):
+    msg = wardrobe_ui.purchase_recommendations_card(items)
     return msg.text, msg.entities
 
 
@@ -520,7 +615,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
-        look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
+        look_data = _with_fashion_rebus(
+            _repair_missing_purchase_recommendation(cid, original_look_data)
+        )
         text, entities = _build_look_message(look_data)
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
@@ -629,6 +726,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "style_tip": fallback_tip,
         "purchase_recommendation": purchase_recommendation,
     }
+    look_data = _with_fashion_rebus(look_data)
     if kb is None:
         result_kb = build_wardrobe_keyboard(has_result=True)
     text, entities = _build_look_message(look_data)
@@ -864,7 +962,7 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_improve":
         await send_home(bot, cid, q=q); return
     if data == "w_buy":
-        await send_purchase_hub(bot, cid); return
+        await recommend_missing_purchase(bot, cid); return
     if data == "w_buy_pick":
         store.pending_input[str(cid)] = "wardrobe_buy"
         await bot.send_message(
@@ -882,4 +980,4 @@ async def handle_callback(bot, cid, q, data, status=None):
         return
 
 
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidate","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])

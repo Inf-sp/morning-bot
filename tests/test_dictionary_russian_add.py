@@ -496,7 +496,7 @@ def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
     assert cid not in bot_text.store.pending_input
 
 
-def test_add_word_is_saved_for_later_enrichment_when_all_ai_reserves_fail(monkeypatch):
+def test_add_word_does_not_save_an_unparsed_placeholder_when_ai_reserves_fail(monkeypatch):
     cid = "dictionary-clarification"
     sent = []
 
@@ -523,12 +523,36 @@ def test_add_word_is_saved_for_later_enrichment_when_all_ai_reserves_fail(monkey
     asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
 
     saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
-    assert saved[-1]["term"] == "Tering"
-    assert saved[-1]["translation"] == ""
-    assert saved[-1]["analysis_pending"] is True
-    assert "Перевод и пример добавлю после проверки" in sent[-1]["text"]
-    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
-    assert cid not in dictionary_import.store.pending_input
+    assert saved == []
+    assert "Сейчас не удалось проверить «tering»" in sent[-1]["text"]
+    assert "Добавлено в нидерландский словарь" not in sent[-1]["text"]
+    assert "Перевод и пример добавлю после проверки" not in sent[-1]["text"]
+    assert dictionary_import.store.pending_input[cid] == "dictclarify_nl"
+
+
+def test_common_dutch_phrase_is_fully_parsed_without_ai(monkeypatch):
+    monkeypatch.setattr(
+        dictionary_import.ai,
+        "allm_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI called")),
+    )
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("Ik wist niet", "nl"))
+    message = dictionary_import._dict_entry_message(entry, status="added")
+
+    assert entry["translation"] == "Я не знал; я не знала"
+    assert entry["breakdown"] == "фраза · прошедшее время"
+    assert entry["examples"] == [{
+        "text": "Ik wist niet dat de winkel dicht was.",
+        "translation": "Я не знал, что магазин был закрыт.",
+    }]
+    assert "Ik wist niet → Я не знал · я не знала" in message.text
+    assert "Разбор: фраза" in message.text
+    assert (
+        "💡 Полезно: Ik wist niet dat de winkel dicht was → "
+        "Я не знал, что магазин был закрыт"
+    ) in message.text
+    assert "Перевод и пример добавлю после проверки" not in message.text
 
 
 def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):

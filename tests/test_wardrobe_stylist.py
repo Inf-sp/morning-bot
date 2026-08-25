@@ -60,6 +60,29 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "💡 Полезно: Оставь верх навыпуск" in message.text
 
 
+def test_outfit_card_shows_fashion_rebus_and_fact():
+    message = render_wardrobe_message({
+        "items": [
+            {"name": "Белая футболка", "zone": "Верх"},
+            {"name": "Широкие брюки", "zone": "Низ"},
+            {"name": "Белые кеды", "zone": "Обувь"},
+        ],
+        "fashion_rebus": {
+            "emoji": "🧥 🌧️ 👢",
+            "answer": "Тренчкот",
+            "fact": (
+                "Изначально плащ-тренчкот был разработан Томасом Бёрберри для солдат "
+                "британской армии в годы Первой мировой войны, а слово «trench» "
+                "буквально переводится как «окоп»."
+            ),
+        },
+    })
+
+    assert "Модный ребус: 🧥 🌧️ 👢 → Тренчкот" in message.text
+    assert "💡 Интересно: Изначально плащ-тренчкот был разработан" in message.text
+    assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
+
+
 def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
     message = render_wardrobe_message({
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],

@@ -134,6 +134,15 @@ _LOCAL_DUTCH_WORD_CARDS = {
         "topic": "общение",
         "difficulty": "A1",
     },
+    "ik wist niet": {
+        "translation": "я не знал; я не знала",
+        "breakdown": "фраза · прошедшее время",
+        "pos": "фраза",
+        "example_nl": "Ik wist niet dat de winkel dicht was.",
+        "example_ru": "Я не знал, что магазин был закрыт.",
+        "topic": "общение",
+        "difficulty": "A2",
+    },
 }
 
 
@@ -420,9 +429,6 @@ def _dict_entry_message(entry, status="added"):
     b.bold(title)
     b.newline()
     render_learning_entry(b, entry)
-    if entry.get("analysis_pending"):
-        b.spacer()
-        b.text_line("Перевод и пример добавлю после проверки.")
     return b.build_stripped()
 
 
@@ -1432,39 +1438,6 @@ def _overwrite_dict_entry_fields(cid, lang, term, fields):
     return None
 
 
-def _deferred_dict_entry(payload, lang, source_text=""):
-    """Сохраняет точный термин при временной недоступности анализа.
-
-    Перевод не угадывается и такая запись не попадает в упражнения, пока
-    обычное ленивое обогащение не добавит проверенные данные.
-    """
-    raw_term = _clean_raw_user_term(payload)
-    if (lang not in ("nl", "en") or not raw_term
-            or not _LATIN_FIELD_RE.search(raw_term)
-            or _CYRILLIC_FIELD_RE.search(raw_term)
-            or _contains_suspicious_analysis_text(raw_term)):
-        return None
-    term = _normalized_user_term(raw_term, lang)
-    if not term:
-        return None
-    return {
-        "lang": lang,
-        "term": term[:120],
-        "article": "",
-        "translation": "",
-        "breakdown": "слово" if len(term.split()) == 1 else "фраза",
-        "examples": [],
-        "raw_user_term": raw_term[:120],
-        "normalized_term": term[:120],
-        "source_text": _clean_raw_user_term(source_text or payload)[:120],
-        "added_at": datetime.now(config.TZ).isoformat(),
-        "status": "new",
-        "last_shown_at": None,
-        "analysis_pending": True,
-        **_extract_srs_fields({}),
-    }
-
-
 async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text=""):
     """Сохраняет запись в словарь сразу, без ожидания кнопки "Добавить" - если разбор
     ошибся, запись можно удалить одной кнопкой, а не потерять, забыв подтвердить."""
@@ -1479,13 +1452,14 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
             entry = await learning_data_quality.check_new_entry(entry)
     except DictionaryAnalysisUnavailable:
         unavailable = True
-        entry = _deferred_dict_entry(payload, check_lang, source_text)
+        entry = None
     except Exception as exc:
         _log.warning(
             "operation=dictionary_add_deferred error_type=%s user_id=%s",
             type(exc).__name__, str(cid),
         )
-        entry = _deferred_dict_entry(payload, check_lang, source_text)
+        unavailable = True
+        entry = None
     await status_message.stop()
     if not entry:
         await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)

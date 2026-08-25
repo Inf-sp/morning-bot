@@ -1,3 +1,5 @@
+from telegram import MessageEntity
+
 from .builder import MessageBuilder
 from .constants import ui_label
 from wardrobe_model import public_zone_name, zone_of
@@ -139,6 +141,21 @@ def render_wardrobe_message(look_data):
         b.text_line("💡 ")
         b.labeled_line("Полезно", tip, lowercase=False)
 
+    rebus = look_data.get("fashion_rebus") or {}
+    emoji = _clean_text(rebus.get("emoji"))
+    answer = _clean_text(rebus.get("answer"))
+    fact = _clean_text(rebus.get("fact"))
+    if emoji and answer:
+        b.spacer()
+        b.bold("Модный ребус:")
+        b.text_line(f" {emoji} → ")
+        b.add(answer, MessageEntity.SPOILER)
+    if fact:
+        b.spacer()
+        b.bold("💡 Интересно:")
+        b.text_line(f" {fact}")
+        b.newline()
+
     return b.build_stripped()
 
 
@@ -261,20 +278,6 @@ def purchase_check_card(data):
     return b.build_stripped()
 
 
-def shopping_home_screen():
-    """Короткое объяснение покупки до запроса — без данных и решений о стиле."""
-    b = MessageBuilder()
-    b.section("💳 Что докупить")
-    b.spacer()
-    b.line("Подберу вещь, которая будет работать с твоим шкафом, а не ждать особого случая.")
-    b.spacer()
-    b.line("Напиши, что ищешь: например «худи», «осенние ботинки» или «рубашка для работы».")
-    b.line("Я учту вещи, цвета и стиль и покажу несколько готовых сочетаний.")
-    b.spacer()
-    b.line("Если хочешь конкретную вещь — нажми кнопку и напиши её название.")
-    return b.build_stripped()
-
-
 def purchase_suggestions_card(data):
     """Результат подбора новой вещи: цвет, причина и реальные сочетания."""
     data = data if isinstance(data, dict) else {}
@@ -308,6 +311,41 @@ def purchase_suggestions_card(data):
         b.section("С чем носить:")
         b.line("\n".join(f"• {outfit}" for outfit in outfits[:3]))
 
+    return b.build_stripped()
+
+
+def purchase_recommendations_card(items):
+    """Три пробела гардероба и приглашение уточнить покупку через чат."""
+    b = MessageBuilder()
+    b.section("💳 Что докупить")
+    b.spacer()
+    b.bold("Рекомендую добавить в гардероб:")
+    b.newline()
+    for item in list(items or [])[:3]:
+        name = _clean_text(item.get("item"))
+        if not name:
+            continue
+        b.text_line("• ")
+        b.bold(name)
+        meta = " · ".join(
+            value for value in (
+                _clean_text(item.get("category")),
+                _clean_text(item.get("style")),
+                _clean_text(item.get("season")),
+            ) if value
+        )
+        if meta:
+            b.text_line(f" ({meta})")
+        reason = _finish_dot(item.get("reason"))
+        if reason:
+            b.text_line(f" · {_upper_first(reason)}")
+        b.newline()
+
+    b.spacer()
+    b.line(
+        "Напиши, что ищешь: например «худи», «осенние ботинки» или «рубашка для работы». "
+        "Я учту твои вещи, цвета и стиль и покажу готовые сочетания."
+    )
     return b.build_stripped()
 
 
