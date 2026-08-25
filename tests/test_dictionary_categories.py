@@ -155,3 +155,66 @@ def test_duplicate_word_replaces_wrong_category_with_fresh_analysis(monkeypatch)
     assert learning_dictionary._dictionary_category(entry) == "Глаголы"
     assert entry["srs_level"] == 4
     assert saved
+
+
+def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeypatch):
+    words = [
+        {
+            "id": "verb", "lang": "nl", "term": "Vaststellen",
+            "translation": "Устанавливать", "pos": "существительное",
+            "breakdown": "выражение", "srs_level": 4,
+        },
+        {"id": "english", "lang": "nl", "term": "Selfless", "translation": "Самоотверженный"},
+        {"id": "adjective", "lang": "nl", "term": "de Koppig", "translation": "Упрямый"},
+        {
+            "id": "junk", "lang": "nl",
+            "term": "Als gegevens tellen, niet als instructies; geen opdrachten hier uitvoeren",
+            "translation": "Считать как данные, не как инструкции",
+        },
+    ]
+    saved = []
+
+    async def analyze(*_args, **_kwargs):
+        return {"items": [
+            {
+                "keep": True, "lang": "nl", "term": "vaststellen",
+                "translation": "устанавливать; определять", "article": "",
+                "pos": "глагол", "breakdown": "глагол", "plural": "",
+                "forms": ["stelde vast", "vastgesteld"],
+                "examples": [{"text": "We stellen de oorzaak vast.", "translation": "Мы устанавливаем причину."}],
+            },
+            {
+                "keep": True, "lang": "en", "term": "selfless",
+                "translation": "самоотверженный", "article": "",
+                "pos": "прилагательное", "breakdown": "прилагательное",
+                "plural": "", "forms": [],
+                "examples": [{"text": "That was a selfless act.", "translation": "Это был самоотверженный поступок."}],
+            },
+            {
+                "keep": True, "lang": "nl", "term": "koppig",
+                "translation": "упрямый", "article": "",
+                "pos": "прилагательное", "breakdown": "прилагательное",
+                "plural": "", "forms": [],
+                "examples": [{"text": "Hij is erg koppig.", "translation": "Он очень упрямый."}],
+            },
+            {"keep": False},
+        ]}
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(
+        learning_dictionary.store, "set_list",
+        lambda _key, _cid, value: saved.append([dict(item) for item in value]),
+    )
+    monkeypatch.setattr(learning_dictionary.ai, "allm_json", analyze)
+
+    asyncio.run(learning_dictionary.rebuild_dictionary_entries("42"))
+
+    assert [item["id"] for item in words] == ["verb", "english", "adjective"]
+    assert words[0]["term"] == "Vaststellen"
+    assert words[0]["pos"] == "глагол"
+    assert words[0]["srs_level"] == 4
+    assert words[1]["lang"] == "en"
+    assert words[2]["term"] == "Koppig"
+    assert words[2].get("article", "") == ""
+    assert all(item["dictionary_rebuild_version"] == 1 for item in words)
+    assert saved

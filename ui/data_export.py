@@ -16,16 +16,12 @@ def export_choice():
 
 def export_choice_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📦 Всё", callback_data="as_export_all")],
-        [
-            InlineKeyboardButton("🧵 Мой шкаф", callback_data="as_export_wardrobe"),
-            InlineKeyboardButton("🥣 Мой холодильник", callback_data="as_export_fridge"),
-        ],
-        [InlineKeyboardButton("🎚️ Мой словарь", callback_data="as_export_dictionary")],
-        [
-            InlineKeyboardButton("❤️ Любимое", callback_data="as_export_favorites"),
-            InlineKeyboardButton("✈️ Поездки", callback_data="as_export_travel"),
-        ],
+        [InlineKeyboardButton("📤 Всё", callback_data="as_export_all")],
+        [InlineKeyboardButton("📤 Мой шкаф", callback_data="as_export_wardrobe")],
+        [InlineKeyboardButton("📤 Мой холодильник", callback_data="as_export_fridge")],
+        [InlineKeyboardButton("📤 Мой словарь", callback_data="as_export_dictionary")],
+        [InlineKeyboardButton("📤 Любимое", callback_data="as_export_favorites")],
+        [InlineKeyboardButton("📤 Поездки", callback_data="as_export_travel")],
         [
             InlineKeyboardButton("⬅️ Назад", callback_data="m_settings"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
