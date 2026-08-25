@@ -87,6 +87,11 @@ def _pexels(query, strict=True, first_result=False):
         return None
 
 
+def pexels_photo(query, *, strict=True, first_result=False):
+    """Общий публичный вход к Pexels для экранов с фото."""
+    return _pexels(query, strict=strict, first_result=first_result)
+
+
 def _unsplash(query, strict=True, first_result=False):
     if not config.UNSPLASH_ACCESS_KEY:
         return None

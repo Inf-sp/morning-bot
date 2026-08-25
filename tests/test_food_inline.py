@@ -6,7 +6,9 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import menu
+import cooking
 import recipe_generation
+import restaurant_discovery
 import util
 import bot_callbacks
 
@@ -19,6 +21,26 @@ def test_home_meal_time_windows():
     assert recipe_generation._home_meal_for_hour(15) == "lunch"
     assert recipe_generation._home_meal_for_hour(16) == "dinner"
     assert recipe_generation._home_meal_for_hour(21) == "dinner"
+
+
+def test_pick_recipe_uses_meal_for_current_time(monkeypatch):
+    calls = []
+
+    class LunchTime:
+        @classmethod
+        def now(cls, _tz):
+            return SimpleNamespace(hour=13)
+
+    async def enter_meal(_bot, _cid, meal, status=None):
+        calls.append((meal, status))
+
+    monkeypatch.setattr(cooking, "datetime", LunchTime)
+    monkeypatch.setattr(cooking, "enter_meal", enter_meal)
+    status = object()
+
+    asyncio.run(cooking.send_recipe_featured(object(), "42", status=status))
+
+    assert calls == [("lunch", status)]
 
 
 def test_month_recipe_pool_only_uses_current_profile_and_month():
@@ -63,7 +85,7 @@ def test_nightly_cooking_warm_prepares_all_meals(monkeypatch):
     assert hours == [(8, False), (13, False), (18, False)]
 
 
-def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
+def test_other_food_place_refresh_replaces_inline_status(monkeypatch):
     calls = []
 
     class Status:
@@ -75,56 +97,33 @@ def test_other_food_menu_refresh_edits_current_inline_message(monkeypatch):
         async def stop(self, delete=True):
             calls.append(("stop", delete))
 
-    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
-        calls.append(("start_inline", q, bot, cid, stages, preserve_message))
-        return Status()
+    monkeypatch.setattr(
+        restaurant_discovery, "get_restaurant",
+        lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
+    )
+    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda _card: SimpleNamespace(
+        text="Обновлённое место", entities=[], reply_markup="food-kb"))
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            raise AssertionError("food refresh must not send a new chat message")
+    asyncio.run(menu.send_food_menu(object(), "42", refresh=True, status=Status()))
 
-    monkeypatch.setattr(util.StatusManager, "start_inline", start_inline)
-    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda *_args: {"name": "Паста"})
-    monkeypatch.setattr(menu.menu_ui, "food_menu", lambda _idea, **_kwargs: SimpleNamespace(
-        text="Обновлённый рецепт", entities=[], reply_markup="food-kb"))
-
-    class Query:
-        message = object()
-
-    asyncio.run(menu.send_food_menu(Bot(), "42", refresh=True, q=Query()))
-
-    assert calls[0][0] == "start_inline"
-    assert calls[0][-1] is True
-    assert calls[1] == ("replace", "Обновлённый рецепт", {
+    assert calls[0] == ("replace", "Обновлённое место", {
         "entities": [], "reply_markup": "food-kb",
     })
-    assert calls[-1] == ("stop", True)
 
 
-def test_food_home_uses_fast_fallback_when_cache_is_empty(monkeypatch):
+def test_food_home_uses_cached_restaurant_without_recipe_generation(monkeypatch):
     shown = []
 
     class Status:
         async def replace(self, text, **_kwargs):
             shown.append(text)
 
-    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
-    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        recipe_generation, "get_fast_cooking_home_idea",
-        lambda *_args, **_kwargs: {"name": "Быстрый ужин"},
-        raising=False,
+        restaurant_discovery, "get_restaurant",
+        lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
     )
-
-    def slow_generation(*_args, **_kwargs):
-        import time
-        time.sleep(0.25)
-        return {"name": "Медленный рецепт"}
-
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", slow_generation)
-    monkeypatch.setattr(menu.menu_ui, "food_menu", lambda idea: SimpleNamespace(
-        text=idea["name"], entities=[], reply_markup="food-kb",
+    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda card: SimpleNamespace(
+        text=card["name"], entities=[], reply_markup="food-kb",
     ))
 
     import time
@@ -133,7 +132,7 @@ def test_food_home_uses_fast_fallback_when_cache_is_empty(monkeypatch):
     elapsed = time.monotonic() - started
 
     assert elapsed < 0.1
-    assert shown == ["Быстрый ужин"]
+    assert shown == ["De Eendracht"]
 
 
 def test_dinner_button_uses_dinner_cache_without_forced_refresh(monkeypatch):

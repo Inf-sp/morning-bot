@@ -161,7 +161,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
             bot, cid, lang,
             back=dictionary._DICT_ORIGIN_TO_BACK.get(origin, "m_learn"), q=q)
     elif act.startswith("dictadd_smart_"):
-        await dictionary.send_dict_manage(bot, cid, act.split("_")[2], q=q)
+        await dictionary.send_dict_add_prompt(bot, cid, act.split("_")[2])
     elif act.startswith("dictadd_"):
         lang = act.split("_")[1]
         store.pending_input[str(cid)] = f"dictadd_{lang}"

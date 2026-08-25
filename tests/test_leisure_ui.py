@@ -35,12 +35,15 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
         ["✨ Подобрать новое кино"],
         ["🎟️ Премьеры фильмов"],
         ["📺 Премьеры сериалов"],
+        ["🏆 Топ-5 фильмов прошлого года"],
+        ["🏆 Топ-5 сериалов прошлого года"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать новую книгу"],
         ["✍🏻 Премьеры"],
+        ["🏆 Топ-5 книг прошлого года"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
@@ -211,6 +214,35 @@ def test_first_movie_recommendation_keeps_poster_with_inline_status():
     assert bot.photos[0]["photo"] == tm["poster"]
     assert status.replacements == []
     assert bot.messages == []
+
+
+def test_movie_recommendation_replaces_localized_poster_with_english_one(monkeypatch):
+    class Bot:
+        def __init__(self):
+            self.photos = []
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda movie_id, kind: "https://image.tmdb.org/english.jpg",
+    )
+    bot = Bot()
+    tm = {
+        "id": 77,
+        "name": "Arrival",
+        "kind": "movie",
+        "poster": "https://image.tmdb.org/localized.jpg",
+        "rating": 7.9,
+        "vote_count": 1_000,
+    }
+
+    asyncio.run(leisure_movies._send_movie_card(
+        bot, "42", {"title": "Arrival"}, 0, tm=tm,
+    ))
+
+    assert bot.photos[0]["photo"] == "https://image.tmdb.org/english.jpg"
 
 
 def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch):

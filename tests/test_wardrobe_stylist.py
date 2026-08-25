@@ -57,7 +57,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
-    assert "💡 Полезно: Оставь верх навыпуск" in message.text
+    assert "💡 Полезно:" not in message.text
 
 
 def test_outfit_card_shows_fashion_rebus_and_fact():
@@ -209,6 +209,51 @@ def test_layer_misfiled_as_top_is_completed_with_a_base_top():
 
     assert outfit is not None
     assert {item["id"] for item in outfit} == {"vest", "tee", "trousers", "sneakers"}
+
+
+def test_relaxed_shirt_can_be_worn_open_over_a_tshirt():
+    wardrobe_data = {"zones": {
+        "Верх": {
+            "Рубашки": [_item("shirt", "Верх", "Голубая свободная рубашка")],
+            "Футболки": [_item("tee", "Верх", "Белая футболка")],
+        },
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Тёмно-синие брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Белые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 18, "has_rain": False, "strong_wind": False, "warm": False},
+        [],
+        "",
+        selected_styles=["Городской"],
+    )
+
+    assert outfit is not None
+    assert {"shirt", "tee"}.issubset({item["id"] for item in outfit})
+    assert [item["id"] for item in sorted(outfit, key=outfit_display_order)][:2] == ["tee", "shirt"]
+
+
+def test_shirt_layer_is_not_added_in_hot_weather():
+    wardrobe_data = {"zones": {
+        "Верх": {
+            "Рубашки": [_item("shirt", "Верх", "Голубая свободная рубашка")],
+            "Футболки": [_item("tee", "Верх", "Белая футболка")],
+        },
+        "Низ": {"Шорты": [_item("shorts", "Низ", "Синие шорты")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Белые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 27, "hot": True, "has_rain": False, "strong_wind": False},
+        [],
+        "",
+        selected_styles=["Городской"],
+    )
+
+    assert outfit is not None
+    assert not {"shirt", "tee"}.issubset({item["id"] for item in outfit})
 
 
 def test_layer_without_a_base_top_is_not_a_complete_outfit():
@@ -388,7 +433,7 @@ def test_cached_outfit_repairs_missing_useful_recommendation(monkeypatch):
     message = render_wardrobe_message(repaired)
 
     assert repaired["purchase_recommendation"]
-    assert "💡 Полезно:" in message.text
+    assert "💡 Полезно:" not in message.text
 
 
 def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypatch):

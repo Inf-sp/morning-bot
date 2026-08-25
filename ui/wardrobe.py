@@ -135,12 +135,6 @@ def render_wardrobe_message(look_data):
             for item in extras:
                 b.line(f"- {item}")
 
-    tip = _outfit_tip(slots, look_data.get("style_tip"))
-    if tip:
-        b.spacer()
-        b.text_line("💡 ")
-        b.labeled_line("Полезно", tip, lowercase=False)
-
     rebus = look_data.get("fashion_rebus") or {}
     emoji = _clean_text(rebus.get("emoji"))
     answer = _clean_text(rebus.get("answer"))
@@ -183,10 +177,6 @@ def _outfit_slots(items):
         slot = zone if zone in grouped else zone_of(name)
         grouped[slot if slot in grouped else "Другое"].append(name)
     return grouped
-
-
-def _outfit_tip(slots, style_tip):
-    return _finish_dot(style_tip)
 
 
 def _pluralize_items(n):

@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from datetime import datetime
+
 import config
 import store
 
@@ -36,6 +38,7 @@ from recipe_generation import (
     _gen_leftovers_recipe_batch,
     _gen_recipe,
     _gen_recipe_batch,
+    _home_meal_for_hour,
     _normalize_queue_recipe,
     _recipe_matches_meal,
     _queue_recipe_presentable,
@@ -61,14 +64,6 @@ def _recipe_kb(cid=None, recipe=None):
     return _kb([
         [("✨ Подобрать другой рецепт", "as_food")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
-    ])
-
-def _recipe_typed_kb():
-    """Клавиатура после «рецепта дня» (send_recipe_featured, вне категорий очереди) —
-    выбор типа приёма пищи; нажатие уводит в новую систему очередей через enter_meal."""
-    return _kb([
-        [("🥐 Завтрак", "a_recipe_breakfast"), ("🥗 Обед", "a_recipe_lunch"), ("🍲 Ужин", "a_recipe_dinner")],
-        [("⬅️ Назад", "m_food"), ("#️⃣ Главная", "m_menu")],
     ])
 
 def _fridge_recipe_kb():
@@ -302,19 +297,9 @@ async def back_to_food_menu(bot, cid, status=None):
     await menu.send_food_menu(bot, cid, status=status)
 
 async def send_recipe_featured(bot, cid, status=None):
-    """Новый рецепт из меню — под результатом кнопки завтрак/обед/ужин."""
-    status = status or await util.StatusManager.start(bot, cid)
-    try:
-        d = await asyncio.to_thread(_gen_recipe, "любое блюдо под вкус пользователя", cid=cid)
-    except Exception as e:
-        await status.stop(delete=True)
-        await verify.safe_error(bot, cid, e, back="m_food"); return
-    store.last_recipe[str(cid)] = d
-    store.last_action[str(cid)] = ("recipe", "featured")
-    card = _recipe_card(d)
-    store.last_source[str(cid)] = "Питание · Рецепт"
-    store.last_answer[str(cid)] = card.text
-    await status.replace(card.text, entities=card.entities, reply_markup=_recipe_typed_kb())
+    """Подбирает рецепт для текущего приёма пищи по локальному времени."""
+    meal = _home_meal_for_hour(datetime.now(config.TZ).hour)
+    await enter_meal(bot, cid, meal, status=status)
 
 
 

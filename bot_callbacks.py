@@ -30,6 +30,7 @@ import util
 import verify
 import wardrobe
 import weather
+import yearly_tops
 from util import ack_loading as _ack
 
 _log = logging.getLogger(__name__)
@@ -49,7 +50,9 @@ def _status_stages(data):
     def progress(first, second, final):
         return ((0, first), (2, second), (6, final))
 
-    if data.startswith(("as_food", "as_fridge_cook", "m_food", "food_")):
+    if data in ("m_food", "m_food_next"):
+        return progress("🍽️ Ищу место...", "📍 Проверяю город...", "📝 Готовлю рекомендацию...")
+    if data.startswith(("as_food", "as_fridge_cook", "food_")):
         first = "⏳ Ищу рецепт..."
     elif data == "w_look":
         first = "⏳ Ищу образ..."
@@ -73,8 +76,6 @@ def _status_stages(data):
         return progress("🗺️ Открываю страну...", "🔍 Собираю факты...", "📝 Готовлю карточку страны...")
     elif data.startswith(("a_trav_", "m_travel")):
         first = "✈️ Ищу поездку..."
-    elif data == "m_food":
-        first = "⏳ Ищу рецепт..."
     elif data == "m_wardrobe":
         first = "⏳ Ищу образ..."
     elif data == "m_movie":
@@ -479,6 +480,19 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "book_reco":
         await _inline_status(lambda status: leisure_books.send_books_reco(bot, cid, status=status))
+        return
+    if data.startswith("yt:"):
+        _prefix, kind, page = data.split(":", 2)
+        if kind not in ("movie", "tv", "book", "game"):
+            return
+        if page == "open":
+            await _inline_status(
+                lambda status: yearly_tops.send(bot, cid, kind, status=status),
+                preserve_message=True,
+            )
+        elif page.isdigit():
+            await _ack(q)
+            await yearly_tops.show_page(q, kind, int(page))
         return
     if data == "book_premieres":
         await _inline_status(

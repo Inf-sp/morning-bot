@@ -141,6 +141,8 @@ _SCREENS = {
         [
             [("✨ Подобрать новое кино", "movie_reco")],
             [("🎟️ Премьеры фильмов", "movie_premieres")],
+            [("🏆 Топ-5 фильмов прошлого года", "yt:movie:open")],
+            [("🏆 Топ-5 сериалов прошлого года", "yt:tv:open")],
             [("🎚️ Моё кино", "movie_favorites")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -152,6 +154,7 @@ _SCREENS = {
         [
             [("✨ Подобрать новую книгу", "book_reco")],
             [("🆕 Премьеры", "book_premieres")],
+            [("🏆 Топ-5 книг прошлого года", "yt:book:open")],
             [("🎚️ Мои книги", "book_favorites")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -306,7 +309,45 @@ def food_menu(idea=None):
 
     rows = [
         [("✨ Подобрать другой рецепт", "m_food_next")],
-        [(ui_label("breakfast", "Завтрак"), "a_recipe_breakfast"), (ui_label("lunch", "Обед"), "a_recipe_lunch"), (ui_label("dinner", "Ужин"), "a_recipe_dinner")],
+        [("🎚️ Мой холодильник", "as_fridge_home")],
+        [("#️⃣ Главная", "m_menu")],
+    ]
+    return b.build_stripped(reply_markup=ikb(rows))
+
+
+def restaurant_menu(card=None):
+    """Главный экран Готовки: одно проверенное место в текущем городе."""
+    card = card or {}
+    city = _cooking_text(card.get("city")) or "Alkmaar"
+    b = MessageBuilder()
+    b.section(f"🍽️ Что поесть · {city}")
+    name = _cooking_text(card.get("name"))
+    if name and card.get("map_url"):
+        b.bold("Куда сходить:")
+        b.newline()
+        b.text_line("• ")
+        b.link(name, str(card["map_url"]))
+        meta = " · ".join(filter(None, (
+            _cooking_text(card.get("cuisine")), _cooking_text(card.get("price")),
+            _cooking_text(card.get("signature_dish")),
+        )))
+        if meta:
+            b.text_line(f" ({meta})")
+        b.newline()
+        description = _cooking_sentence(card.get("description"))
+        if description:
+            b.line(description)
+        fact = _cooking_sentence(card.get("fact"))
+        if fact:
+            b.spacer()
+            b.bold("💡 Интересно:")
+            b.text_line(f" {fact}")
+            b.newline()
+    else:
+        b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
+    rows = [
+        [("✨ Другое место", "m_food_next")],
+        [("✨ Подобрать рецепт", "m_food_gen")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]

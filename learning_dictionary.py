@@ -809,6 +809,22 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
 
 
+async def send_dict_add_prompt(bot, cid, lang):
+    """Включает ввод новой записи и явно просит написать её в чат."""
+    store.pending_input[str(cid)] = f"dictadd_smart_{lang}"
+    await bot.send_message(
+        chat_id=cid,
+        text=(
+            "✏️ Напиши слово в чат.\n\n"
+            "Я приведу его в правильную форму, переведу и добавлю в твой словарь."
+        ),
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+        ]]),
+    )
+
+
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],

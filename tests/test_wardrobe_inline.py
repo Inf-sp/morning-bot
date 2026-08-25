@@ -406,6 +406,39 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
     wardrobe.store.pending_input.pop("42", None)
 
 
+def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
+    import wardrobe_photos
+
+    sent = []
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+    monkeypatch.setattr(
+        wardrobe_photos, "purchase_photo",
+        lambda item: {"url": "https://images.pexels.com/example.jpg", "query": item},
+    )
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
+
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    assert sent[0][1]["photo"] == "https://images.pexels.com/example.jpg"
+    assert sent[0][1]["caption"].startswith("💳 Что докупить")
+
+
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):
     wardrobe_data = {
         "zones": {

@@ -61,6 +61,24 @@ _DICT_ANALYSIS_ORDER = (
     "cf", "openrouter",
 )
 
+
+async def _dictionary_analysis_json(prompt):
+    """Пробует каждый словарный AI-резерв отдельно, не завершаясь на первом сбое."""
+    last_error = None
+    for provider in _DICT_ANALYSIS_ORDER:
+        try:
+            return await ai.allm_json(
+                prompt, 850, order=(provider,), module="learning_dict_add",
+                fallback_allowed=True, privacy_level="public", budget_seconds=8,
+            )
+        except Exception as exc:
+            last_error = exc
+            _log.info(
+                "dictionary provider %s unavailable: %s",
+                provider, type(exc).__name__,
+            )
+    raise DictionaryAnalysisUnavailable() from last_error
+
 _LOCAL_DUTCH_VERB_CARDS = {
     "bewegen": {
         "translation": "двигаться; шевелить",
@@ -107,6 +125,15 @@ _LOCAL_DUTCH_NOUN_CARDS = {
 # Add обязана сразу сохранить проверенную карточку, даже если провайдеры временно
 # недоступны.
 _LOCAL_DUTCH_WORD_CARDS = {
+    "aanwezig": {
+        "translation": "присутствующий; имеющийся",
+        "breakdown": "прилагательное",
+        "pos": "прилагательное",
+        "example_nl": "Is er iemand aanwezig?",
+        "example_ru": "Здесь кто-нибудь есть?",
+        "topic": "общение",
+        "difficulty": "A2",
+    },
     "eentje": {
         "translation": "один; одна; одно",
         "breakdown": "местоименное числительное",
@@ -575,6 +602,8 @@ def _local_dutch_word_entry(raw_user_term, lang_hint):
     if lang_hint not in (None, "nl"):
         return None
     raw_term = _clean_raw_user_term(raw_user_term)
+    if re.match(r"^(?:de|het|een)\s+", raw_term, flags=re.I):
+        return None
     term = _normalized_user_term(raw_term, "nl")
     card = _LOCAL_DUTCH_WORD_CARDS.get(term.casefold())
     if not card:
@@ -1047,10 +1076,7 @@ INPUT_JSON: {input_payload}
 перевода на явно указанный целевой язык, верни {{"ok": false, "reason": "коротко почему"}}.
 """
     try:
-        d = await ai.allm_json(
-            prompt, 850, order=_DICT_ANALYSIS_ORDER, module="learning_dict_add",
-            fallback_allowed=True, privacy_level="public", budget_seconds=16,
-        )
+        d = await _dictionary_analysis_json(prompt)
     except Exception as exc:
         # Не скрываем под общим «не получилось разобрать» факт, что исчерпались
         # именно AI-резервы. Вызывающий сценарий попросит перевод или контекст.

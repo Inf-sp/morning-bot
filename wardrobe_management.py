@@ -384,8 +384,26 @@ async def recommend_missing_purchase(bot, cid):
     text_out, entities = _build_purchase_recommendations_message(candidates)
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = text_out
-    await bot.send_message(chat_id=cid, text=text_out, entities=entities,
-                           reply_markup=_purchase_hub_kb())
+    photo = None
+    if candidates:
+        import asyncio
+        import wardrobe_photos
+
+        photo = await asyncio.to_thread(
+            wardrobe_photos.purchase_photo, _clean_text(candidates[0].get("item")),
+        )
+    if photo and photo.get("url") and len(text_out) <= 1024:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=photo["url"], caption=text_out,
+                caption_entities=entities, reply_markup=_purchase_hub_kb(),
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=text_out, entities=entities, reply_markup=_purchase_hub_kb(),
+    )
 
 
 def _local_purchase_suggestions(item, wardrobe):

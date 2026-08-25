@@ -482,6 +482,11 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
             ) if config.TMDB_API_KEY else None
         except Exception:
             tm = None
+    if tm and tm.get("id"):
+        tm = dict(tm)
+        tm["poster"] = await asyncio.to_thread(
+            tmdb.english_poster, tm.get("id"), tm.get("kind") or "movie",
+        )
     title, msg = _movie_card(it, tm)
     kb = _movie_kb(i, category=category)
     if tm and tm.get("poster"):
@@ -970,9 +975,6 @@ async def _show_discovered(bot, cid, it, tm, category=None):
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
     и чтобы подбор оставался внутри выбранного жанра."""
     tm = dict(tm or {})
-    tm["poster"] = await asyncio.to_thread(
-        tmdb.english_poster, tm.get("id"), tm.get("kind") or "movie",
-    )
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})

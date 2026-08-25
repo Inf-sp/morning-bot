@@ -382,6 +382,42 @@ def game_premieres_screen(items):
     return b.build_stripped()
 
 
+def yearly_top_screen(kind, year, item):
+    labels = {
+        "movie": "Фильмы", "tv": "Сериалы",
+        "book": "Книги", "game": "Игры",
+    }
+    b = MessageBuilder()
+    b.section(f"🏆 Топ-5 · {labels.get(kind, 'Лучшее')} {year}")
+    if not item:
+        b.line("Пока не удалось загрузить проверенный список.")
+        return b.build_stripped()
+    title = str(item.get("title") or item.get("name") or "").strip()
+    url = str(item.get("url") or item.get("info_link") or "").strip()
+    if url:
+        b.link(title, url)
+        b.newline()
+    else:
+        b.bold(title)
+        b.newline()
+    meta = " · ".join(filter(None, (
+        str(item.get("author") or "").strip(),
+        str(item.get("genre") or item.get("genres") or "").strip(),
+    )))
+    if meta:
+        b.line(meta)
+    summary = _movie_premiere_summary(
+        item.get("summary") or item.get("overview") or item.get("description"),
+        limit=220,
+    )
+    if summary:
+        if summary[-1] not in ".!?…":
+            summary += "."
+        b.spacer()
+        b.line(summary)
+    return b.build_stripped()
+
+
 def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     """Главный экран раздела «Кино»: как искать и что сейчас в прокате. Тот же
     визуальный паттерн, что у Гардероба (home_screen)."""

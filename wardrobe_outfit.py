@@ -40,6 +40,7 @@ _CITY_2026_BASE_MARKERS = (
 _CITY_2026_STRICT_MARKERS = (
     "офисн", "делов", "строг", "костюмн", "formal", "business",
 )
+_LIGHT_BASE_MARKERS = ("футболк", "майк", "лонгслив", "топ")
 
 # Зона вещи недостаточна для построения комплекта: старые вещи и ответ AI при
 # добавлении могли сохранить жилет или overshirt в «Верхе». Роль определяем по
@@ -169,6 +170,42 @@ def _completed_layered_combos(combo, candidates, selected_styles=None):
         and (not item.get("id") or item.get("id") not in combo_ids)
     ], selected_styles=selected_styles)
     return [combo + [base_top] for base_top in base_tops]
+
+
+def _is_layerable_shirt(item):
+    """Можно ли носить рубашку расстёгнутой как лёгкий второй слой."""
+    facts = _item_facts(item)
+    return (
+        "рубаш" in facts
+        and not any(marker in facts for marker in _CITY_2026_STRICT_MARKERS)
+        and outfit_role(item) == "base_top"
+    )
+
+
+def _is_light_base_top(item):
+    facts = _item_facts(item)
+    return outfit_role(item) == "base_top" and any(marker in facts for marker in _LIGHT_BASE_MARKERS)
+
+
+def _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles=None):
+    """Добавляет варианты «футболка + расстёгнутая рубашка» для мягкой погоды."""
+    tmax = weather_ctx.get("tmax")
+    if tmax is None or not 14 <= tmax <= 22 or weather_ctx.get("hot"):
+        return combos
+    shirts = _top_candidates([
+        item for item in candidates.get("Верх", []) if _is_layerable_shirt(item)
+    ], limit=2, selected_styles=selected_styles)
+    if not shirts:
+        return combos
+    layered = []
+    for combo in combos:
+        if not any(_is_light_base_top(item) for item in combo):
+            continue
+        combo_ids = {item.get("id") for item in combo if item.get("id")}
+        for shirt in shirts:
+            if not shirt.get("id") or shirt.get("id") not in combo_ids:
+                layered.append(combo + [shirt])
+    return combos + layered
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
@@ -423,6 +460,7 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         for combo in raw_combos
         for complete in _completed_layered_combos(combo, candidates, selected_styles)
     ]
+    combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
     if previous_item_ids:
         # «Другой образ» должен менять основу комплекта, а не одну случайную вещь.
         # Для полного набора из 4–5 элементов требуем минимум две замены; для

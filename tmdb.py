@@ -406,7 +406,7 @@ def trailer_url(tmdb_id, kind="movie"):
     return url
 
 
-def discover(kind, genre_ids=None, min_rating=None, year_gte=None, region=None,
+def discover(kind, genre_ids=None, min_rating=None, year_gte=None, year_lte=None, region=None,
              keywords=None, sort_by="popularity.desc", page=1):
     """Подбор кандидатов по жанру/фильтрам/настроению."""
     if not config.TMDB_API_KEY or kind not in ("movie", "tv"):
@@ -423,6 +423,9 @@ def discover(kind, genre_ids=None, min_rating=None, year_gte=None, region=None,
     if year_gte:
         key = "primary_release_date.gte" if kind == "movie" else "first_air_date.gte"
         params[key] = f"{year_gte}-01-01"
+    if year_lte:
+        key = "primary_release_date.lte" if kind == "movie" else "first_air_date.lte"
+        params[key] = f"{year_lte}-12-31"
     ck = f"discover|{kind}|" + "|".join(f"{k}={v}" for k, v in sorted(params.items()))
     cached = util.ttl_get("tmdb_discover", ck, 21600)
     if cached is not None:

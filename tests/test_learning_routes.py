@@ -9,11 +9,18 @@ import routing
 
 
 def test_empty_learning_add_words_button_opens_dictionary_input(monkeypatch):
-    """The first-use button must not fall through the generic a_ router."""
-    calls = []
+    """The add button must immediately ask the user to type a word in chat."""
+    manage_calls = []
 
     async def send_dict_manage(bot, cid, lang, q=None):
-        calls.append((bot, cid, lang, q))
+        manage_calls.append((bot, cid, lang, q))
+
+    class Bot:
+        def __init__(self):
+            self.messages = []
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
 
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.learning_router.dictionary, "send_dict_manage", send_dict_manage)
@@ -26,11 +33,15 @@ def test_empty_learning_add_words_button_opens_dictionary_input(monkeypatch):
         callback_query = Query()
 
     class Context:
-        bot = object()
+        bot = Bot()
 
+    bot_callbacks.store.pending_input.pop("42", None)
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
-    assert calls == [(Context.bot, "42", "nl", Update.callback_query)]
+    assert manage_calls == []
+    assert "напиши слово" in Context.bot.messages[0]["text"].lower()
+    assert bot_callbacks.store.pending_input["42"] == "dictadd_smart_nl"
+    bot_callbacks.store.pending_input.pop("42", None)
 
 
 def test_navigation_audit_recognizes_all_travel_saved_country_callbacks():

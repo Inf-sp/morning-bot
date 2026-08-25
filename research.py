@@ -375,6 +375,7 @@ _TAVILY_SCENARIOS = {
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
     "book_releases": {"ttl": 7 * 86400, "economy": True, "advanced": False},
+    "restaurant_local": {"ttl": 7 * 86400, "economy": True, "advanced": False},
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"

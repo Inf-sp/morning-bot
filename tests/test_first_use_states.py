@@ -323,7 +323,8 @@ def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
     ]
 
 
-def test_empty_fridge_opens_the_fill_state_without_recipe_generation(monkeypatch):
+def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
+    import restaurant_discovery
     class QueryMessage:
         updated = None
 
@@ -338,16 +339,18 @@ def test_empty_fridge_opens_the_fill_state_without_recipe_generation(monkeypatch
             raise AssertionError("empty state should replace the current screen")
 
     monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: False)
+    monkeypatch.setattr(
+        restaurant_discovery, "get_restaurant",
+        lambda *_args, **_kwargs: {"city": "Alkmaar"},
+    )
 
     asyncio.run(menu.send_food_menu(Bot(), "42", q=Query()))
 
-    assert Query.message.updated["text"] == (
-        "🥣 Готовка\n\n"
-        "Добавь продукты, которые обычно есть дома.\n\n"
-        "Я буду подбирать простые рецепты из них и показывать, чего не хватает."
-    )
+    assert Query.message.updated["text"].startswith("🍽️ Что поесть · Alkmaar")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["🧊 Заполнить холодильник"],
+        ["✨ Другое место"],
+        ["✨ Подобрать рецепт"],
+        ["🎚️ Мой холодильник"],
         ["#️⃣ Главная"],
     ]
 

@@ -160,7 +160,7 @@ def test_learning_notification_opens_learning_without_replacing_words(monkeypatc
 
 def test_inline_status_starts_with_action_specific_text():
     cases = {
-        "m_food_next": "⏳ Ищу рецепт...",
+        "m_food_next": "🍽️ Ищу место...",
         "w_look": "⏳ Ищу образ...",
         "movie_reco": "🎬 Ищу кино...",
         "book_reco": "📚 Ищу книгу...",
@@ -172,7 +172,7 @@ def test_inline_status_starts_with_action_specific_text():
         "a_watch": "🎬 Ищу кино...",
         "a_read": "📚 Ищу книгу...",
         "a_listen": "🎧 Ищу музыку...",
-        "m_food": "⏳ Ищу рецепт...",
+        "m_food": "🍽️ Ищу место...",
         "m_wardrobe": "⏳ Ищу образ...",
         "m_movie": "🎬 Ищу кино...",
         "m_books": "📚 Ищу книгу...",

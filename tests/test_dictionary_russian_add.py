@@ -441,6 +441,46 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
+def test_bare_add_aanwezig_is_saved_and_shows_card_without_ai(monkeypatch):
+    """Обычное слово aanwezig должно добавляться даже при недоступности AI."""
+    sent = []
+    saved = []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("aanwezig must use its local card")
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    def save(_cid, entry):
+        saved.append(entry)
+        return "added", entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
+
+    assert asyncio.run(
+        dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Aanwezig")
+    )
+    assert saved[0]["term"] == "Aanwezig"
+    assert saved[0]["translation"] == "Присутствующий; имеющийся"
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+
+
 def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
     """Точный сценарий из чата получает полную локальную карточку."""
     cid = "dictionary-niet-storen"
@@ -643,12 +683,41 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
     assert entry["term"] == "Tering"
     assert calls == [
         (850, {
-            "order": dictionary_import._DICT_ANALYSIS_ORDER,
+            "order": (dictionary_import._DICT_ANALYSIS_ORDER[0],),
             "module": "learning_dict_add",
             "fallback_allowed": True,
             "privacy_level": "public",
-            "budget_seconds": 16,
+            "budget_seconds": 8,
         })
+    ]
+
+
+def test_dictionary_analysis_explicitly_tries_next_provider_after_failure(monkeypatch):
+    calls = []
+
+    async def analyze(_prompt, _max_tokens, **kwargs):
+        calls.append(kwargs["order"])
+        if len(calls) < 3:
+            raise RuntimeError("provider unavailable")
+        return {
+            "ok": True, "lang": "nl", "term": "bijzonder", "article": "",
+            "translation": "особенный", "breakdown": "прилагательное",
+            "examples": [{"text": "Dat is bijzonder.", "translation": "Это особенно."}],
+            "pos": "прилагательное", "plural": "", "forms": [],
+            "topic": "общение", "difficulty": "A2", "construction": "",
+            "situation_type": "", "alt_translations": [],
+            "needs_confirmation": False, "reason": "",
+        }
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("bijzonder", "nl"))
+
+    assert entry["translation"] == "Особенный"
+    assert calls == [
+        (dictionary_import._DICT_ANALYSIS_ORDER[0],),
+        (dictionary_import._DICT_ANALYSIS_ORDER[1],),
+        (dictionary_import._DICT_ANALYSIS_ORDER[2],),
     ]
 
 
