@@ -2,6 +2,8 @@
 
 import asyncio
 import calendar
+import html
+import re
 from datetime import datetime
 
 import ai
@@ -19,6 +21,20 @@ _LABELS = {
 }
 
 
+def _clean_generated_text(value):
+    text = html.unescape(str(value or ""))
+    text = text.replace("\ufffd", "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[*_`]+", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _clean_generated_fact(value):
+    text = _clean_generated_text(value)
+    return re.sub(r"^(?:[^\wА-Яа-яЁё]+)?(?:интересно|факт)\s*:\s*", "", text, count=1, flags=re.I).strip()
+
+
 def _month_key(day):
     return day.strftime("%Y-%m")
 
@@ -28,9 +44,9 @@ def _valid_items(values, required):
     for value in values or []:
         if not isinstance(value, dict):
             continue
-        emoji = " ".join(str(value.get("emoji") or "").split()).strip()
-        answer = " ".join(str(value.get("answer") or "").split()).strip()
-        fact = " ".join(str(value.get("fact") or "").split()).strip()
+        emoji = _clean_generated_text(value.get("emoji"))
+        answer = _clean_generated_text(value.get("answer"))
+        fact = _clean_generated_fact(value.get("fact"))
         key = answer.casefold()
         if not emoji or not answer or key in answers or (fact and key in fact.casefold()):
             continue

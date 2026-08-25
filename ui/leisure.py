@@ -1,3 +1,4 @@
+import html
 import re
 from datetime import date, datetime
 
@@ -32,12 +33,33 @@ def clip(text, limit=450):
 
 def _safe_rebus_fact(rebus, *candidates):
     """Не показывает факт, если он напрямую раскрывает скрытый ответ ребуса."""
-    answer = " ".join(str((rebus or {}).get("answer") or "").casefold().split()).strip("«»\"'")
+    answer = " ".join(_clean_external_text((rebus or {}).get("answer")).casefold().split()).strip("«»\"'")
     for value in candidates:
-        fact = " ".join(str(value or "").split()).strip()
+        fact = _strip_external_label(value, "интересно", "факт")
         if fact and (not answer or answer not in fact.casefold()):
             return fact
     return ""
+
+
+def _clean_external_text(value):
+    text = html.unescape(str(value or ""))
+    text = text.replace("\ufffd", "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[*_`]+", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _strip_external_label(value, *labels):
+    text = _clean_external_text(value)
+    if not text:
+        return ""
+    pattern = r"^(?:[^\wА-Яа-яЁё]+)?(?:" + "|".join(re.escape(label) for label in labels) + r")\s*:\s*"
+    return re.sub(pattern, "", text, count=1, flags=re.I).strip()
+
+
+def _clean_quoted_title(value):
+    return _clean_external_text(value).strip("«»\"'“”„ ")
 
 
 def _pluralize_titles(n):
@@ -389,7 +411,7 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
 
 def movie_now_playing_screen(city, now_playing, cinema_day):
     """Ежедневная кино-витрина: лёгкая, короткая и без табличного вида."""
-    city = str(city or "твоего города").strip()
+    city = _clean_external_text(city) or "твоего города"
     cinema_day = cinema_day or {}
     rebus = cinema_day.get("rebus") or {}
     birthday = cinema_day.get("birthday") or {}
@@ -406,7 +428,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
         for movie in cinema:
             b.text_line("• ")
             trailer_url = str(_item_value(movie, "trailer_url", "") or "").strip()
-            title = str(_item_value(movie, "title", "") or "").strip()
+            title = _clean_quoted_title(_item_value(movie, "title", ""))
             label = f"«{title}»"
             if trailer_url:
                 b.link(label, trailer_url)
@@ -424,12 +446,13 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
         b.spacer()
         b.bold("Именинник дня:")
         b.text_line(" ")
-        b.bold(str(birthday["name"]))
+        b.bold(_clean_external_text(birthday["name"]))
         birth_date = _birthday_date_label(birthday.get("birth"))
         if birth_date:
             b.text_line(f" · {birth_date}")
-        b.text_line(f" — {str(birthday.get('role') or 'кинематографист').strip()}.")
-        birthday_fact = str(birthday.get("fact") or "").strip()
+        role = _clean_external_text(birthday.get("role")) or "кинематографист"
+        b.text_line(f" — {role}.")
+        birthday_fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
         if birthday_fact:
             b.text_line(f" {birthday_fact}")
         b.newline()
@@ -438,9 +461,9 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
     b.spacer()
     b.bold("Ребус дня:")
     b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "🎬 ❓"))
+    b.text_line(_clean_external_text(rebus.get("emoji")) or "🎬 ❓")
     b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+    b.add(_clean_external_text(rebus.get("answer")) or "Ответ", MessageEntity.SPOILER)
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -452,7 +475,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
 def _movie_now_playing_lines(now_playing) -> list[dict]:
     entries = []
     for item in now_playing or []:
-        title = str(_item_value(item, "title", "") or "").strip()
+        title = _clean_quoted_title(_item_value(item, "title", ""))
         if not title:
             continue
         entries.append(item)
@@ -473,7 +496,7 @@ def _movie_genres_for_line(movie) -> str:
     }
     labels = []
     for value in raw_genres:
-        genre = str(value or "").strip()
+        genre = _clean_external_text(value)
         if genre:
             labels.append(translations.get(genre.casefold(), genre.casefold()))
     return ", ".join(dict.fromkeys(labels[:3]))
@@ -1233,7 +1256,10 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
             date = str(_item_value(event, "date", "") or "").strip()
             place = str(_item_value(event, "place", "") or "").strip()
             context = _concert_context_text(_item_value(event, "context", ""))
-            description = str(_item_value(event, "description", "") or "").strip()
+            description = clip(
+                _clean_external_text(_item_value(event, "description", "")),
+                limit=140,
+            )
             url = str(_item_value(event, "url", "") or "").strip()
             details = " · ".join(value for value in (
                 _lower_initial(context), date, place,

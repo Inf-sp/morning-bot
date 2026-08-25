@@ -49,7 +49,7 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 6
+_WEEKLY_SHOWCASE_VERSION = 7
 _BOOK_PREMIERES_CACHE_VERSION = 2
 _FAVORITE_BOOK_PAGE_SIZE = 8
 _FAVORITE_BOOK_VIEW_TTL = 24 * 3600
@@ -1144,7 +1144,9 @@ def _premiere_summary(item):
     known = _PREMIERE_SUMMARIES.get(title)
     if known:
         return known
-    description = html.unescape(str((item or {}).get("description") or ""))
+    description = html.unescape(str(
+        (item or {}).get("summary") or (item or {}).get("description") or ""
+    ))
     description = re.sub(r"<[^>]+>", " ", description)
     description = re.sub(r"\s+", " ", description).strip()
     if not description:
@@ -1176,15 +1178,38 @@ def _with_book_url(item):
 
 
 def _books_with_premiere_summaries(items):
-    return [
-        {
+    prepared = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        summary = _premiere_summary(item)
+        if not summary:
+            continue
+        prepared.append({
             **dict(item),
-            "summary": _premiere_summary(item),
+            "summary": summary,
             "url": _book_showcase_url(item),
-        }
-        for item in (items or [])
-        if isinstance(item, dict)
-    ]
+        })
+    return prepared
+
+
+def _complete_weekly_book_showcase(primary, reserve, *, limit=3):
+    """Добирает витрину проверенными книгами и не пропускает строки без описания."""
+    selected, seen = [], set()
+    for item in [*(primary or []), *(reserve or [])]:
+        if not isinstance(item, dict) or not _premiere_summary(item):
+            continue
+        identity = (
+            _normalized_isbn(item.get("isbn"))
+            or "|".join(str(item.get(key) or "").strip().casefold() for key in ("title", "author"))
+        )
+        if not identity or identity in seen:
+            continue
+        seen.add(identity)
+        selected.append(dict(item))
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 async def _daily_book_content(*, refresh=False):
@@ -1235,7 +1260,10 @@ def _weekly_book_cache_get(*, allow_stale=False):
     items = entry.get("items")
     # Пустая витрина не должна блокировать новый поиск на весь день: после
     # обновления логики она может заполниться новинками месяца или бестселлерами.
-    return [dict(item) for item in items] if isinstance(items, list) and items else None
+    if not isinstance(items, list) or len(items) < 3:
+        return None
+    prepared = _books_with_premiere_summaries(items)
+    return prepared[:3] if len(prepared) >= 3 else None
 
 
 def _weekly_book_cache_set(items):
@@ -1384,9 +1412,10 @@ async def get_weekly_new_books(*, refresh=False):
         stale = _weekly_book_cache_get(allow_stale=True)
         if stale:
             return stale
-        return _books_with_premiere_summaries(
-            _rank_weekly_books(_verified_season_releases())[:3]
+        fallback = _complete_weekly_book_showcase(
+            [], _rank_weekly_books(_verified_season_releases()),
         )
+        return _books_with_premiere_summaries(fallback)
     stale = _weekly_book_cache_get(allow_stale=True)
     candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
     prepared = []
@@ -1398,15 +1427,16 @@ async def get_weekly_new_books(*, refresh=False):
                     item.get("publisher") and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(item.get("published_date") or ""))
                 ),
             })
-    if len(_rank_weekly_books(prepared)) < 3:
+    if len(_books_with_premiere_summaries(_rank_weekly_books(prepared))) < 3:
         prepared.extend(await _publisher_book_candidates())
-    if len(_rank_weekly_books(prepared)) < 3:
+    if len(_books_with_premiere_summaries(_rank_weekly_books(prepared))) < 3:
         prepared.extend(await _open_library_book_candidates())
-    items = _rank_weekly_books(prepared)[:3]
-    if not items and stale:
+    items = _complete_weekly_book_showcase(
+        _rank_weekly_books(prepared),
+        _rank_weekly_books(_verified_season_releases()),
+    )
+    if len(items) < 3 and stale:
         return stale
-    if not items:
-        items = _rank_weekly_books(_verified_season_releases())[:3]
     items = _books_with_premiere_summaries(items)
     if items:
         _weekly_book_cache_set(items)
@@ -1463,7 +1493,8 @@ async def _publisher_book_candidates():
         f"с {start.isoformat()} по {today.isoformat()}. Не включай переиздания, paperback/ebook "
         "старых книг и не додумывай данные. Верни JSON: "
         '{"books":[{"title":"","author":"","published_date":"YYYY-MM-DD",'
-        '"publisher":"","isbn":"","source_url":""}]}.\n'
+        '"publisher":"","isbn":"","description_ru":"одно короткое предложение на русском",'
+        '"source_url":""}]}. Описание составляй только по материалу источника.\n'
         + secure.wrap_untrusted(source, "результаты поиска по сайтам издательств")
     )
     try:
@@ -1504,6 +1535,9 @@ async def _publisher_book_candidates():
             "publisher_date_confirmed": True,
             "publisher_source_url": str(extracted.get("source_url") or ""),
         }
+        description_ru = " ".join(str(extracted.get("description_ru") or "").split()).strip()
+        if description_ru:
+            item["description"] = description_ru
         verified.append(item)
     return verified
 

@@ -610,6 +610,7 @@ async def _weekly_concerts(cid):
             "date": date_label,
             "place": city,
             "context": leisure_concerts._concert_context(event),
+            "description": str(event.get("description") or event.get("info") or "").strip(),
             "url": str(event.get("url") or "").strip(),
         })
         if len(rows) >= 3:

@@ -1,6 +1,6 @@
 import os
 import asyncio
-from datetime import date
+from datetime import date, timedelta
 
 from telegram import MessageEntity
 
@@ -168,7 +168,7 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
 def test_music_home_shows_three_nearby_concerts_as_separate_items():
     message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [
         {"artist": "Romy", "date": "21 августа", "place": "Алкмар",
-         "description": "Тёплая электроника и сильное живое шоу."},
+         "description": "Тёплая&#x20;электроника\nи сильное живое шоу."},
         {"artist": "FKA twigs", "date": "3 сентября", "place": "Амстердам"},
         {"artist": "The National", "date": "14 сентября", "place": "Утрехт"},
     ], day=date(2026, 8, 25))
@@ -191,12 +191,19 @@ def test_music_home_keeps_concert_type_in_compact_preview():
 def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
     import leisure_concerts
 
+    today = leisure_music.datetime.now(leisure_music.config.TZ).date()
+    future_dates = [
+        (today + timedelta(days=offset)).isoformat()
+        for offset in (1, 2, 3)
+    ]
     events = [
-        {"_artist": "Romy", "dates": {"start": {"localDate": "2026-08-21"}},
+        {"_artist": "Romy", "description": "Тёплая электроника и сильное живое шоу.",
+         "dates": {"start": {"localDate": future_dates[0]}},
          "_embedded": {"venues": [{"city": {"name": "Алкмар"}}]}},
-        {"_artist": "FKA twigs", "dates": {"start": {"localDate": "2026-09-03"}},
+        {"_artist": "FKA twigs", "info": "Театральный поп и пластичное сценическое шоу.",
+         "dates": {"start": {"localDate": future_dates[1]}},
          "_embedded": {"venues": [{"city": {"name": "Амстердам"}}]}},
-        {"_artist": "The National", "dates": {"start": {"localDate": "2026-09-14"}},
+        {"_artist": "The National", "dates": {"start": {"localDate": future_dates[2]}},
          "_embedded": {"venues": [{"city": {"name": "Утрехт"}}]}},
     ]
     requested = {}
@@ -220,17 +227,27 @@ def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
         "country": "Нидерланды",
     }
     assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
+    assert result[0]["description"] == "Тёплая электроника и сильное живое шоу."
+    assert result[1]["description"] == "Театральный поп и пластичное сценическое шоу."
+    message = leisure_ui.music_week_screen("Алкмар", {}, result, day=today)
+    assert "• Romy (сольный концерт" in message.text
+    assert ") · Тёплая электроника и сильное живое шоу." in message.text
 
 
 def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empty(monkeypatch):
     import leisure_concerts
 
+    today = leisure_music.datetime.now(leisure_music.config.TZ).date()
+    future_dates = [
+        (today + timedelta(days=offset)).isoformat()
+        for offset in (1, 2, 3)
+    ]
     events = [
-        {"_artist": "Romy", "dates": {"start": {"localDate": "2026-08-21"}},
+        {"_artist": "Romy", "dates": {"start": {"localDate": future_dates[0]}},
          "_embedded": {"venues": [{"city": {"name": "Лилль"}}]}},
-        {"_artist": "FKA twigs", "dates": {"start": {"localDate": "2026-09-03"}},
+        {"_artist": "FKA twigs", "dates": {"start": {"localDate": future_dates[1]}},
          "_embedded": {"venues": [{"city": {"name": "Париж"}}]}},
-        {"_artist": "The National", "dates": {"start": {"localDate": "2026-09-14"}},
+        {"_artist": "The National", "dates": {"start": {"localDate": future_dates[2]}},
          "_embedded": {"venues": [{"city": {"name": "Лион"}}]}},
     ]
     fallback_calls = []

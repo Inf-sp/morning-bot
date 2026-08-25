@@ -36,6 +36,20 @@ def test_monthly_rebuses_are_unique_for_every_day(monkeypatch):
     assert len({item["answer"] for item in stored["movies"]["items"]}) == 31
 
 
+def test_monthly_rebuses_clean_generated_markup_before_caching():
+    items = monthly_rebuses._valid_items([{
+        "emoji": "🎬",
+        "answer": "**Матрица**",
+        "fact": "��**&#x20;Интересно:** Актёры долго тренировались.",
+    }], 1)
+
+    assert items == [{
+        "emoji": "🎬",
+        "answer": "Матрица",
+        "fact": "Актёры долго тренировались.",
+    }]
+
+
 def test_incomplete_generation_does_not_replace_local_fallback(monkeypatch):
     monkeypatch.setattr(monthly_rebuses.store, "_load", lambda *_args: {})
     monkeypatch.setattr(monthly_rebuses.store, "mutate_kv", lambda *_args: None)

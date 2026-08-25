@@ -1006,6 +1006,28 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
 
+def test_movie_home_cleans_cached_markup_fragments():
+    movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
+        "title": "**«Из любви»***&#x20;*",
+        "genres": ["**drama**"],
+        "overview": "История о чувствах не должна попадать в строку афиши.",
+    }], {
+        "rebus": {
+            "emoji": "🕶️ 💊 🤖",
+            "answer": "**Матрица**",
+            "fact": "��**&#x20;Интересно:** Сёстры Вачовски отправили актёров на подготовку.",
+        },
+    })
+
+    assert "• «Из любви» (драма)" in movie.text
+    assert "Ребус дня: 🕶️ 💊 🤖 → Матрица" in movie.text
+    assert "💡 Интересно: Сёстры Вачовски отправили актёров на подготовку." in movie.text
+    assert "**" not in movie.text
+    assert "&#x20;" not in movie.text
+    assert "�" not in movie.text
+    assert movie.text.count("Интересно:") == 1
+
+
 def test_rebus_fact_never_repeats_the_hidden_answer():
     assert leisure_movies.leisure_ui._safe_rebus_fact(
         {"answer": "Челюсти"},
@@ -1184,6 +1206,7 @@ def test_movie_premieres_fit_one_message_without_cutting_descriptions():
 
 def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
     sent = []
+    premiere_date = (datetime.now(config.TZ).date() + timedelta(days=3)).isoformat()
 
     class Bot:
         async def send_photo(self, **kwargs):
@@ -1198,8 +1221,9 @@ def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
 
     items = [
         {
+            "id": index,
             "title": f"Фильм {index}",
-            "date": "2026-08-15",
+            "date": premiere_date,
             "genres": "драма",
             "overview": f"Короткая завязка {index}.",
             "poster": f"https://image.tmdb.org/poster{index}.jpg",
@@ -1211,6 +1235,10 @@ def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
         "country": "Нидерланды", "cc": "NL",
     })
     monkeypatch.setattr(leisure_movies, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items))
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda movie_id, _kind: f"https://image.tmdb.org/poster{movie_id}.jpg",
+    )
 
     asyncio.run(leisure_movies.send_movie_premieres(Bot(), "42", status=Status()))
 
@@ -1231,9 +1259,11 @@ def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
 
 
 def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
+    premiere_date = (datetime.now(config.TZ).date() + timedelta(days=3)).isoformat()
     items = [{
+        "id": index,
         "title": f"Фильм {index}",
-        "date": "2026-08-15",
+        "date": premiere_date,
         "genres": "драма",
         "overview": f"Короткая завязка {index}.",
         "poster": f"https://image.tmdb.org/poster{index}.jpg",
@@ -1250,6 +1280,10 @@ def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
     monkeypatch.setattr(
         leisure_movies, "get_movie_premieres",
         lambda _cid: asyncio.sleep(0, result=items),
+    )
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda movie_id, _kind: f"https://image.tmdb.org/poster{movie_id}.jpg",
     )
 
     asyncio.run(leisure_movies.show_movie_premiere_page("42", Query(), 1))
@@ -1626,15 +1660,75 @@ def test_weekly_books_keep_only_current_popular_releases(monkeypatch):
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Заметная", "author": "Автор", "isbn": "9780000000001",
          "cover_url": "https://covers.test/1.jpg", "published_date": today,
-         "rating": 4.5, "ratings_count": 140},
+         "rating": 4.5, "ratings_count": 140,
+         "description": "Короткое описание заметной новинки."},
         {"title": "Без отзывов", "published_date": today, "rating": 4.8, "ratings_count": 2},
         {"title": "Старая", "published_date": "2025-01-01", "rating": 4.9, "ratings_count": 900},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
-    assert [item["title"] for item in items] == ["Заметная"]
+    assert items[0]["title"] == "Заметная"
+    assert len(items) == 3
+    assert all(item.get("summary") for item in items)
     assert stored["items"] == items
+
+
+def test_literary_vibe_always_has_three_releases_with_short_descriptions(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    stored = {}
+
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: stored.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [{
+        "title": "Новинка без описания", "author": "Автор", "isbn": "9780000000900",
+        "cover_url": "https://covers.test/empty.jpg", "published_date": today.isoformat(),
+    }])
+
+    async def no_candidates():
+        return []
+
+    reserve = [{
+        "title": f"Проверенная книга {index}", "author": f"Автор {index}",
+        "isbn": f"97800000009{index}", "cover_url": f"https://covers.test/{index}.jpg",
+        "published_date": (today - timedelta(days=index)).isoformat(),
+        "description": f"Короткое описание книги {index}.",
+    } for index in range(1, 4)]
+    monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_candidates)
+    monkeypatch.setattr(leisure_books, "_open_library_book_candidates", no_candidates)
+    monkeypatch.setattr(leisure_books, "_verified_season_releases", lambda *_args, **_kwargs: reserve)
+
+    items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
+    message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, items, day=today)
+
+    assert len(items) == 3
+    assert all(item.get("summary") for item in items)
+    assert message.text.count("\n• ") == 3
+    assert "Новинка без описания" not in message.text
+
+
+def test_literary_vibe_replaces_incomplete_weekly_cache(monkeypatch):
+    today = datetime.now(config.TZ).date()
+    season_start, _season_end, _season = leisure_books._book_season(today)
+    incomplete_cache = {
+        "version": leisure_books._WEEKLY_SHOWCASE_VERSION,
+        "week": leisure_books._book_week_key(),
+        "season": season_start.isoformat(),
+        "items": [{"title": "Одинокая книга", "author": "Автор"}],
+    }
+    reserve = [{
+        "title": f"Резерв {index}", "author": f"Автор {index}",
+        "isbn": f"97800000008{index}", "cover_url": f"https://covers.test/r{index}.jpg",
+        "published_date": (today - timedelta(days=index)).isoformat(),
+        "description": f"Короткое описание резерва {index}.",
+    } for index in range(1, 4)]
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: incomplete_cache)
+    monkeypatch.setattr(leisure_books, "_verified_season_releases", lambda *_args, **_kwargs: reserve)
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+
+    assert [item["title"] for item in items] == ["Резерв 1", "Резерв 2", "Резерв 3"]
+    assert all(item.get("summary") for item in items)
 
 
 def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
@@ -1646,14 +1740,16 @@ def test_literary_vibe_uses_only_books_from_current_season(monkeypatch):
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Свежая книга", "author": "Автор", "isbn": "9780000000004",
          "cover_url": "https://covers.test/4.jpg", "published_date": today.isoformat(),
-         "categories": ["Fiction"]},
+         "categories": ["Fiction"], "description": "Короткое описание свежей книги."},
         {"title": "Старая книга", "published_date": "2025-06-10",
          "rating": 4.9, "ratings_count": 5000},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
-    assert [item["title"] for item in items] == ["Свежая книга"]
+    assert items[0]["title"] == "Свежая книга"
+    assert len(items) == 3
+    assert all(item["title"] != "Старая книга" for item in items)
 
 
 def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
@@ -1666,11 +1762,13 @@ def test_literary_vibe_accepts_google_books_month_precision(monkeypatch):
         "cover_url": "https://covers.test/5.jpg",
         "published_date": f"{today.year}-{today.month:02d}",
         "categories": ["Fiction"],
+        "description": "Короткое описание сезонной новинки.",
     }])
 
     items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
-    assert [item["title"] for item in items] == ["Сезонная новинка"]
+    assert items[0]["title"] == "Сезонная новинка"
+    assert len(items) == 3
 
 
 def test_literary_vibe_recovers_three_verified_books_through_publishers(monkeypatch):
@@ -1712,6 +1810,7 @@ def test_publisher_books_do_not_depend_on_google_books(monkeypatch):
             "title": "Independent Book", "author": "Writer",
             "published_date": (today - timedelta(days=20)).isoformat(),
             "publisher": "Publisher", "isbn": "9780000000999",
+            "description_ru": "Писательница возвращается домой и раскрывает семейную тайну.",
             "source_url": "https://publisher.test/new",
         }],
     })
@@ -1726,6 +1825,7 @@ def test_publisher_books_do_not_depend_on_google_books(monkeypatch):
 
     assert items[0]["title"] == "Independent Book"
     assert items[0]["isbn"] == "9780000000999"
+    assert items[0]["description"] == "Писательница возвращается домой и раскрывает семейную тайну."
 
 
 def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(monkeypatch):
@@ -1743,6 +1843,7 @@ def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(mon
             "published_date": (today - timedelta(days=index * 10)).isoformat(),
             "isbn": f"97800000001{index}", "cover_url": f"https://covers.openlibrary.org/{index}.jpg",
             "publisher_date_confirmed": True,
+            "description": f"Короткое описание Open Book {index}.",
         } for index in range(1, 4)]
 
     monkeypatch.setattr(leisure_books, "_publisher_book_candidates", no_publishers)
@@ -1792,12 +1893,14 @@ def test_weekly_books_fall_back_to_current_season_when_popularity_is_low(monkeyp
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Премьера месяца", "published_date": f"{today.year}-{today.month:02d}-01",
          "author": "Автор", "isbn": "9780000000002",
-         "cover_url": "https://covers.test/2.jpg", "rating": 4.2, "ratings_count": 2},
+         "cover_url": "https://covers.test/2.jpg", "rating": 4.2, "ratings_count": 2,
+         "description": "Короткое описание премьеры месяца."},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
-    assert [item["title"] for item in items] == ["Премьера месяца"]
+    assert items[0]["title"] == "Премьера месяца"
+    assert len(items) == 3
     assert stored["items"] == items
 
 
@@ -1815,12 +1918,14 @@ def test_weekly_books_rebuilds_an_empty_daily_cache(monkeypatch):
     monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda *_args: [
         {"title": "Новая витрина", "published_date": today.isoformat(),
          "author": "Автор", "isbn": "9780000000003",
-         "cover_url": "https://covers.test/3.jpg", "rating": 4.4, "ratings_count": 120},
+         "cover_url": "https://covers.test/3.jpg", "rating": 4.4, "ratings_count": 120,
+         "description": "Короткое описание новой витрины."},
     ])
 
     items = asyncio.run(leisure_books.get_weekly_new_books(refresh=True))
 
-    assert [item["title"] for item in items] == ["Новая витрина"]
+    assert items[0]["title"] == "Новая витрина"
+    assert len(items) == 3
     assert stored["items"] == items
 
 
@@ -1894,6 +1999,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
 def test_book_showcase_falls_back_to_google_books_search_link():
     item = leisure_books._books_with_premiere_summaries([{
         "title": "Недавний бестселлер", "author": "Автор",
+        "summary": "Короткое описание книги.",
     }])[0]
 
     assert item["url"] == "https://books.google.com/books?q=%D0%9D%D0%B5%D0%B4%D0%B0%D0%B2%D0%BD%D0%B8%D0%B9+%D0%B1%D0%B5%D1%81%D1%82%D1%81%D0%B5%D0%BB%D0%BB%D0%B5%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%80"
