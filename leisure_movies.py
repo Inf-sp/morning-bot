@@ -969,6 +969,10 @@ async def _show_discovered(bot, cid, it, tm, category=None):
     в last_recos, чтобы «Другое кино»/«В любимые»/«Уже видел» (через _advance_movie)
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
     и чтобы подбор оставался внутри выбранного жанра."""
+    tm = dict(tm or {})
+    tm["poster"] = await asyncio.to_thread(
+        tmdb.english_poster, tm.get("id"), tm.get("kind") or "movie",
+    )
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})

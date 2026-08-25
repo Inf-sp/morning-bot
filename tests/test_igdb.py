@@ -112,3 +112,33 @@ def test_rejects_uncertain_title_match(monkeypatch):
     item = {"title": "Example Game", "platforms": ["pc"], "url": "https://example.com"}
 
     assert igdb.enrich_game_premieres([item]) == [item]
+
+
+def test_search_game_candidates_returns_the_sims_card_first(monkeypatch):
+    monkeypatch.setattr(igdb, "_access_token", lambda: "token")
+    monkeypatch.setattr(igdb, "_multiquery", lambda *_args: [{
+        "name": "game_0",
+        "result": [{
+            "id": 1, "name": "The Sims", "slug": "the-sims",
+            "cover": {"image_id": "sims-cover"},
+            "platforms": [{"id": 6}],
+            "genres": [{"name": "Simulator"}],
+            "first_release_date": 946684800,
+            "summary": "Build homes and guide virtual people.",
+        }, {
+            "id": 2, "name": "The Sims 4", "slug": "the-sims-4",
+            "cover": {"image_id": "sims4-cover"},
+            "platforms": [{"id": 6}, {"id": 167}],
+            "genres": [{"name": "Simulator"}],
+            "first_release_date": 1409616000,
+        }],
+    }])
+
+    result = igdb.search_game_candidates("The Sims")
+
+    assert [item["name"] for item in result] == [
+        "The Sims (все части)", "The Sims", "The Sims 4",
+    ]
+    assert result[0]["franchise"] is True
+    assert result[0]["poster"].endswith("/sims-cover.jpg")
+    assert result[0]["genres"] == ["simulator"]

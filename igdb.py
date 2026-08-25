@@ -136,7 +136,7 @@ def _multiquery(titles: list[str], token: str) -> list[dict]:
         queries.append(
             f'query games "game_{index}" {{ '
             f'search "{_escape_query(title)}"; '
-            "fields name,cover.image_id,videos.name,videos.video_id,"
+            "fields id,name,slug,summary,cover.image_id,videos.name,videos.video_id,"
             "platforms.id,genres.name,first_release_date; limit 5; };"
         )
     if not queries:
@@ -188,6 +188,77 @@ def _trailer_video_id(videos) -> str:
         if video_id and any(word in name for word in _TRAILER_WORDS):
             return video_id
     return ""
+
+
+def search_game_candidates(title: str) -> list[dict]:
+    """Возвращает до пяти карточек IGDB для подтверждения перед сохранением."""
+    query = " ".join(str(title or "").split()).strip()
+    token = _access_token()
+    if not query or not token:
+        return []
+    groups = _multiquery([query], token)
+    candidates = next((group.get("result") or [] for group in groups
+                       if isinstance(group, dict) and group.get("name") == "game_0"), [])
+    expected = _normalized_title(query)
+    result = []
+    for game in candidates:
+        if not isinstance(game, dict):
+            continue
+        name = " ".join(str(game.get("name") or "").split()).strip()
+        image_id = str((game.get("cover") or {}).get("image_id") or "").strip()
+        if not name or not image_id:
+            continue
+        platform_ids = {int(item.get("id") or 0) for item in (game.get("platforms") or [])
+                        if isinstance(item, dict)}
+        platforms = [key for key, identifiers in _PLATFORM_IDS.items()
+                     if platform_ids.intersection(identifiers)]
+        if not platforms:
+            platforms = ["other"]
+        genres = []
+        for value in (game.get("genres") or []):
+            raw = str(value.get("name") or "").strip().casefold() if isinstance(value, dict) else ""
+            key = _GENRE_KEYS.get(raw) or ("simulator" if raw == "simulator" else "")
+            if key and key not in genres:
+                genres.append(key)
+        item = {
+            "igdb_id": game.get("id"), "name": name, "platforms": platforms,
+            "genres": genres, "poster": _IMAGE_URL.format(image_id=image_id),
+        }
+        try:
+            item["year"] = datetime.fromtimestamp(
+                int(game.get("first_release_date")), tz=timezone.utc,
+            ).year
+        except (TypeError, ValueError, OSError):
+            pass
+        slug = str(game.get("slug") or "").strip()
+        if slug:
+            item["url"] = f"https://www.igdb.com/games/{slug}"
+        result.append(item)
+    result.sort(key=lambda item: _normalized_title(item.get("name")) != expected)
+    exact = next((item for item in result
+                  if _normalized_title(item.get("name")) == expected), None)
+    parts = [item for item in result
+             if (_normalized_title(item.get("name")) == expected
+                 or _normalized_title(item.get("name")).startswith(f"{expected} "))]
+    if exact and len(parts) > 1:
+        franchise = dict(exact)
+        franchise.update({
+            "igdb_id": f"franchise:{expected}",
+            "name": f"{exact['name']} (все части)",
+            "franchise": True,
+            "series_titles": [item["name"] for item in parts],
+            "platforms": list(dict.fromkeys(
+                platform for item in parts for platform in (item.get("platforms") or [])
+            )),
+            "genres": list(dict.fromkeys(
+                genre for item in parts for genre in (item.get("genres") or [])
+            )),
+        })
+        years = [int(item.get("year") or 0) for item in parts if item.get("year")]
+        if years:
+            franchise["year"] = min(years)
+        result.insert(0, franchise)
+    return result[:5]
 
 
 def get_upcoming_games(platforms, *, today=None, days=180) -> list[dict]:

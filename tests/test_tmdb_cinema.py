@@ -52,6 +52,20 @@ def test_get_calls_tmdb_and_returns_json(monkeypatch):
     assert seen["timeout"] == 3
 
 
+def test_english_poster_ignores_localized_and_language_neutral_images(monkeypatch):
+    monkeypatch.setattr(tmdb.util, "ttl_get", lambda *_args: None)
+    monkeypatch.setattr(tmdb.util, "ttl_set", lambda *_args: None)
+    monkeypatch.setattr(tmdb, "_get", lambda *_args, **_kwargs: {
+        "posters": [
+            {"file_path": "/ru.jpg", "iso_639_1": "ru", "vote_average": 10},
+            {"file_path": "/neutral.jpg", "iso_639_1": None, "vote_average": 10},
+            {"file_path": "/en.jpg", "iso_639_1": "en", "vote_average": 8},
+        ],
+    })
+
+    assert tmdb.english_poster(42, "movie") == f"{tmdb._IMG}/en.jpg"
+
+
 def test_now_playing_requires_current_nl_theatrical_release(monkeypatch):
     today = date.today()
     candidates = [

@@ -12,6 +12,7 @@ class _Response:
             "key": "/works/OL1W", "title": "Fresh Book", "author_name": ["Author"],
             "first_publish_year": 2026, "publish_date": ["July 15, 2026"],
             "isbn": ["9780000000001"], "cover_i": 123,
+            "language": ["eng"],
             "publisher": ["Publisher"], "ratings_average": 4.4, "ratings_count": 120,
         }]}
 

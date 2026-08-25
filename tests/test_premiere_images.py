@@ -25,12 +25,14 @@ class Bot:
 
 def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
     items = [{
+        "id": 1,
         "title": "Без постера",
         "date": "2026-08-15",
         "genres": "драма",
         "overview": "Описание.",
         "trailer_url": "https://youtube.test/missing",
     }, *[{
+        "id": index + 2,
         "title": f"С постером {index}",
         "date": "2026-08-15",
         "genres": "драма",
@@ -44,13 +46,17 @@ def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
     monkeypatch.setattr(
         leisure_movies, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items),
     )
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda tmdb_id, _kind: "" if tmdb_id == 1 else f"https://images.test/en{tmdb_id}.jpg",
+    )
     bot = Bot()
 
     asyncio.run(leisure_movies.send_movie_premieres(bot, "42"))
 
     assert [kind for kind, _kwargs in bot.sent] == ["photo"]
     assert "Без постера" not in bot.sent[0][1]["caption"]
-    assert bot.sent[0][1]["photo"] == "https://images.test/movie0.jpg"
+    assert bot.sent[0][1]["photo"] == "https://images.test/en2.jpg"
 
 
 def test_game_premiere_without_poster_is_not_shown(monkeypatch):

@@ -71,6 +71,10 @@ def test_movie_premieres_keep_five_most_popular_with_trailers(monkeypatch):
         "trailer_url",
         lambda movie_id, _kind: f"https://www.youtube.com/watch?v=trailer{movie_id}",
     )
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda movie_id, _kind, *_args: f"https://image.tmdb.org/en{movie_id}.jpg",
+    )
 
     items = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
 
@@ -99,6 +103,10 @@ def test_series_premieres_prioritize_favorite_seasons_and_require_rating_above_s
         "id": 21, "name": "Ровно семь", "release_date": (today + timedelta(days=2)).isoformat(),
         "rating": 7.0, "poster": "seven.jpg", "overview": "Не проходит фильтр.",
     }])
+    monkeypatch.setattr(
+        leisure_movies.tmdb, "english_poster",
+        lambda tmdb_id, _kind, *_args: f"https://image.tmdb.org/en{tmdb_id}.jpg",
+    )
 
     items = asyncio.run(leisure_movies.get_series_premieres("42"))
 

@@ -500,11 +500,14 @@ async def get_movie_premieres(cid, *, refresh=False):
         item["date"],
     ))
     items = [item for item in items if item.get("overview")][:5]
-    trailer_urls = await asyncio.gather(*(
-        asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
-        for item in items
-    ))
-    for item, trailer_url in zip(items, trailer_urls):
+    poster_urls, trailer_urls = await asyncio.gather(
+        asyncio.gather(*(asyncio.to_thread(tmdb.english_poster, item.get("id"), "movie")
+                         for item in items)),
+        asyncio.gather(*(asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
+                         for item in items)),
+    )
+    for item, poster_url, trailer_url in zip(items, poster_urls, trailer_urls):
+        item["poster"] = str(poster_url or "").strip()
         item["trailer_url"] = str(trailer_url or "").strip()
     if items:
         _movie_premieres_cache_set(country_code, today + timedelta(days=7), items)
@@ -536,10 +539,14 @@ def _movie_premieres_view(cid, items, page=0):
 
 
 async def _movie_premieres_with_posters(cid):
-    return [
-        item for item in (await get_movie_premieres(cid))
-        if str(item.get("poster") or "").strip()
-    ][:5]
+    items = [dict(item) for item in (await get_movie_premieres(cid))][:5]
+    posters = await asyncio.gather(*(
+        asyncio.to_thread(tmdb.english_poster, item.get("id"), "movie")
+        for item in items
+    ))
+    for item, poster in zip(items, posters):
+        item["poster"] = str(poster or "").strip()
+    return [item for item in items if item.get("poster")]
 
 
 async def send_movie_premieres(bot, cid, *, status=None):
@@ -625,7 +632,16 @@ async def get_series_premieres(cid):
         str(item.get("release_date") or ""),
         -float(item.get("rating") or 0),
     ))
-    return result[:5]
+    result = result[:5]
+    posters = await asyncio.gather(*(
+        asyncio.to_thread(
+            tmdb.english_poster, item.get("id"), "tv",
+            item.get("season_number") if item.get("season_number") else None,
+        ) for item in result
+    ))
+    for item, poster in zip(result, posters):
+        item["poster"] = str(poster or "").strip()
+    return [item for item in result if item.get("poster")]
 
 
 def _series_premieres_view(items, page=0):

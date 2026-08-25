@@ -218,10 +218,13 @@ def _book_cover(title, title_en=""):
     for q in [t for t in (title_en, title) if t]:
         try:
             r = requests.get("https://openlibrary.org/search.json",
-                             params={"title": q, "limit": 1}, timeout=timeout)
+                             params={"title": q, "language": "eng", "limit": 10,
+                                     "fields": "cover_i,language"}, timeout=timeout)
             docs = r.json().get("docs", [])
-            if docs and docs[0].get("cover_i"):
-                return f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-L.jpg"
+            doc = next((doc for doc in docs
+                        if doc.get("cover_i") and "eng" in (doc.get("language") or [])), None)
+            if doc:
+                return f"https://covers.openlibrary.org/b/id/{doc['cover_i']}-L.jpg"
         except Exception:
             continue
     return None
@@ -282,7 +285,10 @@ async def send_books_home(bot, cid, q=None, status=None):
         get_weekly_new_books(),
     )
     _start, _end, season = _book_season()
-    msg = leisure_ui.weekly_books_screen(_book_city(cid), daily_book, items, season=season)
+    today = datetime.now(config.TZ).date()
+    msg = leisure_ui.weekly_books_screen(
+        _book_city(cid), daily_book, items, day=today, season=season,
+    )
     kb = books_home_keyboard()
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb,

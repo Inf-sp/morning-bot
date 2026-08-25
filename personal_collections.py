@@ -218,7 +218,12 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
 
         await leisure_books.offer_manual_favorite_book(bot, cid, text, origin)
         return
-    if not confirmed and key in {"movies", "games", "artists"}:
+    if key == "games" and not confirmed:
+        import leisure_games
+
+        await leisure_games.offer_manual_favorite_game(bot, cid, text, origin)
+        return
+    if not confirmed and key in {"movies", "artists"}:
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
     store_key, collection_id = collection

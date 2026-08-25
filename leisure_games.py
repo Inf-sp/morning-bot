@@ -43,10 +43,13 @@ _PLATFORM_LABEL = dict(GAME_PLATFORMS)
 _PLATFORM_LABEL["other"] = "🕹️ Прочее"
 _GENRE_LABEL = dict(GAME_GENRES)
 _GENRE_LABEL["board"] = "Настолки"
+_GENRE_LABEL["simulator"] = "Симулятор"
 _GAME_PREMIERES_VERSION = 3
 _GAME_SET_PAGE_SIZE = 8
 _GAME_SET_VIEW_TTL = 24 * 3600
 _game_set_views = {}
+_manual_game_choices = {}
+_MANUAL_GAME_CHOICE_TTL = 15 * 60
 
 _GAME_RECENCY_OPTIONS = (
     ("🆕 Новинки", "new"),
@@ -637,6 +640,104 @@ async def send_favorite_games_added_card(bot, cid, items):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+def _manual_game_choice(token, cid):
+    state = _manual_game_choices.get(token)
+    if (not state or state.get("cid") != str(cid)
+            or time.time() - float(state.get("created_at") or 0) > _MANUAL_GAME_CHOICE_TTL):
+        _manual_game_choices.pop(token, None)
+        return None
+    return state
+
+
+def _prepare_manual_game_card(item):
+    card = dict(item or {})
+    genres = card.get("genres") or []
+    card["genre_label"] = _game_genre_title(genres[0]) if genres else ""
+    card["platform_labels"] = [_PLATFORM_LABEL[key] for key in card.get("platforms") or []
+                               if key in _PLATFORM_LABEL]
+    return card
+
+
+async def _show_manual_game_candidate(bot, cid, token, index, *, q=None):
+    state = _manual_game_choice(token, cid)
+    if state is None:
+        await bot.send_message(chat_id=cid, text="Выбор устарел. Добавь игру ещё раз.")
+        return
+    choices = state.get("choices") or []
+    index = int(index) % len(choices)
+    card = _prepare_manual_game_card(choices[index])
+    msg = leisure_ui.game_set_card(card)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Добавить", callback_data=f"game_add_ok:{token}:{index}"),
+        InlineKeyboardButton("❌ Удалить", callback_data=f"game_add_next:{token}:{index}"),
+    ]])
+    if q is not None:
+        try:
+            await q.edit_message_media(
+                media=InputMediaPhoto(media=card["poster"], caption=msg.text,
+                                      caption_entities=msg.entities), reply_markup=kb,
+            )
+            state["current_index"] = index
+            return
+        except Exception:
+            pass
+    await bot.send_photo(chat_id=cid, photo=card["poster"], caption=msg.text,
+                         caption_entities=msg.entities, reply_markup=kb)
+    state["current_index"] = index
+
+
+async def offer_manual_favorite_game(bot, cid, value, origin="base"):
+    choices = await asyncio.to_thread(igdb.search_game_candidates, value)
+    if not choices:
+        prefix = "loveaddls" if origin == "leisure" else "loveadd"
+        store.pending_input[str(cid)] = f"{prefix}_games"
+        await bot.send_message(chat_id=cid, text=(
+            "Не получилось найти подтверждённую игру с обложкой. "
+            "Уточни название или год выпуска."
+        ))
+        return
+    token = secrets.token_hex(4)
+    _manual_game_choices[token] = {
+        "cid": str(cid), "origin": origin, "created_at": time.time(),
+        "choices": choices, "current_index": 0,
+    }
+    await _show_manual_game_candidate(bot, cid, token, 0)
+
+
+async def handle_manual_game_add_callback(bot, cid, q, data):
+    try:
+        action, token, raw_index = str(data or "").split(":", 2)
+        index = int(raw_index)
+    except ValueError:
+        return
+    state = _manual_game_choice(token, cid)
+    if state is None:
+        await bot.send_message(chat_id=cid, text="Выбор устарел. Добавь игру ещё раз.")
+        return
+    choices = state.get("choices") or []
+    current = int(state.get("current_index", index))
+    if action == "game_add_next":
+        if current + 1 >= len(choices):
+            prefix = "loveaddls" if state.get("origin") == "leisure" else "loveadd"
+            store.pending_input[str(cid)] = f"{prefix}_games"
+            await bot.send_message(chat_id=cid, text=(
+                "Других подтверждённых вариантов не нашлось. Уточни название или год выпуска."
+            ))
+            return
+        await _show_manual_game_candidate(bot, cid, token, current + 1, q=q)
+        return
+    if action != "game_add_ok" or not 0 <= current < len(choices):
+        return
+    item = choices[current]
+    _manual_game_choices.pop(token, None)
+    existing = {_favorite_game_name(value).casefold() for value in _favorite_games(cid)}
+    already = item["name"].casefold() in existing
+    if not already:
+        store.add_to_list(config.FAVORITE_GAMES_KEY, cid, item)
+        _reset_game_daily(cid)
+    await send_favorite_games_added_card(bot, cid, [item])
+
+
 def _genre_keyboard():
     buttons = [InlineKeyboardButton(label, callback_data=f"vg_g_{key}") for key, label in GAME_GENRES]
     rows = [[button] for button in buttons]
@@ -680,7 +781,7 @@ async def send_games_home(bot, cid, *, q=None, status=None):
         )
         home_items.append(item)
     msg = leisure_ui.game_home_screen(
-        None, home_items, daily, year=today.year, season=season,
+        None, home_items, daily, day=today, year=today.year, season=season,
     )
     markup = _game_home_keyboard()
     poster = next(

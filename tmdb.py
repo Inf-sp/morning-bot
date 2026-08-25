@@ -97,7 +97,7 @@ def lookup_title(title, title_en=""):
     """Нормализовать название в данные карточки через TMDb с суточным кэшем."""
     if not config.TMDB_API_KEY:
         return None
-    cache_key = f"{title_en}|{title}".strip().lower()
+    cache_key = f"english-poster-v2|{title_en}|{title}".strip().lower()
     cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
     if cached is not None:
         return cached
@@ -134,7 +134,7 @@ def lookup_title(title, title_en=""):
                 if genre_id in GENRES
             ),
             "kind": kind,
-            "poster": _poster(item.get("poster_path")),
+            "poster": english_poster(item.get("id"), kind),
             "url": f"https://www.themoviedb.org/{kind}/{item.get('id')}",
             "overview": overview,
         }
@@ -144,6 +144,32 @@ def lookup_title(title, title_en=""):
 
 def _poster(path):
     return f"{_IMG}{path}" if path else None
+
+
+def english_poster(tmdb_id, kind="movie", season_number=None):
+    """Возвращает только подтверждённый англоязычный постер TMDb."""
+    if not tmdb_id or kind not in ("movie", "tv"):
+        return None
+    suffix = f":s{season_number}" if season_number is not None else ""
+    cache_key = f"{kind}:{tmdb_id}{suffix}"
+    cached = util.ttl_get("tmdb_english_poster", cache_key, 86400)
+    if cached is not None:
+        return cached or None
+    path = (
+        f"/tv/{tmdb_id}/season/{int(season_number)}/images"
+        if kind == "tv" and season_number is not None
+        else f"/{kind}/{tmdb_id}/images"
+    )
+    data = _get(path, {"include_image_language": "en"}, language="en-US") or {}
+    posters = [item for item in (data.get("posters") or [])
+               if item.get("iso_639_1") == "en" and item.get("file_path")]
+    posters.sort(key=lambda item: (
+        float(item.get("vote_average") or 0), int(item.get("vote_count") or 0),
+        int(item.get("width") or 0),
+    ), reverse=True)
+    value = _poster(posters[0]["file_path"]) if posters else ""
+    util.ttl_set("tmdb_english_poster", cache_key, value)
+    return value or None
 
 
 def _year(x):

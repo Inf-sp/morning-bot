@@ -131,9 +131,9 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     status = Status()
     asyncio.run(leisure_games.send_games_home(object(), "42", status=status))
 
-    assert "👾 Игры на сегодня · Новинки 2026" in status.call[0]
-    assert "Новинки лета:" in status.call[0]
-    assert "Игровой ребус:" in status.call[0]
+    assert "👾 Игровой дайджест · 25 августа" in status.call[0]
+    assert "Свежие релизы:" in status.call[0]
+    assert "Угадай игру:" in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
@@ -148,6 +148,7 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
         "title": f"Игра {index}",
         "genre": "RPG",
         "platform_label": "💻 ПК · 🎮 PS5",
+        "summary": "Короткое описание игры.",
         "url": f"https://example.com/{index}",
         "trailer_url": f"https://www.youtube.com/watch?v=game{index}",
     } for index in range(4)]
@@ -156,17 +157,17 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
         "emoji": "🧙 🚪 3️⃣",
         "answer": "Baldur’s Gate 3",
         "fact": "Игровой факт.",
-    }, year=2026)
+    }, day=date(2026, 8, 25), year=2026)
 
-    assert message.text.startswith("👾 Игры на сегодня · Новинки 2026\n\nНовинки лета:")
-    assert "Игра 0 (RPG) · ПК, PS5" in message.text
+    assert message.text.startswith("👾 Игровой дайджест · 25 августа\n\nСвежие релизы:")
+    assert "Игра 0 (RPG · ПК, PS5) · Короткое описание игры." in message.text
     assert "💻" not in message.text
     assert "🎮" not in message.text
     assert message.text.count("• Игра ") == 3
-    assert "• Игра 0 (RPG) · ПК, PS5" in message.text
+    assert "• Игра 0 (RPG · ПК, PS5) · Короткое описание игры." in message.text
     assert "Игра 3" not in message.text
-    assert "Игровой ребус: 🧙 🚪 3️⃣ → Baldur’s Gate 3" in message.text
-    assert "Игровой ребус:\n" not in message.text
+    assert "Угадай игру: 🧙 🚪 3️⃣ → Baldur’s Gate 3" in message.text
+    assert "Угадай игру:\n" not in message.text
     assert {
         entity.url for entity in message.entities if entity.type == "text_link"
     } == {f"https://www.youtube.com/watch?v=game{index}" for index in range(3)}

@@ -960,7 +960,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "categories": ["Fantasy"],
         "published_date": "2026-08-15",
         "summary": "Вайолет ищет союзников, пока война всё ближе к её дому.",
-    }])
+    }], day=date(2026, 8, 25))
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
         "rebus": {"emoji": "👑 🐝 🎤", "answer": "Beyoncé", "fact": "Факт."},
         "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
@@ -982,13 +982,13 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("Ребус дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
     assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
-    assert "📚 Литературный вайб · Алкмар" in books.text
+    assert "📚 Литературный вайб · 25 августа" in books.text
     assert "Цитата со страницы:" not in books.text
     assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
-    assert "Onyx Storm — Ребекка Яррос · Фэнтези · 15 августа 2026" in books.text
-    assert "Автор недели: Кнут Гамсун · 4 августа 1859 — норвежский писатель." in books.text
+    assert "• Onyx Storm — Ребекка Яррос · Фэнтези · Вайолет ищет союзников" in books.text
+    assert "Автор недели:" not in books.text
     assert "Книга под настроение:" not in books.text
-    assert books.text.index("Новинки сезона:") < books.text.index("Автор недели:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
+    assert books.text.index("Свежие релизы:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
     assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка этой недели · Алкмар" in music.text
     assert "Вайб дня" not in music.text
@@ -1035,7 +1035,7 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
 
     asyncio.run(leisure_books.send_books_home(Bot(), "42"))
 
-    assert "📚 Литературный вайб · Алкмар" in sent[0]["text"]
+    assert "📚 Литературный вайб · 25 августа" in sent[0]["text"]
     assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
     assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
 
@@ -1372,8 +1372,8 @@ def test_daily_category_block_titles_are_bold():
 
     assert {"Ребус дня:", "Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
-    assert {"Литературный ребус:", "Автор недели:",
-            "Новинки сезона:", "💡 Интересно:"}.issubset(_bold_values(books))
+    assert {"Литературный ребус:",
+            "Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
     assert {"Музыкальный ребус:", "Артист недели:",
             "Концерты рядом:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
@@ -1752,18 +1752,33 @@ def test_literary_vibe_uses_open_library_when_google_and_llm_are_unavailable(mon
     assert [item["title"] for item in items] == ["Open Book 1", "Open Book 2", "Open Book 3"]
 
 
-def test_literary_vibe_shows_genre_and_publication_date():
+def test_literary_vibe_shows_genre_and_summary_without_publication_date():
     message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
         "title": "Свежая книга",
         "author": "Автор",
         "categories": ["Fiction"],
         "published_date": "2026-08",
         "summary": "История о возвращении домой.",
-    }])
+    }], day=date(2026, 8, 25))
 
     assert (
-        "Новинки сезона:\nСвежая книга — Автор · "
-        "Художественная проза · август 2026"
+        "Свежие релизы:\n• Свежая книга — Автор · "
+        "Художественная проза · История о возвращении домой."
+    ) in message.text
+    assert "август 2026" not in message.text
+
+
+def test_literary_vibe_shows_up_to_three_translated_genres():
+    message = leisure_books.leisure_ui.weekly_books_screen("Алкмар", {}, [{
+        "title": "Космическая книга",
+        "author": "Автор",
+        "categories": ["Science Fiction / Space Opera / Dystopian"],
+        "summary": "Экипаж ищет новый дом среди далёких звёзд.",
+    }], day=date(2026, 8, 25))
+
+    assert (
+        "Научная фантастика · Космическая опера · Дистопия · "
+        "Экипаж ищет новый дом среди далёких звёзд."
     ) in message.text
 
 
@@ -1865,7 +1880,7 @@ def test_weekly_books_screen_uses_premieres_without_the_old_popular_heading():
         "url": "https://books.google.com/books?id=test",
     }])
 
-    assert "Новинки сезона:\nНедавний бестселлер — Автор" in message.text
+    assert "Свежие релизы:\n• Недавний бестселлер — Автор" in message.text
     assert "Популярное чтение" not in message.text
     assert "Жанр не указан" not in message.text
     assert any(

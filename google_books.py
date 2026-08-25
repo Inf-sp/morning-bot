@@ -242,14 +242,14 @@ def search_new_releases(max_results: int = 20) -> list[dict]:
             except (AttributeError, TypeError, ValueError):
                 continue
             title = _norm(volume.get("title"))
-            if not title or title in seen:
+            if volume.get("language") != "en" or not title or title in seen:
                 continue
             seen.add(title)
             volumes.append(volume)
     return volumes
 
 
-def find_volume(title: str, alternative_title: str = "", author: str = "") -> dict | None:
+def find_volume(title: str, alternative_title: str = "", author: str = "", *, english_only=False) -> dict | None:
     """Возвращает наиболее похожее издание, не случайный первый результат."""
     titles = [value for value in (alternative_title, title) if str(value or "").strip()]
     if not titles or not config.GOOGLE_BOOKS_API_KEY:
@@ -258,7 +258,9 @@ def find_volume(title: str, alternative_title: str = "", author: str = "") -> di
     volumes = []
     for item in _search_items(query):
         try:
-            volumes.append(_volume(item))
+            volume = _volume(item)
+            if not english_only or volume.get("language") == "en":
+                volumes.append(volume)
         except (AttributeError, TypeError, ValueError):
             continue
     ranked = sorted(
@@ -403,6 +405,7 @@ def enrich_book(item: dict) -> dict:
     try:
         volume = find_volume(
             result.get("title", ""), result.get("title_en", ""), result.get("author", ""),
+            english_only=True,
         )
     except Exception:
         return result

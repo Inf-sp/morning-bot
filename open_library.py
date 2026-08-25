@@ -168,7 +168,7 @@ def search_recent_releases(today=None, max_results=60):
                     "sort": "new", "limit": max(1, min(100, int(max_results))),
                     "fields": (
                         "key,title,author_name,first_publish_year,publish_date,isbn,cover_i,"
-                        "publisher,ratings_average,ratings_count,subject"
+                        "publisher,ratings_average,ratings_count,subject,language"
                     ),
                 },
                 headers=_HEADERS,
@@ -181,6 +181,9 @@ def search_recent_releases(today=None, max_results=60):
     items = []
     for doc in docs:
         if not isinstance(doc, dict):
+            continue
+        languages = {str(value).casefold() for value in (doc.get("language") or [])}
+        if not languages.intersection({"eng", "en"}):
             continue
         released = _publication_date(doc.get("publish_date"), today)
         authors = [str(value).strip() for value in doc.get("author_name") or [] if str(value).strip()]

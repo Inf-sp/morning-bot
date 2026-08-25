@@ -241,16 +241,16 @@ def game_card(data):
     return b.build_stripped()
 
 
-def game_home_screen(city, items, daily, *, year=None, season="лета"):
+def game_home_screen(city, items, daily, *, day=None, year=None, season="лета"):
     daily = daily or {}
-    year = int(year or datetime.now().year)
+    day = day if isinstance(day, date) else date.today()
     b = MessageBuilder()
     b.text_line("👾 ")
-    b.bold(f"Игры на сегодня · Новинки {year}")
+    b.bold(f"Игровой дайджест · {_format_date_label(day)}")
     b.newline()
 
     b.spacer()
-    b.bold(f"Новинки {str(season or 'лета').strip()}:")
+    b.bold("Свежие релизы:")
     b.newline()
     rows = [item for item in list(items or []) if str(item.get("title") or "").strip()][:3]
     if rows:
@@ -264,16 +264,20 @@ def game_home_screen(city, items, daily, *, year=None, season="лета"):
                 b.bold(title)
             genre = str(item.get("genre") or "").strip()
             platforms = _plain_game_platforms(item.get("platform_label"))
-            if genre:
-                b.text_line(f" ({genre})")
-            if platforms:
-                b.text_line(f" · {platforms}")
+            meta = " · ".join(value for value in (genre, platforms) if value)
+            if meta:
+                b.text_line(f" ({meta})")
+            summary = clip(str(item.get("summary") or item.get("description") or ""), 140)
+            if summary:
+                if summary[-1] not in ".!?…":
+                    summary += "."
+                b.text_line(f" · {summary}")
             b.newline()
     else:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
     b.spacer()
-    b.bold("Игровой ребус:")
+    b.bold("Угадай игру:")
     b.text_line(" ")
     b.text_line(str(daily.get("emoji") or "🎮 ❓"))
     b.text_line(" → ")
@@ -923,20 +927,20 @@ def favorite_movies_added_card(titles):
     return b.build_stripped()
 
 
-def weekly_books_screen(city, daily_book, items, *, season=""):
+def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
     """Недельная литературная витрина без рейтингов и служебных подписей."""
-    city = str(city or "твоего города").strip()
+    day = day if isinstance(day, date) else date.today()
     daily_book = daily_book or {}
     rebus = daily_book.get("rebus") or {}
     birthday = daily_book.get("birthday") or {}
     b = MessageBuilder()
     b.text_line("📚 ")
-    b.bold(f"Литературный вайб · {city}")
+    b.bold(f"Литературный вайб · {_format_date_label(day)}")
     b.newline()
 
     premieres = _book_premiere_items(items)
     b.spacer()
-    b.bold(f"Новинки {str(season or 'сезона').strip()}:")
+    b.bold("Свежие релизы:")
     if premieres:
         b.newline()
         for premiere in premieres:
@@ -945,18 +949,8 @@ def weekly_books_screen(city, daily_book, items, *, season=""):
         b.text_line(" ")
         b.line("Пока не удалось подтвердить заметные новинки.")
 
-    if birthday.get("name"):
-        b.spacer()
-        b.bold("Автор недели:")
-        b.text_line(" ")
-        b.bold(str(birthday["name"]))
-        birth_date = _birthday_date_label(birthday.get("birth"))
-        if birth_date:
-            b.text_line(f" · {birth_date}")
-        b.line(f" — {str(birthday.get('detail') or 'писатель').strip()}.")
-
     fact = _safe_rebus_fact(
-        rebus, birthday.get("fact"), rebus.get("fact"), daily_book.get("fact"),
+        rebus, rebus.get("fact"), daily_book.get("fact"), birthday.get("fact"),
     )
     b.spacer()
     b.bold("Литературный ребус:")
@@ -1122,6 +1116,7 @@ def _write_book_premiere(
     url = str(_item_value(item, "url", "") or "").strip()
 
     if compact:
+        builder.text_line("• ")
         if url:
             builder.link(title, url)
         else:
@@ -1130,9 +1125,8 @@ def _write_book_premiere(
             builder.text_line(f" — {author}")
         if genres:
             builder.text_line(f" · {genres}")
-        builder.text_line(
-            f" · {_book_premiere_date(item) or 'Дата не указана'}"
-        )
+        if summary:
+            builder.text_line(f" · {_book_premiere_summary(summary, limit=150)}")
         builder.newline()
         return
 
@@ -1162,7 +1156,15 @@ def _book_premiere_genres(item) -> str:
     translations = {
         "fiction": "Художественная проза",
         "fantasy": "Фэнтези",
-        "science fiction": "Фантастика",
+        "science fiction": "Научная фантастика",
+        "space opera": "Космическая опера",
+        "dystopian": "Дистопия",
+        "dystopias": "Дистопия",
+        "historical": "Историческая проза",
+        "family life": "Семейная проза",
+        "coming of age": "Взросление",
+        "literary": "Литературная проза",
+        "magical realism": "Магический реализм",
         "mystery & detective": "Детектив",
         "thrillers": "Триллер",
         "romance": "Романтика",
@@ -1175,13 +1177,15 @@ def _book_premiere_genres(item) -> str:
     }
     labels = []
     for category in categories:
-        raw = str(category or "").strip()
-        translated = translations.get(raw.casefold())
-        if translated:
-            labels.append(translated)
-        elif any("а" <= char.casefold() <= "я" for char in raw):
-            labels.append(raw[:1].upper() + raw[1:])
-    return " · ".join(dict.fromkeys(labels[:2]))
+        parts = re.split(r"\s*(?:/|>)\s*", str(category or ""))
+        for raw in parts:
+            raw = raw.strip()
+            translated = translations.get(raw.casefold())
+            if translated:
+                labels.append(translated)
+            elif any("а" <= char.casefold() <= "я" for char in raw):
+                labels.append(raw[:1].upper() + raw[1:])
+    return " · ".join(dict.fromkeys(labels[:3]))
 
 
 def _book_premiere_summary(summary, *, limit):

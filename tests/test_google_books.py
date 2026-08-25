@@ -269,7 +269,7 @@ def test_find_volumes_deduplicates_same_edition_and_prefers_cover(monkeypatch):
 
 
 def test_enrich_book_keeps_editorial_metadata_and_adds_google_fields(monkeypatch):
-    monkeypatch.setattr(google_books, "find_volume", lambda *_args: {
+    monkeypatch.setattr(google_books, "find_volume", lambda *_args, **_kwargs: {
         "google_books_id": "book-id",
         "title": "The Original Title",
         "author": "Verified Author",
@@ -311,7 +311,7 @@ def test_new_releases_request_uses_newest_order_and_deduplicates(monkeypatch):
     def search(query, max_results, *, order_by):
         calls.append((query, max_results, order_by))
         return [{"id": query, "volumeInfo": {
-            "title": "Одна книга", "authors": ["Автор"],
+            "title": "One Book", "authors": ["Author"], "language": "en",
         }}]
 
     monkeypatch.setattr(google_books, "_search_items", search)
@@ -329,7 +329,7 @@ def test_new_releases_request_uses_newest_order_and_deduplicates(monkeypatch):
 def test_enrichment_failure_returns_original_card(monkeypatch):
     monkeypatch.setattr(
         google_books, "find_volume",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("malformed response")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("malformed response")),
     )
     original = {"title": "1984", "author": "George Orwell"}
 
