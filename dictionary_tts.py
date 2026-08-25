@@ -8,8 +8,8 @@ import json
 import logging
 from datetime import datetime
 
-import azure_speech
 import config
+import free_tts
 import secure
 import storage_driver
 import store
@@ -38,14 +38,14 @@ def spoken_payload(entry: dict) -> tuple[str, str]:
     article = str(entry.get("article") or "").strip()
     if article and not word.casefold().startswith(article.casefold() + " "):
         word = f"{article} {word}".strip()
-    return azure_speech.clean_spoken_text(word), azure_speech.clean_spoken_text(_entry_example_nl(entry))
+    return free_tts.clean_spoken_text(word), free_tts.clean_spoken_text(_entry_example_nl(entry))
 
 
 def make_cache_key(word: str, example: str) -> str:
     return "|".join((
-        azure_speech.LANGUAGE,
-        azure_speech.voice_name(),
-        azure_speech.speech_rate(),
+        free_tts.LANGUAGE,
+        free_tts.voice_name(),
+        free_tts.speech_rate(),
         word.casefold(),
         example,
     ))
@@ -66,9 +66,9 @@ def _get_cached_file_id(cache_key: str) -> str:
 def _save_cached_file_id(cache_key: str, word: str, example: str, file_id: str) -> None:
     record = {
         "cacheKey": cache_key,
-        "language": azure_speech.LANGUAGE,
-        "voice": azure_speech.voice_name(),
-        "rate": azure_speech.speech_rate(),
+        "language": free_tts.LANGUAGE,
+        "voice": free_tts.voice_name(),
+        "rate": free_tts.speech_rate(),
         "word": word.casefold(),
         "example": example,
         "telegramFileId": file_id,
@@ -84,10 +84,10 @@ def _save_cached_file_id(cache_key: str, word: str, example: str, file_id: str) 
 
 
 def _safe_log(error: Exception, word_id: str) -> None:
-    status = error.status if isinstance(error, azure_speech.AzureSpeechError) else None
-    code = error.code if isinstance(error, azure_speech.AzureSpeechError) else type(error).__name__
+    status = None
+    code = str(error) if isinstance(error, free_tts.FreeTTSError) else type(error).__name__
     payload = {
-        "provider": "azure_speech",
+        "provider": "gtts",
         "status": status,
         "wordId": str(word_id),
         "error": secure.redact(code),
@@ -135,7 +135,7 @@ async def send_pronunciation(bot, cid, word_id: str) -> None:
                 await _send_error(bot, cid)
             return
         try:
-            audio = await asyncio.to_thread(azure_speech.synthesize, word, example)
+            audio = await asyncio.to_thread(free_tts.synthesize, word, example)
             voice_file = io.BytesIO(audio)
             voice_file.name = "pronunciation.mp3"
             message = await bot.send_voice(chat_id=cid, voice=voice_file)

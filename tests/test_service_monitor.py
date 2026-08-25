@@ -294,7 +294,7 @@ def test_monitor_fallback_is_not_used_by_request_router(monkeypatch):
 
 def test_passive_language_and_speech_probes_are_not_run_every_five_minutes():
     assert provider_runtime.SPEC_BY_KEY["languagetool"].probe_every >= 3600
-    assert provider_runtime.SPEC_BY_KEY["azure_speech"].probe_every >= 3600
+    assert provider_runtime.SPEC_BY_KEY["gtts"].probe_every >= 3600
     assert provider_runtime.SPEC_BY_KEY["groq"].probe_every >= 3600
     assert provider_runtime.SPEC_BY_KEY["gemini"].probe_every >= 3600
 
@@ -325,6 +325,6 @@ def test_monitor_probe_does_not_create_a_developer_error(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: False)
 
-    assert service_monitor.probe("azure_speech") is False
-    assert provider_runtime.get_state("azure_speech")["status"] == provider_runtime.DOWN
+    assert service_monitor.probe("gtts") is False
+    assert provider_runtime.get_state("gtts")["status"] == provider_runtime.DOWN
     assert provider_runtime.history() == []

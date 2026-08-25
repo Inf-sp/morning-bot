@@ -57,3 +57,40 @@ def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):
     assert first == second
     assert calls == ["search"]
     assert first["map_url"].startswith("https://www.google.com/maps/search/")
+
+
+def test_alkmaar_keeps_a_useful_restaurant_when_live_search_is_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"},
+    )
+    monkeypatch.setattr(restaurant_discovery.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(restaurant_discovery.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(restaurant_discovery.research, "web_search", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        restaurant_discovery.ai, "llm_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("AI unavailable")),
+    )
+
+    card = restaurant_discovery.get_restaurant("42")
+
+    assert card["city"] == "Alkmaar"
+    assert card["name"]
+    assert card["map_url"].startswith("https://www.google.com/maps/search/")
+    assert card["description"]
+
+
+def test_other_place_rotates_through_alkmaar_reserve(monkeypatch):
+    cached = restaurant_discovery._fallback_card("Alkmaar")
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"},
+    )
+    monkeypatch.setattr(restaurant_discovery.store, "get_profile", lambda _cid: {
+        "food_restaurant_recommendation": cached,
+    })
+    monkeypatch.setattr(restaurant_discovery.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(restaurant_discovery.research, "web_search", lambda *_args, **_kwargs: [])
+
+    card = restaurant_discovery.get_restaurant("42", refresh=True)
+
+    assert card["name"] != cached["name"]
+    assert card["map_url"].startswith("https://www.google.com/maps/search/")

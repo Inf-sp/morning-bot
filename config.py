@@ -115,6 +115,9 @@ API_QUOTAS = {
     "azure_speech": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
+    "gtts": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
     "tmdb": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],

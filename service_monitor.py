@@ -32,7 +32,7 @@ _quota_from_headers = provider_runtime.quota_from_headers
 _AI_SERVICES = ("groq", "gemini", "cloudflare", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
-    "spoonacular", "azure_speech", "ticketmaster", "pexels", "unsplash",
+    "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
 )
 _DATA_CATEGORIES = {
     "openweather": "Погода",
@@ -43,7 +43,7 @@ _DATA_CATEGORIES = {
     "youtube": "Музыка",
     "languagetool": "Обучение",
     "spoonacular": "Готовка",
-    "azure_speech": "Озвучка",
+    "gtts": "Озвучка",
     "ticketmaster": "Концерты",
     "pexels": "Фото",
     "unsplash": "Фото",
@@ -93,7 +93,7 @@ def _usage_detail(service: str) -> str:
         return f"{_number(usage['neurons_today'])} нейронов сегодня"
     if service == "openrouter":
         return f"{_number(requests_today)} сегодня"
-    if service == "azure_speech" and usage["characters_today"]:
+    if service == "gtts" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":
         return "подключено"
@@ -259,7 +259,7 @@ def _probe_request(service: str):
         "languagetool": ("POST", f"{config.LANGUAGETOOL_API_URL}/check", {"data": {"text": "Dit is goed.", "language": "nl-NL"}}),
         "spoonacular": ("GET", "https://api.spoonacular.com/food/ingredients/search", {"params": {"query": "apple", "number": 1, "apiKey": config.SPOONACULAR_API_KEY}}),
         "themealdb": ("GET", f"https://www.themealdb.com/api/json/v1/{config.THEMEALDB_API_KEY}/lookup.php", {"params": {"i": "52772"}}),
-        "azure_speech": ("GET", f"https://{config.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list", {"headers": {"Ocp-Apim-Subscription-Key": config.AZURE_SPEECH_KEY}}),
+        "gtts": ("GET", "https://translate.google.nl", {}),
         "ticketmaster": ("GET", "https://app.ticketmaster.com/discovery/v2/events.json", {"params": {"apikey": config.TICKETMASTER_API_KEY, "size": 1}}),
         "pexels": ("GET", "https://api.pexels.com/v1/curated", {"headers": {"Authorization": config.PEXELS_API_KEY}, "params": {"per_page": 1}}),
         "unsplash": ("GET", "https://api.unsplash.com/photos", {"headers": {"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}", "Accept-Version": "v1"}, "params": {"per_page": 1}}),

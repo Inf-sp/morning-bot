@@ -64,7 +64,7 @@ def test_first_press_uploads_voice_and_second_uses_file_id(monkeypatch):
         return b"mp3"
 
     monkeypatch.setattr(dictionary_tts, "_save_cached_file_id", save)
-    monkeypatch.setattr(dictionary_tts.azure_speech, "synthesize", synthesize)
+    monkeypatch.setattr(dictionary_tts.free_tts, "synthesize", synthesize)
 
     asyncio.run(dictionary_tts.send_pronunciation(bot, "42", "word-id"))
     asyncio.run(dictionary_tts.send_pronunciation(bot, "42", "word-id"))
@@ -100,9 +100,9 @@ def test_cache_record_has_provider_inputs_and_telegram_file_id(monkeypatch):
     record = captured["data"][cache_key]
     assert captured["key"] == "tts_cache.json"
     assert record["cacheKey"] == cache_key
-    assert record["language"] == "nl-NL"
-    assert record["voice"] == "nl-NL-MaartenNeural"
-    assert record["rate"] == "-10%"
+    assert record["language"] == "nl"
+    assert record["voice"] == "gtts-nl"
+    assert record["rate"] == "normal"
     assert record["word"] == "vervangen"
     assert record["example"] == "Ik wil mijn oude telefoon vervangen."
     assert record["telegramFileId"] == "AwACAg-test"
@@ -117,7 +117,7 @@ def test_word_without_example_is_still_spoken(monkeypatch):
     monkeypatch.setattr(dictionary_tts, "_get_cached_file_id", lambda key: "")
     monkeypatch.setattr(dictionary_tts, "_save_cached_file_id", lambda *args: None)
     monkeypatch.setattr(
-        dictionary_tts.azure_speech,
+        dictionary_tts.free_tts,
         "synthesize",
         lambda word, example: calls.append((word, example)) or b"mp3",
     )
@@ -128,16 +128,16 @@ def test_word_without_example_is_still_spoken(monkeypatch):
     assert len(bot.voices) == 1
 
 
-def test_azure_error_keeps_card_and_sends_short_message(monkeypatch):
+def test_free_tts_error_keeps_card_and_sends_short_message(monkeypatch):
     bot = VoiceBot()
     dictionary_tts._locks.clear()
     monkeypatch.setattr(dictionary_tts, "_find_entry", lambda cid, word_id: _entry())
     monkeypatch.setattr(dictionary_tts, "_get_cached_file_id", lambda key: "")
 
     def fail(*args):
-        raise dictionary_tts.azure_speech.AzureSpeechError("invalid_key", status=401)
+        raise dictionary_tts.free_tts.FreeTTSError("synthesis_failed")
 
-    monkeypatch.setattr(dictionary_tts.azure_speech, "synthesize", fail)
+    monkeypatch.setattr(dictionary_tts.free_tts, "synthesize", fail)
     asyncio.run(dictionary_tts.send_pronunciation(bot, "42", "word-id"))
 
     assert bot.voices == []

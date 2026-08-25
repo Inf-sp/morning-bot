@@ -155,7 +155,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data.startswith("tts_word:"):
         # answerCallbackQuery запускается заранее в bot.answer_callback, поэтому
-        # кнопка перестаёт крутиться до сетевого запроса Azure.
+        # кнопка перестаёт крутиться до сетевого запроса озвучки.
         await dictionary_tts.send_pronunciation(bot, cid, data.split(":", 1)[1])
         return
     # Готовка vs личные коллекции

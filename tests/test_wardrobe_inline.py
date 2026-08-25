@@ -396,13 +396,14 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
 
     asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
 
-    assert sent[0]["text"].startswith("💳 Что докупить\n\nРекомендую добавить в гардероб:")
-    assert sent[0]["text"].count("\n• ") == 3
+    assert sent[0]["text"].startswith("💳 Что докупить\n\nСерые широкие джинсы")
     assert "Серые широкие джинсы" in sent[0]["text"]
     assert "Закроют пробел в шкафу" in sent[0]["text"]
-    assert "Напиши, что ищешь: например «худи», «осенние ботинки»" in sent[0]["text"]
     assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
-    assert _labels(sent[0]["reply_markup"]) == [["⬅️ Назад", "#️⃣ Главная"]]
+    assert _labels(sent[0]["reply_markup"]) == [
+        ["◀️", "1/3", "▶️"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
     wardrobe.store.pending_input.pop("42", None)
 
 
@@ -427,9 +428,16 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
     monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
     monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+    photo_calls = []
+
+    def purchase_photo(item, audience):
+        photo_calls.append((item, audience))
+        return {"url": "https://images.pexels.com/example.jpg", "query": item}
+
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {"name": "Vladimir"})
     monkeypatch.setattr(
         wardrobe_photos, "purchase_photo",
-        lambda item: {"url": "https://images.pexels.com/example.jpg", "query": item},
+        purchase_photo,
     )
 
     asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
@@ -437,6 +445,40 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
     assert [kind for kind, _kwargs in sent] == ["photo"]
     assert sent[0][1]["photo"] == "https://images.pexels.com/example.jpg"
     assert sent[0][1]["caption"].startswith("💳 Что докупить")
+    assert photo_calls == [("Серые широкие джинсы", "male")]
+
+
+def test_purchase_carousel_edits_the_same_photo_card(monkeypatch):
+    import wardrobe_photos
+
+    wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
+    edited = []
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {"name": "Vladimir"})
+    monkeypatch.setattr(
+        wardrobe_photos, "purchase_photo",
+        lambda item, audience: {"url": f"https://images.pexels.com/{audience}/{item}.jpg"},
+    )
+
+    asyncio.run(wardrobe.show_purchase_page(object(), "42", 1, q=Query()))
+
+    assert len(edited) == 1
+    assert edited[0]["media"].caption.startswith("💳 Что докупить")
+    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/3", "▶️"]
+
+
+def test_purchase_photos_are_male_for_admin_even_without_profile_name(monkeypatch):
+    monkeypatch.setattr(wardrobe.config, "CHAT_ID", "42")
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {})
+
+    assert wardrobe._purchase_photo_audience("42") == "male"
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

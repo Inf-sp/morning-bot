@@ -200,7 +200,7 @@ _SECTION_BY_MODULE = {
     "research": "Поиск", "assistant": "Ассистент", "leisure_movies": "Кино",
     "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",
-    "azure_speech": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
+    "gtts": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
     "travel_photos": "Поездка",
     "settings": "Настройки",
     "menu": "Меню", "bot_callbacks": "Меню", "bot": "Бот",
@@ -216,8 +216,8 @@ _SERVICE_NAMES = (
 _SERVICE_BY_MODULE = {
     "weather": "OpenWeather", "weather_provider": "OpenWeather",
     "spoonacular": "Spoonacular", "themealdb": "TheMealDB",
-    "language_tool": "LanguageTool", "azure_speech": "Azure Speech",
-    "dictionary_tts": "Azure Speech", "tmdb": "TMDB",
+    "language_tool": "LanguageTool", "gtts": "gTTS",
+    "dictionary_tts": "gTTS", "tmdb": "TMDB",
     "leisure_movies": "TMDB", "google_books": "Google Books",
     "leisure_books": "Google Books", "leisure_concerts": "Ticketmaster",
     "rerank": "ZeroEntropy", "research": "Tavily", "ai": "несколько AI-сервисов",
@@ -227,7 +227,7 @@ _SERVICE_BY_MODULE = {
 _FALLBACK_BY_SERVICE = {
     "OpenWeather": "сохранённый прогноз", "Spoonacular": "TheMealDB",
     "TheMealDB": "шаблон без AI", "LanguageTool": "проверка в коде",
-    "Azure Speech": "текстовая карточка", "TMDB": "Gemini",
+    "gTTS": "текстовая карточка", "TMDB": "Gemini",
     "Google Books": "Open Library", "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
     "Gemini": "Groq", "Groq": "Cloudflare AI",

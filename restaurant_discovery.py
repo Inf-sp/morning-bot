@@ -12,6 +12,35 @@ import store
 
 _CACHE_TTL_DAYS = 7
 
+_CITY_FALLBACKS = {
+    "alkmaar": (
+        {
+            "name": "De Eendracht in 't IJkgebouw",
+            "cuisine": "нидерландская · европейская", "price": "€€",
+            "signature_dish": "Eendracht burger",
+            "description": "Ресторан на весь день с сезонными блюдами и продуктами местных поставщиков.",
+            "fact": "Он находится в историческом здании IJkgebouw рядом с Victoriepark.",
+            "source_url": "https://www.deeendracht-alkmaar.nl/",
+        },
+        {
+            "name": "MADA",
+            "cuisine": "грузинская", "price": "€€",
+            "signature_dish": "аджарули хачапури",
+            "description": "Грузинский ресторан с выпечкой из печи, хинкали и блюдами на углях.",
+            "fact": "Винная часть меню опирается на грузинскую традицию выдержки вина в квеври.",
+            "source_url": "https://restaurant-mada.nl/",
+        },
+        {
+            "name": "Roest Alkmaar",
+            "cuisine": "современная европейская", "price": "€€",
+            "signature_dish": "Roest Smashburger",
+            "description": "Неформальный ресторан и коктейль-бар в старом центре Alkmaar.",
+            "fact": "Сам ресторан называет Roest Smashburger своим фирменным блюдом.",
+            "source_url": "https://roestalkmaar.nl/",
+        },
+    ),
+}
+
 
 def _cache(cid):
     value = store.get_profile(cid).get("food_restaurant_recommendation") or {}
@@ -36,6 +65,40 @@ def _save(cid, card):
     ))
 
 
+def _usable(value, city):
+    return bool(
+        isinstance(value, dict)
+        and str(value.get("city") or "").casefold() == str(city or "").casefold()
+        and value.get("name") and value.get("map_url") and value.get("description")
+    )
+
+
+def _fallback_card(city, previous=""):
+    items = _CITY_FALLBACKS.get(str(city or "").casefold()) or ()
+    picked = next(
+        (item for item in items
+         if str(item.get("name") or "").casefold() != str(previous or "").casefold()),
+        items[0] if items else None,
+    )
+    if not picked:
+        return {"city": city}
+    name = picked["name"]
+    return {
+        "city": city, **picked,
+        "map_url": f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{name}, {city}')}",
+        "cached_at": datetime.now(config.TZ).isoformat(),
+    }
+
+
+def _reserve(cid, cached, city, previous=""):
+    if _usable(cached, city) and str(cached.get("name") or "").casefold() != str(previous or "").casefold():
+        return cached
+    card = _fallback_card(city, previous)
+    if card.get("name"):
+        _save(cid, card)
+    return card
+
+
 def _source_text(rows):
     return "\n---\n".join(
         f"TITLE: {row.get('title', '')}\nURL: {row.get('url', '')}\nTEXT: {row.get('content', '')}"
@@ -55,7 +118,7 @@ def get_restaurant(cid, *, refresh=False):
         search_priority="tavily",
     )
     if not rows:
-        return cached if _fresh(cached, city) else {"city": city}
+        return _reserve(cid, cached, city, previous)
     sources = _source_text(rows)
     prompt = f"""Выбери ОДИН реально существующий ресторан в городе {city} по источникам.
 Не используй место {previous or 'без исключений'}. Не придумывай цену, блюдо или факт:
@@ -74,9 +137,9 @@ fact — один проверяемый факт о месте или его к
             cache_context={"city": city.casefold(), "previous": previous.casefold(), "sources": sources},
         )
     except Exception:
-        return cached if _fresh(cached, city) else {"city": city}
+        return _reserve(cid, cached, city, previous)
     if not isinstance(result, dict):
-        return cached if _fresh(cached, city) else {"city": city}
+        return _reserve(cid, cached, city, previous)
     name = " ".join(str(result.get("name") or "").split()).strip()
     source_url = str(result.get("source_url") or "").strip()
     source_urls = {str(row.get("url") or "").strip() for row in rows}
@@ -87,7 +150,7 @@ fact — один проверяемый факт о месте или его к
         or result.get("price") not in {"€", "€€", "€€€"}
         or not all(str(result.get(field) or "").strip() for field in required)
     ):
-        return cached if _fresh(cached, city) else {"city": city}
+        return _reserve(cid, cached, city, previous)
     card = {
         "city": city, "name": name,
         "cuisine": " ".join(str(result["cuisine"]).split()),

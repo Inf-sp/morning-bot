@@ -339,6 +339,31 @@ def purchase_recommendations_card(items):
     return b.build_stripped()
 
 
+def purchase_recommendation_card(item):
+    """Одна рекомендация для фотокарусели покупок."""
+    item = item or {}
+    b = MessageBuilder()
+    b.section("💳 Что докупить")
+    b.spacer()
+    name = _clean_text(item.get("item")) or "Полезная вещь для гардероба"
+    b.bold(name)
+    b.newline()
+    meta = " · ".join(
+        value for value in (
+            _clean_text(item.get("category")),
+            _clean_text(item.get("style")),
+            _clean_text(item.get("season")),
+        ) if value
+    )
+    if meta:
+        b.line(meta)
+    reason = _finish_dot(item.get("reason"))
+    if reason:
+        b.spacer()
+        b.line(_upper_first(reason))
+    return b.build_stripped()
+
+
 def _pluralize_dative_items(n):
     n = abs(int(n))
     if n % 10 == 1 and n % 100 != 11:

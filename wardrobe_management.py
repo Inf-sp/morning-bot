@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from wardrobe import (
         _PURCHASE_FLAGS, _PURCHASE_REJECT_REASONS, _PURCHASE_VERDICTS,
         _ZONES_DESC, _back_kb, _build_purchase_message,
-        _build_purchase_suggestions_message, _clean_text,
+        _build_purchase_recommendation_message, _build_purchase_suggestions_message, _clean_text,
         _flat_wardrobe_items, _get_cached_look, _kb, _log,
         _purchase_candidate, _settings, ai, closet_kb, config,
         delete_label, has_wardrobe_items, normalize_parsed_item,
@@ -368,8 +368,83 @@ def _missing_purchase_candidates(cid, wardrobe):
     )
 
 
+def _purchase_photo_audience(cid):
+    """Определяет тип фотопоиска только при достаточно надёжном сигнале профиля."""
+    if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
+        return "male"
+    profile = store.get_profile(cid) or {}
+    explicit = _clean_text(profile.get("gender")).casefold()
+    if explicit in {"male", "man", "m", "мужской", "мужчина"}:
+        return "male"
+    if explicit in {"female", "woman", "f", "женский", "женщина"}:
+        return "female"
+    name = _clean_text(profile.get("name")).casefold().split(" ", 1)[0]
+    male_names = {
+        "vladimir", "владимир", "alexander", "александр", "alexey", "алексей",
+        "andrey", "андрей", "anton", "антон", "dmitry", "дмитрий", "ivan", "иван",
+        "maxim", "максим", "mikhail", "михаил", "nikita", "никита", "oleg", "олег",
+        "pavel", "павел", "sergey", "сергей", "yuri", "юрий", "denis", "денис",
+    }
+    return "male" if name in male_names else "neutral"
+
+
+def _purchase_carousel_kb(page, count):
+    rows = []
+    if count > 1:
+        rows.append([
+            ("◀️", f"w_buy_page:{(page - 1) % count}"),
+            (f"{page + 1}/{count}", "noop"),
+            ("▶️", f"w_buy_page:{(page + 1) % count}"),
+        ])
+    rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
+    return _kb(rows)
+
+
+async def show_purchase_page(bot, cid, page=0, q=None):
+    wardrobe = store.load_wardrobe(cid)
+    candidates = _missing_purchase_candidates(cid, wardrobe)
+    if not candidates:
+        await recommend_missing_purchase(bot, cid)
+        return
+    page = max(0, min(int(page), len(candidates) - 1))
+    item = candidates[page]
+    text_out, entities = _build_purchase_recommendation_message(item)
+    store.last_source[str(cid)] = "Гардероб · Что докупить"
+    store.last_answer[str(cid)] = text_out
+    import asyncio
+    import wardrobe_photos
+
+    photo = await asyncio.to_thread(
+        wardrobe_photos.purchase_photo,
+        _clean_text(item.get("item")),
+        _purchase_photo_audience(cid),
+    )
+    kb = _purchase_carousel_kb(page, len(candidates))
+    if q is not None and photo and photo.get("url") and len(text_out) <= 1024:
+        try:
+            await q.edit_message_media(
+                media=InputMediaPhoto(
+                    media=photo["url"], caption=text_out, caption_entities=entities,
+                ),
+                reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if photo and photo.get("url") and len(text_out) <= 1024:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=photo["url"], caption=text_out,
+                caption_entities=entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    await bot.send_message(chat_id=cid, text=text_out, entities=entities, reply_markup=kb)
+
+
 async def recommend_missing_purchase(bot, cid):
-    """Сразу советует три вещи и принимает уточнение покупки следующим сообщением."""
+    """Показывает первую из трёх персональных покупок в фотокарусели."""
     wardrobe = store.load_wardrobe(cid)
     if not has_wardrobe_items(cid):
         await bot.send_message(
@@ -379,31 +454,8 @@ async def recommend_missing_purchase(bot, cid):
                               [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
-    candidates = _missing_purchase_candidates(cid, wardrobe)
     store.pending_input[str(cid)] = "wardrobe_buy"
-    text_out, entities = _build_purchase_recommendations_message(candidates)
-    store.last_source[str(cid)] = "Гардероб · Что докупить"
-    store.last_answer[str(cid)] = text_out
-    photo = None
-    if candidates:
-        import asyncio
-        import wardrobe_photos
-
-        photo = await asyncio.to_thread(
-            wardrobe_photos.purchase_photo, _clean_text(candidates[0].get("item")),
-        )
-    if photo and photo.get("url") and len(text_out) <= 1024:
-        try:
-            await bot.send_photo(
-                chat_id=cid, photo=photo["url"], caption=text_out,
-                caption_entities=entities, reply_markup=_purchase_hub_kb(),
-            )
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid, text=text_out, entities=entities, reply_markup=_purchase_hub_kb(),
-    )
+    await show_purchase_page(bot, cid, 0)
 
 
 def _local_purchase_suggestions(item, wardrobe):

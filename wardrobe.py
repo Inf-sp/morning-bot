@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import re
 import config
 import store
@@ -412,6 +412,11 @@ def _build_purchase_suggestions_message(data):
 
 def _build_purchase_recommendations_message(items):
     msg = wardrobe_ui.purchase_recommendations_card(items)
+    return msg.text, msg.entities
+
+
+def _build_purchase_recommendation_message(item):
+    msg = wardrobe_ui.purchase_recommendation_card(item)
     return msg.text, msg.entities
 
 
@@ -963,6 +968,10 @@ async def handle_callback(bot, cid, q, data, status=None):
         await send_home(bot, cid, q=q); return
     if data == "w_buy":
         await recommend_missing_purchase(bot, cid); return
+    if data.startswith("w_buy_page:"):
+        page = data.partition(":")[2]
+        await show_purchase_page(bot, cid, int(page) if page.isdigit() else 0, q=q)
+        return
     if data == "w_buy_pick":
         store.pending_input[str(cid)] = "wardrobe_buy"
         await bot.send_message(
@@ -980,4 +989,4 @@ async def handle_callback(bot, cid, q, data, status=None):
         return
 
 
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","show_purchase_page","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])

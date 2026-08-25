@@ -21,18 +21,26 @@ _PURCHASE_QUERIES = (
 )
 
 
-def _purchase_query(item):
+def _purchase_query(item, audience="neutral"):
     name = " ".join(str(item or "").split()).strip().casefold()
     for markers, query in _PURCHASE_QUERIES:
         if any(marker in name for marker in markers):
-            return query
-    return "minimal clothing fashion item"
+            break
+    else:
+        query = "minimal clothing fashion item"
+    if audience == "male":
+        return f"men wearing {query}"
+    if audience == "female":
+        return f"women wearing {query}"
+    return query
 
 
-@lru_cache(maxsize=64)
-def purchase_photo(item):
+@lru_cache(maxsize=128)
+def purchase_photo(item, audience="neutral"):
     """Возвращает одно фото Pexels или None; повторный запрос кэшируется."""
     name = " ".join(str(item or "").split()).strip()
     if not name:
         return None
-    return pexels_photo(_purchase_query(name), strict=False, first_result=True)
+    return pexels_photo(
+        _purchase_query(name, audience), strict=False, first_result=True,
+    )
