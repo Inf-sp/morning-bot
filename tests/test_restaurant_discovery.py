@@ -1,5 +1,6 @@
 import os
 import asyncio
+from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -16,13 +17,15 @@ def test_restaurant_card_has_google_link_and_compact_details():
         "city": "Alkmaar", "name": "De Eendracht",
         "map_url": "https://www.google.com/maps/search/?api=1&query=De+Eendracht%2C+Alkmaar",
         "cuisine": "нидерландская", "price": "€€", "signature_dish": "сате",
+        "opening_hours": "с 09:00 до 00:00", "dish_emoji": "🍔", "dish_price": "€22,50",
         "description": "Современное городское кафе в историческом центре.",
         "fact": "Ресторан находится в здании бывшей школы.",
     })
 
-    assert message.text.startswith("🍽️ Что поесть · Alkmaar\n\nКуда сходить:\n• De Eendracht")
-    assert "(нидерландская · €€ · сате)" in message.text
-    assert "💡 Интересно: Ресторан находится в здании бывшей школы." in message.text
+    assert message.text.startswith("🍽️ Куда сходить · Alkmaar\n\nСегодня: De Eendracht")
+    assert "- Цена €€\n- нидерландская\n- Открыто с 09:00 до 00:00." in message.text
+    assert "Что взять: 🍔 сате · €22,50" in message.text
+    assert "Интересно: Ресторан находится в здании бывшей школы." in message.text
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
     assert len(links) == 1
     assert links[0].url.startswith("https://www.google.com/maps/search/")
@@ -81,6 +84,18 @@ def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):
     assert first == second
     assert calls == ["search"]
     assert first["map_url"].startswith("https://www.google.com/maps/search/")
+
+
+def test_restaurant_context_changes_with_time_and_good_weather(monkeypatch):
+    monkeypatch.setattr(restaurant_discovery, "_good_terrace_weather", lambda _settings: True)
+
+    morning = restaurant_discovery._context({}, datetime(2026, 8, 26, 9, 0, tzinfo=restaurant_discovery.config.TZ))
+    lunch = restaurant_discovery._context({}, datetime(2026, 8, 26, 13, 0, tzinfo=restaurant_discovery.config.TZ))
+    weekend = restaurant_discovery._context({}, datetime(2026, 8, 28, 19, 0, tzinfo=restaurant_discovery.config.TZ))
+
+    assert morning == ("morning_terrace", "coffee and breakfast with a terrace")
+    assert lunch == ("lunch_terrace", "lunch with a terrace")
+    assert weekend == ("weekend_dinner_terrace", "Friday or Saturday dinner with a terrace")
 
 
 def test_alkmaar_keeps_a_useful_restaurant_when_live_search_is_unavailable(monkeypatch):

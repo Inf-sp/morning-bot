@@ -313,3 +313,48 @@ def test_daily_word_deep_dive_is_generated_once_and_saved_hidden(monkeypatch):
 
     assert len(calls) == 1
     assert words[0]["daily_word_deep_dive"] == deep_dive
+
+
+def test_daily_word_replaces_saved_placeholder_template(monkeypatch):
+    placeholder = {
+        "pronunciation": "[русская транскрипция с ударением]",
+        "translation": "1-2 значения",
+        "essence": "2-3 коротких предложения о смысле и ситуации употребления",
+        "examples": [
+            {"text": "...", "translation": "...", "context": "..."},
+            {"text": "...", "translation": "...", "context": "..."},
+        ],
+        "memory_hook": "короткая яркая ассоциация",
+        "usage_note": "один важный нюанс позиции, регистра или сочетаемости",
+        "exercise_ru": "...", "exercise_answer": "...",
+    }
+    valid = {
+        "pronunciation": "[бепе́ркен]", "translation": "ограничивать · сокращать",
+        "essence": "Так говорят, когда уменьшают допустимый объём или ставят границу.",
+        "examples": [
+            {"text": "We moeten de kosten beperken.", "translation": "Нам нужно сократить расходы.", "context": "О бюджете"},
+            {"text": "Ik beperk mijn schermtijd.", "translation": "Я ограничиваю время у экрана.", "context": "О привычках"},
+        ],
+        "memory_hook": "Представь барьер, который ограничивает пространство.",
+        "usage_note": "Обычно употребляется с прямым дополнением.",
+        "exercise_ru": "Я ограничиваю время у экрана.",
+        "exercise_answer": "Ik beperk mijn schermtijd.",
+    }
+    words = [{
+        "term": "Beperken", "translation": "ограничивать", "lang": "nl",
+        "breakdown": "глагол", "daily_word_deep_dive": placeholder,
+    }]
+    calls = []
+
+    async def generate(*_args, **_kwargs):
+        calls.append(True)
+        return valid
+
+    monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
+    monkeypatch.setattr(dictionary_morning.ai, "allm_json", generate)
+    monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
+
+    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
+
+    assert calls == [True]
+    assert words[0]["daily_word_deep_dive"] == valid

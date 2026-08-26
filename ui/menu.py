@@ -317,27 +317,34 @@ def restaurant_menu(card=None):
     card = card or {}
     city = _cooking_text(card.get("city")) or "Alkmaar"
     b = MessageBuilder()
-    b.section(f"🍽️ Что поесть · {city}")
+    b.section(f"🍽️ Куда сходить · {city}")
     name = _cooking_text(card.get("name"))
     if name and card.get("map_url"):
-        b.bold("Куда сходить:")
-        b.newline()
-        b.text_line("• ")
+        b.bold("Сегодня:")
+        b.text_line(" ")
         b.link(name, str(card["map_url"]))
-        meta = " · ".join(filter(None, (
-            _cooking_text(card.get("cuisine")), _cooking_text(card.get("price")),
-            _cooking_text(card.get("signature_dish")),
-        )))
-        if meta:
-            b.text_line(f" ({meta})")
         b.newline()
-        description = _cooking_sentence(card.get("description"))
-        if description:
-            b.line(description)
+        for detail in (
+            f"Цена {_cooking_text(card.get('price'))}" if card.get("price") else "",
+            _cooking_text(card.get("cuisine")),
+            f"Открыто {_cooking_text(card.get('opening_hours'))}." if card.get("opening_hours") else "",
+        ):
+            if detail:
+                b.line(f"- {detail}")
+        dish = _cooking_text(card.get("signature_dish"))
+        if dish:
+            b.spacer()
+            b.bold("Что взять:")
+            dish_emoji = str(card.get("dish_emoji") or "🍽️").strip()
+            b.text_line(f" {dish_emoji} ")
+            b.bold(dish)
+            if card.get("dish_price"):
+                b.text_line(f" · {_cooking_text(card.get('dish_price'))}")
+            b.newline()
         fact = _cooking_sentence(card.get("fact"))
         if fact:
             b.spacer()
-            b.bold("💡 Интересно:")
+            b.bold("Интересно:")
             b.text_line(f" {fact}")
             b.newline()
     else:
