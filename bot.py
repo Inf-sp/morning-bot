@@ -518,6 +518,16 @@ async def job_startup_audits(context: ContextTypes.DEFAULT_TYPE):
     await asyncio.to_thread(_run_startup_audits)
 
 
+async def job_retry_dictionary_adds(context: ContextTypes.DEFAULT_TYPE):
+    """Повторяет только сохранённые Add-запросы; пользователь ничего не вводит заново."""
+    if tracking.has_active_actions():
+        return
+    import dictionary_import
+    await dictionary_import.process_queued_dictionary_adds(
+        context.bot, access.get_allowed_cids(), limit=10,
+    )
+
+
 async def job_normalize_favorite_collections(context: ContextTypes.DEFAULT_TYPE):
     """Один спокойный проход по старым личным спискам после запуска.
 
@@ -660,6 +670,12 @@ def _build_application():
         interval=300,
         first=310,
         **_job_options("monitoring_repeating"),
+    )
+    jq.run_repeating(
+        job_retry_dictionary_adds,
+        interval=300,
+        first=90,
+        **_job_options("dictionary_add_retry_repeating"),
     )
     for section, time_label in _HOME_WARM_SCHEDULE:
         weekly_home_sections = {"travel", "cinema", "books", "music"}

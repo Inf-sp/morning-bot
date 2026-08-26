@@ -53,31 +53,73 @@ class DictionaryAnalysisUnavailable(RuntimeError):
     """Ни один AI-резерв не смог надёжно разобрать словарную запись."""
 
 
-# Разбор слова — короткая публичная учебная задача. После основной Qwen-модели
-# пробуем Gemini и другой Groq-модельный класс: сбой одного JSON-провайдера не
+# Разбор слова — короткая публичная учебная задача. Сначала используем Gemini,
+# затем два Groq-модельных класса и остальные резервы: сбой одного JSON-провайдера не
 # должен заставлять пользователя повторять тот же ввод.
 _DICT_ANALYSIS_ORDER = (
-    ai.GROQ_STANDARD, "gemini", ai.GROQ_SIMPLE,
+    "gemini", ai.GROQ_STANDARD, ai.GROQ_SIMPLE,
     "cf", "openrouter",
 )
+_DICT_HEDGE_DELAY_SECONDS = 1.0
+_DICT_ANALYSIS_DEADLINE_SECONDS = 6.0
+_DICT_PENDING_PROFILE_FIELD = "dictionary_pending_analysis"
+
+
+def _usable_analysis_result(value):
+    return bool(
+        isinstance(value, dict) and value.get("ok")
+        and str(value.get("term") or "").strip()
+        and str(value.get("translation") or "").strip()
+        and str(value.get("breakdown") or "").strip()
+    )
+
+
+async def _analysis_from_provider(prompt, provider):
+    return await ai.allm_json(
+        prompt, 850, order=(provider,), module="learning_dict_add",
+        fallback_allowed=True, privacy_level="public", budget_seconds=5,
+    )
 
 
 async def _dictionary_analysis_json(prompt):
-    """Пробует каждый словарный AI-резерв отдельно, не завершаясь на первом сбое."""
+    """Gemini стартует сразу, резервы — через секунду; берём первый валидный JSON."""
+    tasks = {asyncio.create_task(_analysis_from_provider(prompt, "gemini")): "gemini"}
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _DICT_ANALYSIS_DEADLINE_SECONDS
+    reserves_started = False
     last_error = None
-    for provider in _DICT_ANALYSIS_ORDER:
-        try:
-            return await ai.allm_json(
-                prompt, 850, order=(provider,), module="learning_dict_add",
-                fallback_allowed=True, privacy_level="public", budget_seconds=8,
+    try:
+        while tasks and loop.time() < deadline:
+            timeout = max(0.0, deadline - loop.time())
+            if not reserves_started:
+                timeout = min(timeout, _DICT_HEDGE_DELAY_SECONDS)
+            done, _pending = await asyncio.wait(
+                tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED,
             )
-        except Exception as exc:
-            last_error = exc
-            _log.info(
-                "dictionary provider %s unavailable: %s",
-                provider, type(exc).__name__,
-            )
-    raise DictionaryAnalysisUnavailable() from last_error
+            for task in done:
+                provider = tasks.pop(task)
+                try:
+                    result = task.result()
+                    if _usable_analysis_result(result):
+                        return result
+                    last_error = ValueError("invalid dictionary analysis")
+                except Exception as exc:
+                    last_error = exc
+                    _log.info(
+                        "dictionary provider %s unavailable: %s",
+                        provider, type(exc).__name__,
+                    )
+            if not reserves_started:
+                reserves_started = True
+                for provider in _DICT_ANALYSIS_ORDER[1:]:
+                    task = asyncio.create_task(_analysis_from_provider(prompt, provider))
+                    tasks[task] = provider
+        raise DictionaryAnalysisUnavailable() from last_error
+    finally:
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 _LOCAL_DUTCH_VERB_CARDS = {
     "bewegen": {
@@ -184,6 +226,18 @@ _LOCAL_RUSSIAN_TARGET_CARDS = {
         "breakdown": "существительное", "pos": "существительное",
         "plural": "brains", "example": "The brain needs rest.",
         "example_ru": "Мозгу нужен отдых.",
+    },
+    ("разум", "nl"): {
+        "term": "Verstand", "article": "het", "translation": "разум; здравый смысл",
+        "breakdown": "существительное · het-слово", "pos": "существительное",
+        "plural": "verstanden", "example": "Gebruik je verstand.",
+        "example_ru": "Используй свой разум.",
+    },
+    ("разум", "en"): {
+        "term": "Reason", "article": "", "translation": "разум; здравый смысл",
+        "breakdown": "существительное", "pos": "существительное",
+        "plural": "", "example": "Reason helps us make better choices.",
+        "example_ru": "Разум помогает нам принимать более взвешенные решения.",
     },
 }
 
@@ -1088,6 +1142,8 @@ INPUT_JSON: {input_payload}
 - Не выдумывай значение. Если слово многозначное, редкое, написано с ошибкой, не хватает
   артикля для нидерландского существительного или есть риск неверного перевода, поставь
   needs_confirmation=true и дай наиболее вероятную трактовку.
+- Для русского значения с явно заданным целевым языком выбери самое частотное значение,
+  остальные укажи в alt_translations и не требуй подтверждения только из-за многозначности.
 
 Верни JSON:
 {{
@@ -1554,6 +1610,17 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
     if not entry:
         entry = _pending_analysis_entry(payload, lang or check_lang)
         if not entry:
+            if (_CYRILLIC_RE.search(_clean_raw_user_term(payload))
+                    and _queue_dictionary_analysis(cid, payload, lang or check_lang)):
+                store.pending_input.pop(str(cid), None)
+                store.dict_pending_add.pop(str(cid), None)
+                await bot.send_message(
+                    chat_id=cid,
+                    text=(f"⏳ Принял «{_clean_raw_user_term(payload)}». "
+                          "Карточка появится в словаре после автоматической проверки."),
+                    reply_markup=_dictionary_nav(cid, lang or check_lang),
+                )
+                return
             await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)
             return
     if entry.get("needs_confirmation"):
@@ -1633,6 +1700,78 @@ def _pending_analysis_entry(payload, lang):
         "analysis_pending": True,
         **_extract_srs_fields({}),
     }
+
+
+def _queue_dictionary_analysis(cid, payload, lang):
+    """Постоянно сохраняет русский запрос, который нельзя безопасно записать без перевода."""
+    raw_term = _clean_raw_user_term(payload)
+    code = lang if lang in ("nl", "en") else _active_language_code(cid)
+    if not raw_term or len(raw_term) > 120:
+        return False
+    queue_id = hashlib.sha256(f"{code}:{raw_term.casefold()}".encode()).hexdigest()[:24]
+
+    def change(profile):
+        queue = [item for item in (profile.get(_DICT_PENDING_PROFILE_FIELD) or [])
+                 if isinstance(item, dict) and item.get("id") != queue_id]
+        queue.append({
+            "id": queue_id, "term": raw_term, "lang": code,
+            "created_at": datetime.now(config.TZ).isoformat(),
+        })
+        profile[_DICT_PENDING_PROFILE_FIELD] = queue[-20:]
+        return profile, None
+
+    store.mutate_profile(cid, change)
+    return True
+
+
+def _remove_queued_dictionary_analysis(cid, queue_id):
+    def change(profile):
+        queue = [item for item in (profile.get(_DICT_PENDING_PROFILE_FIELD) or [])
+                 if isinstance(item, dict) and item.get("id") != queue_id]
+        if queue:
+            profile[_DICT_PENDING_PROFILE_FIELD] = queue
+        else:
+            profile.pop(_DICT_PENDING_PROFILE_FIELD, None)
+        return profile, None
+
+    store.mutate_profile(cid, change)
+
+
+async def process_queued_dictionary_adds(bot, cids, limit=10):
+    """Доготавливает сохранённые Add-запросы и присылает карточку после успеха."""
+    processed = 0
+    for cid in cids:
+        queue = store.get_profile(cid).get(_DICT_PENDING_PROFILE_FIELD) or []
+        for item in queue:
+            if processed >= limit:
+                return processed
+            if not isinstance(item, dict):
+                continue
+            processed += 1
+            try:
+                entry = await _normalize_dict_entry_full(
+                    item.get("term", ""), item.get("lang"), source_text=item.get("term", ""),
+                )
+                if not entry or entry.get("needs_confirmation"):
+                    continue
+                entry = await _enrich_dutch_verb(entry, cid)
+                entry = await learning_data_quality.check_new_entry(entry)
+                status, saved = _save_normalized_dict_entry(cid, entry)
+            except Exception as exc:
+                _log.info(
+                    "queued dictionary analysis remains pending: user_id=%s error_type=%s",
+                    str(cid), type(exc).__name__,
+                )
+                continue
+            _remove_queued_dictionary_analysis(cid, item.get("id"))
+            msg = _dict_entry_message(saved, status=status)
+            term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
+            await bot.send_message(
+                chat_id=cid, text=msg.text, entities=msg.entities,
+                reply_markup=_dict_saved_kb(saved, term_key, show_dictionary=True),
+                persistent_inline=True,
+            )
+    return processed
 
 
 def _clarification_choices(values) -> list[str]:

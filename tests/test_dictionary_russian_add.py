@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from types import SimpleNamespace
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -88,6 +89,135 @@ def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
     assert saved[0]["lang"] == "nl"
     assert saved[0]["term"] == "Brein"
     assert "Het brein → Мозг" in sent[-1]["text"]
+
+
+def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch):
+    """Точный пользовательский сценарий: Add разум всегда даёт готовую карточку."""
+    sent, saved = [], []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise dictionary_import.DictionaryAnalysisUnavailable()
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_dictionary_analysis_json", unavailable)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(
+        dictionary_import, "_save_normalized_dict_entry",
+        lambda _cid, entry: ("added", saved.append(entry) or entry),
+    )
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), "42", "разум", "nl"))
+
+    assert saved[0]["term"] == "Verstand"
+    assert saved[0]["article"] == "het"
+    assert "Het verstand → Разум" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+
+
+def test_dictionary_analysis_starts_reserves_without_waiting_for_slow_gemini(monkeypatch):
+    calls = []
+
+    async def provider(_prompt, name):
+        calls.append(name)
+        if name == "gemini":
+            await asyncio.sleep(0.2)
+        return {
+            "ok": True, "lang": "nl", "term": "wijsheid",
+            "translation": "мудрость", "breakdown": "существительное",
+        }
+
+    monkeypatch.setattr(dictionary_import, "_analysis_from_provider", provider)
+    monkeypatch.setattr(dictionary_import, "_DICT_HEDGE_DELAY_SECONDS", 0.01)
+    started = time.monotonic()
+
+    result = asyncio.run(dictionary_import._dictionary_analysis_json("prompt"))
+
+    assert result["term"] == "wijsheid"
+    assert calls[0] == "gemini"
+    assert len(calls) > 1
+    assert time.monotonic() - started < 0.15
+
+
+def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
+    cid, sent = "queued-russian-add", []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unavailable(*_args, **_kwargs):
+        raise dictionary_import.DictionaryAnalysisUnavailable()
+
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
+    dictionary_import.store.set_profile(cid, {})
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "мудрость", "nl"))
+
+    queued = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
+    assert queued[0]["term"] == "мудрость"
+    assert "Карточка появится в словаре после автоматической проверки" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+
+
+def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
+    cid, sent = "queued-russian-retry", []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def normalize(*_args, **_kwargs):
+        return {
+            "lang": "nl", "term": "Wijsheid", "article": "de",
+            "translation": "Мудрость", "breakdown": "существительное · de-слово",
+            "pos": "существительное", "plural": "wijsheden",
+            "added_at": "2026-08-26T12:00:00+02:00", "status": "new",
+            "last_shown_at": None,
+            "examples": [{"text": "Wijsheid komt met de jaren.",
+                          "translation": "Мудрость приходит с годами."}],
+        }
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    dictionary_import.store.set_profile(cid, {})
+    dictionary_import.store.set_list(dictionary_import.config.DICT_KEY, cid, [])
+    dictionary_import._queue_dictionary_analysis(cid, "мудрость", "nl")
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", normalize)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+
+    processed = asyncio.run(
+        dictionary_import.process_queued_dictionary_adds(Bot(), [cid])
+    )
+
+    assert processed == 1
+    assert "dictionary_pending_analysis" not in dictionary_import.store.get_profile(cid)
+    assert dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)[0]["term"] == "Wijsheid"
+    assert "De wijsheid → Мудрость" in sent[-1]["text"]
 
 
 def test_short_add_command_strips_telegram_markdown(monkeypatch):
@@ -755,7 +885,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
             "module": "learning_dict_add",
             "fallback_allowed": True,
             "privacy_level": "public",
-            "budget_seconds": 8,
+            "budget_seconds": 5,
         })
     ]
 
@@ -782,11 +912,10 @@ def test_dictionary_analysis_explicitly_tries_next_provider_after_failure(monkey
     entry = asyncio.run(dictionary_import._normalize_dict_entry_full("bijzonder", "nl"))
 
     assert entry["translation"] == "Особенный"
-    assert calls == [
-        (dictionary_import._DICT_ANALYSIS_ORDER[0],),
-        (dictionary_import._DICT_ANALYSIS_ORDER[1],),
-        (dictionary_import._DICT_ANALYSIS_ORDER[2],),
-    ]
+    assert calls[0] == ("gemini",)
+    assert set(calls[1:]) == {
+        (provider,) for provider in dictionary_import._DICT_ANALYSIS_ORDER[1:]
+    }
 
 
 def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypatch):
