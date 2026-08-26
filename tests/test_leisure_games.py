@@ -138,7 +138,6 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
         ["🎲 Настолки"],
-        ["🏆 Топ-5 игр прошлого года"],
         ["🎚️ Мой набор игр"],
         ["#️⃣ Главная"],
     ]

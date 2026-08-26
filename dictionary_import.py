@@ -172,6 +172,21 @@ _LOCAL_DUTCH_WORD_CARDS = {
     },
 }
 
+_LOCAL_RUSSIAN_TARGET_CARDS = {
+    ("мозг", "nl"): {
+        "term": "Brein", "article": "het", "translation": "мозг",
+        "breakdown": "существительное · het-слово", "pos": "существительное",
+        "plural": "breinen", "example": "Mijn brein heeft rust nodig.",
+        "example_ru": "Моему мозгу нужен отдых.",
+    },
+    ("мозг", "en"): {
+        "term": "Brain", "article": "", "translation": "мозг",
+        "breakdown": "существительное", "pos": "существительное",
+        "plural": "brains", "example": "The brain needs rest.",
+        "example_ru": "Мозгу нужен отдых.",
+    },
+}
+
 
 def _dictionary_nav(cid, lang=None, back=None):
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
@@ -323,8 +338,8 @@ def _extract_chat_dict_add(text, cid=None):
         return None, None
     lang = _dict_lang_hint(f" {text} ", cid)
     payload = _clean_chat_dict_payload(text)
-    has_foreign_payload = bool(re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", payload)) and not _CYRILLIC_RE.search(payload)
-    if not (has_dict_word or has_kind_word or has_foreign_payload):
+    has_lexical_payload = bool(re.search(r"[A-Za-zÀ-ÖØ-öø-ÿА-Яа-яЁё]", payload))
+    if not (has_dict_word or has_kind_word or has_lexical_payload):
         return None, None
     if _DICT_QUESTION_PAYLOAD_RE.search(payload):
         return None, None
@@ -640,6 +655,37 @@ def _local_dutch_word_entry(raw_user_term, lang_hint):
     }
 
 
+def _local_russian_target_entry(raw_user_term, lang_hint):
+    """Проверенная карточка русского значения на активном языке обучения."""
+    if lang_hint not in ("nl", "en"):
+        return None
+    raw_term = _clean_raw_user_term(raw_user_term)
+    card = _LOCAL_RUSSIAN_TARGET_CARDS.get((raw_term.casefold(), lang_hint))
+    if not card:
+        return None
+    term = card["term"]
+    return {
+        "lang": lang_hint,
+        "term": term,
+        "raw_user_term": raw_term,
+        "normalized_term": term,
+        "article": card["article"],
+        "translation": normalize_translation_case(card["translation"]),
+        "breakdown": card["breakdown"],
+        "examples": [{"text": card["example"], "translation": card["example_ru"]}],
+        "source_text": raw_term,
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "analysis_confidence": 1.0,
+        "analysis_provider": "local_dictionary",
+        **_extract_srs_fields({
+            "pos": card["pos"], "plural": card["plural"], "topic": "здоровье",
+            "difficulty": "A1",
+        }),
+    }
+
+
 def _verb_analysis_prompt(word, fixed_preposition=""):
     request = {
         "word": word,
@@ -941,7 +987,8 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
             or (lang_hint == "nl" and _contains_mixed_script(raw_user_term))):
         return None
     local_entry = (
-        _local_dutch_noun_entry(raw_user_term, lang_hint)
+        _local_russian_target_entry(raw_user_term, lang_hint)
+        or _local_dutch_noun_entry(raw_user_term, lang_hint)
         or _local_dutch_verb_entry(raw_user_term, lang_hint)
         or _local_dutch_word_entry(raw_user_term, lang_hint)
     )
@@ -1563,7 +1610,7 @@ def _pending_analysis_entry(payload, lang):
     """Безопасно сохраняет лексему, если все сервисы разбора временно отказали."""
     code = lang if lang in ("nl", "en") else "nl"
     raw_term = _clean_raw_user_term(payload)
-    if (not raw_term or len(raw_term) > 120
+    if (not raw_term or len(raw_term) > 120 or _CYRILLIC_RE.search(raw_term)
             or _contains_suspicious_analysis_text(raw_term)
             or (code == "nl" and _contains_mixed_script(raw_term))):
         return None

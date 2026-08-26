@@ -22,6 +22,74 @@ def test_add_word_command_extracts_russian_value(monkeypatch):
     assert lang == "nl"
 
 
+def test_short_add_russian_value_uses_active_dutch_dictionary(monkeypatch):
+    monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "nl")
+
+    payload, lang = dictionary_import._extract_chat_dict_add("Add мозг", "42")
+
+    assert payload == "мозг"
+    assert lang == "nl"
+
+
+def test_short_add_russian_value_uses_active_english_dictionary(monkeypatch):
+    monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "en")
+
+    payload, lang = dictionary_import._extract_chat_dict_add("Add мозг", "42")
+
+    assert payload == "мозг"
+    assert lang == "en"
+
+
+def test_add_mozg_builds_a_dutch_learning_card_without_ai(monkeypatch):
+    async def unavailable(*_args, **_kwargs):
+        raise AssertionError("checked local translation must not call AI")
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", unavailable)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("мозг", "nl"))
+    message = dictionary_import._dict_entry_message(entry, status="added")
+
+    assert entry["lang"] == "nl"
+    assert entry["term"] == "Brein"
+    assert entry["article"] == "het"
+    assert "Het brein → Мозг" in message.text
+    assert "Разбор: существительное · het-слово" in message.text
+    assert "💡 Полезно: Mijn brein heeft rust nodig → Моему мозгу нужен отдых" in message.text
+
+
+def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
+    saved, sent = [], []
+
+    class Status:
+        async def stop(self):
+            return None
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def start(*_args, **_kwargs):
+        return Status()
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
+    monkeypatch.setattr(
+        dictionary_import, "_save_normalized_dict_entry",
+        lambda _cid, entry: ("added", saved.append(entry) or entry),
+    )
+
+    assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add мозг"))
+
+    assert saved[0]["lang"] == "nl"
+    assert saved[0]["term"] == "Brein"
+    assert "Het brein → Мозг" in sent[-1]["text"]
+
+
 def test_short_add_command_strips_telegram_markdown(monkeypatch):
     monkeypatch.setattr(dictionary_import, "_active_language_code", lambda _cid: "nl")
 

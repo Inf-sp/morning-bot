@@ -41,7 +41,6 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать новую книгу"],
         ["✍🏻 Премьеры"],
-        ["🏆 Топ-5 книг прошлого года"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]

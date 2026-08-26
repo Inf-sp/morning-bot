@@ -401,7 +401,6 @@ def _game_home_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_reco")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
-        [InlineKeyboardButton("🏆 Топ-5 игр прошлого года", callback_data="yt:game:open")],
         [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
