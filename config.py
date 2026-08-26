@@ -166,6 +166,7 @@ GAME_PREMIERES_CACHE_KEY = "game_premieres_cache.json"  # {platform_signature: {
 CINEMA_DAILY_CACHE_KEY = "cinema_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный именинник дня для всех пользователей
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 MUSIC_DAILY_CACHE_KEY = "music_daily_cache.json"  # {YYYY-MM-DD: {legend}} — один проверенный музыкальный именинник дня для всех пользователей
+MUSIC_HOME_CACHE_KEY = "music_home_cache.json"  # {cid: дневная витрина Музыки с концертами}
 YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"

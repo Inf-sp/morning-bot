@@ -1499,7 +1499,7 @@ def _entry_needs_ai_refresh(item):
     return not item.get("breakdown") or _dict_example(item) is None
 
 
-async def _refresh_dict_entry(cid, item):
+async def _refresh_dict_entry(cid, item, force=False):
     """Ленивая миграция одной старой записи в новый формат при первом обращении.
     Обновляет запись на месте по индексу — не через _save_normalized_dict_entry,
     т.к. та считает совпадение термина дубликатом и не заменит поля."""
@@ -1518,24 +1518,35 @@ async def _refresh_dict_entry(cid, item):
     for idx, w in enumerate(words):
         if w is item or (_dict_lang(w) == lang and _entry_term(w) == term):
             updated = dict(w)
-            updated.update({
+            refreshed_fields = {
                 "lang": entry["lang"],
                 # Existing user data is authoritative. Lazy enrichment may add
                 # missing metadata, but must not replace the learned pair with
                 # a new AI interpretation.
                 "term": term,
-                "article": w.get("article") or entry.get("article", ""),
-                "translation": original_translation or entry["translation"],
-                "breakdown": w.get("breakdown") or entry.get("breakdown", ""),
+                "article": (entry.get("article", "") if force
+                            else w.get("article") or entry.get("article", "")),
+                "translation": (entry["translation"] if force
+                                else original_translation or entry["translation"]),
+                "breakdown": (entry.get("breakdown", "") if force
+                              else w.get("breakdown") or entry.get("breakdown", "")),
                 "examples": (
-                    w.get("examples") if _dict_example(w) is not None
+                    entry.get("examples", []) if force
+                    else w.get("examples") if _dict_example(w) is not None
                     else entry.get("examples", [])
                 ),
                 "status": w.get("status") or "new",
                 "last_shown_at": w.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),
                 **_verb_analysis_fields(entry),
-            })
+            }
+            if force:
+                for field in (
+                    "pos", "plural", "forms", "topic", "difficulty", "construction",
+                    "entry_type", "situation_type", "alt_translations",
+                ):
+                    refreshed_fields[field] = entry.get(field, "" if field != "forms" else [])
+            updated.update(refreshed_fields)
             if entry.get("forms"):
                 updated["forms"] = entry["forms"]
             if entry.get("translation"):
@@ -1560,7 +1571,10 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + ([
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"),
+        *([[InlineKeyboardButton(
+            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+        )]] if word_id else []),
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

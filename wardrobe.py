@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -25,6 +27,9 @@ from wardrobe_model import (
     wardrobe_stats,
 )
 from wardrobe_outfit import (
+    build_how_to_wear,
+    build_main_accent,
+    build_sock_recommendation,
     build_style_tip,
     choose_outfit_style,
     is_urban_2026_base_top,
@@ -46,7 +51,7 @@ if TYPE_CHECKING:
     )
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 11
+COPY_VALIDATOR_VERSION = 12
 PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
@@ -712,6 +717,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             for it in best_sorted
         ],
         "style_tip": fallback_tip,
+        "sock_recommendation": build_sock_recommendation(best_sorted),
+        "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
+        "main_accent": build_main_accent(best_sorted, weather_ctx),
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
@@ -977,4 +985,4 @@ async def handle_callback(bot, cid, q, data, status=None):
         return
 
 
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","show_purchase_page","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])

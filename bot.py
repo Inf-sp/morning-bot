@@ -528,6 +528,34 @@ async def job_retry_dictionary_adds(context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def job_dictionary_maintenance(context: ContextTypes.DEFAULT_TYPE):
+    """Обновляет старые карточки вне пользовательского открытия словаря."""
+    if tracking.has_active_actions():
+        context.application.job_queue.run_once(
+            job_dictionary_maintenance,
+            when=60,
+            name="dictionary_maintenance_once",
+            job_kwargs={"id": "dictionary_maintenance_once", "replace_existing": True},
+        )
+        return
+    for cid in access.get_allowed_cids():
+        try:
+            await dictionary.rebuild_dictionary_entries(cid)
+            for lang in ("nl", "en"):
+                await dictionary.migrate_dict_entries_for_srs(cid, lang)
+        except Exception:
+            logging.exception("Dictionary maintenance failed user_id=%s", cid)
+
+
+async def job_requested_dictionary_rechecks(context: ContextTypes.DEFAULT_TYPE):
+    """Забирает пользовательские запросы полной проверки по одному за проход."""
+    if tracking.has_active_actions():
+        return
+    await dictionary.process_requested_dictionary_rechecks(
+        context.bot, access.get_allowed_cids(), limit=1,
+    )
+
+
 async def job_normalize_favorite_collections(context: ContextTypes.DEFAULT_TYPE):
     """Один спокойный проход по старым личным спискам после запуска.
 
@@ -657,6 +685,11 @@ def _build_application():
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_once(job_startup_audits, when=2, **_job_options("startup_audits_once"))
+    jq.run_once(
+        job_dictionary_maintenance,
+        when=180,
+        **_job_options("dictionary_maintenance_once"),
+    )
     for index, (section, _time_label) in enumerate(_HOME_WARM_SCHEDULE):
         jq.run_once(
             job_warm_home_pages,
@@ -676,6 +709,12 @@ def _build_application():
         interval=300,
         first=90,
         **_job_options("dictionary_add_retry_repeating"),
+    )
+    jq.run_repeating(
+        job_requested_dictionary_rechecks,
+        interval=60,
+        first=30,
+        **_job_options("dictionary_recheck_repeating"),
     )
     for section, time_label in _HOME_WARM_SCHEDULE:
         weekly_home_sections = {"travel", "cinema", "books", "music"}

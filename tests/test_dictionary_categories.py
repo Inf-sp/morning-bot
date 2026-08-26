@@ -8,6 +8,70 @@ import learning_dictionary
 import dictionary_import
 
 
+def test_expression_breakdown_is_moved_from_nouns_to_sentences(monkeypatch):
+    words = [{
+        "id": "expression-1", "lang": "nl", "term": "Op dit moment",
+        "translation": "В данный момент", "pos": "noun",
+        "breakdown": "выражение", "examples": [],
+    }]
+    saved = []
+    monkeypatch.setattr(
+        learning_dictionary.store, "get_list", lambda *_args: [dict(words[0])],
+    )
+    monkeypatch.setattr(
+        learning_dictionary.store, "set_list",
+        lambda _key, _cid, value: saved.append(value),
+    )
+
+    result = learning_dictionary.normalize_user_dictionary("42")
+
+    assert result[0]["pos"] == "фраза"
+    assert result[0]["entry_type"] == "phrase"
+    assert learning_dictionary._dictionary_category(result[0]) == "Предложения"
+    assert saved[0][0]["pos"] == "фраза"
+
+
+def test_requested_full_dictionary_check_reports_result_and_clears_request(monkeypatch):
+    cid, sent = "full-dictionary-check", []
+    before = [{
+        "id": "1", "lang": "nl", "term": "Vaststellen",
+        "translation": "Устанавливать", "pos": "существительное",
+        "breakdown": "существительное",
+    }]
+    after = [{
+        **before[0], "pos": "глагол", "breakdown": "глагол",
+        "dictionary_rechecked_at": "2099-01-01T00:00:00+00:00",
+    }]
+    state = {"items": before}
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def rebuild(*_args, **_kwargs):
+        state["items"] = after
+        return after
+
+    learning_dictionary.store.set_profile(cid, {
+        "dictionary_recheck_request": {"lang": "nl", "requested_at": "2026-08-26"},
+    })
+    monkeypatch.setattr(
+        learning_dictionary, "_dict_lang_entries",
+        lambda *_args: [dict(item) for item in state["items"]],
+    )
+    monkeypatch.setattr(learning_dictionary, "normalize_user_dictionary", lambda _cid: state["items"])
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", rebuild)
+
+    handled = asyncio.run(
+        learning_dictionary.process_requested_dictionary_rechecks(Bot(), [cid])
+    )
+
+    assert handled == 1
+    assert "dictionary_recheck_request" not in learning_dictionary.store.get_profile(cid)
+    assert "Исправлено: 1" in sent[-1]["text"]
+    assert "Перенесено между категориями: 1" in sent[-1]["text"]
+
+
 def test_dictionary_migration_repairs_pos_from_grammar_breakdown(monkeypatch):
     words = [{
         "id": "word-1",

@@ -6,18 +6,18 @@ from travel_photos import pexels_photo
 
 
 _PURCHASE_QUERIES = (
-    (("пиджак", "блейзер"), "oversized blazer fashion outfit"),
-    (("лофер",), "leather loafers fashion"),
-    (("жилет",), "knitted vest fashion outfit"),
-    (("рубаш",), "oversized shirt fashion outfit"),
-    (("сумк",), "crossbody bag fashion"),
-    (("ремень",), "leather belt fashion"),
-    (("джинс",), "wide leg jeans fashion"),
-    (("худи",), "hoodie fashion outfit"),
-    (("ботин",), "ankle boots fashion"),
-    (("кед", "кроссов"), "sneakers fashion outfit"),
-    (("пальто",), "coat fashion outfit"),
-    (("куртк",), "jacket fashion outfit"),
+    (("пиджак", "блейзер"), "oversized blazer"),
+    (("лофер",), "leather loafers"),
+    (("жилет",), "knitted vest"),
+    (("рубаш",), "oversized shirt"),
+    (("сумк",), "crossbody bag"),
+    (("ремень",), "leather belt"),
+    (("джинс",), "wide leg jeans"),
+    (("худи",), "hoodie"),
+    (("ботин",), "ankle boots"),
+    (("кед", "кроссов"), "sneakers"),
+    (("пальто",), "coat"),
+    (("куртк",), "jacket"),
 )
 
 
@@ -27,11 +27,11 @@ def _purchase_query(item, audience="neutral"):
         if any(marker in name for marker in markers):
             break
     else:
-        query = "minimal clothing fashion item"
+        query = "minimal clothing item"
     if audience == "male":
-        return f"male fashion model wearing {query}"
+        return f"men {query}"
     if audience == "female":
-        return f"women wearing {query}"
+        return f"women {query}"
     return query
 
 

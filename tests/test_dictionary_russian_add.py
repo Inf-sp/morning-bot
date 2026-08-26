@@ -182,6 +182,41 @@ def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
+def test_force_check_replaces_wrong_card_fields_and_keeps_srs(monkeypatch):
+    old = {
+        "id": "vaststellen-1", "lang": "nl", "term": "Vaststellen",
+        "translation": "Устанавливать", "pos": "существительное",
+        "breakdown": "выражение", "examples": [],
+        "srs_level": 4, "srs_due_at": "2026-09-01T10:00:00+02:00",
+    }
+    words = [old]
+
+    async def normalize(*_args, **_kwargs):
+        return {
+            "lang": "nl", "term": "Vaststellen", "article": "",
+            "translation": "Устанавливать; определять", "pos": "глагол",
+            "breakdown": "глагол", "forms": ["stelde vast", "vastgesteld"],
+            "examples": [{"text": "We stellen de oorzaak vast.",
+                          "translation": "Мы устанавливаем причину."}],
+        }
+
+    async def unchanged(entry, *_args, **_kwargs):
+        return entry
+
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", normalize)
+    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", unchanged)
+    monkeypatch.setattr(dictionary_import.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(dictionary_import.store, "set_list", lambda *_args: None)
+
+    updated = asyncio.run(dictionary_import._refresh_dict_entry("42", old, force=True))
+
+    assert updated["pos"] == "глагол"
+    assert updated["breakdown"] == "глагол"
+    assert updated["examples"][0]["text"] == "We stellen de oorzaak vast."
+    assert updated["srs_level"] == 4
+    assert updated["srs_due_at"] == "2026-09-01T10:00:00+02:00"
+
+
 def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
     cid, sent = "queued-russian-retry", []
 
@@ -965,8 +1000,10 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictdelid_abc123"
     assert keyboard.inline_keyboard[2][0].text == "🎚️ Мой словарь"
     assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_nl_keep"
+    assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "🔊 Прослушать", "❌ Удалить", "🎚️ Мой словарь", "⬅️ Назад", "#️⃣ Главная",
+        "🔊 Прослушать", "❌ Удалить", "🎚️ Мой словарь",
+        "✨ Проверить карточку", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 
@@ -979,7 +1016,8 @@ def test_duplicate_word_actions_include_dictionary():
     assert keyboard.inline_keyboard[1][0].text == "🎚️ Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "🎚️ Мой словарь", "⬅️ Назад", "#️⃣ Главная",
+        "❌ Удалить", "🎚️ Мой словарь", "✨ Проверить карточку",
+        "⬅️ Назад", "#️⃣ Главная",
     ]
 
 

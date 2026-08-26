@@ -1,5 +1,8 @@
 """Closet management and purchase evaluation flows."""
 
+import hashlib
+import json
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -401,9 +404,33 @@ def _purchase_carousel_kb(page, count, photo_variant=0):
     return _kb(rows)
 
 
-async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0):
+def _purchase_carousel_candidates(cid, wardrobe, *, reset=False):
+    """Фиксирует вещи карусели, чтобы смена фото не меняла рекомендацию."""
+    signature = hashlib.sha256(json.dumps({
+        "wardrobe": wardrobe,
+        "styles": _settings.wardrobe_styles(cid),
+    }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:24]
+    profile = store.get_profile(cid) or {}
+    cached = profile.get("wardrobe_purchase_carousel") or {}
+    if (not reset and cached.get("signature") == signature
+            and isinstance(cached.get("items"), list) and cached["items"]):
+        return [dict(item) for item in cached["items"] if isinstance(item, dict)]
+    items = _missing_purchase_candidates(cid, wardrobe)
+
+    def change(current):
+        current["wardrobe_purchase_carousel"] = {
+            "signature": signature,
+            "items": [dict(item) for item in items],
+        }
+        return current, None
+
+    store.mutate_profile(cid, change)
+    return items
+
+
+async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0, reset_candidates=False):
     wardrobe = store.load_wardrobe(cid)
-    candidates = _missing_purchase_candidates(cid, wardrobe)
+    candidates = _purchase_carousel_candidates(cid, wardrobe, reset=reset_candidates)
     if not candidates:
         await recommend_missing_purchase(bot, cid)
         return
@@ -457,7 +484,7 @@ async def recommend_missing_purchase(bot, cid):
         )
         return
     store.pending_input[str(cid)] = "wardrobe_buy"
-    await show_purchase_page(bot, cid, 0)
+    await show_purchase_page(bot, cid, 0, reset_candidates=True)
 
 
 def _local_purchase_suggestions(item, wardrobe):

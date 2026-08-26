@@ -50,7 +50,9 @@ def _breakdown(entry):
         "adj": "прилагательное", "adjective": "прилагательное", "прилагательное": "прилагательное",
         "adverb": "наречие", "наречие": "наречие", "preposition": "предлог", "предлог": "предлог",
         "phrase": "выражение", "фраза": "выражение", "expression": "выражение",
-    }.get(pos) or (raw.replace(",", " · ") if raw else "выражение")
+    }.get(pos) or (raw.replace(",", " · ") if raw else (
+        "слово" if len(term.split()) <= 1 else "выражение"
+    ))
 
 
 def _verified_forms(entry):

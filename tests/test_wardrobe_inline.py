@@ -495,9 +495,53 @@ def test_purchase_other_variant_uses_next_english_pexels_result(monkeypatch):
     wardrobe_photos.purchase_photo("Серые широкие джинсы", "male", 2)
 
     query, options = calls[0]
-    assert query == "male fashion model wearing wide leg jeans fashion"
+    assert query == "men wide leg jeans"
     assert not any("а" <= char.casefold() <= "я" for char in query)
     assert options["result_index"] == 2
+
+
+def test_purchase_photo_query_removes_color_and_uses_plain_english_item():
+    import wardrobe_photos
+
+    assert wardrobe_photos._purchase_query(
+        "Молочная оверсайз-рубашка", "male",
+    ) == "men oversized shirt"
+
+
+def test_other_photo_variant_keeps_the_same_purchase_recommendation(monkeypatch):
+    import wardrobe_photos
+
+    wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
+    calls, edited = [], []
+    variants = iter((
+        [{"item": "Молочная оверсайз-рубашка", "reason": "добавит второй слой"}],
+        [{"item": "Серые широкие джинсы", "reason": "закроют пробел"}],
+    ))
+
+    class Query:
+        async def edit_message_media(self, **kwargs):
+            edited.append(kwargs)
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args: next(variants))
+    monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
+    monkeypatch.setattr(
+        wardrobe_photos, "purchase_photo",
+        lambda item, audience, variant=0: calls.append((item, audience, variant))
+        or {"url": f"https://images.pexels.com/{variant}.jpg"},
+    )
+    wardrobe.store.set_profile("same-purchase-photo", {})
+
+    asyncio.run(wardrobe.show_purchase_page(object(), "same-purchase-photo", 0, q=Query()))
+    asyncio.run(wardrobe.show_purchase_page(
+        object(), "same-purchase-photo", 0, q=Query(), photo_variant=1,
+    ))
+
+    assert calls == [
+        ("Молочная оверсайз-рубашка", "male", 0),
+        ("Молочная оверсайз-рубашка", "male", 1),
+    ]
+    assert "Молочная оверсайз-рубашка" in edited[1]["media"].caption
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

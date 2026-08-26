@@ -245,6 +245,9 @@ def dict_entry_view_kb(entry, page, term_key):
         if word_id else [])
     return InlineKeyboardMarkup(dictionary._dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+        *([[InlineKeyboardButton(
+            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+        )]] if word_id else []),
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

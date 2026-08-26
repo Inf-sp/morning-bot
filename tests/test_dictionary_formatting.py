@@ -50,6 +50,14 @@ def test_article_card_keeps_natural_sentence_case_after_migration():
     assert "Het gevolg → Последствие" in builder.build().text
 
 
+def test_unknown_single_word_is_not_labeled_as_expression():
+    builder = MessageBuilder()
+    render_learning_entry(builder, {"term": "Immers", "translation": "Ведь"})
+
+    assert "Разбор: слово" in builder.build().text
+    assert "Разбор: выражение" not in builder.build().text
+
+
 def test_known_dutch_phrases_keep_their_own_translation():
     entry = normalize_entry({
         "term": "Wat balen",

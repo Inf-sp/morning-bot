@@ -207,6 +207,14 @@ def _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles=No
                 layered.append(combo + [shirt])
     return combos + layered
 
+
+def _has_light_shirt_layer(items):
+    """Есть ли в комплекте именно связка лёгкого базового верха и рубашки."""
+    return (
+        any(_is_layerable_shirt(item) for item in items)
+        and any(_is_light_base_top(item) and not _is_layerable_shirt(item) for item in items)
+    )
+
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
 
@@ -344,6 +352,10 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
     Возвращает float — выше лучше."""
     score = 0.0
     tmax = weather_ctx.get("tmax")
+    # В прохладную мягкую погоду рубашка поверх футболки — полезный вариант,
+    # но при +20…+22 однослойный комплект снова остаётся конкурентным.
+    if tmax is not None and 14 <= tmax < 20 and _has_light_shirt_layer(items):
+        score += 2
     for it in items:
         tr = it.get("temp_range")
         if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
@@ -466,8 +478,19 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         # Для полного набора из 4–5 элементов требуем минимум две замены; для
         # маленького шкафа оставляем честную возможность заменить хотя бы одну.
         min_changes = 2 if any(len(combo) >= 4 for combo in combos) else 1
-        combos = [combo for combo in combos
-                  if len(previous_item_ids - {it.get("id") for it in combo}) >= min_changes]
+        previous_was_layered = any(
+            _has_light_shirt_layer(combo)
+            and {it.get("id") for it in combo if it.get("id")} == previous_item_ids
+            for combo in combos
+        )
+        combos = [
+            combo for combo in combos
+            if len(previous_item_ids - {it.get("id") for it in combo}) >= min_changes
+            or (
+                previous_was_layered != _has_light_shirt_layer(combo)
+                and len(previous_item_ids - {it.get("id") for it in combo}) >= 1
+            )
+        ]
     scored = [(
         score_outfit(combo, weather_ctx, wardrobe_history, prefs_text, selected_styles), combo,
     ) for combo in combos]
@@ -603,6 +626,53 @@ def build_style_tip(items, weather_ctx=None, avoid_tips=None):
 
     ordered = _tip_order(list(items), list(SAFE_NEUTRAL_STYLE_TIPS))
     return first_available(ordered) or ordered[0]
+
+
+def build_how_to_wear(items, style_tip=""):
+    """До трёх коротких действий только для вещей из готового комплекта."""
+    actions = []
+    tops = [item for item in items if item.get("zone") == "Верх"]
+    shirt = next((item for item in tops if "рубаш" in _item_facts(item)), None)
+    base = next((item for item in tops if item is not shirt and outfit_role(item) == "base_top"), None)
+
+    if shirt and base:
+        actions.append("Рубашку полностью расстегнуть")
+    if shirt and _has_confirmed_long_sleeves(shirt):
+        actions.append("Рукава слегка подвернуть")
+    if base and any(marker in _item_facts(base) for marker in ("футболк", "майк", "лонгслив")):
+        base_facts = _item_facts(base)
+        garment = "Футболку" if "футболк" in base_facts else "Майку" if "майк" in base_facts else "Лонгслив"
+        actions.append(f"{garment} оставить навыпуск")
+
+    if not actions and style_tip:
+        action = re.split(r",?\s+чтобы\s+", str(style_tip).strip(), maxsplit=1, flags=re.IGNORECASE)[0]
+        action = action.rstrip(". ")
+        if action:
+            actions.append(action[:1].upper() + action[1:])
+    return actions[:3]
+
+
+def build_sock_recommendation(items):
+    """Подбирает спокойный цвет носков к обуви и низу, не утверждая, что они есть в шкафу."""
+    selected = next((item for item in items
+                     if item.get("zone") == "Аксессуары" and "носк" in _item_facts(item)), None)
+    if selected:
+        return public_item_name(selected)
+
+    shoe = next((item for item in items if item.get("zone") == "Обувь"), {})
+    bottom = next((item for item in items if item.get("zone") == "Низ"), {})
+    facts = f"{_item_facts(shoe)} {_item_facts(bottom)}"
+    if any(marker in facts for marker in ("чёрн", "черн", "тём", "темн")):
+        return "Тёмно-серые носки"
+    if any(marker in facts for marker in ("олив", "зелён", "зелен", "хаки")):
+        return "Светло-серые носки"
+    return "Белые носки"
+
+
+def build_main_accent(items, weather_ctx=None):
+    """Одна grounded-строка о том, что связывает цвета и вещи в образе."""
+    reasons = build_outfit_reasons(items, weather_ctx or {})
+    return reasons[0] if reasons else "Спокойная палитра связывает вещи, а обувь завершает образ."
 
 
 _COLOR_CLAIM_MARKERS = (

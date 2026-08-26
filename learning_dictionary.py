@@ -3,6 +3,7 @@
 import logging
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -139,6 +140,13 @@ def normalize_user_dictionary(cid):
         canonical_pos = canonical_part_of_speech(item)
         if canonical_pos:
             item["pos"] = canonical_pos
+        if canonical_pos == "фраза":
+            # Разбор «выражение/фраза» сильнее ошибочного legacy noun: такие
+            # записи всегда живут в категории «Предложения».
+            item["entry_type"] = "phrase"
+            item["kind"] = "phrase"
+            item.pop("article", None)
+            item.pop("plural", None)
         explicit_article = str(item.get("article") or "").strip().casefold()
         if explicit_article in {"de", "het"} and entry_language(item) == "nl":
             # Старые записи нередко хранили артикль внутри term и ошибочный
@@ -316,9 +324,9 @@ def _entry_needs_ai_refresh(item):
     return implementation(item)
 
 
-async def _refresh_dict_entry(cid, item):
+async def _refresh_dict_entry(cid, item, force=False):
     from dictionary_import import _refresh_dict_entry as implementation
-    return await implementation(cid, item)
+    return await implementation(cid, item, force=force)
 
 
 def _extract_srs_fields(data):
@@ -451,12 +459,13 @@ JSON: {{"items":[{{"keep":true,"lang":"nl|en","term":"...","translation":"...",
 """
 
 
-async def rebuild_dictionary_entries(cid):
+async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
     """Один раз пересобирает все старые карточки, сохраняя id и SRS-прогресс."""
     words = store.get_list(config.DICT_KEY, cid)
     pending_idx = [
         index for index, entry in enumerate(words)
-        if int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION
+        if (lang not in ("nl", "en") or _dict_lang(entry) == lang)
+        and (force or int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION)
     ]
     if not pending_idx:
         return words
@@ -471,6 +480,9 @@ async def rebuild_dictionary_entries(cid):
                 module="learning_dictionary_rebuild", fallback_allowed=True,
                 cache_context={
                     "version": _DICTIONARY_REBUILD_VERSION,
+                    "manual_recheck_date": (
+                        datetime.now(config.TZ).date().isoformat() if force else ""
+                    ),
                     "entries": [
                         (_dict_lang(entry), normalize_key(_entry_term(entry)), _entry_translation(entry))
                         for entry in entries
@@ -529,6 +541,7 @@ async def rebuild_dictionary_entries(cid):
                 "alt_translations": list(result.get("alt_translations") or [])[:2],
                 "dictionary_format_version": _DICTIONARY_FORMAT_VERSION,
                 "dictionary_rebuild_version": _DICTIONARY_REBUILD_VERSION,
+                **({"dictionary_rechecked_at": datetime.now(config.TZ).isoformat()} if force else {}),
             })
             words[word_idx] = updated
             changed = True
@@ -697,9 +710,8 @@ async def send_dict(bot, cid, back="m_learn", q=None):
 
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     """Главный экран языкового словаря: категории вместо плоской сетки."""
-    await rebuild_dictionary_entries(cid)
-    normalize_user_dictionary(cid)
-    await migrate_dict_entries_for_srs(cid, lang)
+    # Открытие словаря — быстрый UI-маршрут. Тяжёлые одноразовые AI-миграции
+    # выполняет фоновая задача, здесь остаётся только локальное чтение/нормализация.
     entries = _dict_lang_entries(cid, lang)
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
@@ -711,6 +723,10 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
+    if entries:
+        rows.append([InlineKeyboardButton(
+            "✨ Проверить весь словарь", callback_data=f"a_dictcheckall_{lang}",
+        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов и фраз"
@@ -755,6 +771,9 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
+            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+        )])
+        rows.append([InlineKeyboardButton(
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
@@ -766,6 +785,95 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
         bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows),
         q=q, persistent_inline=True,
     )
+
+
+async def check_dictionary_entry(bot, cid, word_id, q=None):
+    """Принудительно пересобирает одну карточку и показывает исправленный результат."""
+    entry = _entry_by_id(cid, word_id)
+    if not entry:
+        await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
+        return
+    updated = await _refresh_dict_entry(cid, entry, force=True)
+    if updated is entry or not updated:
+        await bot.send_message(
+            chat_id=cid, text="Не получилось проверить карточку. Попробую при общей проверке.",
+            reply_markup=back_menu_keyboard(f"a_dictlang_{_dict_lang(entry)}"),
+        )
+        return
+    updated = normalize_user_dictionary(cid)
+    match = next((item for item in updated if str(item.get("id") or "") == str(word_id)), entry)
+    msg = _dict_entry_message(match, status="updated")
+    await _show_screen(
+        bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, 0, ""),
+        q=q, persistent_inline=True,
+    )
+
+
+async def request_dictionary_recheck(bot, cid, lang, q=None):
+    """Сохраняет запрос полной проверки; фоновая задача заберёт его без ожидания UI."""
+    code = lang if lang in ("nl", "en") else _active_language_code(cid)
+
+    def change(profile):
+        profile["dictionary_recheck_request"] = {
+            "lang": code, "requested_at": datetime.now(config.TZ).isoformat(),
+        }
+        return profile, None
+
+    store.mutate_profile(cid, change)
+    await _show_screen(
+        bot, cid,
+        "⏳ Проверяю словарь в фоне\n\nМожно продолжать пользоваться ботом. Я сообщу, когда закончу.",
+        None,
+        back_menu_keyboard(f"a_dictlang_{code}"), q=q,
+    )
+
+
+async def process_requested_dictionary_rechecks(bot, cids, limit=1):
+    """Обрабатывает не больше limit словарей за проход и присылает итог."""
+    handled = 0
+    for cid in cids:
+        request = store.get_profile(cid).get("dictionary_recheck_request") or {}
+        lang = request.get("lang")
+        if lang not in ("nl", "en") or handled >= limit:
+            continue
+        before = [dict(item) for item in _dict_lang_entries(cid, lang)]
+        started_at = datetime.now(config.TZ).isoformat()
+        await rebuild_dictionary_entries(cid, force=True, lang=lang)
+        after = [dict(item) for item in normalize_user_dictionary(cid) if _dict_lang(item) == lang]
+        checked = sum(
+            1 for item in after
+            if str(item.get("dictionary_rechecked_at") or "") >= started_at
+        )
+        if before and checked == 0:
+            continue
+        before_by_id = {str(item.get("id") or ""): item for item in before}
+        changed = moved = 0
+        compared_fields = ("lang", "term", "translation", "article", "pos", "breakdown",
+                           "plural", "forms", "examples", "construction")
+        for item in after:
+            old = before_by_id.get(str(item.get("id") or ""))
+            if not old:
+                continue
+            if any(old.get(field) != item.get(field) for field in compared_fields):
+                changed += 1
+            if _dictionary_category(old) != _dictionary_category(item):
+                moved += 1
+
+        def clear(profile):
+            profile.pop("dictionary_recheck_request", None)
+            return profile, None
+
+        store.mutate_profile(cid, clear)
+        handled += 1
+        await bot.send_message(
+            chat_id=cid,
+            text=("✅ Словарь проверен\n\n"
+                  f"Исправлено: {changed}\n"
+                  f"Перенесено между категориями: {moved}\n"
+                  f"Уже было правильно: {max(0, len(after) - changed)}"),
+            reply_markup=back_menu_keyboard(f"a_dictlang_{lang}"),
+        )
+    return handled
 
 
 async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
@@ -853,8 +961,11 @@ def _dict_search_kb(entry, term_key):
                   if word_id else [])
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+        *([[InlineKeyboardButton(
+            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+        )]] if word_id else []),
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -927,6 +1038,9 @@ def _dictionary_category(entry):
         "phrase": "Предложения", "фраза": "Предложения", "expression": "Предложения",
         "выражение": "Предложения", "construction": "Предложения", "конструкция": "Предложения",
     }
+    entry_type = str(entry.get("entry_type") or entry.get("kind") or "").casefold()
+    if pos == "фраза" or entry_type in {"phrase", "expression", "sentence"}:
+        return "Предложения"
     if pos in aliases:
         return aliases[pos]
     term = re.sub(r"^(de|het|een|the|a|an)\s+", "", _entry_term(entry).strip(), flags=re.I)

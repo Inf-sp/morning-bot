@@ -166,6 +166,24 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     ]
     assert not any("Местоимения" in label for row in rows for label in row)
     assert not any("Mooi" in label or "Lopen" in label for row in rows for label in row)
+    assert ["✨ Проверить весь словарь"] in rows
+
+
+def test_dictionary_home_does_not_wait_for_ai_migrations(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("dictionary home must not wait for an AI migration")
+
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", forbidden)
+    monkeypatch.setattr(learning_dictionary, "migrate_dict_entries_for_srs", forbidden)
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [])
+
+    asyncio.run(learning_dictionary.send_dict_lang(Bot(), "42", "nl"))
 
 
 def test_dictionary_pagination_shows_current_page(monkeypatch):
@@ -219,7 +237,8 @@ def test_dictionary_category_opens_a_full_word_card(monkeypatch):
     assert "Разбор: существительное · het-слово" in bot.message["text"]
     assert "Множественное число: de huizen" in bot.message["text"]
     assert _labels(bot.message["reply_markup"]) == [
-        ["🔊 Прослушать"], ["❌ Удалить"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🔊 Прослушать"], ["✨ Проверить карточку"], ["❌ Удалить"],
+        ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -346,7 +365,7 @@ def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
 
     asyncio.run(menu.send_food_menu(Bot(), "42", q=Query()))
 
-    assert Query.message.updated["text"].startswith("🍽️ Что поесть · Alkmaar")
+    assert Query.message.updated["text"].startswith("🍽️ Куда сходить · Alkmaar")
     assert _labels(Query.message.updated["reply_markup"]) == [
         ["✨ Другое место"],
         ["🍳 Рецепты"],

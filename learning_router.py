@@ -126,6 +126,10 @@ async def handle_action(bot, cid, q, act, run_with_status):
         await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act == "dictlang_active":
         await dictionary.send_dict_lang(bot, cid, dictionary._active_language_code(cid), q=q)
+    elif act.startswith("dictcheckall_"):
+        await dictionary.request_dictionary_recheck(bot, cid, act.rsplit("_", 1)[-1], q=q)
+    elif act.startswith("dictcheck_"):
+        await dictionary.check_dictionary_entry(bot, cid, act[len("dictcheck_"):], q=q)
     elif act.startswith("dictcatdelok_"):
         parts = act[len("dictcatdelok_"):].split("_", 3)
         if (len(parts) == 4 and parts[0] in ("nl", "en")

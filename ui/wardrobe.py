@@ -102,7 +102,8 @@ def render_wardrobe_message(look_data):
 
     Погодная строка намеренно не показывается.
 
-    look_data: {primary_style, items[{name, zone}], style_tip}
+    look_data: {primary_style, items[{name, zone}], sock_recommendation,
+                how_to_wear[], main_accent}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -121,6 +122,11 @@ def render_wardrobe_message(look_data):
         if slots["Обувь"]:
             b.line(f"- {', '.join(slots['Обувь'])}")
 
+        sock_recommendation = _upper_first(_clean_text(look_data.get("sock_recommendation")))
+        selected_socks = any("носк" in item.casefold() for item in slots["Аксессуары"])
+        if sock_recommendation and not selected_socks:
+            b.line(f"- {sock_recommendation}")
+
         extras = [
             *slots["Верхняя одежда"],
             *slots["Аксессуары"],
@@ -132,6 +138,23 @@ def render_wardrobe_message(look_data):
             b.newline()
             for item in extras:
                 b.line(f"- {item}")
+
+    how_to_wear = [_clean_text(value).rstrip(".") for value in (look_data.get("how_to_wear") or [])]
+    how_to_wear = [value for value in how_to_wear if value]
+    if how_to_wear:
+        b.spacer()
+        b.bold("Как носить:")
+        b.newline()
+        for action in how_to_wear[:3]:
+            b.line(f"- {action}")
+
+    main_accent = _finish_dot(look_data.get("main_accent"))
+    if main_accent:
+        b.spacer()
+        b.text_line("💡 ")
+        b.bold("Главный акцент:")
+        b.text_line(f" {_lower_first(main_accent)}")
+        b.newline()
 
     return b.build_stripped()
 

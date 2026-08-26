@@ -1,6 +1,7 @@
 """Музыкальные рекомендации и управление любимыми артистами."""
 
 import asyncio
+from copy import deepcopy
 import json
 import logging
 import re
@@ -26,6 +27,8 @@ from leisure_collection import plain_label
 _log = logging.getLogger(__name__)
 _MUSIC_DAILY_LOCK = threading.Lock()
 _MUSIC_LEGEND_CACHE_VERSION = 2
+_MUSIC_HOME_CACHE_VERSION = 1
+_MUSIC_HOME_LOCKS = {}
 
 
 def _music_home_only_kb():
@@ -541,14 +544,79 @@ async def send_music_task(bot, cid, key, *, status=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_music_task_keyboard())
 
 
+def _music_home_context(cid):
+    settings_data = store.get_settings(cid)
+    return {
+        "city": _music_city(cid),
+        "country": str(settings_data.get("cc") or "NL").upper(),
+        "artists": sorted(artist.casefold() for artist in _ensure_artists(cid)),
+    }
+
+
+def _music_home_cache_get(cid):
+    data = store._load(config.MUSIC_HOME_CACHE_KEY)
+    entry = data.get(str(cid)) if isinstance(data, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    if (
+        entry.get("version") != _MUSIC_HOME_CACHE_VERSION
+        or entry.get("date") != datetime.now(config.TZ).date().isoformat()
+        or entry.get("context") != _music_home_context(cid)
+        or not isinstance(entry.get("daily_music"), dict)
+        or not isinstance(entry.get("concerts"), list)
+    ):
+        return None
+    return {
+        "city": str(entry.get("city") or _music_city(cid)),
+        "daily_music": deepcopy(entry["daily_music"]),
+        "concerts": deepcopy(entry["concerts"]),
+    }
+
+
+def _music_home_cache_set(cid, value):
+    context = _music_home_context(cid)
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(cid)] = {
+            "version": _MUSIC_HOME_CACHE_VERSION,
+            "date": datetime.now(config.TZ).date().isoformat(),
+            "context": context,
+            "city": value["city"],
+            "daily_music": deepcopy(value["daily_music"]),
+            "concerts": deepcopy(value["concerts"]),
+        }
+        return data, None
+
+    store.mutate_kv(config.MUSIC_HOME_CACHE_KEY, mutate)
+
+
+async def _music_home_data(cid):
+    cached = _music_home_cache_get(cid)
+    if cached is not None:
+        return cached
+    lock = _MUSIC_HOME_LOCKS.setdefault(str(cid), asyncio.Lock())
+    async with lock:
+        cached = _music_home_cache_get(cid)
+        if cached is not None:
+            return cached
+        daily_music, concerts = await asyncio.gather(
+            _daily_music_content(cid), _weekly_concerts(cid),
+        )
+        value = {
+            "city": _music_city(cid),
+            "daily_music": daily_music,
+            "concerts": concerts,
+        }
+        _music_home_cache_set(cid, value)
+        return deepcopy(value)
+
+
 async def send_music_home(bot, cid, q=None, status=None):
     """Открывает ежедневную музыкальную витрину; артиста выбирают отдельной кнопкой."""
-    daily_music, concerts = await asyncio.gather(
-        _daily_music_content(cid),
-        _weekly_concerts(cid),
-    )
+    home = await _music_home_data(cid)
     msg = leisure_ui.music_week_screen(
-        _music_city(cid), daily_music, concerts,
+        home["city"], home["daily_music"], home["concerts"],
         day=datetime.now(config.TZ).date(),
     )
     kb = music_home_keyboard()
@@ -566,7 +634,7 @@ async def send_music_home(bot, cid, q=None, status=None):
 
 async def warm_music_home_cache(cid):
     """Готовит данные музыкальной витрины без запроса персональной рекомендации."""
-    await asyncio.gather(_daily_music_content(cid), _weekly_concerts(cid))
+    await _music_home_data(cid)
     return True
 
 

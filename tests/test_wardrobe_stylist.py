@@ -13,6 +13,8 @@ from ui.settings import wardrobe_style
 from ui.wardrobe import outfit_header, render_wardrobe_message
 from wardrobe_model import normalize_parsed_item, public_item_name
 from wardrobe_outfit import (
+    build_how_to_wear,
+    build_sock_recommendation,
     SAFE_NEUTRAL_STYLE_TIP,
     build_style_tip,
     outfit_display_order,
@@ -49,6 +51,9 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
             {"name": "Белые кеды", "zone": "Обувь"},
         ],
         "style_tip": "Оставь верх навыпуск, чтобы силуэт выглядел расслабленнее",
+        "sock_recommendation": "Белые носки",
+        "how_to_wear": ["Футболку оставить навыпуск"],
+        "main_accent": "Белая футболка связывает светлую обувь с низом",
     })
 
     assert _entities(message, MessageEntity.ITALIC) == []
@@ -57,7 +62,26 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
+    assert "- Белые носки" in message.text
+    assert "Как носить:\n- Футболку оставить навыпуск" in message.text
+    assert "💡 Главный акцент:" in message.text
     assert "💡 Полезно:" not in message.text
+
+
+def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
+    items = [
+        {"name": "Зелёная рубашка с длинным рукавом", "zone": "Верх", "colors": ["зелёный"]},
+        {"name": "Белая футболка", "zone": "Верх", "colors": ["белый"]},
+        {"name": "Оливковые шорты", "zone": "Низ", "colors": ["оливковый"]},
+        {"name": "Белые кеды", "zone": "Обувь", "colors": ["белый"]},
+    ]
+
+    assert build_how_to_wear(items) == [
+        "Рубашку полностью расстегнуть",
+        "Рукава слегка подвернуть",
+        "Футболку оставить навыпуск",
+    ]
+    assert build_sock_recommendation(items) == "Светло-серые носки"
 
 
 def test_outfit_card_does_not_show_legacy_fashion_rebus():
@@ -232,6 +256,26 @@ def test_relaxed_shirt_can_be_worn_open_over_a_tshirt():
     assert outfit is not None
     assert {"shirt", "tee"}.issubset({item["id"] for item in outfit})
     assert [item["id"] for item in sorted(outfit, key=outfit_display_order)][:2] == ["tee", "shirt"]
+
+
+def test_shirt_and_tshirt_can_be_recommended_without_a_selected_style():
+    wardrobe_data = {"zones": {
+        "Верх": {
+            "Рубашки": [_item("shirt", "Верх", "Голубая свободная рубашка")],
+            "Футболки": [_item("tee", "Верх", "Белая футболка")],
+        },
+        "Низ": {"Брюки": [_item("trousers", "Низ", "Тёмно-синие брюки")]},
+        "Обувь": {"Кеды": [_item("sneakers", "Обувь", "Белые кеды")]},
+    }}
+
+    outfit = pick_best_outfit(
+        wardrobe_data,
+        {"tmax": 17, "has_rain": False, "strong_wind": False, "warm": True},
+        [],
+        "",
+    )
+
+    assert {"shirt", "tee"}.issubset({item["id"] for item in outfit})
 
 
 def test_shirt_layer_is_not_added_in_hot_weather():

@@ -165,6 +165,40 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
     ]
 
 
+def test_second_music_home_open_uses_complete_daily_cache(monkeypatch):
+    sent, calls = [], {"daily": 0, "concerts": 0}
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    async def daily(_cid):
+        calls["daily"] += 1
+        return {"rebus": {"emoji": "🎹", "answer": "Piano", "fact": "Факт."}}
+
+    async def concerts(_cid):
+        calls["concerts"] += 1
+        return [{"artist": "Romy", "date": "21 августа", "place": "Алкмар"}]
+
+    cache = {}
+    monkeypatch.setattr(leisure_music.store, "_load", lambda key: cache.get(key, {}))
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_kv",
+        lambda key, change: cache.__setitem__(key, change(cache.get(key, {}))[0]),
+    )
+    monkeypatch.setattr(leisure_music, "_daily_music_content", daily)
+    monkeypatch.setattr(leisure_music, "_weekly_concerts", concerts)
+    monkeypatch.setattr(leisure_music, "_music_city", lambda _cid: "Алкмар")
+    monkeypatch.setattr(leisure_music, "_ensure_artists", lambda _cid: ["Romy"])
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL"})
+
+    asyncio.run(leisure_music.send_music_home(Bot(), "42"))
+    asyncio.run(leisure_music.send_music_home(Bot(), "42"))
+
+    assert calls == {"daily": 1, "concerts": 1}
+    assert sent[0]["text"] == sent[1]["text"]
+
+
 def test_music_home_shows_three_nearby_concerts_as_separate_items():
     message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [
         {"artist": "Romy", "date": "21 августа", "place": "Алкмар",
