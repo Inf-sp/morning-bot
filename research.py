@@ -22,6 +22,45 @@ _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 _CF_CACHE = {}          # name.lower() -> (ts, dict)
 _CF_TTL = 86400         # факты о стране стабильны - сутки
 
+_ENGLISH_SEARCH_SCENARIOS = {
+    "restaurant_local", "concert_specific", "game_releases", "book_releases",
+}
+_ENGLISH_PLACE_NAMES = {
+    "нидерланды": "Netherlands", "алкмар": "Alkmaar", "амстердам": "Amsterdam",
+    "германия": "Germany", "франция": "France", "бельгия": "Belgium",
+    "испания": "Spain", "италия": "Italy", "великобритания": "United Kingdom",
+    "сша": "United States", "польша": "Poland", "швеция": "Sweden",
+    "дания": "Denmark", "португалия": "Portugal", "исландия": "Iceland",
+}
+_CYRILLIC_TRANSLITERATION = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e",
+    "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k",
+    "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+    "с": "s", "т": "t", "у": "u", "ф": "f", "х": "kh", "ц": "ts",
+    "ч": "ch", "ш": "sh", "щ": "shch", "ъ": "", "ы": "y", "ь": "",
+    "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def english_search_query(query: str, scenario: str = "") -> str:
+    """Нормализует автоматический продуктовый поиск до английской латиницы."""
+    text = re.sub(r"\s+", " ", str(query or "")).strip()
+    if scenario not in _ENGLISH_SEARCH_SCENARIOS or not re.search(r"[А-Яа-яЁё]", text):
+        return text
+    for russian, english in _ENGLISH_PLACE_NAMES.items():
+        text = re.sub(rf"\b{re.escape(russian)}\b", english, text, flags=re.I)
+    parts = []
+    for char in text:
+        lower = char.casefold()
+        replacement = _CYRILLIC_TRANSLITERATION.get(ord(lower))
+        if replacement is None:
+            parts.append(char)
+        elif char.isupper():
+            parts.append(replacement[:1].upper() + replacement[1:])
+        else:
+            parts.append(replacement)
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
 # ================= WIKIPEDIA =================
 def _wiki_ru_title(name):
     """Русский заголовок статьи через langlink из англ. Википедии (точнее ловит место)."""
@@ -406,6 +445,7 @@ def _tavily_allowed(scenario: str, *, search_depth: str = "basic") -> bool:
 def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
                   scenario: str = "", search_depth: str = "basic") -> list:
     """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
+    query = english_search_query(query, scenario)
     if not config.TAVILY_API_KEY or not _tavily_allowed(scenario, search_depth=search_depth):
         return []
     domains = tuple(str(x).strip().casefold() for x in (include_domains or []) if str(x).strip())
@@ -521,6 +561,7 @@ def web_search(query: str, max_results: int = 5, include_domains=None, *, scenar
     Tavily is not a universal fallback: callers must opt in with one of the
     current-information scenarios above.
     """
+    query = english_search_query(query, scenario)
     out, seen = [], set()
     domains = tuple(str(value).strip().casefold() for value in (include_domains or []) if str(value).strip())
     tavily_enabled = bool(allow_tavily and _tavily_allowed(scenario))

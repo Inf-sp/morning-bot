@@ -35,7 +35,7 @@ def test_ai_traffic_records_five_minute_peak(monkeypatch):
         {"ts": 1_784_464_300, "ok": False, "cache_hit": False,
          "origin": "Фон", "section": "Поездка", "actor": "", "provider": "gemini"},
         {"ts": 1_784_464_400, "ok": False, "cache_hit": False,
-         "origin": "Фон", "section": "Готовка", "actor": "", "provider": "openrouter"},
+         "origin": "Фон", "section": "Питание", "actor": "", "provider": "openrouter"},
     ]}
     monkeypatch.setattr(ai.store, "_load", lambda _key: state)
     monkeypatch.setattr(ai.time, "time", lambda: 1_784_464_600)

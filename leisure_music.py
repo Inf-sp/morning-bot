@@ -1,7 +1,9 @@
 """Музыкальные рекомендации и управление любимыми артистами."""
 
 import asyncio
+import json
 import logging
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -615,6 +617,39 @@ async def _weekly_concerts(cid):
         })
         if len(rows) >= 3:
             break
+    return await _concert_descriptions_in_russian(rows)
+
+
+async def _concert_descriptions_in_russian(rows):
+    """Переводит до трёх внешних описаний; английский fallback не показывается."""
+    rows = [dict(row) for row in (rows or [])]
+    indexes, source_texts = [], []
+    for index, row in enumerate(rows[:3]):
+        description = " ".join(str(row.get("description") or "").split()).strip()
+        row["description"] = description if re.search(r"[А-Яа-яЁё]", description) else ""
+        if description and not row["description"]:
+            indexes.append(index)
+            source_texts.append(description[:500])
+    if not source_texts:
+        return rows
+    prompt = (
+        "Переведи описания концертов на естественный русский язык. Сохрани смысл, "
+        "не добавляй факты и сократи каждое до одного предложения не длиннее 140 символов. "
+        "Верни только JSON вида {\"translations\":[\"...\"]}.\nINPUT_JSON: "
+        + json.dumps({"descriptions": source_texts}, ensure_ascii=False)
+    )
+    try:
+        data = await ai.allm_json(
+            prompt, 500, tier="cheap", module="music_concert_translation",
+            fallback_allowed=True, privacy_level="public", budget_seconds=8,
+        )
+        translations = data.get("translations") if isinstance(data, dict) else []
+    except Exception:
+        translations = []
+    for index, translation in zip(indexes, translations or []):
+        text = " ".join(str(translation or "").split()).strip()[:180]
+        if re.search(r"[А-Яа-яЁё]", text):
+            rows[index]["description"] = text
     return rows
 
 

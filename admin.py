@@ -187,7 +187,7 @@ def _error_signature(entry):
         # Groq, Cloudflare и OpenRouter. Для владельца это один инцидент, а не
         # несколько якобы разных ошибок ассистента.
         if kind == "all-providers-failed":
-            return "llm", kind
+            return "llm", kind, str(entry.get("section") or "Система")
     return (
         str(entry.get("source") or ""), str(entry.get("kind") or ""),
         str(entry.get("file") or ""), str(entry.get("error") or entry.get("msg") or "")[:240],

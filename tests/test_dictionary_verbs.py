@@ -84,6 +84,24 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
     assert "💡 Полезно: Ik werk vandaag thuis → Сегодня я работаю дома" in text
 
 
+def test_separable_verb_aanraden_keeps_its_example_in_the_card():
+    entry = {
+        "lang": "nl",
+        "term": "Aanraden",
+        "translation": "советовать; рекомендовать",
+        "pos": "глагол",
+        "breakdown": "глагол",
+        "example_nl": "Ik raad je deze film aan.",
+        "example_ru": "Я рекомендую тебе этот фильм.",
+    }
+
+    text = dictionary_import._dict_entry_message(entry, status="found").text
+
+    assert "Aanraden → Советовать · рекомендовать" in text
+    assert "Разбор: глагол" in text
+    assert "💡 Полезно: Ik raad je deze film aan → Я рекомендую тебе этот фильм" in text
+
+
 def test_verb_with_zijn_uses_is_perfect_form(monkeypatch):
     async def fake_request(_word):
         return _analysis(

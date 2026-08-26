@@ -388,7 +388,7 @@ def _purchase_photo_audience(cid):
     return "male" if name in male_names else "neutral"
 
 
-def _purchase_carousel_kb(page, count):
+def _purchase_carousel_kb(page, count, photo_variant=0):
     rows = []
     if count > 1:
         rows.append([
@@ -396,11 +396,12 @@ def _purchase_carousel_kb(page, count):
             (f"{page + 1}/{count}", "noop"),
             ("▶️", f"w_buy_page:{(page + 1) % count}"),
         ])
+    rows.append([("✨ Другой вариант", f"w_buy_photo:{page}:{photo_variant + 1}")])
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 
 
-async def show_purchase_page(bot, cid, page=0, q=None):
+async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0):
     wardrobe = store.load_wardrobe(cid)
     candidates = _missing_purchase_candidates(cid, wardrobe)
     if not candidates:
@@ -414,12 +415,13 @@ async def show_purchase_page(bot, cid, page=0, q=None):
     import asyncio
     import wardrobe_photos
 
-    photo = await asyncio.to_thread(
-        wardrobe_photos.purchase_photo,
-        _clean_text(item.get("item")),
-        _purchase_photo_audience(cid),
+    photo_args = (
+        _clean_text(item.get("item")), _purchase_photo_audience(cid),
     )
-    kb = _purchase_carousel_kb(page, len(candidates))
+    if photo_variant:
+        photo_args += (int(photo_variant),)
+    photo = await asyncio.to_thread(wardrobe_photos.purchase_photo, *photo_args)
+    kb = _purchase_carousel_kb(page, len(candidates), int(photo_variant))
     if q is not None and photo and photo.get("url") and len(text_out) <= 1024:
         try:
             await q.edit_message_media(

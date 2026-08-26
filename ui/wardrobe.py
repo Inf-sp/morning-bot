@@ -1,5 +1,3 @@
-from telegram import MessageEntity
-
 from .builder import MessageBuilder
 from .constants import ui_label
 from wardrobe_model import public_zone_name, zone_of
@@ -134,21 +132,6 @@ def render_wardrobe_message(look_data):
             b.newline()
             for item in extras:
                 b.line(f"- {item}")
-
-    rebus = look_data.get("fashion_rebus") or {}
-    emoji = _clean_text(rebus.get("emoji"))
-    answer = _clean_text(rebus.get("answer"))
-    fact = _clean_text(rebus.get("fact"))
-    if emoji and answer:
-        b.spacer()
-        b.bold("Модный ребус:")
-        b.text_line(f" {emoji} → ")
-        b.add(answer, MessageEntity.SPOILER)
-    if fact:
-        b.spacer()
-        b.bold("💡 Интересно:")
-        b.text_line(f" {fact}")
-        b.newline()
 
     return b.build_stripped()
 

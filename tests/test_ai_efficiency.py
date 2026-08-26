@@ -160,6 +160,28 @@ def test_gemini_does_not_retry_a_rate_limit(monkeypatch):
     assert calls == ["gemini"]
 
 
+def test_gemini_limit_error_uses_current_product_section(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        ai.api_usage, "gemini_state",
+        lambda *_args: {"cooldown_scope": "RPM", "cooldown_seconds": 60},
+    )
+    monkeypatch.setattr(ai.api_usage, "should_log_gemini_limit", lambda _token: True)
+    monkeypatch.setattr(
+        tracking, "log_error",
+        lambda *args, **kwargs: logged.append((args, kwargs)),
+    )
+
+    trace = tracking.start_action("42", "Словарь", "добавление слова")
+    try:
+        ai._log_gemini_limit("gemini_rate_limit")
+    finally:
+        tracking.finish_action(trace)
+
+    assert logged[0][1]["section"] == "Словарь"
+    assert logged[0][1]["action"] == "сработал лимит провайдера"
+
+
 def test_one_action_can_use_gemini_only_once(monkeypatch):
     calls = []
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)

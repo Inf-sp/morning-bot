@@ -55,9 +55,9 @@ class ProviderSpec:
 # Fallbacks are directed. Tavily is reserve-only while its monthly quota is
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
-    ProviderSpec("gemini", "Gemini", ("Готовка", "Обучение", "Ассистент"),
+    ProviderSpec("gemini", "Gemini", ("Питание", "Обучение", "Ассистент"),
                  ("groq", "openrouter"), 3600, role="Сложные задачи"),
-    ProviderSpec("groq", "Groq", ("Готовка", "Обучение", "Ассистент"),
+    ProviderSpec("groq", "Groq", ("Питание", "Обучение", "Ассистент"),
                  ("cloudflare", "openrouter"), 3600, role="Основной"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Последний резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
@@ -69,14 +69,14 @@ SPECS = (
     ProviderSpec("google_books", "Google Books", ("Книги",), (), 86400),
     ProviderSpec("youtube", "YouTube", ("Музыка",), (), 86400),
     ProviderSpec("languagetool", "LanguageTool", ("Обучение",), ("gemini",), 3600),
-    ProviderSpec("spoonacular", "Spoonacular", ("Готовка",), ("themealdb",), 3600),
-    ProviderSpec("themealdb", "TheMealDB", ("Готовка",), ()),
+    ProviderSpec("spoonacular", "Spoonacular", ("Питание",), ("themealdb",), 3600),
+    ProviderSpec("themealdb", "TheMealDB", ("Питание",), ()),
     ProviderSpec("gtts", "gTTS", ("Озвучка",), (), 86400),
     ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",), 3600),
     ProviderSpec("pexels", "Pexels", ("Поездка",), ("unsplash",)),
     ProviderSpec("unsplash", "Unsplash", ("Поездка",), ()),
-    ProviderSpec("telegram", "Telegram", ("Мой день", "Готовка", "Обучение"), ()),
-    ProviderSpec("database", "PostgreSQL", ("Мой день", "Готовка", "Обучение"), ()),
+    ProviderSpec("telegram", "Telegram", ("Мой день", "Питание", "Обучение"), ()),
+    ProviderSpec("database", "PostgreSQL", ("Мой день", "Питание", "Обучение"), ()),
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}

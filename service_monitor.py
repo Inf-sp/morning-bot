@@ -42,7 +42,7 @@ _DATA_CATEGORIES = {
     "google_books": "Книги",
     "youtube": "Музыка",
     "languagetool": "Обучение",
-    "spoonacular": "Готовка",
+    "spoonacular": "Питание",
     "gtts": "Озвучка",
     "ticketmaster": "Концерты",
     "pexels": "Фото",

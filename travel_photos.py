@@ -35,7 +35,7 @@ def _score(*, width, height, description, position, strict=True):
         return min(width * height, 30_000_000) - position * 20_000
 
 
-def _pexels(query, strict=True, first_result=False):
+def _pexels(query, strict=True, first_result=False, result_index=0):
     if not config.PEXELS_API_KEY:
         return None
     started = time.monotonic()
@@ -74,7 +74,10 @@ def _pexels(query, strict=True, first_result=False):
                 candidates.append((score, photo, url))
         if not candidates:
             return None
-        _, photo, url = candidates[0] if first_result else max(candidates, key=lambda row: row[0])
+        if first_result:
+            _, photo, url = candidates[max(0, int(result_index)) % len(candidates)]
+        else:
+            _, photo, url = max(candidates, key=lambda row: row[0])
         return {
             "provider": "pexels", "id": str(photo.get("id") or ""), "url": url,
             "page_url": str(photo.get("url") or ""), "photographer": str(photo.get("photographer") or ""),
@@ -87,9 +90,11 @@ def _pexels(query, strict=True, first_result=False):
         return None
 
 
-def pexels_photo(query, *, strict=True, first_result=False):
+def pexels_photo(query, *, strict=True, first_result=False, result_index=0):
     """Общий публичный вход к Pexels для экранов с фото."""
-    return _pexels(query, strict=strict, first_result=first_result)
+    return _pexels(
+        query, strict=strict, first_result=first_result, result_index=result_index,
+    )
 
 
 def _unsplash(query, strict=True, first_result=False):

@@ -48,7 +48,7 @@ def ikb(rows):
 def main_menu_rows():
     return [
         [(ui_label("myday", "Мой день"), "m_myday")],
-        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
+        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Питание"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("travel", "Поездки"), "m_travel")],
         [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("music", "Музыка"), "m_music")],
         [(ui_label("books", "Книги"), "m_books"), ("👾 Игры", "m_games")],
@@ -105,10 +105,10 @@ _SCREENS = {
     ),
     "m_food": (
         UI_FOOD,
-        "Готовка",
+        "Питание",
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
-            [("✨ Подобрать рецепт", "m_food_gen")],
+            [("🍳 Рецепты", "m_food_gen")],
             [("🎚️ Мой холодильник", "as_fridge_home")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -141,8 +141,6 @@ _SCREENS = {
         [
             [("✨ Подобрать новое кино", "movie_reco")],
             [("🎟️ Премьеры фильмов", "movie_premieres")],
-            [("🏆 Топ-5 фильмов прошлого года", "yt:movie:open")],
-            [("🏆 Топ-5 сериалов прошлого года", "yt:tv:open")],
             [("🎚️ Моё кино", "movie_favorites")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -347,7 +345,7 @@ def restaurant_menu(card=None):
         b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
     rows = [
         [("✨ Другое место", "m_food_next")],
-        [("✨ Подобрать рецепт", "m_food_gen")],
+        [("🍳 Рецепты", "m_food_gen")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]
@@ -356,7 +354,7 @@ def restaurant_menu(card=None):
 
 def food_empty_menu():
     b = MessageBuilder()
-    b.section("🥣 Готовка")
+    b.section("🥣 Питание")
     b.spacer()
     b.line("Добавь продукты, которые обычно есть дома.")
     b.spacer()

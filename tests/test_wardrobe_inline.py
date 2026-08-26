@@ -275,7 +275,7 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
     asyncio.run(wardrobe.send_home(bot, "cached-fast", q=q))
 
     assert len(q.message.edits) == 1
-    assert "Модный ребус: 🧥 🌧️ 👢 → Тренчкот" in q.message.edits[0][0][0]
+    assert "Модный ребус" not in q.message.edits[0][0][0]
     assert bot.sends == []
 
 
@@ -402,6 +402,7 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
     assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
     assert _labels(sent[0]["reply_markup"]) == [
         ["◀️", "1/3", "▶️"],
+        ["✨ Другой вариант"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     wardrobe.store.pending_input.pop("42", None)
@@ -479,6 +480,24 @@ def test_purchase_photos_are_male_for_admin_even_without_profile_name(monkeypatc
     monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {})
 
     assert wardrobe._purchase_photo_audience("42") == "male"
+
+
+def test_purchase_other_variant_uses_next_english_pexels_result(monkeypatch):
+    import wardrobe_photos
+
+    calls = []
+    wardrobe_photos.purchase_photo.cache_clear()
+    monkeypatch.setattr(
+        wardrobe_photos, "pexels_photo",
+        lambda query, **kwargs: calls.append((query, kwargs)) or {"url": "photo"},
+    )
+
+    wardrobe_photos.purchase_photo("Серые широкие джинсы", "male", 2)
+
+    query, options = calls[0]
+    assert query == "male fashion model wearing wide leg jeans fashion"
+    assert not any("а" <= char.casefold() <= "я" for char in query)
+    assert options["result_index"] == 2
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

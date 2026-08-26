@@ -29,18 +29,19 @@ def _purchase_query(item, audience="neutral"):
     else:
         query = "minimal clothing fashion item"
     if audience == "male":
-        return f"men wearing {query}"
+        return f"male fashion model wearing {query}"
     if audience == "female":
         return f"women wearing {query}"
     return query
 
 
-@lru_cache(maxsize=128)
-def purchase_photo(item, audience="neutral"):
+@lru_cache(maxsize=256)
+def purchase_photo(item, audience="neutral", variant=0):
     """Возвращает одно фото Pexels или None; повторный запрос кэшируется."""
     name = " ".join(str(item or "").split()).strip()
     if not name:
         return None
     return pexels_photo(
         _purchase_query(name, audience), strict=False, first_result=True,
+        result_index=max(0, int(variant)),
     )

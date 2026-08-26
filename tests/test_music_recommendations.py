@@ -234,6 +234,44 @@ def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
     assert ") · Тёплая электроника и сильное живое шоу." in message.text
 
 
+def test_weekly_concert_loader_translates_english_descriptions_to_russian(monkeypatch):
+    import leisure_concerts
+
+    event_date = (leisure_music.datetime.now(leisure_music.config.TZ).date()
+                  + timedelta(days=1)).isoformat()
+    event = {
+        "_artist": "Romy",
+        "description": "Warm electronic music and a powerful live show.",
+        "dates": {"start": {"localDate": event_date}},
+        "_embedded": {"venues": [{"city": {"name": "Amsterdam"}}]},
+    }
+    monkeypatch.setattr(leisure_music.config, "TICKETMASTER_API_KEY", "ticketmaster-key")
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: [event])
+
+    async def translate(*_args, **_kwargs):
+        return {"translations": ["Тёплая электроника и сильное живое шоу."]}
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", translate)
+
+    result = asyncio.run(leisure_music._weekly_concerts("42"))
+
+    assert result[0]["description"] == "Тёплая электроника и сильное живое шоу."
+
+
+def test_music_home_hides_english_description_when_translation_is_unavailable(monkeypatch):
+    async def unavailable(*_args, **_kwargs):
+        raise RuntimeError("AI unavailable")
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
+    rows = asyncio.run(leisure_music._concert_descriptions_in_russian([{
+        "artist": "Romy", "description": "Warm electronic music and a powerful live show.",
+    }]))
+
+    assert rows[0]["description"] == ""
+
+
 def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empty(monkeypatch):
     import leisure_concerts
 

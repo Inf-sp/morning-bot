@@ -134,6 +134,35 @@ def example_matches_term(entry, example):
             common += 1
         return common >= 4
 
+    def dutch_verb_stem(infinitive):
+        """Best-effort spelling stem for regular Dutch infinitives."""
+        word = str(infinitive or "").casefold()
+        if not word.endswith("en") or len(word) < 5:
+            return ""
+        stem = word[:-2]
+        if len(stem) >= 2 and stem[-1] == stem[-2]:
+            return stem[:-1]
+        vowels = "aeiou"
+        if (len(stem) >= 3 and stem[-1] not in vowels
+                and stem[-2] in vowels and stem[-3] not in vowels):
+            return stem[:-1] + stem[-2] + stem[-1]
+        return stem
+
+    def matches_separable_dutch_verb(infinitive):
+        prefixes = (
+            "achter", "binnen", "boven", "buiten", "tegen", "terug",
+            "voor", "door", "over", "onder", "samen", "vast", "verder",
+            "aan", "af", "bij", "in", "mee", "na", "om", "op", "toe",
+            "uit", "weg",
+        )
+        for prefix in prefixes:
+            if not infinitive.startswith(prefix) or prefix not in candidate_words:
+                continue
+            stem = dutch_verb_stem(infinitive[len(prefix):])
+            if stem and any(related_word(stem, candidate) for candidate in candidate_words):
+                return True
+        return False
+
     if len(term_words) > 1:
         normalized_term = " ".join(term_words)
         normalized_text = " ".join(candidate_words)
@@ -148,10 +177,12 @@ def example_matches_term(entry, example):
             for word in meaningful
         )
 
-    return any(
+    if any(
         related_word(search_word, candidate)
         for search_word in search_words for candidate in candidate_words
-    )
+    ):
+        return True
+    return entry_language(entry) == "nl" and matches_separable_dutch_verb(term_words[0])
 
 
 def is_dictionary_word(term, kind=""):

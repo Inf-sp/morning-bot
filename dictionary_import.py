@@ -456,6 +456,9 @@ def _dict_entry_message(entry, status="added"):
     b.bold(title)
     b.newline()
     render_learning_entry(b, entry)
+    if entry.get("analysis_pending") and not _entry_translation(entry):
+        b.spacer()
+        b.line("Перевод уточняется автоматически.")
     return b.build_stripped()
 
 
@@ -1502,8 +1505,10 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
         entry = None
     await status_message.stop()
     if not entry:
-        await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)
-        return
+        entry = _pending_analysis_entry(payload, lang or check_lang)
+        if not entry:
+            await _ask_dict_clarification(bot, cid, payload, lang, unavailable=unavailable)
+            return
     if entry.get("needs_confirmation"):
         await _ask_dict_clarification(
             bot, cid, payload, lang,
@@ -1511,6 +1516,8 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
         )
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
+    store.pending_input.pop(str(cid), None)
+    store.dict_pending_add.pop(str(cid), None)
     msg = _dict_entry_message(saved, status=status)
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     if status == "duplicate":
@@ -1548,6 +1555,35 @@ def _clarification_entry(term, translation, lang):
         "added_at": datetime.now(config.TZ).isoformat(),
         "status": "new",
         "last_shown_at": None,
+        **_extract_srs_fields({}),
+    }
+
+
+def _pending_analysis_entry(payload, lang):
+    """Безопасно сохраняет лексему, если все сервисы разбора временно отказали."""
+    code = lang if lang in ("nl", "en") else "nl"
+    raw_term = _clean_raw_user_term(payload)
+    if (not raw_term or len(raw_term) > 120
+            or _contains_suspicious_analysis_text(raw_term)
+            or (code == "nl" and _contains_mixed_script(raw_term))):
+        return None
+    term = _normalized_user_term(raw_term, code)
+    if not term:
+        return None
+    return {
+        "lang": code,
+        "term": term,
+        "article": "",
+        "translation": "",
+        "breakdown": "слово" if len(term.split()) == 1 else "фраза",
+        "examples": [],
+        "raw_user_term": raw_term,
+        "normalized_term": term,
+        "source_text": raw_term,
+        "added_at": datetime.now(config.TZ).isoformat(),
+        "status": "new",
+        "last_shown_at": None,
+        "analysis_pending": True,
         **_extract_srs_fields({}),
     }
 

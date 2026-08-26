@@ -50,15 +50,6 @@ COPY_VALIDATOR_VERSION = 11
 PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
-_FASHION_REBUS = {
-    "emoji": "🧥 🌧️ 👢",
-    "answer": "Тренчкот",
-    "fact": (
-        "Изначально плащ-тренчкот был разработан Томасом Бёрберри для солдат "
-        "британской армии в годы Первой мировой войны, а слово «trench» "
-        "буквально переводится как «окоп»."
-    ),
-}
 _PURCHASE_IDEAS = (
     {
         "item": "Тёмно-синий оверсайз-пиджак",
@@ -208,12 +199,6 @@ def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, ra
 def _build_look_message(look_data):
     msg = wardrobe_ui.render_wardrobe_message(look_data)
     return msg.text, msg.entities
-
-
-def _with_fashion_rebus(look_data):
-    result = dict(look_data or {})
-    result["fashion_rebus"] = dict(_FASHION_REBUS)
-    return result
 
 
 def _purchase_recommendation_text(recommendation):
@@ -620,9 +605,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
-        look_data = _with_fashion_rebus(
-            _repair_missing_purchase_recommendation(cid, original_look_data)
-        )
+        look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
         text, entities = _build_look_message(look_data)
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
@@ -731,7 +714,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "style_tip": fallback_tip,
         "purchase_recommendation": purchase_recommendation,
     }
-    look_data = _with_fashion_rebus(look_data)
     if kb is None:
         result_kb = build_wardrobe_keyboard(has_result=True)
     text, entities = _build_look_message(look_data)
@@ -971,6 +953,12 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data.startswith("w_buy_page:"):
         page = data.partition(":")[2]
         await show_purchase_page(bot, cid, int(page) if page.isdigit() else 0, q=q)
+        return
+    if data.startswith("w_buy_photo:"):
+        parts = data.split(":")
+        page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+        variant = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+        await show_purchase_page(bot, cid, page, q=q, photo_variant=variant)
         return
     if data == "w_buy_pick":
         store.pending_input[str(cid)] = "wardrobe_buy"

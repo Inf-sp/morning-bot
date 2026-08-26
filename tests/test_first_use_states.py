@@ -349,7 +349,7 @@ def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
     assert Query.message.updated["text"].startswith("🍽️ Что поесть · Alkmaar")
     assert _labels(Query.message.updated["reply_markup"]) == [
         ["✨ Другое место"],
-        ["✨ Подобрать рецепт"],
+        ["🍳 Рецепты"],
         ["🎚️ Мой холодильник"],
         ["#️⃣ Главная"],
     ]

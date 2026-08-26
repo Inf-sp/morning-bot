@@ -593,9 +593,11 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
             second += f" · повтор после {_cooldown_phrase(int(seconds))}"
         else:
             second += " · повтор после cooldown"
+        action_trace = tracking.current_action()
+        section = action_trace.section if action_trace and action_trace.section else "Система"
         tracking.log_error(
             "llm", f"{first}\n{second}", kind=kind or "gemini_rate_limit",
-            section="Разные категории", action="сработал лимит провайдера",
+            section=section, action="сработал лимит провайдера",
             service="Gemini", fallback="автоматический резерв" if fallback else "",
         )
     except Exception:

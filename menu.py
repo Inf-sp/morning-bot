@@ -79,21 +79,25 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         )
         msg = menu_ui.restaurant_menu(card)
         if status is not None:
-            await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+            await status.replace(
+                msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+                disable_web_page_preview=True,
+            )
         elif q is not None:
             try:
                 await q.message.edit_text(
                     msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+                    disable_web_page_preview=True,
                 )
             except Exception:
                 await bot.send_message(
                     chat_id=cid, text=msg.text, entities=msg.entities,
-                    reply_markup=msg.reply_markup,
+                    reply_markup=msg.reply_markup, disable_web_page_preview=True,
                 )
         else:
             await bot.send_message(
                 chat_id=cid, text=msg.text, entities=msg.entities,
-                reply_markup=msg.reply_markup,
+                reply_markup=msg.reply_markup, disable_web_page_preview=True,
             )
         return
 

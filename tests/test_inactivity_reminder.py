@@ -26,7 +26,7 @@ def test_inactivity_reminder_has_exact_copy_and_main_menu():
     )
     assert _labels(message.reply_markup) == [
         ["☀️ Мой день"],
-        ["🧵 Гардероб", "🥣 Готовка"],
+        ["🧵 Гардероб", "🥣 Питание"],
         ["🧠 Обучение", "✈️ Поездки"],
         ["🎬 Кино", "🎧 Музыка"],
         ["📚 Книги", "👾 Игры"],

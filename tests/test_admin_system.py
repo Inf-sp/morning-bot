@@ -145,7 +145,7 @@ def test_logs_hide_llm_provider_payload_and_code_location(monkeypatch):
     assert "ai.py" not in text
 
 
-def test_logs_group_ai_chain_failures_with_date_and_human_reason(monkeypatch):
+def test_logs_keep_ai_chain_failures_separate_for_each_section(monkeypatch):
     now = int(datetime(2026, 8, 12, 13, 24, tzinfo=admin.config.TZ).timestamp())
     errors = [
         {
@@ -154,7 +154,7 @@ def test_logs_group_ai_chain_failures_with_date_and_human_reason(monkeypatch):
             "error": "groq_standard: HTTP 429; openrouter: HTTP 503",
         },
         {
-            "id": "llm-2", "ts": now - 90, "source": "llm", "section": "Разные категории",
+            "id": "llm-2", "ts": now - 90, "source": "llm", "section": "Питание",
             "kind": "all-providers-failed",
             "error": "groq_standard: rate limit; openrouter: timeout",
         },
@@ -169,9 +169,11 @@ def test_logs_group_ai_chain_failures_with_date_and_human_reason(monkeypatch):
 
     text = bot.sent[0]["text"]
     assert text.count("Ассистент · не удалось подготовить ответ") == 1
+    assert text.count("Питание · не удалось подготовить ответ") == 1
     assert "12 авг · 13:24" in text
     assert "причина: Groq — лимит; OpenRouter — сервис не ответил" in text
-    assert "повторилось 2 раза" in text
+    assert "Разные категории" not in text
+    assert "повторилось 2 раза" not in text
 
 
 def test_expected_ai_outage_does_not_create_a_second_app_error(monkeypatch):

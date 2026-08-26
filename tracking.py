@@ -192,8 +192,8 @@ def get_action_latencies(limit=100) -> list:
 
 _SECTION_BY_MODULE = {
     "myday": "Мой день", "weather": "Мой день", "weather_provider": "Мой день",
-    "cooking": "Готовка", "recipe_generation": "Готовка", "spoonacular": "Готовка",
-    "themealdb": "Готовка", "learning": "Обучение", "trainer": "Обучение",
+    "cooking": "Питание", "recipe_generation": "Питание", "spoonacular": "Питание",
+    "themealdb": "Питание", "learning": "Обучение", "trainer": "Обучение",
     "learning_game": "Обучение", "learning_dictionary": "Обучение",
     "dictionary_import": "Обучение", "language_tool": "Обучение",
     "wardrobe": "Гардероб",

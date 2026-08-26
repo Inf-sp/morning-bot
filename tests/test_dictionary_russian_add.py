@@ -536,7 +536,7 @@ def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
     assert cid not in bot_text.store.pending_input
 
 
-def test_add_word_does_not_save_an_unparsed_placeholder_when_ai_reserves_fail(monkeypatch):
+def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
     cid = "dictionary-clarification"
     sent = []
 
@@ -563,11 +563,11 @@ def test_add_word_does_not_save_an_unparsed_placeholder_when_ai_reserves_fail(mo
     asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
 
     saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
-    assert saved == []
-    assert "Сейчас не удалось проверить «tering»" in sent[-1]["text"]
-    assert "Добавлено в нидерландский словарь" not in sent[-1]["text"]
-    assert "Перевод и пример добавлю после проверки" not in sent[-1]["text"]
-    assert dictionary_import.store.pending_input[cid] == "dictclarify_nl"
+    assert saved[0]["term"] == "Tering"
+    assert saved[0]["analysis_pending"] is True
+    assert "Добавлено в нидерландский словарь" in sent[-1]["text"]
+    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+    assert cid not in dictionary_import.store.pending_input
 
 
 def test_common_dutch_phrase_is_fully_parsed_without_ai(monkeypatch):

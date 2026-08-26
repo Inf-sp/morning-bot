@@ -1,4 +1,5 @@
 import os
+import asyncio
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -6,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 from telegram import MessageEntity
 
 import restaurant_discovery
+import menu
 from ui.menu import restaurant_menu
 
 
@@ -24,6 +26,28 @@ def test_restaurant_card_has_google_link_and_compact_details():
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
     assert len(links) == 1
     assert links[0].url.startswith("https://www.google.com/maps/search/")
+
+
+def test_restaurant_screen_always_disables_link_preview(monkeypatch):
+    replaced = {}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            replaced.update(kwargs)
+
+    monkeypatch.setattr(
+        restaurant_discovery, "get_restaurant",
+        lambda *_args, **_kwargs: {
+            "city": "Alkmaar", "name": "De Eendracht",
+            "map_url": "https://www.google.com/maps/search/?api=1&query=De+Eendracht",
+            "cuisine": "нидерландская", "price": "€€", "signature_dish": "сате",
+            "description": "Городское кафе.", "fact": "Находится в центре.",
+        },
+    )
+
+    asyncio.run(menu.send_food_menu(object(), "42", status=Status()))
+
+    assert replaced["disable_web_page_preview"] is True
 
 
 def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):

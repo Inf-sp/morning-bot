@@ -8,6 +8,21 @@ import leisure_concerts
 import research
 
 
+def test_product_research_queries_are_normalized_to_english():
+    query = research.english_search_query(
+        "Romy official tour dates Нидерланды 2026", "concert_specific",
+    )
+
+    assert query == "Romy official tour dates Netherlands 2026"
+    assert not any("а" <= char.casefold() <= "я" for char in query)
+
+
+def test_explicit_user_search_is_not_silently_rewritten():
+    query = "Проверь новости на русском"
+
+    assert research.english_search_query(query, "explicit_research") == query
+
+
 def test_generic_web_search_never_falls_back_to_tavily(monkeypatch):
     monkeypatch.setattr(research, "firecrawl_search", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(research, "tavily_search", lambda *_args, **_kwargs: (_ for _ in ()).throw(

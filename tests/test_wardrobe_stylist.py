@@ -60,7 +60,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "💡 Полезно:" not in message.text
 
 
-def test_outfit_card_shows_fashion_rebus_and_fact():
+def test_outfit_card_does_not_show_legacy_fashion_rebus():
     message = render_wardrobe_message({
         "items": [
             {"name": "Белая футболка", "zone": "Верх"},
@@ -78,9 +78,9 @@ def test_outfit_card_shows_fashion_rebus_and_fact():
         },
     })
 
-    assert "Модный ребус: 🧥 🌧️ 👢 → Тренчкот" in message.text
-    assert "💡 Интересно: Изначально плащ-тренчкот был разработан" in message.text
-    assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
+    assert "Модный ребус" not in message.text
+    assert "Тренчкот" not in message.text
+    assert "💡 Интересно" not in message.text
 
 
 def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():

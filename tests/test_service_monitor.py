@@ -36,7 +36,7 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
 
 def test_ai_provider_catalog_uses_roles_not_sections():
     assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Сложные задачи"
-    assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Готовка"
+    assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Питание"
 
 
 def test_quota_rows_show_remaining_not_usage(monkeypatch):
@@ -55,7 +55,7 @@ def test_one_remaining_request_is_healthy_when_spoonacular_still_accepts_request
     provider_runtime.record_result("spoonacular", True, quota_remaining=1, quota_total=150)
 
     assert service_monitor.format_row("spoonacular") == (
-        "🟢 Spoonacular · Готовка · 1/150 осталось"
+        "🟢 Spoonacular · Питание · 1/150 осталось"
     )
 
 
@@ -68,7 +68,7 @@ def test_successful_spoonacular_request_removes_themealdb_fallback(monkeypatch):
     provider_runtime.record_result("spoonacular", True, quota_remaining=1, quota_total=49)
 
     assert service_monitor.format_row("spoonacular") == (
-        "🟢 Spoonacular · Готовка · 1/49 осталось"
+        "🟢 Spoonacular · Питание · 1/49 осталось"
     )
 
 
@@ -86,7 +86,7 @@ def test_successful_spoonacular_probe_with_remaining_quota_removes_stale_fallbac
 
     assert provider_runtime.selected_provider("spoonacular") == "spoonacular"
     assert service_monitor.format_row("spoonacular") == (
-        "🟢 Spoonacular · Готовка · 1/49 осталось"
+        "🟢 Spoonacular · Питание · 1/49 осталось"
     )
 
 
