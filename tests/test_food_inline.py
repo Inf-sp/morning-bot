@@ -101,13 +101,13 @@ def test_other_food_place_refresh_replaces_inline_status(monkeypatch):
         restaurant_discovery, "get_restaurant",
         lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
     )
-    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda _card: SimpleNamespace(
+    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda _card, **_kwargs: SimpleNamespace(
         text="Обновлённое место", entities=[], reply_markup="food-kb"))
 
     asyncio.run(menu.send_food_menu(object(), "42", refresh=True, status=Status()))
 
     assert calls[0] == ("replace", "Обновлённое место", {
-        "entities": [], "reply_markup": "food-kb",
+        "entities": [], "reply_markup": "food-kb", "disable_web_page_preview": True,
     })
 
 
@@ -122,7 +122,7 @@ def test_food_home_uses_cached_restaurant_without_recipe_generation(monkeypatch)
         restaurant_discovery, "get_restaurant",
         lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
     )
-    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda card: SimpleNamespace(
+    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda card, **_kwargs: SimpleNamespace(
         text=card["name"], entities=[], reply_markup="food-kb",
     ))
 

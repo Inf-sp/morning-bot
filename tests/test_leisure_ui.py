@@ -1003,8 +1003,10 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
     assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
-    assert "Что в кино:\n• «Фильм» (драма, триллер)" in movie.text
-    assert "Героиня возвращается домой" not in movie.text
+    assert (
+        "Что в кино:\n• «Фильм» (драма, триллер) · "
+        "Героиня возвращается домой и находит старую тайну."
+    ) in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти»" not in movie.text
@@ -1087,7 +1089,8 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
 
     asyncio.run(leisure_books.send_books_home(Bot(), "42"))
 
-    assert "📚 Литературный вайб · 25 августа" in sent[0]["text"]
+    today_label = leisure_movies.leisure_ui._format_date_label(datetime.now(config.TZ).date())
+    assert f"📚 Литературный вайб · {today_label}" in sent[0]["text"]
     assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
     assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
 
@@ -1591,6 +1594,7 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
     asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
 
     assert "• «Второй» (комедия)" in sent[0]["text"]
+    assert "• «Второй» (комедия) · Героиня решает начать всё заново." in sent[0]["text"]
     assert "• «Четвёртый» (боевик)" in sent[0]["text"]
     assert "• «Пятый» (драма)" in sent[0]["text"]
     assert "Первый" not in sent[0]["text"]

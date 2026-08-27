@@ -164,6 +164,7 @@ MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, 
 BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, items}} — книги текущего месяца на неделю
 GAME_PREMIERES_CACHE_KEY = "game_premieres_cache.json"  # {platform_signature: {expires, items}} — подтверждённые игровые релизы
 CINEMA_DAILY_CACHE_KEY = "cinema_daily_cache.json"  # {YYYY-MM-DD: {birthday}} — один проверенный именинник дня для всех пользователей
+CATEGORY_NEWS_CACHE_KEY = "category_news_cache.json"  # общий проверенный пул новостей по разделам
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 MUSIC_DAILY_CACHE_KEY = "music_daily_cache.json"  # {YYYY-MM-DD: {legend}} — один проверенный музыкальный именинник дня для всех пользователей
 MUSIC_HOME_CACHE_KEY = "music_home_cache.json"  # {cid: дневная витрина Музыки с концертами}

@@ -399,7 +399,8 @@ def _purchase_carousel_kb(page, count, photo_variant=0):
             (f"{page + 1}/{count}", "noop"),
             ("▶️", f"w_buy_page:{(page + 1) % count}"),
         ])
-    rows.append([("✨ Другой вариант", f"w_buy_photo:{page}:{photo_variant + 1}")])
+    next_page = (page + 1) % count if count else 0
+    rows.append([("✨ Другой вариант", f"w_buy_page:{next_page}")])
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 

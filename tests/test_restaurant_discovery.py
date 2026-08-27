@@ -86,6 +86,53 @@ def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):
     assert first["map_url"].startswith("https://www.google.com/maps/search/")
 
 
+def test_restaurant_recommendation_rotates_on_the_next_day(monkeypatch):
+    profile = {}
+    current = {"now": datetime(2026, 8, 26, 12, tzinfo=restaurant_discovery.config.TZ)}
+    names = iter(("De Eendracht", "Soepp"))
+    searches = []
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current["now"]
+
+    monkeypatch.setattr(restaurant_discovery, "datetime", Clock)
+    monkeypatch.setattr(restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
+    monkeypatch.setattr(restaurant_discovery.store, "get_profile", lambda _cid: dict(profile))
+    monkeypatch.setattr(
+        restaurant_discovery.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
+    monkeypatch.setattr(
+        restaurant_discovery.research, "web_search",
+        lambda *_args, **_kwargs: searches.append(current["now"].date()) or [{
+            "title": "De Eendracht and Soepp Alkmaar",
+            "url": "https://example.com/restaurant",
+            "content": "De Eendracht and Soepp are verified restaurants in Alkmaar.",
+        }],
+    )
+
+    def recommendation(*_args, **_kwargs):
+        name = next(names)
+        return {
+            "name": name, "cuisine": "нидерландская", "price": "€€",
+            "signature_dish": "блюдо дня", "description": "Городское кафе.",
+            "fact": "Находится в центре.",
+            "source_url": "https://example.com/restaurant",
+        }
+
+    monkeypatch.setattr(restaurant_discovery.ai, "llm_json", recommendation)
+
+    first = restaurant_discovery.get_restaurant("42")
+    current["now"] = datetime(2026, 8, 27, 12, tzinfo=restaurant_discovery.config.TZ)
+    second = restaurant_discovery.get_restaurant("42")
+
+    assert first["name"] == "De Eendracht"
+    assert second["name"] == "Soepp"
+    assert len(searches) == 2
+
+
 def test_restaurant_context_changes_with_time_and_good_weather(monkeypatch):
     monkeypatch.setattr(restaurant_discovery, "_good_terrace_weather", lambda _settings: True)
 

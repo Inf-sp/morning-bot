@@ -10,8 +10,6 @@ import secure
 import store
 
 
-_CACHE_TTL_DAYS = 7
-
 _CITY_FALLBACKS = {
     "alkmaar": (
         {
@@ -54,10 +52,13 @@ def _fresh(value, city, context_key):
         cached = datetime.fromisoformat(str(value.get("cached_at") or ""))
     except (TypeError, ValueError):
         return False
+    now = datetime.now(config.TZ)
+    if cached.tzinfo is None:
+        cached = cached.replace(tzinfo=config.TZ)
     return (
         str(value.get("city") or "").casefold() == str(city or "").casefold()
         and value.get("context_key") == context_key
-        and (datetime.now(config.TZ) - cached).days < _CACHE_TTL_DAYS
+        and cached.astimezone(config.TZ).date() == now.date()
         and value.get("name") and value.get("map_url")
     )
 
@@ -151,7 +152,7 @@ def get_restaurant(cid, *, refresh=False):
     cached = _cache(cid)
     if not refresh and _fresh(cached, city, context_key):
         return cached
-    previous = str(cached.get("name") or "") if refresh else ""
+    previous = str(cached.get("name") or "") if _usable(cached, city) else ""
     rows = research.web_search(
         f"best {search_context} in {city} official menu opening hours signature dish price",
         max_results=6, scenario="restaurant_local", allow_tavily=True,

@@ -415,6 +415,7 @@ _TAVILY_SCENARIOS = {
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
     "book_releases": {"ttl": 7 * 86400, "economy": True, "advanced": False},
     "restaurant_local": {"ttl": 7 * 86400, "economy": True, "advanced": False},
+    "category_news": {"ttl": 6 * 3600, "economy": True, "advanced": False},
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"
@@ -443,7 +444,9 @@ def _tavily_allowed(scenario: str, *, search_depth: str = "basic") -> bool:
 
 
 def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
-                  scenario: str = "", search_depth: str = "basic") -> list:
+                  scenario: str = "", search_depth: str = "basic",
+                  topic: str = "general", time_range: str = "",
+                  start_date: str = "", end_date: str = "") -> list:
     """Поиск через Tavily. Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
     query = english_search_query(query, scenario)
     if not config.TAVILY_API_KEY or not _tavily_allowed(scenario, search_depth=search_depth):
@@ -451,7 +454,10 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
     domains = tuple(str(x).strip().casefold() for x in (include_domains or []) if str(x).strip())
     ttl = _TAVILY_SCENARIOS[scenario]["ttl"]
     normalized_query = re.sub(r"\s+", " ", str(query or "").casefold()).strip()
-    key = f"{normalized_query}:{max_results}:{','.join(domains)}:{search_depth}"
+    key = (
+        f"{normalized_query}:{max_results}:{','.join(domains)}:{search_depth}:"
+        f"{topic}:{time_range}:{start_date}:{end_date}"
+    )
     cached = _TV_CACHE.get(key)
     if cached and time.time() - cached[0] < ttl:
         api_usage.record_tavily_event(scenario, "cache_hits")
@@ -466,6 +472,14 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
             "include_raw_content": False,
             "include_images": False,
         }
+        if topic in {"general", "news", "finance"}:
+            payload["topic"] = topic
+        if time_range in {"day", "week", "month", "year", "d", "w", "m", "y"}:
+            payload["time_range"] = time_range
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", start_date or ""):
+            payload["start_date"] = start_date
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_date or ""):
+            payload["end_date"] = end_date
         if domains:
             payload["include_domains"] = list(domains)
         r = requests.post(
@@ -555,7 +569,9 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 def web_search(query: str, max_results: int = 5, include_domains=None, *, scenario: str = "",
-               allow_tavily: bool = False, search_priority: str = "firecrawl") -> list:
+               allow_tavily: bool = False, search_priority: str = "firecrawl",
+               topic: str = "general", time_range: str = "",
+               start_date: str = "", end_date: str = "") -> list:
     """Search only through an explicitly chosen provider policy.
 
     Tavily is not a universal fallback: callers must opt in with one of the
@@ -569,7 +585,8 @@ def web_search(query: str, max_results: int = 5, include_domains=None, *, scenar
                  else ((firecrawl_search, tavily_search) if tavily_enabled else (firecrawl_search,)))
     for provider in providers:
         rows = (provider(query, max_results=max_results, include_domains=domains,
-                         scenario=scenario)
+                         scenario=scenario, topic=topic, time_range=time_range,
+                         start_date=start_date, end_date=end_date)
                 if provider is tavily_search else provider(query, max_results=max_results))
         for item in rows:
             url = (item.get("url") or "").strip()

@@ -1,4 +1,5 @@
 from .builder import MessageBuilder
+from .news import append_weekly_news
 from telegram import MessageEntity
 
 
@@ -16,7 +17,7 @@ def visited_summary(n):
     return f"{verb} {n} {plural_countries(n)}"
 
 
-def home_screen(idea, rebus=None):
+def home_screen(idea, rebus=None, *, news=None):
     b = MessageBuilder()
     b.text_line(f"{idea['emoji']} ")
     b.bold(f"Поездка на сегодня · {idea['transport_title']}")
@@ -41,6 +42,7 @@ def home_screen(idea, rebus=None):
         b.newline()
     b.spacer()
     b.line(f"💡 Полезно: {idea['tip']}")
+    append_weekly_news(b, news)
     return b.build_stripped()
 
 

@@ -6,6 +6,7 @@ from .text import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
+from .news import append_weekly_news
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -312,7 +313,7 @@ def food_menu(idea=None):
     return b.build_stripped(reply_markup=ikb(rows))
 
 
-def restaurant_menu(card=None):
+def restaurant_menu(card=None, *, news=None):
     """Главный экран Готовки: одно проверенное место в текущем городе."""
     card = card or {}
     city = _cooking_text(card.get("city")) or "Alkmaar"
@@ -349,6 +350,7 @@ def restaurant_menu(card=None):
             b.newline()
     else:
         b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
+    append_weekly_news(b, news)
     rows = [
         [("✨ Другое место", "m_food_next")],
         [("🍳 Рецепты", "m_food_gen")],

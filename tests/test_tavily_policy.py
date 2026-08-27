@@ -77,6 +77,35 @@ def test_tavily_cache_avoids_second_network_request(monkeypatch):
     assert len(calls) == 1
 
 
+def test_category_news_search_uses_news_topic_and_week_filter(monkeypatch):
+    research._TV_CACHE.clear()
+    monkeypatch.setattr(research.config, "TAVILY_API_KEY", "test-key")
+    monkeypatch.setattr(research, "_tavily_allowed", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(research.api_usage, "record_request", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(research.api_usage, "record_tavily_event", lambda *_args, **_kwargs: None)
+    payloads = []
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"results": []}
+
+    monkeypatch.setattr(
+        research.requests, "post",
+        lambda *_args, **kwargs: payloads.append(kwargs["json"]) or Response(),
+    )
+
+    research.tavily_search(
+        "important textile news", scenario="category_news",
+        topic="news", time_range="week",
+    )
+
+    assert payloads[0]["topic"] == "news"
+    assert payloads[0]["time_range"] == "week"
+
+
 def test_bulk_concert_refresh_never_starts_external_artist_search(monkeypatch):
     async def ticketmaster(*_args, **_kwargs):
         return []

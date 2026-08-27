@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
+import category_news
 import country_catalog
 import config
 import memory
@@ -213,16 +214,27 @@ async def send_home(bot, cid, q=None, status=None):
     idea = await asyncio.to_thread(_home_idea, cid)
     today = datetime.now(config.TZ).date()
     rebus = await monthly_rebuses.for_day("travel", today, _TRAVEL_REBUSES)
-    msg = travel_ui.home_screen(idea, rebus=rebus)
+    msg = travel_ui.home_screen(
+        idea, rebus=rebus, news=category_news.cached_line("travel"),
+    )
     if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=_home_kb())
+        await status.replace(
+            msg.text, entities=msg.entities, reply_markup=_home_kb(),
+            disable_web_page_preview=True,
+        )
         return
     elif q is not None:
         try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=_home_kb()); return
+            await q.message.edit_text(
+                msg.text, entities=msg.entities, reply_markup=_home_kb(),
+                disable_web_page_preview=True,
+            ); return
         except Exception:
             pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_home_kb())
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_home_kb(),
+        disable_web_page_preview=True,
+    )
 
 
 async def warm_home_cache(cid, *, refresh=False):

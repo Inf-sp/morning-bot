@@ -347,6 +347,7 @@ async def _daily_cinema_content():
 
 
 async def send_movie_now_playing(bot, cid, q=None, status=None):
+    import category_news
     city = _movie_city(cid)
     local_movies = await get_local_now_playing(cid, limit=20)
     featured = _featured_now_playing(local_movies, require_overview=True)
@@ -357,7 +358,9 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()
-    msg = leisure_ui.movie_now_playing_screen(city, now_playing, cinema_day)
+    msg = leisure_ui.movie_now_playing_screen(
+        city, now_playing, cinema_day, news=category_news.cached_line("movie"),
+    )
     kb = _movie_home_kb()
     if status is not None:
         await status.replace(

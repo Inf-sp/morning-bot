@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import config
+import category_news
 import store
 from ui import menu as menu_ui
 
@@ -77,7 +78,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         card = await asyncio.to_thread(
             restaurant_discovery.get_restaurant, cid, refresh=refresh,
         )
-        msg = menu_ui.restaurant_menu(card)
+        msg = menu_ui.restaurant_menu(card, news=category_news.cached_line("food"))
         if status is not None:
             await status.replace(
                 msg.text, entities=msg.entities, reply_markup=msg.reply_markup,

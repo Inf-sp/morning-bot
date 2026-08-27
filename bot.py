@@ -10,6 +10,7 @@ from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
 
 import config
 import ai
+import category_news
 import store
 import callback_topics
 import access
@@ -322,6 +323,23 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
             await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
         except Exception:
             logging.exception("job_warm_weather_cache failed for cid=%s", cid)
+
+
+async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
+    """Globally refresh verified category news before home-screen warmups."""
+    if tracking.has_active_actions():
+        logging.info("category news refresh skipped: user action active")
+        return
+    try:
+        report = await asyncio.to_thread(category_news.refresh_pool)
+        logging.info(
+            "category news refresh complete updated=%s retained=%s missing=%s",
+            ",".join(report.get("updated") or ()),
+            ",".join(report.get("retained") or ()),
+            ",".join(report.get("missing") or ()),
+        )
+    except Exception:
+        logging.exception("category news refresh failed")
 
 
 async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
@@ -686,6 +704,10 @@ def _build_application():
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_once(job_startup_audits, when=2, **_job_options("startup_audits_once"))
     jq.run_once(
+        job_refresh_category_news, when=3,
+        **_job_options("category_news_refresh_startup"),
+    )
+    jq.run_once(
         job_dictionary_maintenance,
         when=180,
         **_job_options("dictionary_maintenance_once"),
@@ -727,6 +749,10 @@ def _build_application():
             data=section,
             **_job_options(f"warm_home_{section}_{cadence}"),
         )
+    jq.run_daily(
+        job_refresh_category_news, time=_t("01:30"), days=tuple(range(7)),
+        **_job_options("category_news_refresh_daily"),
+    )
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
     # Премьеры фильмов обновляются по недельному ключу в понедельник. Остальные
     # витрины сами проверяют свой TTL и не делают лишний внешний запрос.

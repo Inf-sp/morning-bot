@@ -6,6 +6,7 @@ from telegram import MessageEntity
 
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
+from .news import append_weekly_news
 
 
 def _birthday_date_label(value):
@@ -445,7 +446,7 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     return b.build_stripped()
 
 
-def movie_now_playing_screen(city, now_playing, cinema_day):
+def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
     """Ежедневная кино-витрина: лёгкая, короткая и без табличного вида."""
     city = _clean_external_text(city) or "твоего города"
     cinema_day = cinema_day or {}
@@ -473,6 +474,13 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
             genres = _movie_genres_for_line(movie)
             if genres:
                 b.text_line(f" ({genres})")
+            overview = _movie_premiere_summary(
+                _clean_external_text(_item_value(movie, "overview", "")), limit=150,
+            )
+            if overview:
+                if overview[-1] not in ".!?…":
+                    overview += "."
+                b.text_line(f" · {overview}")
             b.newline()
     else:
         b.text_line(" ")
@@ -505,6 +513,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day):
         b.bold("💡 Интересно:")
         b.text_line(" ")
         b.line(fact)
+    append_weekly_news(b, news)
     return b.build_stripped()
 
 

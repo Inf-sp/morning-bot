@@ -1,5 +1,6 @@
 from .builder import MessageBuilder
 from .constants import ui_label
+from .news import append_weekly_news
 from wardrobe_model import public_zone_name, zone_of
 
 
@@ -97,7 +98,7 @@ def empty_wardrobe():
     return b.build_stripped()
 
 
-def render_wardrobe_message(look_data):
+def render_wardrobe_message(look_data, *, news=None):
     """Образ на сегодня: три базовые вещи и выбранные дополнения.
 
     Погодная строка намеренно не показывается.
@@ -155,6 +156,8 @@ def render_wardrobe_message(look_data):
         b.bold("Главный акцент:")
         b.text_line(f" {_lower_first(main_accent)}")
         b.newline()
+
+    append_weekly_news(b, news)
 
     return b.build_stripped()
 

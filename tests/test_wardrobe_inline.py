@@ -508,22 +508,22 @@ def test_purchase_photo_query_removes_color_and_uses_plain_english_item():
     ) == "men oversized shirt"
 
 
-def test_other_photo_variant_keeps_the_same_purchase_recommendation(monkeypatch):
+def test_other_purchase_variant_shows_the_next_clothing_recommendation(monkeypatch):
     import wardrobe_photos
 
     wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
     calls, edited = [], []
-    variants = iter((
-        [{"item": "Молочная оверсайз-рубашка", "reason": "добавит второй слой"}],
-        [{"item": "Серые широкие джинсы", "reason": "закроют пробел"}],
-    ))
+    variants = [
+        {"item": "Молочная оверсайз-рубашка", "reason": "добавит второй слой"},
+        {"item": "Серые широкие джинсы", "reason": "закроют пробел"},
+    ]
 
     class Query:
         async def edit_message_media(self, **kwargs):
             edited.append(kwargs)
 
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
-    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args: next(variants))
+    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args: variants)
     monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
     monkeypatch.setattr(
         wardrobe_photos, "purchase_photo",
@@ -534,14 +534,15 @@ def test_other_photo_variant_keeps_the_same_purchase_recommendation(monkeypatch)
 
     asyncio.run(wardrobe.show_purchase_page(object(), "same-purchase-photo", 0, q=Query()))
     asyncio.run(wardrobe.show_purchase_page(
-        object(), "same-purchase-photo", 0, q=Query(), photo_variant=1,
+        object(), "same-purchase-photo", 1, q=Query(),
     ))
 
     assert calls == [
         ("Молочная оверсайз-рубашка", "male", 0),
-        ("Молочная оверсайз-рубашка", "male", 1),
+        ("Серые широкие джинсы", "male", 0),
     ]
-    assert "Молочная оверсайз-рубашка" in edited[1]["media"].caption
+    assert "Серые широкие джинсы" in edited[1]["media"].caption
+    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_page:1"
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

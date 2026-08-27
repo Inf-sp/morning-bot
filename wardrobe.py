@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import re
 import config
+import category_news
 import store
 import ai
 import weather
@@ -201,8 +202,8 @@ def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, ra
     }
 
 
-def _build_look_message(look_data):
-    msg = wardrobe_ui.render_wardrobe_message(look_data)
+def _build_look_message(look_data, *, news=None):
+    msg = wardrobe_ui.render_wardrobe_message(look_data, news=news)
     return msg.text, msg.entities
 
 
@@ -611,7 +612,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
         look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
-        text, entities = _build_look_message(look_data)
+        text, entities = _build_look_message(
+            look_data, news=category_news.cached_line("wardrobe"),
+        )
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
             cached["look_data"] = look_data
@@ -620,14 +623,26 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         if kb is None:
             result_kb = build_wardrobe_keyboard(has_result=True)
         if status is not None:
-            await status.replace(text, entities=entities, reply_markup=result_kb)
+            await status.replace(
+                text, entities=entities, reply_markup=result_kb,
+                disable_web_page_preview=True,
+            )
         elif q is not None:
             try:
-                await q.message.edit_text(text, entities=entities, reply_markup=result_kb)
+                await q.message.edit_text(
+                    text, entities=entities, reply_markup=result_kb,
+                    disable_web_page_preview=True,
+                )
             except Exception:
-                await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
+                await bot.send_message(
+                    chat_id=cid, text=text, entities=entities, reply_markup=result_kb,
+                    disable_web_page_preview=True,
+                )
         else:
-            await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=result_kb)
+            await bot.send_message(
+                chat_id=cid, text=text, entities=entities, reply_markup=result_kb,
+                disable_web_page_preview=True,
+            )
         return
     w = store.load_wardrobe(cid)
     if not store.wardrobe_to_text(w).strip():
@@ -724,7 +739,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     }
     if kb is None:
         result_kb = build_wardrobe_keyboard(has_result=True)
-    text, entities = _build_look_message(look_data)
+    text, entities = _build_look_message(
+        look_data, news=category_news.cached_line("wardrobe"),
+    )
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
     # он окажется привязан к устаревшей версии и станет невалидным сразу же.
@@ -734,7 +751,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     store.last_look[str(cid)] = ", ".join(it.get("name", "") for it in best_sorted)[:120]
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
-    await status.replace(text, entities=entities, reply_markup=result_kb)
+    await status.replace(
+        text, entities=entities, reply_markup=result_kb,
+        disable_web_page_preview=True,
+    )
 # Extracted to wardrobe_management.py: def get_wardrobe_gaps.
 
 _ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.items())
