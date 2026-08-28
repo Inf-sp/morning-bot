@@ -57,6 +57,7 @@ TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
+SERP_API_KEY = os.environ.get("SERP_API_KEY", "").strip()
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID") or CHAT_ID
 # Classic Telegram messages keep the same readable text size on every client.
 # Rich Messages remain an opt-in compatibility experiment.
@@ -122,6 +123,9 @@ API_QUOTAS = {
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "pexels": [
+        {"mode": "local", "unit": "requests", "period": "day"},
+    ],
+    "serpapi": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "unsplash": [

@@ -535,6 +535,94 @@ def test_purchase_photo_rejects_an_image_that_describes_another_item():
     ) is True
 
 
+def test_serpapi_shopping_is_primary_for_purchase_photo(monkeypatch):
+    import wardrobe_photos
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {"shopping_results": [
+                {
+                    "product_id": "wrong",
+                    "title": "Men blue formal shirt",
+                    "thumbnail": "https://shop.example/shirt.jpg",
+                },
+                {
+                    "product_id": "right",
+                    "title": "Men gray wide leg jeans",
+                    "thumbnail": "https://shop.example/jeans.jpg",
+                    "product_link": "https://shop.example/jeans",
+                    "price": "€79",
+                    "source": "Example Shop",
+                },
+            ]}
+
+    calls = []
+    wardrobe_photos.purchase_photo.cache_clear()
+    monkeypatch.setattr(wardrobe_photos.config, "SERP_API_KEY", "test-key")
+    monkeypatch.setattr(
+        wardrobe_photos.requests, "get",
+        lambda url, **kwargs: calls.append((url, kwargs)) or Response(),
+    )
+    monkeypatch.setattr(
+        wardrobe_photos, "pexels_photo",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Pexels called")),
+    )
+    monkeypatch.setattr(wardrobe_photos.api_usage, "record_request", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(wardrobe_photos.provider_runtime, "record_result", lambda *_args, **_kwargs: None)
+
+    photo = wardrobe_photos.purchase_photo("Серые широкие джинсы", "male")
+
+    assert photo["provider"] == "serpapi"
+    assert photo["id"] == "right"
+    assert photo["url"] == "https://shop.example/jeans.jpg"
+    assert photo["page_url"] == "https://shop.example/jeans"
+    assert calls[0][1]["params"] == {
+        "engine": "google_shopping",
+        "q": "men gray wide leg jeans",
+        "gl": "nl",
+        "hl": "en",
+        "api_key": "test-key",
+    }
+
+
+def test_purchase_photo_falls_back_to_pexels_when_shopping_has_no_match(monkeypatch):
+    import wardrobe_photos
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {"shopping_results": [{
+                "title": "Men blue formal shirt",
+                "thumbnail": "https://shop.example/shirt.jpg",
+            }]}
+
+    wardrobe_photos.purchase_photo.cache_clear()
+    monkeypatch.setattr(wardrobe_photos.config, "SERP_API_KEY", "test-key")
+    monkeypatch.setattr(wardrobe_photos.requests, "get", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(wardrobe_photos.api_usage, "record_request", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(wardrobe_photos.provider_runtime, "record_result", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(wardrobe_photos.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        wardrobe_photos, "pexels_photo",
+        lambda *_args, **_kwargs: {
+            "provider": "pexels",
+            "url": "https://images.pexels.com/jeans.jpg",
+            "alt": "Man wearing gray wide leg jeans",
+        },
+    )
+
+    photo = wardrobe_photos.purchase_photo("Серые широкие джинсы", "male")
+
+    assert photo["provider"] == "pexels"
+
+
 def test_fresh_purchase_candidates_exclude_the_current_carousel():
     wardrobe_data = {"zones": {
         "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},

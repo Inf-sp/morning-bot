@@ -261,6 +261,7 @@ def _probe_request(service: str):
         "themealdb": ("GET", f"https://www.themealdb.com/api/json/v1/{config.THEMEALDB_API_KEY}/lookup.php", {"params": {"i": "52772"}}),
         "gtts": ("GET", "https://translate.google.nl", {}),
         "ticketmaster": ("GET", "https://app.ticketmaster.com/discovery/v2/events.json", {"params": {"apikey": config.TICKETMASTER_API_KEY, "size": 1}}),
+        "serpapi": ("GET", "https://serpapi.com/account.json", {"params": {"api_key": config.SERP_API_KEY}}),
         "pexels": ("GET", "https://api.pexels.com/v1/curated", {"headers": {"Authorization": config.PEXELS_API_KEY}, "params": {"per_page": 1}}),
         "unsplash": ("GET", "https://api.unsplash.com/photos", {"headers": {"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}", "Accept-Version": "v1"}, "params": {"per_page": 1}}),
         "telegram": ("GET", f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe", {}),
