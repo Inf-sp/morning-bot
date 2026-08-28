@@ -24,6 +24,11 @@ _MAX_AGE_DAYS = 10
 _MIN_IMPORTANCE = 75
 _MIN_CONFIDENCE = 70
 _MAX_ITEMS = 3
+_EVENT_STOPWORDS = {
+    "about", "after", "against", "been", "from", "into", "more", "most",
+    "news", "over", "said", "says", "than", "that", "their", "there", "these",
+    "they", "this", "those", "under", "when", "where", "which", "with", "would",
+}
 
 _POLICIES = {
     "wardrobe": {
@@ -179,6 +184,7 @@ def _discover(category, now):
     rows = research.web_search(
         policy["query"], max_results=10, scenario="category_news",
         allow_tavily=True, search_priority="tavily", topic="news", time_range="week",
+        require_published_date=True,
     )
     return _clean_rows(rows, now)
 
@@ -239,11 +245,25 @@ def _selected_items(category, decisions, rows, now):
         has_primary = any(
             _domain_matches(domain, policy["primary_domains"]) for domain in domains
         )
+        event_tokens = []
+        for row in evidence:
+            tokens = {
+                token for token in re.findall(
+                    r"[a-z0-9][a-z0-9'-]{3,}",
+                    f"{row.get('title', '')} {row.get('content', '')}".casefold(),
+                )
+                if token not in _EVENT_STOPWORDS
+            }
+            event_tokens.append(tokens)
+        common_event_tokens = (
+            set.intersection(*event_tokens) if len(event_tokens) > 1 else set()
+        )
         if (
             not re.search(r"[а-яё]", text, re.I) or "\n" in text or len(text) > 150
             or len(text) < 45 or importance < _MIN_IMPORTANCE
             or confidence < _MIN_CONFIDENCE or not evidence
             or (len(domains) < 2 and not has_primary)
+            or (len(domains) >= 2 and len(common_event_tokens) < 2)
         ):
             continue
         evidence.sort(
@@ -316,8 +336,18 @@ def refresh_pool(*, categories=None, now=None, force=False):
         if category in _CATEGORIES
     )
     cached = store._load(config.CATEGORY_NEWS_CACHE_KEY) or {}
-    if not force and cached.get("date") == current.date().isoformat():
-        return {"updated": (), "retained": requested, "missing": ()}
+    old_categories = (
+        cached.get("categories")
+        if isinstance(cached.get("categories"), dict) else {}
+    )
+    if not force:
+        today = current.date().isoformat()
+        requested = tuple(
+            category for category in requested
+            if (old_categories.get(category) or {}).get("refreshed_on") != today
+        )
+    if not requested:
+        return {"updated": (), "retained": (), "missing": ()}
 
     rows_by_category = {}
     for category in requested:
@@ -340,10 +370,6 @@ def refresh_pool(*, categories=None, now=None, force=False):
         except Exception:
             decisions = {}
 
-    old_categories = (
-        cached.get("categories")
-        if isinstance(cached.get("categories"), dict) else {}
-    )
     next_categories = dict(old_categories)
     updated, retained, missing = [], [], []
     used_urls = set()
@@ -357,7 +383,11 @@ def refresh_pool(*, categories=None, now=None, force=False):
             if not used_urls.intersection(item.get("evidence_urls") or [])
         ]
         if selected:
-            next_categories[category] = {"items": selected}
+            next_categories[category] = {
+                "items": selected,
+                "refreshed_on": current.date().isoformat(),
+                "attempted_at": current.isoformat(),
+            }
             used_urls.update(
                 url for item in selected for url in item.get("evidence_urls") or []
             )
@@ -367,21 +397,40 @@ def refresh_pool(*, categories=None, now=None, force=False):
             ((old_categories.get(category) or {}).get("items") or []), current,
         )
         if previous:
-            next_categories[category] = {"items": previous}
+            next_categories[category] = {
+                **(old_categories.get(category) or {}),
+                "items": previous,
+                "attempted_at": current.isoformat(),
+            }
             used_urls.update(
                 url for item in previous for url in item.get("evidence_urls") or []
             )
             retained.append(category)
         else:
-            next_categories[category] = {"items": []}
+            next_categories[category] = {
+                **(old_categories.get(category) or {}),
+                "items": [],
+                "attempted_at": current.isoformat(),
+            }
             missing.append(category)
 
-    store._save(config.CATEGORY_NEWS_CACHE_KEY, {
-        "schema": _SCHEMA_VERSION,
-        "date": current.date().isoformat(),
-        "updated_at": current.isoformat(),
-        "categories": next_categories,
-    })
+    def save(current_data):
+        current_data = current_data if isinstance(current_data, dict) else {}
+        current_categories = (
+            current_data.get("categories")
+            if isinstance(current_data.get("categories"), dict) else {}
+        )
+        for category in requested:
+            current_categories[category] = next_categories[category]
+        current_data.update({
+            "schema": _SCHEMA_VERSION,
+            "date": current.date().isoformat(),
+            "updated_at": current.isoformat(),
+            "categories": current_categories,
+        })
+        return current_data, None
+
+    store.mutate_kv(config.CATEGORY_NEWS_CACHE_KEY, save)
     return {
         "updated": tuple(updated),
         "retained": tuple(retained),

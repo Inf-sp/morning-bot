@@ -25,7 +25,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _SUBROUTERS = {
     "onboard": ("onboard.py", "handle_callback"),
     "settings": ("settings.py", "handle_callback"),
-    "wardrobe": ("wardrobe.py", "handle_callback"),
+    "wardrobe": ("wardrobe_router.py", "handle_callback"),
     "myday": ("myday.py", "handle_callback"),
     "cooking": ("cooking.py", "handle_callback"),
     "learning_router": ("learning_router.py", "handle_callback"),

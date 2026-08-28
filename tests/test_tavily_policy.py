@@ -106,6 +106,51 @@ def test_category_news_search_uses_news_topic_and_week_filter(monkeypatch):
     assert payloads[0]["time_range"] == "week"
 
 
+def test_firecrawl_news_search_keeps_published_date(monkeypatch):
+    monkeypatch.setattr(research.config, "FIRECRAWL_API_KEY", "test-key")
+    monkeypatch.setattr(research.api_usage, "record_request", lambda *_args, **_kwargs: None)
+    calls = []
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"data": {"news": [{
+                "title": "Textile law", "url": "https://example.org/textile",
+                "snippet": "A consequential textile law was adopted.",
+                "date": "2026-08-27T09:00:00Z",
+            }]}}
+
+    monkeypatch.setattr(
+        research.requests, "post",
+        lambda url, **kwargs: calls.append((url, kwargs["json"])) or Response(),
+    )
+
+    rows = research.firecrawl_search("textile law", topic="news", time_range="week")
+
+    assert calls[0][0].endswith("/v2/search")
+    assert calls[0][1]["sources"] == ["news"]
+    assert rows[0]["published_date"] == "2026-08-27T09:00:00Z"
+
+
+def test_news_web_search_falls_back_when_tavily_rows_have_no_date(monkeypatch):
+    monkeypatch.setattr(research, "_tavily_allowed", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(research, "tavily_search", lambda *_args, **_kwargs: [{
+        "title": "Undated", "url": "https://tavily.example/item", "content": "x",
+    }])
+    monkeypatch.setattr(research, "firecrawl_search", lambda *_args, **_kwargs: [{
+        "title": "Dated", "url": "https://firecrawl.example/item", "content": "y",
+        "published_date": "2026-08-27T09:00:00Z",
+    }])
+
+    rows = research.web_search(
+        "important news", scenario="category_news", allow_tavily=True,
+        search_priority="tavily", topic="news", require_published_date=True,
+    )
+
+    assert [row["title"] for row in rows] == ["Dated"]
+
+
 def test_bulk_concert_refresh_never_starts_external_artist_search(monkeypatch):
     async def ticketmaster(*_args, **_kwargs):
         return []

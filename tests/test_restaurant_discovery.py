@@ -58,7 +58,10 @@ def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):
     rows = [{
         "title": "De Eendracht Alkmaar",
         "url": "https://example.com/de-eendracht",
-        "content": "De Eendracht is a Dutch restaurant in Alkmaar known for satay.",
+        "content": (
+            "De Eendracht is a Dutch restaurant in central Alkmaar known for satay. "
+            "The restaurant occupies a former school and has a moderate €€ price range."
+        ),
     }]
     calls = []
     monkeypatch.setattr(restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
@@ -75,7 +78,14 @@ def test_restaurant_search_is_verified_cached_and_linked_to_google(monkeypatch):
         "name": "De Eendracht", "cuisine": "нидерландская", "price": "€€",
         "signature_dish": "сате", "description": "Городское кафе в центре.",
         "fact": "Ресторан работает в здании бывшей школы.",
-        "source_url": "https://example.com/de-eendracht",
+        "evidence": {
+            "name": {"source_id": "source:0", "quote": "De Eendracht"},
+            "cuisine": {"source_id": "source:0", "quote": "Dutch restaurant"},
+            "price": {"source_id": "source:0", "quote": "€€ price range"},
+            "signature_dish": {"source_id": "source:0", "quote": "known for satay"},
+            "description": {"source_id": "source:0", "quote": "central Alkmaar"},
+            "fact": {"source_id": "source:0", "quote": "occupies a former school"},
+        },
     })
 
     first = restaurant_discovery.get_restaurant("42")
@@ -109,7 +119,10 @@ def test_restaurant_recommendation_rotates_on_the_next_day(monkeypatch):
         lambda *_args, **_kwargs: searches.append(current["now"].date()) or [{
             "title": "De Eendracht and Soepp Alkmaar",
             "url": "https://example.com/restaurant",
-            "content": "De Eendracht and Soepp are verified restaurants in Alkmaar.",
+            "content": (
+                "De Eendracht and Soepp are verified Dutch restaurants in central Alkmaar. "
+                "Both serve a documented daily dish in the €€ price range."
+            ),
         }],
     )
 
@@ -119,7 +132,14 @@ def test_restaurant_recommendation_rotates_on_the_next_day(monkeypatch):
             "name": name, "cuisine": "нидерландская", "price": "€€",
             "signature_dish": "блюдо дня", "description": "Городское кафе.",
             "fact": "Находится в центре.",
-            "source_url": "https://example.com/restaurant",
+            "evidence": {
+                "name": {"source_id": "source:0", "quote": name},
+                "cuisine": {"source_id": "source:0", "quote": "Dutch restaurants"},
+                "price": {"source_id": "source:0", "quote": "€€ price range"},
+                "signature_dish": {"source_id": "source:0", "quote": "daily dish"},
+                "description": {"source_id": "source:0", "quote": "restaurants in central Alkmaar"},
+                "fact": {"source_id": "source:0", "quote": "central Alkmaar"},
+            },
         }
 
     monkeypatch.setattr(restaurant_discovery.ai, "llm_json", recommendation)
@@ -131,6 +151,75 @@ def test_restaurant_recommendation_rotates_on_the_next_day(monkeypatch):
     assert first["name"] == "De Eendracht"
     assert second["name"] == "Soepp"
     assert len(searches) == 2
+
+
+def test_restaurant_rejects_yesterdays_name_even_if_ai_repeats_it(monkeypatch):
+    cached = restaurant_discovery._fallback_card("Alkmaar")
+    cached["cached_at"] = "2026-08-26T12:00:00+02:00"
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 27, 12, tzinfo=restaurant_discovery.config.TZ)
+
+    monkeypatch.setattr(restaurant_discovery, "datetime", Clock)
+    monkeypatch.setattr(restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
+    monkeypatch.setattr(restaurant_discovery.store, "get_profile", lambda _cid: {
+        "food_restaurant_recommendation": cached,
+    })
+    monkeypatch.setattr(restaurant_discovery.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(restaurant_discovery.research, "web_search", lambda *_args, **_kwargs: [{
+        "title": cached["name"], "url": cached["source_url"],
+        "content": f"{cached['name']} is a Dutch restaurant with a €€ price range and burger menu.",
+    }])
+    monkeypatch.setattr(restaurant_discovery.ai, "llm_json", lambda *_args, **_kwargs: {
+        "name": cached["name"], "cuisine": "нидерландская", "price": "€€",
+        "signature_dish": "бургер", "description": "Городской ресторан.",
+        "fact": "Работает весь день.", "evidence": {},
+    })
+
+    card = restaurant_discovery.get_restaurant("42")
+
+    assert card["name"] != cached["name"]
+
+
+def test_restaurant_is_stable_when_context_changes_during_same_day(monkeypatch):
+    profile = {}
+    current = {"now": datetime(2026, 8, 27, 9, tzinfo=restaurant_discovery.config.TZ)}
+    calls = []
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current["now"]
+
+    monkeypatch.setattr(restaurant_discovery, "datetime", Clock)
+    monkeypatch.setattr(restaurant_discovery, "_good_terrace_weather", lambda _settings: False)
+    monkeypatch.setattr(restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
+    monkeypatch.setattr(restaurant_discovery.store, "get_profile", lambda _cid: dict(profile))
+    monkeypatch.setattr(
+        restaurant_discovery.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
+    monkeypatch.setattr(
+        restaurant_discovery, "_fallback_card",
+        lambda city, previous="", context_key="": {
+            "city": city, "name": "Stable", "description": "Description",
+            "map_url": "https://maps.example/stable", "context_key": context_key,
+            "cached_at": Clock.now().isoformat(),
+        },
+    )
+    monkeypatch.setattr(
+        restaurant_discovery.research, "web_search",
+        lambda *_args, **_kwargs: calls.append(current["now"].hour) or [],
+    )
+
+    first = restaurant_discovery.get_restaurant("42")
+    current["now"] = datetime(2026, 8, 27, 19, tzinfo=restaurant_discovery.config.TZ)
+    second = restaurant_discovery.get_restaurant("42")
+
+    assert first == second
+    assert calls == [9]
 
 
 def test_restaurant_context_changes_with_time_and_good_weather(monkeypatch):

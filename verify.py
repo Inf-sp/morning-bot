@@ -299,6 +299,16 @@ def audit_architecture(root=None):
     dictionary_path = os.path.join(root, "learning_dictionary.py")
     if os.path.exists(dictionary_path):
         source = open(dictionary_path, encoding="utf-8").read()
+
+        def owns_or_binds(function):
+            return bool(
+                re.search(rf"(?:async\s+)?def\s+{function}\s*\(", source)
+                or (
+                    "_bind_functions" in source
+                    and re.search(rf'["\']{function}["\']', source)
+                )
+            )
+
         if re.search(r"(?:async\s+)?def\s+(?:send_seed_intro|seed_start|seed_toggle|seed_page)\s*\(", source):
             findings.append("learning_dictionary.py: still owns seed workflow")
         if re.search(r"(?:async\s+)?def\s+(?:send_morning_word|send_daily_practice)\s*\(", source):
@@ -309,7 +319,7 @@ def audit_architecture(root=None):
             if function == "normalize_entry":
                 if not re.search(r"from dictionary_model import \(", source) or function not in source:
                     findings.append("learning_dictionary.py: normalize_entry re-export missing")
-            elif not re.search(rf"(?:async\s+)?def\s+{function}\s*\(", source):
+            elif not owns_or_binds(function):
                 findings.append(f"learning_dictionary.py: {function} missing")
 
     repository_path = os.path.join(root, "dictionary_repository.py")

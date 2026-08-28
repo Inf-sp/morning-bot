@@ -40,10 +40,6 @@ LANGUAGETOOL_API_URL = os.environ.get(
 ).strip().rstrip("/")
 SPOONACULAR_API_KEY = os.environ.get("SPOONACULAR_API_KEY", "").strip()
 THEMEALDB_API_KEY = os.environ.get("THEMEALDB_API_KEY", "1").strip() or "1"
-AZURE_SPEECH_KEY = os.environ.get("AZURE_SPEECH_KEY", "").strip()
-AZURE_SPEECH_REGION = os.environ.get("AZURE_SPEECH_REGION", "").strip()
-AZURE_SPEECH_VOICE = os.environ.get("AZURE_SPEECH_VOICE", "nl-NL-MaartenNeural").strip() or "nl-NL-MaartenNeural"
-AZURE_SPEECH_RATE = os.environ.get("AZURE_SPEECH_RATE", "-10%").strip() or "-10%"
 CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
@@ -110,9 +106,6 @@ API_QUOTAS = {
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "spoonacular": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "azure_speech": [
         {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "gtts": [

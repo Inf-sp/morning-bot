@@ -20,9 +20,14 @@ def get_settings(chat_id):
     return _load(config.SETTINGS_FILE).get(str(chat_id), config.DEFAULT_CITY)
 
 def set_settings(chat_id, lat, lon, city, country="", cc=""):
-    d = _load(config.SETTINGS_FILE)
-    d[str(chat_id)] = {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}
-    _save(config.SETTINGS_FILE, d)
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(chat_id)] = {
+            "lat": lat, "lon": lon, "city": city, "country": country, "cc": cc,
+        }
+        return data, None
+
+    mutate_kv(config.SETTINGS_FILE, change)
 
 
 def get_last_admin_deploy_notified_version():
@@ -35,11 +40,14 @@ def get_last_admin_deploy_notified_version():
 
 
 def set_last_admin_deploy_notified_version(version, sent_at):
-    state = _load(config.DEPLOY_REPORT_KEY)
-    state["last_admin_deploy_notified_version"] = str(version or "")
-    state["last_sent_version"] = str(version or "")
-    state["sent_at"] = str(sent_at or "")
-    _save(config.DEPLOY_REPORT_KEY, state)
+    def change(state):
+        state = state if isinstance(state, dict) else {}
+        state["last_admin_deploy_notified_version"] = str(version or "")
+        state["last_sent_version"] = str(version or "")
+        state["sent_at"] = str(sent_at or "")
+        return state, None
+
+    mutate_kv(config.DEPLOY_REPORT_KEY, change)
 
 def get_profile(chat_id):
     """Память пользователя (dict). Пусто -> {}."""
@@ -215,9 +223,12 @@ def set_level(chat_id, language, level):
         level = "hard"
     if level not in ("simple", "hard"):
         return
-    d = _load(config.LEVELS_FILE)
-    d.setdefault(str(chat_id), {})[language] = level
-    _save(config.LEVELS_FILE, d)
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        data.setdefault(str(chat_id), {})[language] = level
+        return data, None
+
+    mutate_kv(config.LEVELS_FILE, change)
 
 def has_level(chat_id, language):
     return language in _load(config.LEVELS_FILE).get(str(chat_id), {})
@@ -227,11 +238,13 @@ def ensure_level(chat_id, language, level="simple"):
         level = "hard"
     if level not in ("simple", "hard"):
         level = "simple"
-    d = _load(config.LEVELS_FILE)
-    user = d.setdefault(str(chat_id), {})
-    if language not in user:
-        user[language] = level
-        _save(config.LEVELS_FILE, d)
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        user = data.setdefault(str(chat_id), {})
+        user.setdefault(language, level)
+        return data, None
+
+    mutate_kv(config.LEVELS_FILE, change)
 
 def get_learning_language(chat_id):
     code = str(get_profile(chat_id).get("learning_language") or "").strip().lower()
@@ -435,18 +448,28 @@ def get_list(key, chat_id):
     return d.get(str(chat_id), [])
 
 def add_to_list(key, chat_id, item):
-    d = _load(key)
-    if not isinstance(d, dict):
-        d = _migrate_flat(key, chat_id, d)
-    d.setdefault(str(chat_id), []).append(item)
-    _save(key, d)
+    current = _load(key)
+    if not isinstance(current, dict):
+        _migrate_flat(key, chat_id, current)
+
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        data.setdefault(str(chat_id), []).append(item)
+        return data, None
+
+    mutate_kv(key, change)
 
 def set_list(key, chat_id, items):
-    d = _load(key)
-    if not isinstance(d, dict):
-        d = _migrate_flat(key, chat_id, d)
-    d[str(chat_id)] = items
-    _save(key, d)
+    current = _load(key)
+    if not isinstance(current, dict):
+        _migrate_flat(key, chat_id, current)
+
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        data[str(chat_id)] = items
+        return data, None
+
+    mutate_kv(key, change)
 
 # Ключи с per-user данными вида {str(cid): ...}
 _PER_USER_KEYS = {

@@ -15,18 +15,6 @@ def _load_allowed() -> list:
     return store._load(config.ALLOWED_CIDS_KEY).get("cids", [])
 
 
-def _save_allowed(cids: list):
-    store._save(config.ALLOWED_CIDS_KEY, {"cids": cids})
-
-
-def _load_invites() -> dict:
-    return store._load(config.PENDING_INVITES_KEY).get("invites", {})
-
-
-def _save_invites(invites: dict):
-    store._save(config.PENDING_INVITES_KEY, {"invites": invites})
-
-
 def is_owner(cid) -> bool:
     return bool(config.CHAT_ID) and str(cid) == str(config.CHAT_ID)
 
@@ -40,20 +28,29 @@ def is_allowed(cid) -> bool:
 
 def allow_user(cid):
     """Добавить cid в allowlist (если ещё не там)."""
-    cids = _load_allowed()
     key = str(cid)
-    if key not in cids:
-        cids.append(key)
-        _save_allowed(cids)
+
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        cids = list(data.get("cids") or [])
+        if key not in cids:
+            cids.append(key)
+        data["cids"] = cids
+        return data, None
+
+    store.mutate_kv(config.ALLOWED_CIDS_KEY, change)
 
 
 def revoke_user(cid):
     """Удалить cid из allowlist."""
-    cids = _load_allowed()
     key = str(cid)
-    if key in cids:
-        cids.remove(key)
-        _save_allowed(cids)
+
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        data["cids"] = [value for value in (data.get("cids") or []) if value != key]
+        return data, None
+
+    store.mutate_kv(config.ALLOWED_CIDS_KEY, change)
 
 
 def get_allowed_cids() -> list:
@@ -73,24 +70,42 @@ def _purge_expired(invites: dict) -> dict:
 
 def create_invite() -> str:
     """Создать одноразовый инвайт-код. Возвращает код."""
-    invites = _purge_expired(_load_invites())
     code = secrets.token_hex(4)          # 8 hex-символов
-    invites[code] = time.time()
-    _save_invites(invites)
+
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        invites = _purge_expired(dict(data.get("invites") or {}))
+        invites[code] = time.time()
+        data["invites"] = invites
+        return data, None
+
+    store.mutate_kv(config.PENDING_INVITES_KEY, change)
     return code
 
 
 def use_invite(code: str, cid) -> bool:
     """Попытаться активировать инвайт. True при успехе (добавляет cid в allowlist)."""
-    invites = _purge_expired(_load_invites())
-    if code not in invites:
+    def consume(data):
+        data = data if isinstance(data, dict) else {}
+        invites = _purge_expired(dict(data.get("invites") or {}))
+        claimed = code in invites
+        if claimed:
+            del invites[code]
+        data["invites"] = invites
+        return data, claimed
+
+    if not store.mutate_kv(config.PENDING_INVITES_KEY, consume):
         return False
-    del invites[code]
-    _save_invites(invites)
     allow_user(cid)
     return True
 
 
 def pending_invites() -> dict:
     """Список ещё не использованных инвайтов {code: ts}."""
-    return _purge_expired(_load_invites())
+    def change(data):
+        data = data if isinstance(data, dict) else {}
+        invites = _purge_expired(dict(data.get("invites") or {}))
+        data["invites"] = invites
+        return data, invites
+
+    return store.mutate_kv(config.PENDING_INVITES_KEY, change)

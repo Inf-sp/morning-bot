@@ -24,7 +24,7 @@ import store
 from fridge_model import _CAT_BTN_LABEL, _CAT_ORDER, _fridge_migrate
 from wardrobe_model import ZONE_SUBCATS
 from util import esc
-from ui.constants import choose_label, delete_label, ui_label
+from ui.constants import delete_label, ui_label
 
 CLEAN_PAGE = 8
 
@@ -389,7 +389,7 @@ def _is_reversible_ctx(ctx):
     return ctx.startswith("lv_") or ctx.startswith("lvls_") or ctx.startswith("hid_")
 
 
-# Контексты, где помимо «*️⃣ Выбрать все на странице» доступна кнопка «Удалить все
+# Контексты, где помимо выбора всех элементов на странице доступна кнопка «Удалить все
 # N» (выбор всей коллекции, не только видимой страницы) — см. P2-1: сохраняет
 # прежнее поведение кнопки «Удалить все» из самодельного чистильщика словаря
 # без чекбоксов, но проводит её через общее правило подтверждения P2-2.
@@ -445,7 +445,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         )])
     if len(chunk) >= 2:
         page_ids = {i for i, _ in chunk}
-        page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
@@ -759,7 +759,7 @@ async def _render_view(bot, cid, view_id, q=None):
                                               callback_data=f"clact:{view_id}:{action['id']}")])
     if view.get("editing") and len(chunk) >= 2:
         page_ids = {i for i, _ in chunk}
-        page_label = "✅ Снять выбор на странице" if page_ids <= sel else choose_label("Выбрать все на странице")
+        page_label = "✅ Снять выбор на странице" if page_ids <= sel else "Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     if add_button and add_button_at_bottom:
         label, callback_data = add_button

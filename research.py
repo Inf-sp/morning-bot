@@ -524,15 +524,21 @@ def tavily_snippet(query: str, max_chars: int = 1200) -> str:
     return web_snippet(query, max_chars)
 
 
-def firecrawl_search(query: str, max_results: int = 5) -> list:
+def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general",
+                     time_range: str = "") -> list:
     """Основной внешний поиск; Tavily подключается выше только как резерв.
     Возвращает list[{title, url, content}] или [] при ошибке/нет ключа."""
     if not config.FIRECRAWL_API_KEY:
         return []
     try:
+        news_search = topic == "news"
+        payload = {"query": query, "limit": max_results}
+        if news_search:
+            payload["sources"] = ["news"]
         r = requests.post(
-            "https://api.firecrawl.dev/v1/search",
-            json={"query": query, "limit": max_results},
+            "https://api.firecrawl.dev/v2/search" if news_search
+            else "https://api.firecrawl.dev/v1/search",
+            json=payload,
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
             timeout=18,
         )
@@ -543,10 +549,19 @@ def firecrawl_search(query: str, max_results: int = 5) -> list:
             _log.warning("firecrawl_search failed: HTTP %s", r.status_code)
             return []
         data = r.json().get("data") or []
+        if isinstance(data, dict):
+            data = data.get("news") or data.get("web") or []
         return [{
             "title": row.get("title", ""),
             "url": row.get("url", ""),
-            "content": row.get("description") or row.get("markdown") or "",
+            "content": (
+                row.get("snippet") or row.get("description")
+                or row.get("markdown") or ""
+            ),
+            "published_date": (
+                row.get("date") or row.get("published_date")
+                or row.get("publishedAt") or ""
+            ),
         } for row in data if isinstance(row, dict)]
     except Exception as e:
         api_usage.record_request("firecrawl", ok=False, error=type(e).__name__)
@@ -571,7 +586,8 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 def web_search(query: str, max_results: int = 5, include_domains=None, *, scenario: str = "",
                allow_tavily: bool = False, search_priority: str = "firecrawl",
                topic: str = "general", time_range: str = "",
-               start_date: str = "", end_date: str = "") -> list:
+               start_date: str = "", end_date: str = "",
+               require_published_date: bool = False) -> list:
     """Search only through an explicitly chosen provider policy.
 
     Tavily is not a universal fallback: callers must opt in with one of the
@@ -587,9 +603,15 @@ def web_search(query: str, max_results: int = 5, include_domains=None, *, scenar
         rows = (provider(query, max_results=max_results, include_domains=domains,
                          scenario=scenario, topic=topic, time_range=time_range,
                          start_date=start_date, end_date=end_date)
-                if provider is tavily_search else provider(query, max_results=max_results))
+                if provider is tavily_search else provider(
+                    query, max_results=max_results, topic=topic, time_range=time_range,
+                ))
         for item in rows:
             url = (item.get("url") or "").strip()
+            if require_published_date and not (
+                item.get("published_date") or item.get("publishedAt") or item.get("date")
+            ):
+                continue
             if domains:
                 try:
                     from urllib.parse import urlparse

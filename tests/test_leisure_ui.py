@@ -1608,7 +1608,7 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
     assert sent[0]["disable_web_page_preview"] is True
 
 
-def test_movie_home_keeps_current_movies_when_tmdb_overviews_are_missing(monkeypatch):
+def test_movie_home_hides_movies_when_short_overviews_are_missing(monkeypatch):
     sent = []
 
     class Bot:
@@ -1633,8 +1633,8 @@ def test_movie_home_keeps_current_movies_when_tmdb_overviews_are_missing(monkeyp
 
     asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
 
-    assert "• «Первый» (драма)" in sent[0]["text"]
-    assert "Пока не удалось подтвердить актуальные показы." not in sent[0]["text"]
+    assert "Первый" not in sent[0]["text"]
+    assert "Пока не удалось подтвердить актуальные показы." in sent[0]["text"]
 
 
 def test_cinema_rebus_changes_with_calendar_day():

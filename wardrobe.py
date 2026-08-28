@@ -41,6 +41,7 @@ from wardrobe_outfit import (
 from wardrobe_migration import migrate_item_attrs
 from module_binding import bind_functions as _bind_functions
 import wardrobe_management as _wardrobe_management
+import wardrobe_router as _wardrobe_router
 
 _log = logging.getLogger(__name__)
 _MANAGEMENT_DEPENDENCIES = (ai, secure, normalize_parsed_item)
@@ -260,12 +261,18 @@ def _purchase_candidate(w, weather_ctx, selected_styles=None):
     return None
 
 
-def _purchase_candidates(w, weather_ctx=None, selected_styles=None, *, primary=None, limit=3):
+def _purchase_candidates(w, weather_ctx=None, selected_styles=None, *, primary=None, limit=3,
+                         exclude_names=None):
     """Возвращает несколько конкретных недостающих вещей без сетевого запроса."""
     weather_ctx = weather_ctx or {}
     items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
     facts = " ".join(str(item.get("name") or "") for item in items).casefold()
-    candidates, seen = [], set()
+    candidates = []
+    seen = {
+        _clean_text(name).casefold()
+        for name in (exclude_names or [])
+        if _clean_text(name)
+    }
 
     def add(candidate):
         candidate = dict(candidate or {})
@@ -887,122 +894,5 @@ _PURCHASE_REJECT_REASONS = {
     "material_or_season", "price_vs_utility", "poor_condition",
 }
 
-
-# Extracted to wardrobe_management.py: def _normalize_purchase_check.
-
-async def ingest(bot, cid, text):
-    store.add_wardrobe_mode.pop(str(cid), None)
-    await add_item(bot, cid, text)
-
-
-# ---------- роутер кнопок ----------
-async def handle_callback(bot, cid, q, data, status=None):
-    if data == "w_look":
-        previous = _get_cached_look(cid) or {}
-        previous_style_tip = (previous.get("look_data") or {}).get("style_tip") or None
-        store.clear_wardrobe_daylook(cid)
-        owns_status = status is None
-        if owns_status:
-            status = await util.StatusManager.start_inline(
-                q,
-                bot=bot,
-                cid=cid,
-                stages=util.StatusManager.TOPIC_STAGES["wardrobe"],
-                preserve_message=True,
-            )
-        try:
-            await send_looks(
-                bot, cid, status=status,
-                previous_item_ids=previous.get("item_ids") or [],
-                previous_style_tip=previous_style_tip,
-            )
-        except Exception as e:
-            await verify.safe_error(bot, cid, e, back="m_wardrobe")
-        finally:
-            if owns_status:
-                await status.stop(delete=True)
-        return
-    if data in ("w_closet", "w_del_g"):
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data == "w_add":
-        store.pending_input[str(cid)] = "wardrobe_add"
-        await bot.send_message(chat_id=cid, text="Опиши её одним сообщением или отправь вещи списком через запятую.\n\n"
-                               "Пример: Голубая свободная рубашка Uniqlo.",
-                               reply_markup=_back_kb()); return
-    if data == "w_fill":
-        store.pending_input[str(cid)] = "wardrobe_fill"
-        await bot.send_message(
-            chat_id=cid,
-            text="Пришли список всей своей одежды одним сообщением — я сам разложу всё по шкафу.",
-            reply_markup=_back_kb(),
-        )
-        return
-    if data == "w_add_ok":
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data == "w_add_all":
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data == "w_add_edit":
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data == "w_search":
-        # Совместимость со старыми сообщениями: поиск убран из актуального шкафа.
-        await send_wardrobe_zones(bot, cid, q=q)
-        return
-    if data.startswith("w_searchdel_"):
-        item_id = data[len("w_searchdel_"):]
-        await send_delete_confirmation(bot, cid, item_id, q=q); return
-    if data.startswith("w_cat_"):
-        category_data = data[len("w_cat_"):]
-        zone_slug, separator, page_value = category_data.rpartition("_")
-        if separator and zone_slug in ZONE_BY_SLUG and page_value.isdigit():
-            await send_category(bot, cid, zone_slug, int(page_value), q=q)
-        else:
-            await send_category(bot, cid, category_data, q=q)
-        return
-    if data.startswith("w_item_"):
-        await send_item_card(bot, cid, data[len("w_item_"):], q=q); return
-    if data.startswith("w_edit_"):
-        item_id = data[len("w_edit_"):]
-        await send_item_card(bot, cid, item_id, q=q); return
-    if data.startswith("w_deleteok_"):
-        item_id = data[len("w_deleteok_"):]
-        store.remove_wardrobe_items(cid, [item_id])
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data.startswith("w_delete_"):
-        await send_delete_confirmation(bot, cid, data[len("w_delete_"):], q=q); return
-    if data == "w_del":
-        # Сначала показываем категории: редактирование идёт внутри выбранной категории.
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data.startswith(("w_del_", "w_delz_", "w_delsc_")):
-        await send_wardrobe_zones(bot, cid, q=q); return
-    if data == "w_improve":
-        await send_home(bot, cid, q=q); return
-    if data == "w_buy":
-        await recommend_missing_purchase(bot, cid); return
-    if data.startswith("w_buy_page:"):
-        page = data.partition(":")[2]
-        await show_purchase_page(bot, cid, int(page) if page.isdigit() else 0, q=q)
-        return
-    if data.startswith("w_buy_photo:"):
-        parts = data.split(":")
-        page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
-        variant = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-        await show_purchase_page(bot, cid, page, q=q, photo_variant=variant)
-        return
-    if data == "w_buy_pick":
-        store.pending_input[str(cid)] = "wardrobe_buy"
-        await bot.send_message(
-            chat_id=cid,
-            text="Что ищем? Например: «худи», «зелёная худи» или «ботинки на осень».",
-            reply_markup=_kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
-        )
-        return
-    if data == "w_buy_gap":
-        await recommend_missing_purchase(bot, cid)
-        return
-    if data == "w_check":
-        # Совместимость со старыми сообщениями: отдельная оценка покупки убрана.
-        await send_purchase_hub(bot, cid)
-        return
-
-
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","recommend_another_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_router, ["ingest", "handle_callback"])

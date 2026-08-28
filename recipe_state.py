@@ -35,16 +35,20 @@ def set_active_meal(cid, meal):
     """Записывает активную категорию. meal — один из MEAL_CHOICES."""
     if meal not in MEAL_CHOICES:
         raise ValueError(f"unknown meal: {meal!r}, expected one of {MEAL_CHOICES}")
-    d = store._load(config.ACTIVE_MEAL_KEY)
-    d[str(cid)] = meal
-    store._save(config.ACTIVE_MEAL_KEY, d)
+    def change(data):
+        data[str(cid)] = meal
+        return data, None
+
+    store.mutate_kv(config.ACTIVE_MEAL_KEY, change)
 
 
 def clear_active_meal(cid):
     """Удаляет активную категорию (возврат в меню «Готовка» через «Назад»)."""
-    d = store._load(config.ACTIVE_MEAL_KEY)
-    if d.pop(str(cid), None) is not None:
-        store._save(config.ACTIVE_MEAL_KEY, d)
+    def change(data):
+        data.pop(str(cid), None)
+        return data, None
+
+    store.mutate_kv(config.ACTIVE_MEAL_KEY, change)
 
 
 def get_recipe_queue(cid):
@@ -54,16 +58,20 @@ def get_recipe_queue(cid):
 
 def set_recipe_queue(cid, meal, items, pos=0):
     """Записывает очередь целиком (обычно после генерации батча ~10 рецептов)."""
-    d = store._load(config.RECIPE_QUEUE_KEY)
-    d[str(cid)] = {"meal": meal, "items": list(items), "pos": pos}
-    store._save(config.RECIPE_QUEUE_KEY, d)
+    def change(data):
+        data[str(cid)] = {"meal": meal, "items": list(items), "pos": pos}
+        return data, None
+
+    store.mutate_kv(config.RECIPE_QUEUE_KEY, change)
 
 
 def clear_recipe_queue(cid):
     """Удаляет очередь текущего пользователя (например, вместе с active_meal при «Назад»)."""
-    d = store._load(config.RECIPE_QUEUE_KEY)
-    if d.pop(str(cid), None) is not None:
-        store._save(config.RECIPE_QUEUE_KEY, d)
+    def change(data):
+        data.pop(str(cid), None)
+        return data, None
+
+    store.mutate_kv(config.RECIPE_QUEUE_KEY, change)
 
 
 def queue_next(cid):
@@ -72,27 +80,32 @@ def queue_next(cid):
     None, если очередь пуста или уже пройдена целиком — вызывающий код должен
     сгенерировать новую очередь для той же категории (генерация вне этого модуля).
     """
-    q = get_recipe_queue(cid)
-    items = q.get("items") or []
-    pos = q.get("pos", 0)
-    if not items or pos >= len(items):
-        return None
-    item = items[pos]
-    d = store._load(config.RECIPE_QUEUE_KEY)
-    d.setdefault(str(cid), q)["pos"] = pos + 1
-    store._save(config.RECIPE_QUEUE_KEY, d)
-    return item
+    def change(data):
+        queue = data.get(str(cid)) or {}
+        items = queue.get("items") or []
+        pos = queue.get("pos", 0)
+        if not items or pos >= len(items):
+            return data, None
+        item = items[pos]
+        queue["pos"] = pos + 1
+        data[str(cid)] = queue
+        return data, item
+
+    return store.mutate_kv(config.RECIPE_QUEUE_KEY, change)
 
 
 def _persist_current_queue_recipe(cid, recipe):
     """Сохраняет изменения показанного рецепта (например photo_* поля) в очередь."""
-    d = store._load(config.RECIPE_QUEUE_KEY)
-    q = d.get(str(cid)) or {}
-    items = q.get("items") or []
-    idx = int(q.get("pos", 0)) - 1
-    if 0 <= idx < len(items):
-        items[idx] = recipe
-        store._save(config.RECIPE_QUEUE_KEY, d)
+    def change(data):
+        queue = data.get(str(cid)) or {}
+        items = queue.get("items") or []
+        idx = int(queue.get("pos", 0)) - 1
+        if 0 <= idx < len(items):
+            items[idx] = recipe
+            data[str(cid)] = queue
+        return data, None
+
+    store.mutate_kv(config.RECIPE_QUEUE_KEY, change)
 
 
 def get_recipe_history(cid):
@@ -123,10 +136,11 @@ def bump_cuisine_weight(cid, cuisine, delta):
     """Изменяет вес кухни на delta, с clamp в [CUISINE_WEIGHT_MIN, CUISINE_WEIGHT_MAX]."""
     if not cuisine:
         return
-    d = store._load(config.CUISINE_WEIGHTS_KEY)
-    weights = d.setdefault(str(cid), {})
-    new_value = weights.get(cuisine, 0) + delta
-    weights[cuisine] = max(CUISINE_WEIGHT_MIN, min(CUISINE_WEIGHT_MAX, new_value))
-    store._save(config.CUISINE_WEIGHTS_KEY, d)
+    def change(data):
+        weights = data.setdefault(str(cid), {})
+        new_value = weights.get(cuisine, 0) + delta
+        weights[cuisine] = max(CUISINE_WEIGHT_MIN, min(CUISINE_WEIGHT_MAX, new_value))
+        return data, None
 
+    store.mutate_kv(config.CUISINE_WEIGHTS_KEY, change)
 

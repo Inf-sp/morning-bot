@@ -433,7 +433,11 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
 
     def purchase_photo(item, audience):
         photo_calls.append((item, audience))
-        return {"url": "https://images.pexels.com/example.jpg", "query": item}
+        return {
+            "url": "https://images.pexels.com/example.jpg",
+            "query": item,
+            "alt": "Man wearing gray wide leg jeans",
+        }
 
     monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {"name": "Vladimir"})
     monkeypatch.setattr(
@@ -465,8 +469,12 @@ def test_purchase_carousel_edits_the_same_photo_card(monkeypatch):
     monkeypatch.setattr(wardrobe.store, "get_profile", lambda _cid: {"name": "Vladimir"})
     monkeypatch.setattr(
         wardrobe_photos, "purchase_photo",
-        lambda item, audience: {"url": f"https://images.pexels.com/{audience}/{item}.jpg"},
+        lambda item, audience: {
+            "url": f"https://images.pexels.com/{audience}/{item}.jpg",
+            "alt": "Matching clothing photo",
+        },
     )
+    monkeypatch.setattr(wardrobe_photos, "_photo_matches_item", lambda *_args: True)
 
     asyncio.run(wardrobe.show_purchase_page(object(), "42", 1, q=Query()))
 
@@ -495,20 +503,123 @@ def test_purchase_other_variant_uses_next_english_pexels_result(monkeypatch):
     wardrobe_photos.purchase_photo("Серые широкие джинсы", "male", 2)
 
     query, options = calls[0]
-    assert query == "men wide leg jeans"
+    assert query == "men gray wide leg jeans"
     assert not any("а" <= char.casefold() <= "я" for char in query)
     assert options["result_index"] == 2
+    assert options["result_validator"]({
+        "alt": "Man wearing a blue formal shirt",
+    }) is False
+    assert options["result_validator"]({
+        "alt": "Man wearing grey wide leg jeans",
+    }) is True
 
 
-def test_purchase_photo_query_removes_color_and_uses_plain_english_item():
+def test_purchase_photo_query_keeps_color_and_silhouette_in_english():
     import wardrobe_photos
 
     assert wardrobe_photos._purchase_query(
         "Молочная оверсайз-рубашка", "male",
-    ) == "men oversized shirt"
+    ) == "men cream oversized shirt"
 
 
-def test_other_purchase_variant_shows_the_next_clothing_recommendation(monkeypatch):
+def test_purchase_photo_rejects_an_image_that_describes_another_item():
+    import wardrobe_photos
+
+    assert wardrobe_photos._photo_matches_item(
+        "Серые широкие джинсы",
+        {"alt": "Man wearing a blue formal shirt"},
+    ) is False
+    assert wardrobe_photos._photo_matches_item(
+        "Серые широкие джинсы",
+        {"alt": "Man wearing gray wide leg jeans"},
+    ) is True
+
+
+def test_fresh_purchase_candidates_exclude_the_current_carousel():
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+    current = wardrobe._purchase_candidates(wardrobe_data, limit=3)
+    current_names = {item["item"].casefold() for item in current}
+
+    fresh = wardrobe._purchase_candidates(
+        wardrobe_data, limit=3, exclude_names=current_names,
+    )
+
+    assert fresh
+    assert current_names.isdisjoint(item["item"].casefold() for item in fresh)
+
+
+def test_recommend_another_purchase_replaces_the_current_batch(monkeypatch):
+    import wardrobe_photos
+
+    sent = []
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    cid = "fresh-purchase-batch"
+    wardrobe.store.set_profile(cid, {})
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+    monkeypatch.setattr(wardrobe_photos, "purchase_photo", lambda *_args: None)
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), cid))
+    first_text = sent[-1]["text"]
+    asyncio.run(wardrobe.recommend_another_purchase(Bot(), cid))
+    second_text = sent[-1]["text"]
+
+    assert first_text != second_text
+    assert "Серые широкие джинсы" in first_text
+    assert "Серые широкие джинсы" not in second_text
+
+
+def test_purchase_card_falls_back_to_text_when_photo_does_not_match(monkeypatch):
+    import wardrobe_photos
+
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
+        "zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}
+    })
+    monkeypatch.setattr(
+        wardrobe, "_purchase_carousel_candidates",
+        lambda *_args, **_kwargs: [{
+            "item": "Серые широкие джинсы", "reason": "закроют пробел",
+        }],
+    )
+    monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
+    monkeypatch.setattr(
+        wardrobe_photos, "purchase_photo",
+        lambda *_args: {
+            "url": "https://images.pexels.com/wrong.jpg",
+            "alt": "Man wearing a blue formal shirt",
+        },
+    )
+
+    asyncio.run(wardrobe.show_purchase_page(Bot(), "42"))
+
+    assert [kind for kind, _kwargs in sent] == ["message"]
+
+
+def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):
     import wardrobe_photos
 
     wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
@@ -523,12 +634,21 @@ def test_other_purchase_variant_shows_the_next_clothing_recommendation(monkeypat
             edited.append(kwargs)
 
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
-    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args: variants)
+    monkeypatch.setattr(
+        wardrobe, "_missing_purchase_candidates", lambda *_args, **_kwargs: variants,
+    )
     monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
     monkeypatch.setattr(
         wardrobe_photos, "purchase_photo",
         lambda item, audience, variant=0: calls.append((item, audience, variant))
-        or {"url": f"https://images.pexels.com/{variant}.jpg"},
+        or {
+            "url": f"https://images.pexels.com/{variant}.jpg",
+            "alt": (
+                "Man wearing cream oversized shirt"
+                if "рубаш" in item.casefold()
+                else "Man wearing gray wide leg jeans"
+            ),
+        },
     )
     wardrobe.store.set_profile("same-purchase-photo", {})
 
@@ -542,7 +662,20 @@ def test_other_purchase_variant_shows_the_next_clothing_recommendation(monkeypat
         ("Серые широкие джинсы", "male", 0),
     ]
     assert "Серые широкие джинсы" in edited[1]["media"].caption
-    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_page:1"
+    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_new"
+
+    refreshed = []
+
+    async def recommend_another(_bot, cid, q=None):
+        refreshed.append((cid, q))
+
+    monkeypatch.setattr(
+        wardrobe, "recommend_another_purchase", recommend_another, raising=False,
+    )
+    query = Query()
+    asyncio.run(wardrobe.handle_callback(object(), "same-purchase-photo", query, "w_buy_new"))
+
+    assert refreshed == [("same-purchase-photo", query)]
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

@@ -358,7 +358,7 @@ async def send_purchase_hub(bot, cid):
     await recommend_missing_purchase(bot, cid)
 
 
-def _missing_purchase_candidates(cid, wardrobe):
+def _missing_purchase_candidates(cid, wardrobe, *, exclude_names=None):
     """Берёт актуальный пробел из образа и добирает ещё две полезные покупки."""
     cached = _get_cached_look(cid) or {}
     recommended = (cached.get("look_data") or {}).get("purchase_recommendation") or {}
@@ -368,6 +368,7 @@ def _missing_purchase_candidates(cid, wardrobe):
     ) else None
     return _purchase_candidates(
         wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3,
+        exclude_names=exclude_names,
     )
 
 
@@ -391,7 +392,7 @@ def _purchase_photo_audience(cid):
     return "male" if name in male_names else "neutral"
 
 
-def _purchase_carousel_kb(page, count, photo_variant=0):
+def _purchase_carousel_kb(page, count):
     rows = []
     if count > 1:
         rows.append([
@@ -399,14 +400,13 @@ def _purchase_carousel_kb(page, count, photo_variant=0):
             (f"{page + 1}/{count}", "noop"),
             ("▶️", f"w_buy_page:{(page + 1) % count}"),
         ])
-    next_page = (page + 1) % count if count else 0
-    rows.append([("✨ Другой вариант", f"w_buy_page:{next_page}")])
+    rows.append([("✨ Другой вариант", "w_buy_new")])
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 
 
-def _purchase_carousel_candidates(cid, wardrobe, *, reset=False):
-    """Фиксирует вещи карусели, чтобы смена фото не меняла рекомендацию."""
+def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=None):
+    """Фиксирует вещи карусели для стабильного листания рекомендаций."""
     signature = hashlib.sha256(json.dumps({
         "wardrobe": wardrobe,
         "styles": _settings.wardrobe_styles(cid),
@@ -416,12 +416,20 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False):
     if (not reset and cached.get("signature") == signature
             and isinstance(cached.get("items"), list) and cached["items"]):
         return [dict(item) for item in cached["items"] if isinstance(item, dict)]
-    items = _missing_purchase_candidates(cid, wardrobe)
+    excluded = {
+        _clean_text(name).casefold()
+        for name in (exclude_names or [])
+        if _clean_text(name)
+    }
+    items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
+    if excluded and not items:
+        return []
 
     def change(current):
         current["wardrobe_purchase_carousel"] = {
             "signature": signature,
             "items": [dict(item) for item in items],
+            "seen_items": sorted(excluded),
         }
         return current, None
 
@@ -429,11 +437,31 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False):
     return items
 
 
-async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0, reset_candidates=False):
+async def show_purchase_page(
+        bot, cid, page=0, q=None, reset_candidates=False, exclude_names=None):
     wardrobe = store.load_wardrobe(cid)
-    candidates = _purchase_carousel_candidates(cid, wardrobe, reset=reset_candidates)
+    candidates = _purchase_carousel_candidates(
+        cid, wardrobe, reset=reset_candidates, exclude_names=exclude_names,
+    )
     if not candidates:
-        await recommend_missing_purchase(bot, cid)
+        no_more_text = "Других полезных покупок по текущему шкафу пока не нашлось."
+        no_more_kb = _kb([[('⬅️ Назад', 'm_wardrobe'), ('#️⃣ Главная', 'm_menu')]])
+        if q is not None:
+            for method_name, text_arg in (
+                    ("edit_message_caption", "caption"),
+                    ("edit_message_text", "text")):
+                try:
+                    await getattr(q, method_name)(
+                        **{text_arg: no_more_text}, reply_markup=no_more_kb,
+                    )
+                    return
+                except Exception:
+                    pass
+        await bot.send_message(
+            chat_id=cid,
+            text=no_more_text,
+            reply_markup=no_more_kb,
+        )
         return
     page = max(0, min(int(page), len(candidates) - 1))
     item = candidates[page]
@@ -443,13 +471,14 @@ async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0, reset_ca
     import asyncio
     import wardrobe_photos
 
-    photo_args = (
+    photo = await asyncio.to_thread(
+        wardrobe_photos.purchase_photo,
         _clean_text(item.get("item")), _purchase_photo_audience(cid),
     )
-    if photo_variant:
-        photo_args += (int(photo_variant),)
-    photo = await asyncio.to_thread(wardrobe_photos.purchase_photo, *photo_args)
-    kb = _purchase_carousel_kb(page, len(candidates), int(photo_variant))
+    if photo and not wardrobe_photos._photo_matches_item(
+            _clean_text(item.get("item")), photo):
+        photo = None
+    kb = _purchase_carousel_kb(page, len(candidates))
     if q is not None and photo and photo.get("url") and len(text_out) <= 1024:
         try:
             await q.edit_message_media(
@@ -470,6 +499,11 @@ async def show_purchase_page(bot, cid, page=0, q=None, photo_variant=0, reset_ca
             return
         except Exception:
             pass
+    if q is not None:
+        try:
+            await q.delete_message()
+        except Exception:
+            pass
     await bot.send_message(chat_id=cid, text=text_out, entities=entities, reply_markup=kb)
 
 
@@ -486,6 +520,25 @@ async def recommend_missing_purchase(bot, cid):
         return
     store.pending_input[str(cid)] = "wardrobe_buy"
     await show_purchase_page(bot, cid, 0, reset_candidates=True)
+
+
+async def recommend_another_purchase(bot, cid, q=None):
+    """Пересчитывает покупки и исключает уже показанный набор рекомендаций."""
+    profile = store.get_profile(cid) or {}
+    cached = profile.get("wardrobe_purchase_carousel") or {}
+    excluded = {
+        _clean_text(name).casefold()
+        for name in (cached.get("seen_items") or [])
+        if _clean_text(name)
+    }
+    excluded.update(
+        _clean_text(item.get("item")).casefold()
+        for item in (cached.get("items") or [])
+        if isinstance(item, dict) and _clean_text(item.get("item"))
+    )
+    await show_purchase_page(
+        bot, cid, 0, q=q, reset_candidates=True, exclude_names=excluded,
+    )
 
 
 def _local_purchase_suggestions(item, wardrobe):

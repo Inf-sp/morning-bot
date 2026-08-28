@@ -180,10 +180,7 @@ async def get_local_now_playing(cid, *, limit=20, refresh=False):
                 for movie in regional
                 if str(getattr(movie, "title", "") or "").strip()
             ]
-        has_featured = bool(
-            _featured_now_playing(items, require_overview=True)
-            or _featured_now_playing(items)
-        )
+        has_featured = bool(_featured_now_playing(items, require_overview=True))
         if not has_featured and previous_items:
             items = previous_items
         else:
@@ -351,10 +348,6 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     city = _movie_city(cid)
     local_movies = await get_local_now_playing(cid, limit=20)
     featured = _featured_now_playing(local_movies, require_overview=True)
-    if not featured:
-        # Описание TMDb полезно для проверки качества, но его временное
-        # отсутствие не должно скрывать всю подтверждённую киноафишу.
-        featured = _featured_now_playing(local_movies)
     featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()

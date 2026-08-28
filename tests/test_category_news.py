@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime, timedelta
 
@@ -7,6 +8,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 from telegram import MessageEntity
 
 import category_news
+import bot as bot_module
 import config
 from ui import leisure as leisure_ui
 from ui import menu as menu_ui
@@ -95,7 +97,10 @@ def test_editor_accepts_two_independent_sources_and_saves_pool(monkeypatch):
     ]
 
     monkeypatch.setattr(category_news.store, "_load", lambda key: memory.get(key, {}))
-    monkeypatch.setattr(category_news.store, "_save", lambda key, value: memory.update({key: value}))
+    monkeypatch.setattr(
+        category_news.store, "mutate_kv",
+        lambda key, change: memory.update({key: change(memory.get(key, {}))[0]}),
+    )
     monkeypatch.setattr(
         category_news, "_discover",
         lambda category, _now: rows if category == "food" else [],
@@ -173,7 +178,10 @@ def test_failed_category_discovery_does_not_block_other_categories(monkeypatch):
     }
 
     monkeypatch.setattr(category_news.store, "_load", lambda key: memory.get(key, {}))
-    monkeypatch.setattr(category_news.store, "_save", lambda key, value: memory.update({key: value}))
+    monkeypatch.setattr(
+        category_news.store, "mutate_kv",
+        lambda key, change: memory.update({key: change(memory.get(key, {}))[0]}),
+    )
 
     def discover(category, _now):
         if category == "wardrobe":
@@ -198,3 +206,86 @@ def test_failed_category_discovery_does_not_block_other_categories(monkeypatch):
 
     assert report["updated"] == ("food",)
     assert report["missing"] == ("wardrobe",)
+    wardrobe_cache = memory[config.CATEGORY_NEWS_CACHE_KEY]["categories"]["wardrobe"]
+    assert "refreshed_on" not in wardrobe_cache
+
+
+def test_failed_category_can_retry_on_the_same_day(monkeypatch):
+    now = datetime(2026, 8, 27, 12, tzinfo=config.TZ)
+    memory = {}
+    monkeypatch.setattr(category_news.store, "_load", lambda key: memory.get(key, {}))
+    monkeypatch.setattr(
+        category_news.store, "mutate_kv",
+        lambda key, change: memory.update({key: change(memory.get(key, {}))[0]}),
+    )
+    monkeypatch.setattr(
+        category_news, "_discover",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("temporary failure")),
+    )
+
+    first = category_news.refresh_pool(categories=("wardrobe",), now=now)
+    assert first["missing"] == ("wardrobe",)
+
+    row = {
+        "url": "https://ec.europa.eu/commission/presscorner/detail/textile-law",
+        "domain": "ec.europa.eu",
+        "title": "European Commission adopts textile durability law",
+        "content": "The European Commission adopted binding textile durability rules.",
+        "published_at": now.isoformat(),
+    }
+    monkeypatch.setattr(category_news, "_discover", lambda *_args: [row])
+    monkeypatch.setattr(category_news.ai, "llm_json", lambda *_args, **_kwargs: {
+        "categories": {"wardrobe": [{
+            "text_ru": "European Commission утвердила обязательные требования к долговечности текстиля.",
+            "importance": 90, "confidence": 95, "evidence_ids": ["wardrobe:0"],
+        }]},
+    })
+
+    second = category_news.refresh_pool(categories=("wardrobe",), now=now)
+
+    assert second["updated"] == ("wardrobe",)
+    assert memory[config.CATEGORY_NEWS_CACHE_KEY]["categories"]["wardrobe"]["refreshed_on"] == "2026-08-27"
+
+
+def test_two_unrelated_sources_do_not_count_as_confirmation():
+    now = datetime(2026, 8, 27, 12, tzinfo=config.TZ)
+    rows = [
+        {
+            "url": "https://reuters.com/fashion/paris-textile-law",
+            "domain": "reuters.com",
+            "title": "Paris approves textile recycling law",
+            "content": "French lawmakers approved mandatory garment recycling targets.",
+            "published_at": now.isoformat(),
+        },
+        {
+            "url": "https://apnews.com/article/tokyo-film-award",
+            "domain": "apnews.com",
+            "title": "Tokyo festival announces cinema award",
+            "content": "A Japanese director received the festival grand prize.",
+            "published_at": now.isoformat(),
+        },
+    ]
+    decisions = [{
+        "text_ru": "В Европе якобы приняли новое обязательное правило для всей текстильной отрасли.",
+        "importance": 90, "confidence": 90,
+        "evidence_ids": ["wardrobe:0", "wardrobe:1"],
+    }]
+
+    assert category_news._selected_items("wardrobe", decisions, rows, now) == []
+
+
+def test_active_user_action_reschedules_news_refresh(monkeypatch):
+    scheduled = []
+
+    class Queue:
+        def run_once(self, callback, **kwargs):
+            scheduled.append((callback, kwargs))
+
+    context = type("Context", (), {"job_queue": Queue()})()
+    monkeypatch.setattr(bot_module.tracking, "has_active_actions", lambda: True)
+
+    asyncio.run(bot_module.job_refresh_category_news(context))
+
+    assert scheduled[0][0] is bot_module.job_refresh_category_news
+    assert scheduled[0][1]["when"] == 60
+    assert scheduled[0][1]["job_kwargs"]["replace_existing"] is True

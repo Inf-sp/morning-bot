@@ -35,7 +35,7 @@ def _score(*, width, height, description, position, strict=True):
         return min(width * height, 30_000_000) - position * 20_000
 
 
-def _pexels(query, strict=True, first_result=False, result_index=0):
+def _pexels(query, strict=True, first_result=False, result_index=0, result_validator=None):
     if not config.PEXELS_API_KEY:
         return None
     started = time.monotonic()
@@ -70,7 +70,17 @@ def _pexels(query, strict=True, first_result=False, result_index=0):
                            description=photo.get("alt"), position=position, strict=strict)
             src = photo.get("src") or {}
             url = src.get("landscape") or src.get("large2x") or src.get("large") or src.get("original")
-            if score is not None and url:
+            candidate = {
+                "provider": "pexels", "id": str(photo.get("id") or ""), "url": url,
+                "page_url": str(photo.get("url") or ""),
+                "photographer": str(photo.get("photographer") or ""),
+                "photographer_url": str(photo.get("photographer_url") or ""),
+                "alt": str(photo.get("alt") or ""),
+                "width": int(photo.get("width") or 0), "height": int(photo.get("height") or 0),
+                "query": query,
+            }
+            if (score is not None and url
+                    and (result_validator is None or result_validator(candidate))):
                 candidates.append((score, photo, url))
         if not candidates:
             return None
@@ -90,10 +100,13 @@ def _pexels(query, strict=True, first_result=False, result_index=0):
         return None
 
 
-def pexels_photo(query, *, strict=True, first_result=False, result_index=0):
+def pexels_photo(
+        query, *, strict=True, first_result=False, result_index=0,
+        result_validator=None):
     """Общий публичный вход к Pexels для экранов с фото."""
     return _pexels(
         query, strict=strict, first_result=first_result, result_index=result_index,
+        result_validator=result_validator,
     )
 
 

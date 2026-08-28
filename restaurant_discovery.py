@@ -47,7 +47,7 @@ def _cache(cid):
     return value if isinstance(value, dict) else {}
 
 
-def _fresh(value, city, context_key):
+def _fresh(value, city):
     try:
         cached = datetime.fromisoformat(str(value.get("cached_at") or ""))
     except (TypeError, ValueError):
@@ -57,7 +57,6 @@ def _fresh(value, city, context_key):
         cached = cached.replace(tzinfo=config.TZ)
     return (
         str(value.get("city") or "").casefold() == str(city or "").casefold()
-        and value.get("context_key") == context_key
         and cached.astimezone(config.TZ).date() == now.date()
         and value.get("name") and value.get("map_url")
     )
@@ -107,9 +106,43 @@ def _reserve(cid, cached, city, previous="", context_key=""):
 
 def _source_text(rows):
     return "\n---\n".join(
-        f"TITLE: {row.get('title', '')}\nURL: {row.get('url', '')}\nTEXT: {row.get('content', '')}"
-        for row in rows
+        f"ID: source:{index}\nTITLE: {row.get('title', '')}\n"
+        f"URL: {row.get('url', '')}\nTEXT: {row.get('content', '')}"
+        for index, row in enumerate(rows)
     )
+
+
+def _normal(value):
+    return " ".join(str(value or "").casefold().split()).strip()
+
+
+def _validated_evidence(result, rows, fields):
+    """Return the primary source URL only when every fact has a literal quote."""
+    evidence = result.get("evidence") if isinstance(result, dict) else None
+    if not isinstance(evidence, dict):
+        return ""
+    by_id = {f"source:{index}": row for index, row in enumerate(rows)}
+    primary_url = ""
+    for field in fields:
+        proof = evidence.get(field)
+        if not isinstance(proof, dict):
+            return ""
+        row = by_id.get(str(proof.get("source_id") or ""))
+        quote = _normal(proof.get("quote"))
+        if not row or len(quote) < 3:
+            return ""
+        source_text = _normal(f"{row.get('title', '')} {row.get('content', '')}")
+        if quote not in source_text:
+            return ""
+        if field == "name":
+            if _normal(result.get("name")) not in quote:
+                return ""
+            primary_url = str(row.get("url") or "").strip()
+        if field in {"price", "dish_price"} and (
+            str(result.get(field) or "") not in str(proof.get("quote") or "")
+        ):
+            return ""
+    return primary_url if primary_url.startswith("https://") else ""
 
 
 def _good_terrace_weather(settings):
@@ -150,7 +183,7 @@ def get_restaurant(cid, *, refresh=False):
     city = str(settings.get("city") or "Alkmaar").strip()
     context_key, search_context = _context(settings)
     cached = _cache(cid)
-    if not refresh and _fresh(cached, city, context_key):
+    if not refresh and _fresh(cached, city):
         return cached
     previous = str(cached.get("name") or "") if _usable(cached, city) else ""
     rows = research.web_search(
@@ -168,13 +201,23 @@ def get_restaurant(cid, *, refresh=False):
 по-русски. price только €, €€ или €€€. signature_dish — конкретное блюдо.
 fact — один проверяемый факт о месте или его кухне. opening_hours и dish_price
 заполняй только при явном подтверждении источником, иначе оставь пустыми.
-dish_emoji — один подходящий эмодзи блюда. source_url скопируй из источника.
+dish_emoji — один подходящий эмодзи блюда. Для каждого фактического поля верни
+evidence с source_id и короткой ДОСЛОВНОЙ цитатой из TITLE или TEXT, которая его
+подтверждает. Не переводи evidence.quote. Если подтверждения нет, не выбирай место.
 
 {secure.wrap_untrusted(sources, "результаты поиска")}
 
 Верни JSON: {{"name":"...","cuisine":"...","price":"€€",
 "opening_hours":"...","signature_dish":"...","dish_emoji":"🍽️","dish_price":"...",
-"description":"...","fact":"...","source_url":"https://..."}}
+"description":"...","fact":"...","evidence":{{
+"name":{{"source_id":"source:0","quote":"..."}},
+"cuisine":{{"source_id":"source:0","quote":"..."}},
+"price":{{"source_id":"source:0","quote":"..."}},
+"signature_dish":{{"source_id":"source:0","quote":"..."}},
+"description":{{"source_id":"source:0","quote":"..."}},
+"fact":{{"source_id":"source:0","quote":"..."}},
+"opening_hours":{{"source_id":"source:0","quote":"..."}},
+"dish_price":{{"source_id":"source:0","quote":"..."}}}}}}
 """
     try:
         result = ai.llm_json(
@@ -187,12 +230,15 @@ dish_emoji — один подходящий эмодзи блюда. source_url
     if not isinstance(result, dict):
         return _reserve(cid, cached, city, previous, context_key)
     name = " ".join(str(result.get("name") or "").split()).strip()
-    source_url = str(result.get("source_url") or "").strip()
-    source_urls = {str(row.get("url") or "").strip() for row in rows}
-    source_blob = sources.casefold()
     required = ("cuisine", "price", "signature_dish", "description", "fact")
+    evidence_fields = ["name", *required]
+    evidence_fields.extend(
+        field for field in ("opening_hours", "dish_price")
+        if str(result.get(field) or "").strip()
+    )
+    source_url = _validated_evidence(result, rows, evidence_fields)
     if (
-        not name or name.casefold() not in source_blob or source_url not in source_urls
+        not name or _normal(name) == _normal(previous) or not source_url
         or result.get("price") not in {"€", "€€", "€€€"}
         or not all(str(result.get(field) or "").strip() for field in required)
     ):

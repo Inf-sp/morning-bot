@@ -43,6 +43,8 @@ from deploy_report import (
     get_app_version,
     maybe_send_admin_deploy_notification,
 )
+from module_binding import bind_functions as _bind_functions
+import bot_maintenance as _bot_maintenance
 
 _log = logging.getLogger(__name__)
 
@@ -166,8 +168,7 @@ async def answer_callback(update, context):
         lambda task: tracking.mark_first_feedback(trace)
         if not task.cancelled() and task.exception() is None else None
     )
-    # Даём answerCallbackQuery начать отправку до любого синхронного чтения БД
-    # внутри обработчика (особенно перед Azure Speech TTS).
+    # Даём answerCallbackQuery начать отправку до синхронного чтения БД в обработчике.
     await asyncio.sleep(0)
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
@@ -329,6 +330,11 @@ async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
     """Globally refresh verified category news before home-screen warmups."""
     if tracking.has_active_actions():
         logging.info("category news refresh skipped: user action active")
+        context.job_queue.run_once(
+            job_refresh_category_news, when=60,
+            data={"category_news_retry": True},
+            **_job_options("category_news_refresh_retry"),
+        )
         return
     try:
         report = await asyncio.to_thread(category_news.refresh_pool)
@@ -338,6 +344,17 @@ async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
             ",".join(report.get("retained") or ()),
             ",".join(report.get("missing") or ()),
         )
+        retrying = bool(
+            (getattr(getattr(context, "job", None), "data", None) or {}).get(
+                "category_news_retry"
+            )
+        )
+        if report.get("missing") and not retrying:
+            context.job_queue.run_once(
+                job_refresh_category_news, when=15 * 60,
+                data={"category_news_retry": True},
+                **_job_options("category_news_refresh_retry"),
+            )
     except Exception:
         logging.exception("category news refresh failed")
 
@@ -480,119 +497,11 @@ async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_inactivity_reminders failed for cid=%s", cid)
 
 
-def _run_startup_audits():
-    """Проверить исходники после готовности polling, не задерживая запуск."""
-    try:
-        unhandled = verify.audit_callbacks()
-        if unhandled:
-            logging.warning("Callback audit: unhandled -> %s", ", ".join(unhandled))
-        else:
-            logging.info("Callback audit: OK")
-    except Exception:
-        logging.exception("Callback audit failed")
-    try:
-        violations = verify.audit_architecture()
-        if violations:
-            logging.warning("Architecture audit: violations -> %s", "; ".join(violations))
-        else:
-            logging.info("Architecture audit: OK")
-    except Exception:
-        logging.exception("Architecture audit failed")
-    try:
-        trainer_violations = verify.audit_trainer_contracts()
-        if trainer_violations:
-            logging.warning("Trainer contract audit: violations -> %s", "; ".join(trainer_violations))
-        else:
-            logging.info("Trainer contract audit: OK")
-    except Exception:
-        logging.exception("Trainer contract audit failed")
-    try:
-        navigation_violations = verify.audit_navigation_contracts()
-        if navigation_violations:
-            logging.warning("Navigation audit: violations -> %s", "; ".join(navigation_violations))
-        else:
-            logging.info("Navigation audit: OK")
-    except Exception:
-        logging.exception("Navigation audit failed")
-    try:
-        leaks = secure.scan_secrets()
-        if leaks:
-            logging.warning("Secrets scan: findings -> %s", "; ".join(leaks))
-        else:
-            logging.info("Secrets scan: OK")
-    except Exception:
-        logging.exception("Secrets scan failed")
-
-
-async def job_startup_audits(context: ContextTypes.DEFAULT_TYPE):
-    if tracking.has_active_actions():
-        context.application.job_queue.run_once(
-            job_startup_audits,
-            when=30,
-            name="startup_audits_once",
-            job_kwargs={"id": "startup_audits_once", "replace_existing": True},
-        )
-        return
-    await asyncio.to_thread(_run_startup_audits)
-
-
-async def job_retry_dictionary_adds(context: ContextTypes.DEFAULT_TYPE):
-    """Повторяет только сохранённые Add-запросы; пользователь ничего не вводит заново."""
-    if tracking.has_active_actions():
-        return
-    import dictionary_import
-    await dictionary_import.process_queued_dictionary_adds(
-        context.bot, access.get_allowed_cids(), limit=10,
-    )
-
-
-async def job_dictionary_maintenance(context: ContextTypes.DEFAULT_TYPE):
-    """Обновляет старые карточки вне пользовательского открытия словаря."""
-    if tracking.has_active_actions():
-        context.application.job_queue.run_once(
-            job_dictionary_maintenance,
-            when=60,
-            name="dictionary_maintenance_once",
-            job_kwargs={"id": "dictionary_maintenance_once", "replace_existing": True},
-        )
-        return
-    for cid in access.get_allowed_cids():
-        try:
-            await dictionary.rebuild_dictionary_entries(cid)
-            for lang in ("nl", "en"):
-                await dictionary.migrate_dict_entries_for_srs(cid, lang)
-        except Exception:
-            logging.exception("Dictionary maintenance failed user_id=%s", cid)
-
-
-async def job_requested_dictionary_rechecks(context: ContextTypes.DEFAULT_TYPE):
-    """Забирает пользовательские запросы полной проверки по одному за проход."""
-    if tracking.has_active_actions():
-        return
-    await dictionary.process_requested_dictionary_rechecks(
-        context.bot, access.get_allowed_cids(), limit=1,
-    )
-
-
-async def job_normalize_favorite_collections(context: ContextTypes.DEFAULT_TYPE):
-    """Один спокойный проход по старым личным спискам после запуска.
-
-    TMDb уже кэширует резолв названий на сутки, поэтому миграция не создаёт
-    повторных запросов при перезапуске и не задерживает запуск бота.
-    """
-    if tracking.has_active_actions():
-        context.application.job_queue.run_once(
-            job_normalize_favorite_collections,
-            when=60,
-            name="normalize_favorite_collections_once",
-            job_kwargs={"id": "normalize_favorite_collections_once", "replace_existing": True},
-        )
-        return
-    try:
-        if await asyncio.to_thread(leisure_collection.normalize_favorite_collections, True):
-            logging.info("Favorite collections: canonical labels applied")
-    except Exception:
-        logging.exception("Favorite collections normalization failed")
+_bind_functions(globals(), _bot_maintenance, [
+    "_run_startup_audits", "job_startup_audits", "job_retry_dictionary_adds",
+    "job_dictionary_maintenance", "job_requested_dictionary_rechecks",
+    "job_normalize_favorite_collections",
+])
 
 
 async def post_init(app):

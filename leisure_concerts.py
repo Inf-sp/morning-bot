@@ -783,6 +783,11 @@ def _event_date(event):
     return str((event or {}).get("dates", {}).get("start", {}).get("localDate") or "")
 
 
+def _today():
+    from datetime import datetime
+    return datetime.now(config.TZ).date()
+
+
 def _artist_is_due(cid, artist, cc, *, force=False, now=None):
     """Новый артист проверяется сразу; без событий — раз в месяц.
 
@@ -1017,7 +1022,7 @@ async def _fetch_favorite_events(cid):
     events = cached if cached is not None else await _fetch_concerts(artists, cc, cname, cid=cid)
 
     from datetime import datetime
-    today_str = datetime.now(config.TZ).date().isoformat()
+    today_str = _today().isoformat()
     return [e for e in events
             if e.get("dates", {}).get("start", {}).get("localDate", "9999") >= today_str]
 
@@ -1196,7 +1201,6 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         return
 
     from util import _MONTHS
-    from datetime import datetime
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
@@ -1214,7 +1218,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
             return ds
 
     place_label = f"Концерты · {cname}"
-    today_str = datetime.now(config.TZ).date().isoformat()
+    today_str = _today().isoformat()
     seen_artist_events = set()
     rows_data = []
     for e in sorted(events, key=lambda event: _event_date(event) or "9999-99-99"):

@@ -8,7 +8,7 @@
 """
 from .builder import MessageBuilder, MessageSpec, WARNING_EMOJI
 from . import rich
-from .constants import STATUS_EMOJI, UI_EMOJI, choose_label, ui_label
+from .constants import STATUS_EMOJI, UI_EMOJI, ui_label
 
 # --- статус-точки (единственные допустимые «светофоры») ---
 OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "□"
@@ -423,7 +423,7 @@ def broadcast(next_title, next_when):
 def notification_picker(options):
     """options: [NotificationOption]. Список для выбора уведомления перед тестом."""
     b = MessageBuilder()
-    b.bold(choose_label("Выбрать уведомление"))
+    b.bold("Уведомление для теста")
     b.newline()
     b.spacer()
     for opt in options:

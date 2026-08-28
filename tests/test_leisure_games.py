@@ -131,7 +131,9 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     status = Status()
     asyncio.run(leisure_games.send_games_home(object(), "42", status=status))
 
-    assert "👾 Игровой дайджест · 25 августа" in status.call[0]
+    today = datetime.now(leisure_games.config.TZ).date()
+    expected_date = leisure_games.leisure_ui._format_date_label(today)
+    assert f"👾 Игровой дайджест · {expected_date}" in status.call[0]
     assert "Свежие релизы:" in status.call[0]
     assert "Угадай игру:" in status.call[0]
     assert "💡 Интересно:" in status.call[0]

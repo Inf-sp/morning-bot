@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from datetime import date
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -91,6 +92,7 @@ def test_concerts_card_keeps_classic_text_and_link():
 
 
 def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_label(monkeypatch):
+    monkeypatch.setattr(leisure_concerts, "_today", lambda: date(2026, 8, 20))
     events = [
         {
             "id": f"romy-{date}",
@@ -130,6 +132,7 @@ def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_
 
 
 def test_concerts_from_cache_are_shown_nearest_first(monkeypatch):
+    monkeypatch.setattr(leisure_concerts, "_today", lambda: date(2026, 8, 20))
     dates = ("2026-11-20", "2026-08-25", "2026-09-10")
     events = [{
         "id": f"romy-{event_date}",
