@@ -261,14 +261,27 @@ def test_morning_word_shows_deep_dive_and_spoiler_answer():
     }])
 
     assert "🇳🇱 Слово дня" in msg.text
-    assert "Immers\n[и́ммерс] · ведь · же" in msg.text
-    assert "В чём суть" in msg.text
+    assert "Immers → [и́ммерс] · ведь · же" in msg.text
+    assert "В чём суть: Так напоминают о том, что собеседнику уже должно быть известно. Обычно immers стоит в середине предложения." in msg.text
     assert "Het is immers weekend! → Сейчас ведь выходные! (Когда спишь до обеда)" in msg.text
-    assert "Крючок для памяти" in msg.text
-    assert "🎯 Твоя очередь:" in msg.text
-    assert "Ответ: Ik lees immers een boek." in msg.text
+    assert "Крючок для памяти" not in msg.text
+    assert "🎯 Твоя очередь: «Я ведь читаю книгу.» → Ik lees immers een boek." in msg.text
     spoilers = [entity for entity in msg.entities if entity.type == "spoiler"]
     assert len(spoilers) == 1
+
+
+def test_incomplete_daily_word_is_not_sent_or_marked_as_shown(monkeypatch):
+    words = [{
+        "term": "Ontwikkelen", "translation": "развивать", "lang": "nl",
+        "breakdown": "глагол",
+    }]
+    monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
+    monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
+
+    msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
+
+    assert msg is None
+    assert "daily_word_shown_at" not in words[0]
 
 
 def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):

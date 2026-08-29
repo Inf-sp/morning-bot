@@ -301,35 +301,34 @@ def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", r
     if prepared:
         entry = prepared[0]
         b.bold(str(entry.get("term") or ""))
-        b.newline()
+        b.text_line(" → ")
         pronunciation = str(entry.get("pronunciation") or "").strip()
         translation = str(entry.get("translation") or "").strip()
         b.line(" · ".join(part for part in (pronunciation, translation) if part))
         essence = str(entry.get("essence") or "").strip()
-        if essence:
-            b.spacer(); b.bold("В чём суть"); b.newline(); b.line(essence)
+        insight = str(
+            entry.get("insight") or entry.get("usage_note") or entry.get("memory_hook") or ""
+        ).strip()
+        explanation = " ".join(part for part in (essence, insight) if part)
+        if explanation:
+            b.spacer(); b.label("В чём суть", explanation, lowercase=False); b.newline()
         examples = entry.get("examples") or []
         if examples:
-            b.spacer(); b.bold("Живые примеры"); b.newline()
+            b.spacer(); b.bold("Живые примеры:"); b.newline()
             for example in examples[:2]:
                 if not isinstance(example, dict):
                     continue
                 line = f"{example.get('text', '')} → {example.get('translation', '')}".strip()
                 context = str(example.get("context") or "").strip()
                 b.line(f"{line} ({context})" if context else line)
-        hook = str(entry.get("memory_hook") or "").strip()
-        note = str(entry.get("usage_note") or "").strip()
-        if hook or note:
-            b.spacer(); b.bold("Крючок для памяти"); b.newline()
-            if hook: b.line(hook)
-            if note: b.line(note)
         exercise = str(entry.get("exercise_ru") or "").strip()
         answer = str(entry.get("exercise_answer") or "").strip()
         if exercise:
-            b.spacer(); b.text_line("🎯 "); b.bold("Твоя очередь:"); b.newline()
-            b.line(f"«{exercise}»")
+            b.spacer(); b.text_line("🎯 "); b.bold("Твоя очередь:")
+            b.text_line(f" «{exercise}»")
             if answer:
-                b.text_line("Ответ: "); b.add(answer, MessageEntity.SPOILER); b.newline()
+                b.text_line(" → "); b.add(answer, MessageEntity.SPOILER)
+            b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
