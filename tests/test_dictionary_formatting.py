@@ -6,15 +6,35 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import config
 import dictionary_morning
+import dictionary_import
 import learning_dictionary
 import settings
 import trainer
 import trainer_engine
 import trainer_exercises
-from dictionary_model import display_term, normalize_entry
+from dictionary_model import (
+    display_term, migrate_legacy_study_card, normalize_entry, study_card_is_complete,
+)
 from ui import learning as learning_ui
+from ui import dictionary as dictionary_ui
 from ui.builder import MessageBuilder, MessageSpec
 from ui.learning_entry import render_learning_entry
+
+
+def _complete_study_entry(term, translation, *, lang="nl"):
+    return {
+        "term": term, "translation": translation, "lang": lang,
+        "pronunciation": "[произноше́ние]",
+        "essence": "Так объясняется смысл слова в обычной жизненной ситуации.",
+        "insight": "У слова есть важный нюанс употребления.",
+        "examples": [
+            {"text": f"Dit is {term}.", "translation": "Это первый живой пример.", "context": "В разговоре"},
+            {"text": f"Ik gebruik {term}.", "translation": "Это второй живой пример.", "context": "На практике"},
+        ],
+        "exercise_ru": "Это короткое задание.",
+        "exercise_answer": f"Dit is {term}.",
+        "study_card_version": 1,
+    }
 
 
 def test_startup_migration_capitalizes_legacy_terms_and_translations(monkeypatch):
@@ -270,6 +290,51 @@ def test_morning_word_shows_deep_dive_and_spoiler_answer():
     assert len(spoilers) == 1
 
 
+def test_dictionary_and_daily_word_use_the_same_saved_card_body():
+    entry = _complete_study_entry("Beperken", "Ограничивать; сокращать")
+
+    dictionary_msg = dictionary_ui.dict_category_entry("Глаголы", 0, 1, entry)
+    daily_msg = learning_ui.morning_words("🇳🇱", entries=[entry])
+
+    dictionary_body = dictionary_msg.text.split("\n\n", 1)[1]
+    daily_body = daily_msg.text.split("\n\n", 1)[1]
+    assert dictionary_body == daily_body
+    assert "Beperken → [произноше́ние] · ограничивать · сокращать" in dictionary_body
+    assert "В чём суть:" in dictionary_body
+    assert "Живые примеры:" in dictionary_body
+    assert "🎯 Твоя очередь:" in dictionary_body
+    assert any(entity.type == "spoiler" for entity in dictionary_msg.entities)
+
+
+def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
+    async def analyze(_prompt):
+        return {
+            "ok": True, "lang": "en", "term": "selfless", "article": "",
+            "translation": "самоотверженный", "pronunciation": "[се́лфлэс]",
+            "essence": "Так описывают человека или поступок без личной выгоды.",
+            "insight": "Часто относится к помощи другим людям.",
+            "breakdown": "прилагательное", "pos": "прилагательное",
+            "examples": [
+                {"text": "That was a selfless act.", "translation": "Это был самоотверженный поступок.", "context": "О помощи"},
+                {"text": "She made a selfless choice.", "translation": "Она сделала бескорыстный выбор.", "context": "О решении"},
+            ],
+            "exercise_ru": "Это был самоотверженный поступок.",
+            "exercise_answer": "That was a selfless act.",
+            "plural": "", "forms": [], "topic": "характер", "difficulty": "B1",
+            "construction": "", "situation_type": "", "alt_translations": [],
+            "verb": {"is_verb": False}, "needs_confirmation": False, "reason": "",
+        }
+
+    monkeypatch.setattr(dictionary_import, "_dictionary_analysis_json", analyze)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full("selfless", "en"))
+
+    assert study_card_is_complete(entry)
+    assert entry["study_card_version"] == 1
+    assert entry["dictionary_rebuild_version"] == 2
+    assert len(entry["examples"]) == 2
+
+
 def test_incomplete_daily_word_is_not_sent_or_marked_as_shown(monkeypatch):
     words = [{
         "term": "Ontwikkelen", "translation": "развивать", "lang": "nl",
@@ -286,10 +351,10 @@ def test_incomplete_daily_word_is_not_sent_or_marked_as_shown(monkeypatch):
 
 def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):
     words = [
-        {"term": "Immers", "translation": "ведь", "lang": "nl"},
-        {"term": "Inmiddels", "translation": "тем временем", "lang": "nl"},
-        {"term": "Eigenlijk", "translation": "вообще-то", "lang": "nl"},
-        {"term": "Laat maar", "translation": "забудь", "lang": "nl"},
+        _complete_study_entry("Immers", "ведь"),
+        _complete_study_entry("Inmiddels", "тем временем"),
+        _complete_study_entry("Eigenlijk", "вообще-то"),
+        _complete_study_entry("Laat maar", "забудь"),
     ]
     monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
     monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
@@ -304,13 +369,10 @@ def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):
     assert dictionary_morning.build_daily_practice("42", "nl", mark_shown=True)["entries"] == []
 
 
-def test_daily_word_deep_dive_is_generated_once_and_saved_hidden(monkeypatch):
-    words = [{
+def test_legacy_daily_word_deep_dive_migrates_into_dictionary_entry():
+    entry = {
         "term": "Immers", "translation": "ведь", "lang": "nl",
-        "breakdown": "наречие", "examples": [{"text": "Het is immers weekend.", "translation": "Ведь выходные."}],
-    }]
-    calls = []
-    deep_dive = {
+        "daily_word_deep_dive": {
         "pronunciation": "[и́ммерс]", "translation": "ведь · же",
         "essence": "Напоминает об известной причине.",
         "examples": [
@@ -319,24 +381,18 @@ def test_daily_word_deep_dive_is_generated_once_and_saved_hidden(monkeypatch):
         ],
         "memory_hook": "ИМ-МЕР-С — ВЕДЬ.", "usage_note": "Обычно стоит в середине.",
         "exercise_ru": "Ты же это знаешь.", "exercise_answer": "Je weet het immers.",
+        },
     }
 
-    async def fake_allm_json(*_args, **_kwargs):
-        calls.append(True)
-        return deep_dive
-
-    monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
-    monkeypatch.setattr(dictionary_morning.ai, "allm_json", fake_allm_json)
-    monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
-
-    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
-    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
-
-    assert len(calls) == 1
-    assert words[0]["daily_word_deep_dive"] == deep_dive
+    assert migrate_legacy_study_card(entry) is True
+    assert "daily_word_deep_dive" not in entry
+    assert entry["pronunciation"] == "[и́ммерс]"
+    assert entry["insight"] == "Обычно стоит в середине."
+    assert len(entry["examples"]) == 2
+    assert study_card_is_complete(entry)
 
 
-def test_daily_word_replaces_saved_placeholder_template(monkeypatch):
+def test_placeholder_daily_word_is_not_migrated_or_sent(monkeypatch):
     placeholder = {
         "pronunciation": "[русская транскрипция с ударением]",
         "translation": "1-2 значения",
@@ -349,33 +405,16 @@ def test_daily_word_replaces_saved_placeholder_template(monkeypatch):
         "usage_note": "один важный нюанс позиции, регистра или сочетаемости",
         "exercise_ru": "...", "exercise_answer": "...",
     }
-    valid = {
-        "pronunciation": "[бепе́ркен]", "translation": "ограничивать · сокращать",
-        "essence": "Так говорят, когда уменьшают допустимый объём или ставят границу.",
-        "examples": [
-            {"text": "We moeten de kosten beperken.", "translation": "Нам нужно сократить расходы.", "context": "О бюджете"},
-            {"text": "Ik beperk mijn schermtijd.", "translation": "Я ограничиваю время у экрана.", "context": "О привычках"},
-        ],
-        "memory_hook": "Представь барьер, который ограничивает пространство.",
-        "usage_note": "Обычно употребляется с прямым дополнением.",
-        "exercise_ru": "Я ограничиваю время у экрана.",
-        "exercise_answer": "Ik beperk mijn schermtijd.",
-    }
     words = [{
         "term": "Beperken", "translation": "ограничивать", "lang": "nl",
         "breakdown": "глагол", "daily_word_deep_dive": placeholder,
     }]
-    calls = []
-
-    async def generate(*_args, **_kwargs):
-        calls.append(True)
-        return valid
 
     monkeypatch.setattr(dictionary_morning, "_ensure_dict", lambda _cid: words)
-    monkeypatch.setattr(dictionary_morning.ai, "allm_json", generate)
     monkeypatch.setattr(dictionary_morning.store, "set_list", lambda *_args: None)
 
-    asyncio.run(dictionary_morning._prepare_deep_dive("42", "nl"))
+    msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert calls == [True]
-    assert words[0]["daily_word_deep_dive"] == valid
+    assert msg is None
+    assert "daily_word_shown_at" not in words[0]
+    assert migrate_legacy_study_card(words[0]) is False

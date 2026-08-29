@@ -239,28 +239,50 @@ def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeyp
     saved = []
 
     async def analyze(*_args, **_kwargs):
+        def complete(item, pronunciation, essence, insight, exercise_ru, exercise_answer):
+            item.update({
+                "pronunciation": pronunciation,
+                "essence": essence,
+                "insight": insight,
+                "exercise_ru": exercise_ru,
+                "exercise_answer": exercise_answer,
+            })
+            first = dict(item["examples"][0], context="В разговоре")
+            item["examples"] = [first, {
+                "text": exercise_answer,
+                "translation": exercise_ru,
+                "context": "На практике",
+            }]
+            return item
+
         return {"items": [
-            {
+            complete({
                 "keep": True, "lang": "nl", "term": "vaststellen",
                 "translation": "устанавливать; определять", "article": "",
                 "pos": "глагол", "breakdown": "глагол", "plural": "",
                 "forms": ["stelde vast", "vastgesteld"],
                 "examples": [{"text": "We stellen de oorzaak vast.", "translation": "Мы устанавливаем причину."}],
-            },
-            {
+            }, "[вастсте́ллен]", "Так говорят, когда точно устанавливают или определяют факт.",
+                "У отделяемого глагола vast переходит в конец.",
+                "Мы определяем причину.", "We stellen de oorzaak vast."),
+            complete({
                 "keep": True, "lang": "en", "term": "selfless",
                 "translation": "самоотверженный", "article": "",
                 "pos": "прилагательное", "breakdown": "прилагательное",
                 "plural": "", "forms": [],
                 "examples": [{"text": "That was a selfless act.", "translation": "Это был самоотверженный поступок."}],
-            },
-            {
+            }, "[се́лфлэс]", "Так описывают человека или поступок без личной выгоды.",
+                "Часто относится к помощи другим людям.",
+                "Это был самоотверженный поступок.", "That was a selfless act."),
+            complete({
                 "keep": True, "lang": "nl", "term": "koppig",
                 "translation": "упрямый", "article": "",
                 "pos": "прилагательное", "breakdown": "прилагательное",
                 "plural": "", "forms": [],
                 "examples": [{"text": "Hij is erg koppig.", "translation": "Он очень упрямый."}],
-            },
+            }, "[ко́ппих]", "Так говорят о человеке, который не хочет менять решение.",
+                "В зависимости от ситуации звучит критично или одобрительно.",
+                "Он очень упрямый.", "Hij is erg koppig."),
             {"keep": False},
         ]}
 
@@ -280,5 +302,6 @@ def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeyp
     assert words[1]["lang"] == "en"
     assert words[2]["term"] == "Koppig"
     assert words[2].get("article", "") == ""
-    assert all(item["dictionary_rebuild_version"] == 1 for item in words)
+    assert all(item["dictionary_rebuild_version"] == 2 for item in words)
+    assert all(item["study_card_version"] == 1 for item in words)
     assert saved

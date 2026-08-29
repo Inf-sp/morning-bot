@@ -16,6 +16,8 @@ import store
 from dictionary_model import (
     CANONICAL_ENTRY_OVERRIDES,
     DICTIONARY_FORMAT_VERSION,
+    DICTIONARY_REBUILD_VERSION,
+    STUDY_CARD_VERSION,
     PHRASE_CORRECTIONS,
     entry_language,
     entry_term,
@@ -27,6 +29,8 @@ from dictionary_model import (
     canonical_part_of_speech,
     normalize_key,
     normalize_term_case,
+    migrate_legacy_study_card,
+    study_card_is_complete,
 )
 from dictionary_management import (
     confirm_delete_dict_entry,
@@ -139,6 +143,9 @@ def normalize_user_dictionary(cid):
     seen = {}
     for item in words:
         item, _quality_changed = learning_data_quality.normalize_entry(item)
+        if migrate_legacy_study_card(item):
+            item["dictionary_rebuild_version"] = DICTIONARY_REBUILD_VERSION
+            changed = True
         canonical_pos = canonical_part_of_speech(item)
         if canonical_pos:
             item["pos"] = canonical_pos
@@ -165,6 +172,13 @@ def normalize_user_dictionary(cid):
         key = (lang, normalize_key(entry_term(item)))
         if key in seen:
             existing = result[seen[key]]
+            if study_card_is_complete(item) and not study_card_is_complete(existing):
+                for field in (
+                    "pronunciation", "essence", "insight", "examples",
+                    "exercise_ru", "exercise_answer", "study_card_version",
+                    "dictionary_rebuild_version",
+                ):
+                    existing[field] = item[field]
             translations = []
             translation_keys = set()
             for source in (entry_translation(existing), entry_translation(item)):
@@ -420,8 +434,8 @@ def _dict_counts(cid):
 
 _SRS_MIGRATION_BATCH_SIZE = 40  # ограничивает размер одного промпта на очень больших словарях
 _DICTIONARY_FORMAT_VERSION = DICTIONARY_FORMAT_VERSION
-_DICTIONARY_REBUILD_VERSION = 1
-_DICTIONARY_REBUILD_BATCH_SIZE = 25
+_DICTIONARY_REBUILD_VERSION = DICTIONARY_REBUILD_VERSION
+_DICTIONARY_REBUILD_BATCH_SIZE = 10
 
 
 def _dictionary_rebuild_prompt(entries):
@@ -431,6 +445,7 @@ def _dictionary_rebuild_prompt(entries):
             "term": _entry_term(entry), "translation": _entry_translation(entry),
             "article": entry.get("article", ""), "pos": entry.get("pos", ""),
             "breakdown": entry.get("breakdown", ""),
+            "has_study_card": study_card_is_complete(entry),
         }
         for index, entry in enumerate(entries)
     ], ensure_ascii=False)
@@ -450,13 +465,21 @@ def _dictionary_rebuild_prompt(entries):
 - У нидерландского существительного отдели de/het в article; у всех остальных
   article пустой. Не превращай прилагательные и глаголы в существительные.
 - translation: 1–2 точных русских значения. pos и breakdown — по-русски.
-- examples: ровно один короткий естественный пример с русским переводом.
+- pronunciation: русская транскрипция с ударением в квадратных скобках.
+- essence: два коротких русских предложения о смысле и ситуации употребления.
+- insight: одна короткая яркая ассоциация без выдуманной этимологии или важный
+  нюанс позиции, регистра или сочетаемости.
+- examples: ровно два коротких естественных примера с русским переводом и
+  коротким контекстом в скобках.
+- exercise_ru и exercise_answer: короткое задание на перевод и правильный ответ.
 - forms: до трёх полезных форм; plural только для существительного.
 - Верни все элементы в исходном порядке, не объединяй их сам.
 
 JSON: {{"items":[{{"keep":true,"lang":"nl|en","term":"...","translation":"...",
 "article":"de|het|","pos":"...","breakdown":"...","plural":"","forms":[],
-"examples":[{{"text":"...","translation":"..."}}],"topic":"","difficulty":"A1|A2|B1|B2|C1",
+"pronunciation":"[...]","essence":"...","insight":"...",
+"examples":[{{"text":"...","translation":"...","context":"..."}},{{"text":"...","translation":"...","context":"..."}}],
+"exercise_ru":"...","exercise_answer":"...","topic":"","difficulty":"A1|A2|B1|B2|C1",
 "construction":"","situation_type":"","alt_translations":[]}}]}}
 """
 
@@ -513,12 +536,24 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
                 "наречие", "предлог", "фраза",
             }
             examples = result.get("examples") or []
-            valid_example = (
-                isinstance(examples, list) and examples and isinstance(examples[0], dict)
-                and str(examples[0].get("text") or "").strip()
-                and str(examples[0].get("translation") or "").strip()
+            valid_examples = (
+                isinstance(examples, list) and len(examples) >= 2
+                and all(
+                    isinstance(example, dict)
+                    and str(example.get("text") or "").strip()
+                    and str(example.get("translation") or "").strip()
+                    for example in examples[:2]
+                )
             )
-            if lang not in {"nl", "en"} or not term or not translation or not valid_pos or not valid_example:
+            study_fields = {
+                "pronunciation": str(result.get("pronunciation") or "").strip(),
+                "essence": str(result.get("essence") or "").strip(),
+                "insight": str(result.get("insight") or "").strip(),
+                "exercise_ru": str(result.get("exercise_ru") or "").strip(),
+                "exercise_answer": str(result.get("exercise_answer") or "").strip(),
+            }
+            if (lang not in {"nl", "en"} or not term or not translation or not valid_pos
+                    or not valid_examples or not all(study_fields.values())):
                 continue
             article = str(result.get("article") or "").strip().casefold()
             if canonical_pos == "существительное" and lang == "nl" and article not in {"de", "het"}:
@@ -535,7 +570,8 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
                 "breakdown": str(result.get("breakdown") or canonical_pos).strip(),
                 "plural": str(result.get("plural") or "").strip(),
                 "forms": [str(value).strip() for value in (result.get("forms") or []) if str(value).strip()][:3],
-                "examples": list(examples)[:1],
+                "examples": list(examples)[:2],
+                **study_fields,
                 "topic": str(result.get("topic") or "").strip(),
                 "difficulty": str(result.get("difficulty") or "").strip().upper(),
                 "construction": str(result.get("construction") or "").strip(),
@@ -545,6 +581,9 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
                 "dictionary_rebuild_version": _DICTIONARY_REBUILD_VERSION,
                 **({"dictionary_rechecked_at": datetime.now(config.TZ).isoformat()} if force else {}),
             })
+            if not study_card_is_complete(updated):
+                continue
+            updated["study_card_version"] = STUDY_CARD_VERSION
             words[word_idx] = updated
             changed = True
     if remove_idx:

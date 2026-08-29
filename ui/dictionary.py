@@ -1,7 +1,7 @@
-from dictionary_model import display_term
+from dictionary_model import display_term, study_card_is_complete
 
 from .builder import MessageBuilder
-from .learning_entry import render_learning_entry
+from .learning_entry import render_learning_entry, render_study_card
 
 
 def dict_overview(nl_total, en_total):
@@ -41,5 +41,8 @@ def dict_category_entry(category, index, total, entry):
     flag = "🇬🇧" if lang == "en" else "🇳🇱"
     b = MessageBuilder()
     b.section(f"{flag} {category} · {index + 1}/{total}")
-    render_learning_entry(b, entry or {})
+    if study_card_is_complete(entry):
+        render_study_card(b, entry or {})
+    else:
+        render_learning_entry(b, entry or {})
     return b.build_stripped()

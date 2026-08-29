@@ -20,13 +20,16 @@ import learning_dictionary as dictionary
 import learning_data_quality
 from dictionary_model import (
     DICTIONARY_FORMAT_VERSION,
+    DICTIONARY_REBUILD_VERSION,
+    STUDY_CARD_VERSION,
     example_matches_term,
     canonical_part_of_speech,
+    study_card_is_complete,
     normalize_translation_case,
     normalize_term_case,
 )
 from ui.constants import delete_label
-from ui.learning_entry import render_learning_entry
+from ui.learning_entry import render_learning_entry, render_study_card
 from ui.navigation import back_menu_keyboard
 
 _log = logging.getLogger(__name__)
@@ -76,7 +79,7 @@ def _usable_analysis_result(value):
 
 async def _analysis_from_provider(prompt, provider):
     return await ai.allm_json(
-        prompt, 850, order=(provider,), module="learning_dict_add",
+        prompt, 1100, order=(provider,), module="learning_dict_add",
         fallback_allowed=True, privacy_level="public", budget_seconds=5,
     )
 
@@ -524,7 +527,10 @@ def _dict_entry_message(entry, status="added"):
     title = titles.get(status, "Найдено")
     b.bold(title)
     b.newline()
-    render_learning_entry(b, entry)
+    if study_card_is_complete(entry):
+        render_study_card(b, entry)
+    else:
+        render_learning_entry(b, entry)
     if entry.get("analysis_pending") and not _entry_translation(entry):
         b.spacer()
         b.line("Перевод уточняется автоматически.")
@@ -995,10 +1001,17 @@ async def _enrich_dutch_verb(entry, cid=None, force=False):
     })
     entry.pop("verb_analysis_failed", None)
     if analysis["example_nl"] and analysis["example_ru"]:
-        entry["examples"] = [{
+        generated_example = {
             "text": analysis["example_nl"],
             "translation": analysis["example_ru"],
-        }]
+        }
+        other_examples = [
+            example for example in (entry.get("examples") or [])
+            if isinstance(example, dict)
+            and str(example.get("text") or "").strip().casefold()
+            != analysis["example_nl"].strip().casefold()
+        ]
+        entry["examples"] = [generated_example, *other_examples][:2]
     return entry
 
 
@@ -1119,11 +1132,18 @@ INPUT_JSON: {input_payload}
   а не "На что ты ждёшь?".
 - breakdown: короткий разбор — часть речи, род/артикль, особенность формы (одна строка,
   без пояснений сверх необходимого).
-- examples: ровно один короткий пример на изучаемом языке с переводом на русский.
-  Пример должен быть естественным, частотным и пригодным для обычной речи. Не используй
+- pronunciation: русская транскрипция с ударением в квадратных скобках.
+- essence: два коротких русских предложения о смысле и ситуации употребления.
+- insight: одна короткая яркая ассоциация без выдуманной этимологии или важный
+  нюанс позиции, регистра или сочетаемости.
+- examples: ровно два коротких примера на изучаемом языке с переводом на русский
+  и коротким русским context. Примеры должны быть естественными, частотными и
+  пригодными для обычной речи. Не используй
   редкие, книжные, сложные или искусственно составленные конструкции. Это должна быть
   фраза, которую реально говорят дома, на работе, в магазине, дороге или разговоре;
   не соединяй случайные предметы и обстоятельства только ради целевого слова.
+- exercise_ru и exercise_answer: одно короткое русское предложение для перевода
+  и естественный правильный ответ на изучаемом языке.
 - pos: часть речи одним словом ("существительное", "глагол", "прилагательное", "фраза" и т.п.).
 - plural: множественное число, если применимо к существительному, иначе пусто.
 - forms: до 3 других форм слова (склонения/спряжения), если это уместно, иначе пустой список.
@@ -1152,8 +1172,16 @@ INPUT_JSON: {input_payload}
   "term": "правильная учебная форма",
   "article": "de|het|",
   "translation": "перевод",
+  "pronunciation": "[русская транскрипция с ударением]",
+  "essence": "два коротких предложения",
+  "insight": "ассоциация или важный нюанс",
   "breakdown": "короткий разбор",
-  "examples": [{{"text": "...", "translation": "..."}}],
+  "examples": [
+    {{"text": "...", "translation": "...", "context": "..."}},
+    {{"text": "...", "translation": "...", "context": "..."}}
+  ],
+  "exercise_ru": "...",
+  "exercise_answer": "...",
   "pos": "часть речи",
   "plural": "",
   "forms": [],
@@ -1207,7 +1235,7 @@ INPUT_JSON: {input_payload}
     if russian_source and not _CYRILLIC_RE.search(translation):
         return None
     examples = []
-    for ex in (d.get("examples") or [])[:1]:
+    for ex in (d.get("examples") or [])[:2]:
         if not isinstance(ex, dict):
             continue
         text = re.sub(r"\s+", " ", str(ex.get("text") or "").strip())
@@ -1216,7 +1244,11 @@ INPUT_JSON: {input_payload}
                 and not _contains_suspicious_analysis_text(ex_ru)
                 and len(text) <= 140 and len(ex_ru) <= 140
                 and len(text.split()) <= 16 and len(ex_ru.split()) <= 16):
-            examples.append({"text": text, "translation": ex_ru})
+            examples.append({
+                "text": text,
+                "translation": ex_ru,
+                "context": re.sub(r"\s+", " ", str(ex.get("context") or "").strip())[:80],
+            })
     breakdown = re.sub(r"\s+", " ", str(d.get("breakdown") or "").strip())[:180]
     if not breakdown or _contains_suspicious_analysis_text(breakdown):
         return None
@@ -1245,8 +1277,13 @@ INPUT_JSON: {input_payload}
         "normalized_term": term[:120],
         "article": article,
         "translation": normalize_translation_case(translation)[:180],
+        "pronunciation": re.sub(r"\s+", " ", str(d.get("pronunciation") or "").strip())[:120],
+        "essence": re.sub(r"\s+", " ", str(d.get("essence") or "").strip())[:500],
+        "insight": re.sub(r"\s+", " ", str(d.get("insight") or "").strip())[:300],
         "breakdown": breakdown,
         "examples": examples,
+        "exercise_ru": re.sub(r"\s+", " ", str(d.get("exercise_ru") or "").strip())[:240],
+        "exercise_answer": re.sub(r"\s+", " ", str(d.get("exercise_answer") or "").strip())[:240],
         "source_text": raw_user_term[:120],
         "added_at": datetime.now(config.TZ).isoformat(),
         "status": "new",
@@ -1284,10 +1321,18 @@ INPUT_JSON: {input_payload}
                 ) if value],
             })
             if analysis["example_nl"] and analysis["example_ru"]:
-                entry["examples"] = [{
+                verb_example = {
                     "text": analysis["example_nl"],
                     "translation": analysis["example_ru"],
-                }]
+                    "context": str((entry.get("examples") or [{}])[0].get("context") or "").strip(),
+                }
+                other_examples = [
+                    example for example in (entry.get("examples") or [])
+                    if isinstance(example, dict)
+                    and str(example.get("text") or "").strip().casefold()
+                    != analysis["example_nl"].strip().casefold()
+                ]
+                entry["examples"] = [verb_example, *other_examples][:2]
     if not russian_source and len(term.split()) > 1:
         if entry.get("construction"):
             entry["entry_type"] = "construction"
@@ -1314,7 +1359,11 @@ INPUT_JSON: {input_payload}
         # идентичность записи, которую пользователь попросил выучить.
         entry["term"] = _normalized_user_term(raw_user_term, lang)
         entry["normalized_term"] = entry["term"]
-    return _apply_known_dutch_verb_card(entry)
+    entry = _apply_known_dutch_verb_card(entry)
+    if study_card_is_complete(entry):
+        entry["study_card_version"] = STUDY_CARD_VERSION
+        entry["dictionary_rebuild_version"] = DICTIONARY_REBUILD_VERSION
+    return entry
 
 
 _SRS_FIELD_KEYS = (
@@ -1322,6 +1371,10 @@ _SRS_FIELD_KEYS = (
     "situation_type", "alt_translations",
     "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
     "srs_history", "srs_last_exercise_type",
+)
+_STUDY_CARD_FIELD_KEYS = (
+    "pronunciation", "essence", "insight", "exercise_ru", "exercise_answer",
+    "study_card_version", "dictionary_rebuild_version",
 )
 def _save_normalized_dict_entry(cid, entry):
     """Сохраняет запись единого словаря (структура из спеки: term/article/translation/
@@ -1333,6 +1386,10 @@ def _save_normalized_dict_entry(cid, entry):
     if canonical_pos:
         entry["pos"] = canonical_pos
     srs_fields = {k: entry[k] for k in _SRS_FIELD_KEYS if k in entry}
+    study_card_fields = (
+        {k: entry[k] for k in _STUDY_CARD_FIELD_KEYS if k in entry}
+        if study_card_is_complete(entry) else {}
+    )
     verb_fields = _verb_analysis_fields(entry)
     words = store.ensure_list_ids(config.DICT_KEY, cid)
     loose_text = _dict_loose_text(entry["lang"], entry["term"])
@@ -1363,6 +1420,11 @@ def _save_normalized_dict_entry(cid, entry):
                         duplicate[field] = entry[field]
                         changed = True
                 duplicate["dictionary_format_version"] = DICTIONARY_FORMAT_VERSION
+            if study_card_is_complete(entry):
+                for field in (*_STUDY_CARD_FIELD_KEYS, "examples"):
+                    if field in entry and duplicate.get(field) != entry[field]:
+                        duplicate[field] = entry[field]
+                        changed = True
             for field in ("raw_user_term", "normalized_term"):
                 if not duplicate.get(field) and entry.get(field):
                     duplicate[field] = entry[field]
@@ -1415,6 +1477,7 @@ def _save_normalized_dict_entry(cid, entry):
                 ),
                 "breakdown": entry.get("breakdown", ""),
                 "examples": entry.get("examples", []),
+                **study_card_fields,
                 "raw_user_term": item.get("raw_user_term") or entry.get("raw_user_term", ""),
                 "normalized_term": entry.get("normalized_term") or entry["term"],
                 "source_text": entry.get("source_text", ""),
@@ -1455,6 +1518,7 @@ def _save_normalized_dict_entry(cid, entry):
         "dictionary_format_version": DICTIONARY_FORMAT_VERSION,
         **({"analysis_pending": True} if entry.get("analysis_pending") else {}),
         **srs_fields,
+        **study_card_fields,
         **verb_fields,
     }
     store.add_to_list(config.DICT_KEY, cid, saved)
@@ -1531,10 +1595,15 @@ async def _refresh_dict_entry(cid, item, force=False):
                 "breakdown": (entry.get("breakdown", "") if force
                               else w.get("breakdown") or entry.get("breakdown", "")),
                 "examples": (
-                    entry.get("examples", []) if force
+                    entry.get("examples", []) if force or not study_card_is_complete(w)
                     else w.get("examples") if _dict_example(w) is not None
                     else entry.get("examples", [])
                 ),
+                **({
+                    field: entry.get(field, w.get(field, ""))
+                    for field in _STUDY_CARD_FIELD_KEYS
+                    if field in entry or field in w
+                } if study_card_is_complete(entry) else {}),
                 "status": w.get("status") or "new",
                 "last_shown_at": w.get("last_shown_at"),
                 "updated_at": datetime.now(config.TZ).isoformat(),

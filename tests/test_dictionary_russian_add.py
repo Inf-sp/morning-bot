@@ -491,12 +491,26 @@ def test_new_dictionary_entry_gets_stable_word_id(monkeypatch):
         "lang": "nl",
         "term": "vervangen",
         "translation": "заменять",
+        "pronunciation": "[ферва́нген]",
+        "essence": "Так говорят, когда одну вещь меняют на другую.",
+        "insight": "Обычно употребляется с прямым дополнением.",
+        "examples": [
+            {"text": "Ik vervang de lamp.", "translation": "Я заменяю лампу.", "context": "Дома"},
+            {"text": "We vervangen de stoel.", "translation": "Мы заменяем стул.", "context": "На работе"},
+        ],
+        "exercise_ru": "Я заменяю лампу.",
+        "exercise_answer": "Ik vervang de lamp.",
+        "study_card_version": 1,
+        "dictionary_rebuild_version": 2,
         "added_at": "2026-07-16T12:00:00+02:00",
     })
 
     assert status == "added"
     assert len(saved["id"]) == 32
     assert stored[0]["id"] == saved["id"]
+    assert saved["pronunciation"] == "[ферва́нген]"
+    assert saved["study_card_version"] == 1
+    assert len(saved["examples"]) == 2
 
 
 def test_bare_english_command_leaves_language_to_analyser():
@@ -915,7 +929,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
 
     assert entry["term"] == "Tering"
     assert calls == [
-        (850, {
+        (1100, {
             "order": (dictionary_import._DICT_ANALYSIS_ORDER[0],),
             "module": "learning_dict_add",
             "fallback_allowed": True,

@@ -186,8 +186,11 @@ async def process_requested_dictionary_rechecks(bot, cids, limit=1):
             continue
         before_by_id = {str(item.get("id") or ""): item for item in before}
         changed = moved = 0
-        compared_fields = ("lang", "term", "translation", "article", "pos", "breakdown",
-                           "plural", "forms", "examples", "construction")
+        compared_fields = (
+            "lang", "term", "translation", "article", "pos", "breakdown",
+            "plural", "forms", "examples", "construction", "pronunciation",
+            "essence", "insight", "exercise_ru", "exercise_answer",
+        )
         for item in after:
             old = before_by_id.get(str(item.get("id") or ""))
             if not old:

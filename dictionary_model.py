@@ -3,7 +3,15 @@
 import re
 
 
-DICTIONARY_FORMAT_VERSION = 3
+DICTIONARY_FORMAT_VERSION = 4
+STUDY_CARD_VERSION = 1
+DICTIONARY_REBUILD_VERSION = 2
+
+_STUDY_CARD_PLACEHOLDERS = (
+    "русская транскрипция", "1-2 значения", "2-3 коротких предложения",
+    "короткая яркая ассоциация", "один важный нюанс",
+    "ассоциация или один важный нюанс", "...",
+)
 
 
 _LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an)\s+", re.I)
@@ -33,6 +41,94 @@ CANONICAL_ENTRY_OVERRIDES = {
     "wat balen": ("Wat balen", "Вот досада!"),
     "wat doe je daar": ("Wat doe je daar?", "Что ты делаешь там?"),
 }
+
+
+def study_card_data(entry):
+    """Возвращает единые учебные поля записи, включая legacy-разбор рассылки."""
+    if not isinstance(entry, dict):
+        return {}
+    legacy = entry.get("daily_word_deep_dive")
+    legacy = legacy if isinstance(legacy, dict) else {}
+    examples = entry.get("examples")
+    if not isinstance(examples, list) or len(examples) < 2:
+        examples = legacy.get("examples") or examples or []
+    return {
+        "term": entry_term(entry),
+        "translation": str(entry.get("translation") or legacy.get("translation") or "").strip(),
+        "pronunciation": str(entry.get("pronunciation") or legacy.get("pronunciation") or "").strip(),
+        "essence": str(entry.get("essence") or legacy.get("essence") or "").strip(),
+        "insight": str(
+            entry.get("insight") or entry.get("usage_note") or entry.get("memory_hook")
+            or legacy.get("insight") or legacy.get("usage_note") or legacy.get("memory_hook")
+            or ""
+        ).strip(),
+        "examples": examples,
+        "exercise_ru": str(entry.get("exercise_ru") or legacy.get("exercise_ru") or "").strip(),
+        "exercise_answer": str(
+            entry.get("exercise_answer") or legacy.get("exercise_answer") or ""
+        ).strip(),
+    }
+
+
+def study_card_is_complete(entry):
+    """Проверяет, что карточку можно целиком показать без догадок и шаблонов."""
+    card = study_card_data(entry)
+    required = (
+        card.get("term"), card.get("translation"), card.get("pronunciation"),
+        card.get("essence"), card.get("insight"), card.get("exercise_ru"),
+        card.get("exercise_answer"),
+    )
+    if not all(str(value or "").strip() for value in required):
+        return False
+    combined = " ".join(str(value) for value in required).casefold()
+    if any(marker in combined for marker in _STUDY_CARD_PLACEHOLDERS):
+        return False
+    if len(card["essence"]) < 20 or len(card["insight"]) < 12:
+        return False
+    pronunciation = card["pronunciation"]
+    if not re.search(r"[А-Яа-яЁё]", pronunciation) or not (
+        "\u0301" in pronunciation or "ё" in pronunciation.casefold()
+    ):
+        return False
+    if not re.search(r"[А-Яа-яЁё]", card["essence"]):
+        return False
+    examples = card.get("examples")
+    if not isinstance(examples, list) or len(examples) < 2:
+        return False
+    for example in examples[:2]:
+        if not isinstance(example, dict):
+            return False
+        text = str(example.get("text") or "").strip()
+        translation = str(example.get("translation") or "").strip()
+        context = str(example.get("context") or "").strip()
+        if (len(text) < 4 or len(translation) < 4 or len(context) < 3
+                or "..." in (text, translation, context)):
+            return False
+        if not re.search(r"[А-Яа-яЁё]", translation):
+            return False
+    return True
+
+
+def migrate_legacy_study_card(entry):
+    """Переносит валидный daily-разбор в канонические поля той же записи."""
+    if not isinstance(entry, dict) or not study_card_is_complete(entry):
+        return False
+    card = study_card_data(entry)
+    changed = False
+    for field in (
+        "pronunciation", "essence", "insight", "examples",
+        "exercise_ru", "exercise_answer",
+    ):
+        if entry.get(field) != card[field]:
+            entry[field] = card[field]
+            changed = True
+    if entry.get("study_card_version") != STUDY_CARD_VERSION:
+        entry["study_card_version"] = STUDY_CARD_VERSION
+        changed = True
+    if "daily_word_deep_dive" in entry:
+        entry.pop("daily_word_deep_dive", None)
+        changed = True
+    return changed
 
 
 def language_code(language):

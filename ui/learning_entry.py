@@ -2,7 +2,9 @@
 
 import re
 
-from dictionary_model import example_matches_term
+from telegram import MessageEntity
+
+from dictionary_model import example_matches_term, study_card_data
 
 from dictionary_model import display_term
 
@@ -89,6 +91,53 @@ def _example(entry, term):
 def _without_terminal_period(value):
     """Карточка уже визуально завершена: точка в конце примера лишняя."""
     return str(value or "").strip().rstrip(". ")
+
+
+def _meaning_case(value):
+    """Значение после стрелки начинается со строчной, но аббревиатуры сохраняются."""
+    text = str(value or "").strip()
+    if len(text) > 1 and text[:2].isupper():
+        return text
+    return text[:1].lower() + text[1:] if text else ""
+
+
+def render_study_card(builder, entry, *, include_exercise=True):
+    """Единая сохранённая карточка для словаря и ежедневной рассылки."""
+    card = study_card_data(entry)
+    term = _term(entry, card.get("term"))
+    translation = re.sub(r"\s*;\s*", " · ", card.get("translation") or "").strip()
+    builder.spacer()
+    builder.bold(term)
+    builder.text_line(" → ")
+    builder.line(" · ".join(
+        part for part in (card.get("pronunciation"), _meaning_case(translation)) if part
+    ))
+
+    explanation = " ".join(
+        part for part in (card.get("essence"), card.get("insight")) if part
+    )
+    builder.spacer()
+    builder.label("В чём суть", explanation, lowercase=False)
+    builder.newline()
+
+    builder.spacer()
+    builder.bold("Живые примеры:")
+    builder.newline()
+    for example in card.get("examples", [])[:2]:
+        text = str(example.get("text") or "").strip()
+        meaning = str(example.get("translation") or "").strip()
+        context = str(example.get("context") or "").strip()
+        line = f"{text} → {meaning}"
+        builder.line(f"{line} ({context})" if context else line)
+
+    if include_exercise:
+        builder.spacer()
+        builder.text_line("🎯 ")
+        builder.bold("Твоя очередь:")
+        builder.text_line(f" «{card.get('exercise_ru')}» → ")
+        builder.add(card.get("exercise_answer"), MessageEntity.SPOILER)
+        builder.newline()
+    return builder
 
 
 def render_learning_entry(
