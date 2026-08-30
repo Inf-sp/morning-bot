@@ -168,6 +168,37 @@ def _run_with_deadline(module, budget_seconds, call):
         _ACTIVE_DEADLINE.reset(token)
 
 
+def _run_provider_attempt(call, *, reserve_seconds=0.0):
+    """Ограничивает одну попытку, сохраняя время следующим AI-резервам."""
+    outer_deadline = _ACTIVE_DEADLINE.get()
+    if outer_deadline is None or reserve_seconds <= 0:
+        return call()
+    now = time.monotonic()
+    attempt_deadline = min(
+        float(outer_deadline),
+        max(now + 0.2, float(outer_deadline) - float(reserve_seconds)),
+    )
+    token = _ACTIVE_DEADLINE.set(attempt_deadline)
+    try:
+        return call()
+    finally:
+        _ACTIVE_DEADLINE.reset(token)
+
+
+def _reserve_for_later_providers(order, index, policy):
+    """Возвращает минимальное время, которое нельзя отдавать текущей модели."""
+    later = tuple(order[index + 1:])
+    regular_reserves = sum(
+        1 for name in later if name != "openrouter"
+    ) * _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS
+    openrouter_reserve = (
+        OPENROUTER_FALLBACK_RESERVE_SECONDS
+        if policy.openrouter_allowed and "openrouter" in later and config.OPENROUTER_API_KEY
+        else 0.0
+    )
+    return regular_reserves + openrouter_reserve
+
+
 def _is_temporary_status(status_code):
     return status_code in (429, 502, 503, 504)
 
@@ -1392,7 +1423,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     gemini_rate_limit_err = pre_gemini_unavailable
     rate_limit_logged = False
     failed_providers = []
-    for name in order:
+    for provider_index, name in enumerate(order):
         remaining = _remaining_seconds()
         if remaining is not None and remaining <= 0:
             errs.append("chain:deadline")
@@ -1436,7 +1467,12 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             continue
         t0 = time.time()
         try:
-            out = _as_text(calls[name]())
+            out = _as_text(_run_provider_attempt(
+                calls[name],
+                reserve_seconds=_reserve_for_later_providers(
+                    order, provider_index, policy,
+                ),
+            ))
             if out and out.strip():
                 if response_validator is not None:
                     try:

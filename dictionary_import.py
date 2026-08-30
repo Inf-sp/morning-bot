@@ -66,7 +66,7 @@ _DICT_ANALYSIS_ORDER = (
     "cf", "openrouter",
 )
 _DICT_HEDGE_DELAY_SECONDS = 1.0
-_DICT_ANALYSIS_DEADLINE_SECONDS = 6.0
+_DICT_ANALYSIS_DEADLINE_SECONDS = 15.0
 _DICT_PENDING_PROFILE_FIELD = "dictionary_pending_analysis"
 
 
@@ -88,7 +88,7 @@ async def _analysis_from_provider(prompt, provider, cache_context=None):
         "module": "learning_dict_add",
         "fallback_allowed": True,
         "privacy_level": "public",
-        "budget_seconds": 5,
+        "budget_seconds": 12,
     }
     if provider_cache_context is not None:
         kwargs["cache_context"] = provider_cache_context
@@ -1041,36 +1041,13 @@ def _normalized_user_term(raw_user_term, lang):
     return normalize_term_case(term, _kind_of(term))
 
 
-def _rebuild_result_is_fresh(value, previous):
-    """Проверяет полноту пересборки и наличие хотя бы одного нового примера."""
-    if not isinstance(value, dict):
-        return False
-    required = (
-        "pronunciation", "essence", "insight", "exercise_ru", "exercise_answer",
-    )
-    if not all(str(value.get(field) or "").strip() for field in required):
-        return False
-    examples = value.get("examples") or []
-    if not isinstance(examples, list) or len(examples) < 2:
-        return False
-    if not all(
-        isinstance(example, dict)
-        and str(example.get("text") or "").strip()
-        and str(example.get("translation") or "").strip()
-        and str(example.get("context") or "").strip()
-        for example in examples[:2]
-    ):
-        return False
-    old_examples = {
-        re.sub(r"\s+", " ", str(example.get("text") or "")).strip().casefold()
-        for example in ((previous or {}).get("examples") or [])
-        if isinstance(example, dict) and str(example.get("text") or "").strip()
-    }
-    new_examples = {
-        re.sub(r"\s+", " ", str(example.get("text") or "")).strip().casefold()
-        for example in examples[:2]
-    }
-    return len(new_examples) == 2 and new_examples.isdisjoint(old_examples)
+def _rebuild_result_is_usable(value, _previous):
+    """Принимает содержательный повторный разбор сохранённого слова.
+
+    Полноту итоговой карточки проверяем после объединения с уже сохранёнными
+    безопасными полями. Повтор примера не должен отменять всю пересборку.
+    """
+    return _usable_analysis_result(value)
 
 
 async def _normalize_dict_entry_full(
@@ -1268,7 +1245,7 @@ INPUT_JSON: {input_payload}
             d = await _dictionary_analysis_json(
                 prompt,
                 cache_context=rebuild_cache_context,
-                result_validator=lambda value: _rebuild_result_is_fresh(
+                result_validator=lambda value: _rebuild_result_is_usable(
                     value, rebuild_from,
                 ),
             )
@@ -1644,6 +1621,13 @@ async def _refresh_dict_entry(cid, item, force=False):
             term, lang, source_text=term,
             rebuild_from=item if force else None,
         )
+        if force and entry:
+            merged = dict(item)
+            for field, value in entry.items():
+                if value not in (None, "", []):
+                    merged[field] = value
+            merged["needs_confirmation"] = False
+            entry = merged
         if entry:
             entry = (await _enrich_dutch_verb(entry, cid, force=True)
                      if force else await _enrich_dutch_verb(entry, cid))

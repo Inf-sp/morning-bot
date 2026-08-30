@@ -67,6 +67,40 @@ def test_chain_does_not_start_another_provider_after_deadline(monkeypatch):
     assert calls == ["gemini"]
 
 
+def test_chain_preserves_time_for_the_next_ai_provider(monkeypatch):
+    clock = {"now": 0.0}
+    calls = []
+
+    monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
+    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
+
+    def primary(*_args, **_kwargs):
+        calls.append("gemini")
+        clock["now"] = ai._ACTIVE_DEADLINE.get()
+        raise ai.LLMProviderError("gemini", "timeout", temporary=True)
+
+    def reserve(*_args, **_kwargs):
+        calls.append("groq")
+        return "резервный ответ"
+
+    monkeypatch.setattr(ai, "_gen_gemini", primary)
+    monkeypatch.setattr(ai, "_gen_groq", reserve)
+
+    result = ai.llm(
+        "Ответь", order=("gemini", ai.GROQ_STANDARD), budget_seconds=3,
+    )
+
+    assert result == "резервный ответ"
+    assert calls == ["gemini", "groq"]
+    assert clock["now"] == 2.0
+
+
 def test_free_chat_gives_openrouter_its_reserved_remaining_budget(monkeypatch):
     clock = {"now": 0.0}
     calls = []

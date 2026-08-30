@@ -126,6 +126,16 @@ def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
         assert ai._resolve(None, None, module=module)[0] == "gemini"
 
 
+def test_every_central_text_ai_route_has_a_reserve_provider():
+    routes = [
+        *ai.TIERS.values(),
+        *((order, None) for order in ai.MODULE_POLICY.values()),
+    ]
+
+    for order, _unused in routes:
+        assert len([provider for provider in order if provider != "openrouter"]) >= 2
+
+
 def test_all_premium_recommendations_have_a_cache_ttl():
     for module in ("travel", "food", "wardrobe"):
         assert ai._cache_ttl(module, "json") > 0

@@ -232,7 +232,7 @@ def test_force_check_replaces_wrong_card_fields_and_keeps_srs(monkeypatch):
     assert updated["card_rebuilt_at"]
 
 
-def test_card_rebuild_uses_fresh_cache_context_and_requires_new_example(monkeypatch):
+def test_card_rebuild_uses_fresh_cache_context_without_rejecting_the_same_word(monkeypatch):
     old = {
         "term": "Careful", "translation": "Осторожный",
         "examples": [
@@ -277,11 +277,48 @@ def test_card_rebuild_uses_fresh_cache_context_and_requires_new_example(monkeypa
     assert captured["cache_context"]["mode"] == "dictionary_card_rebuild"
     assert captured["cache_context"]["request_id"]
     assert captured["result_validator"](analyzed)
-    assert not captured["result_validator"]({**analyzed, "examples": old["examples"]})
-    assert not captured["result_validator"]({
+    assert captured["result_validator"]({**analyzed, "examples": old["examples"]})
+    assert captured["result_validator"]({
         **analyzed,
         "examples": [old["examples"][0], analyzed["examples"][1]],
     })
+
+
+def test_card_rebuild_merges_missing_fields_from_saved_card(monkeypatch):
+    old = {
+        "id": "word-1", "lang": "en", "term": "Careful",
+        "translation": "Осторожный", "pos": "прилагательное",
+        "breakdown": "прилагательное", "pronunciation": "[кэ́афул]",
+        "essence": "Так описывают внимательное действие без ненужного риска.",
+        "insight": "Часто употребляется как предупреждение.",
+        "examples": [
+            {"text": "Be careful.", "translation": "Будь осторожен.",
+             "context": "Предупреждение"},
+            {"text": "She is careful.", "translation": "Она осторожна.",
+             "context": "О человеке"},
+        ],
+        "exercise_ru": "Будь осторожен.", "exercise_answer": "Be careful.",
+    }
+    words = [old]
+
+    async def partial(*_args, **_kwargs):
+        return {
+            "lang": "en", "term": "Careful", "translation": "Осторожный; внимательный",
+            "breakdown": "прилагательное", "pos": "прилагательное",
+            "examples": [], "needs_confirmation": True,
+        }
+
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", partial)
+    monkeypatch.setattr(dictionary_import.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(dictionary_import.store, "set_list", lambda *_args: None)
+
+    updated = asyncio.run(dictionary_import._refresh_dict_entry("42", old, force=True))
+
+    assert updated is not old
+    assert updated["translation"] == "Осторожный; внимательный"
+    assert updated["pronunciation"] == "[кэ́афул]"
+    assert updated["examples"] == old["examples"]
+    assert updated["card_rebuild_revision"] == 1
 
 
 def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
@@ -984,7 +1021,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
             "module": "learning_dict_add",
             "fallback_allowed": True,
             "privacy_level": "public",
-            "budget_seconds": 5,
+            "budget_seconds": 12,
         })
     ]
 
