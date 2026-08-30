@@ -65,7 +65,6 @@ _DICT_ANALYSIS_ORDER = (
     "gemini", ai.GROQ_STANDARD, ai.GROQ_SIMPLE,
     "cf", "openrouter",
 )
-_DICT_HEDGE_DELAY_SECONDS = 1.0
 _DICT_ANALYSIS_DEADLINE_SECONDS = 15.0
 _DICT_PENDING_PROFILE_FIELD = "dictionary_pending_analysis"
 
@@ -79,71 +78,23 @@ def _usable_analysis_result(value):
     )
 
 
-async def _analysis_from_provider(prompt, provider, cache_context=None):
-    provider_cache_context = None
-    if isinstance(cache_context, dict):
-        provider_cache_context = {**cache_context, "provider": provider}
-    kwargs = {
-        "order": (provider,),
-        "module": "learning_dict_add",
-        "fallback_allowed": True,
-        "privacy_level": "public",
-        "budget_seconds": 12,
-    }
-    if provider_cache_context is not None:
-        kwargs["cache_context"] = provider_cache_context
-    return await ai.allm_json(prompt, 1100, **kwargs)
-
-
 async def _dictionary_analysis_json(prompt, *, cache_context=None, result_validator=None):
-    """Gemini стартует сразу, резервы — через секунду; берём первый валидный JSON."""
-    def start_provider(provider):
-        if cache_context is None:
-            return asyncio.create_task(_analysis_from_provider(prompt, provider))
-        return asyncio.create_task(
-            _analysis_from_provider(prompt, provider, cache_context)
-        )
-
-    tasks = {
-        start_provider("gemini"): "gemini"
-    }
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + _DICT_ANALYSIS_DEADLINE_SECONDS
-    reserves_started = False
-    last_error = None
+    """Один общий маршрут пробует каждый AI-резерв ровно один раз."""
+    validator = result_validator or _usable_analysis_result
     try:
-        while tasks and loop.time() < deadline:
-            timeout = max(0.0, deadline - loop.time())
-            if not reserves_started:
-                timeout = min(timeout, _DICT_HEDGE_DELAY_SECONDS)
-            done, _pending = await asyncio.wait(
-                tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in done:
-                provider = tasks.pop(task)
-                try:
-                    result = task.result()
-                    if (_usable_analysis_result(result)
-                            and (result_validator is None or result_validator(result))):
-                        return result
-                    last_error = ValueError("invalid dictionary analysis")
-                except Exception as exc:
-                    last_error = exc
-                    _log.info(
-                        "dictionary provider %s unavailable: %s",
-                        provider, type(exc).__name__,
-                    )
-            if not reserves_started:
-                reserves_started = True
-                for provider in _DICT_ANALYSIS_ORDER[1:]:
-                    task = start_provider(provider)
-                    tasks[task] = provider
-        raise DictionaryAnalysisUnavailable() from last_error
-    finally:
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        return await ai.allm_json(
+            prompt,
+            1100,
+            order=_DICT_ANALYSIS_ORDER,
+            module="learning_dict_add",
+            fallback_allowed=True,
+            privacy_level="public",
+            budget_seconds=_DICT_ANALYSIS_DEADLINE_SECONDS,
+            cache_context=cache_context,
+            result_validator=validator,
+        )
+    except Exception as exc:
+        raise DictionaryAnalysisUnavailable() from exc
 
 _LOCAL_DUTCH_VERB_CARDS = {
     "bewegen": {
@@ -1784,6 +1735,8 @@ async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text="")
         )
         return
     status, saved = _save_normalized_dict_entry(cid, entry)
+    if saved.get("analysis_pending") and not _entry_translation(saved):
+        _queue_dictionary_analysis(cid, payload, saved.get("lang") or lang or check_lang)
     store.pending_input.pop(str(cid), None)
     store.dict_pending_add.pop(str(cid), None)
     msg = _dict_entry_message(saved, status=status)

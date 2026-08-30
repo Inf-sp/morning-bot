@@ -129,28 +129,24 @@ def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
-def test_dictionary_analysis_starts_reserves_without_waiting_for_slow_gemini(monkeypatch):
-    calls = []
+def test_dictionary_analysis_passes_semantic_validation_to_central_route(monkeypatch):
+    captured = {}
 
-    async def provider(_prompt, name):
-        calls.append(name)
-        if name == "gemini":
-            await asyncio.sleep(0.2)
+    async def analyze(_prompt, _max_tokens, **kwargs):
+        captured.update(kwargs)
         return {
             "ok": True, "lang": "nl", "term": "wijsheid",
             "translation": "мудрость", "breakdown": "существительное",
         }
 
-    monkeypatch.setattr(dictionary_import, "_analysis_from_provider", provider)
-    monkeypatch.setattr(dictionary_import, "_DICT_HEDGE_DELAY_SECONDS", 0.01)
-    started = time.monotonic()
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
 
     result = asyncio.run(dictionary_import._dictionary_analysis_json("prompt"))
 
     assert result["term"] == "wijsheid"
-    assert calls[0] == "gemini"
-    assert len(calls) > 1
-    assert time.monotonic() - started < 0.15
+    assert captured["order"] == dictionary_import._DICT_ANALYSIS_ORDER
+    assert captured["result_validator"](result)
+    assert not captured["result_validator"]({"ok": False})
 
 
 def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
@@ -912,6 +908,8 @@ def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
     saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
     assert saved[0]["term"] == "Tering"
     assert saved[0]["analysis_pending"] is True
+    queued = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
+    assert queued[0]["term"] == "tering"
     assert "Добавлено в нидерландский словарь" in sent[-1]["text"]
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
     assert cid not in dictionary_import.store.pending_input
@@ -1015,24 +1013,25 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
     entry = asyncio.run(dictionary_import._normalize_dict_entry_full("tering", "nl"))
 
     assert entry["term"] == "Tering"
-    assert calls == [
-        (1100, {
-            "order": (dictionary_import._DICT_ANALYSIS_ORDER[0],),
-            "module": "learning_dict_add",
-            "fallback_allowed": True,
-            "privacy_level": "public",
-            "budget_seconds": 12,
-        })
-    ]
+    assert len(calls) == 1
+    max_tokens, kwargs = calls[0]
+    assert max_tokens == 1100
+    assert kwargs["order"] == dictionary_import._DICT_ANALYSIS_ORDER
+    assert kwargs["module"] == "learning_dict_add"
+    assert kwargs["fallback_allowed"] is True
+    assert kwargs["privacy_level"] == "public"
+    assert kwargs["budget_seconds"] == 15
+    assert kwargs["result_validator"]({
+        "ok": True, "term": "tering", "translation": "ругательство",
+        "breakdown": "существительное",
+    })
 
 
-def test_dictionary_analysis_explicitly_tries_next_provider_after_failure(monkeypatch):
+def test_dictionary_analysis_uses_one_central_provider_chain(monkeypatch):
     calls = []
 
     async def analyze(_prompt, _max_tokens, **kwargs):
         calls.append(kwargs["order"])
-        if len(calls) < 3:
-            raise RuntimeError("provider unavailable")
         return {
             "ok": True, "lang": "nl", "term": "bijzonder", "article": "",
             "translation": "особенный", "breakdown": "прилагательное",
@@ -1048,10 +1047,7 @@ def test_dictionary_analysis_explicitly_tries_next_provider_after_failure(monkey
     entry = asyncio.run(dictionary_import._normalize_dict_entry_full("bijzonder", "nl"))
 
     assert entry["translation"] == "Особенный"
-    assert calls[0] == ("gemini",)
-    assert set(calls[1:]) == {
-        (provider,) for provider in dictionary_import._DICT_ANALYSIS_ORDER[1:]
-    }
+    assert calls == [dictionary_import._DICT_ANALYSIS_ORDER]
 
 
 def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypatch):

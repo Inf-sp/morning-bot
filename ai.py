@@ -1684,9 +1684,16 @@ def _parse_json_response(raw):
 
 def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
                    fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-                   allow_personal_openrouter=False, fallback_policy=None, cache_context=None):
+                   allow_personal_openrouter=False, fallback_policy=None, cache_context=None,
+                   result_validator=None):
     if not module:
         module = _caller_module()
+    def validate_json_result(raw):
+        parsed = _parse_json_response(raw)
+        if result_validator is not None and not result_validator(parsed):
+            raise ValueError("json_result_validation_failed")
+        return parsed
+
     raw = _llm_impl(
         prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
         "Внутри строковых значений НЕ используй двойные кавычки - "
@@ -1694,7 +1701,7 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
         max_tokens, 0.7, order, tier, module, route,
         fallback_allowed, privacy_level, "json", fallback_policy,
         allow_personal_openrouter, cache_context,
-        response_validator=_parse_json_response,
+        response_validator=validate_json_result,
     )
     return _parse_json_response(raw)
 
@@ -1702,7 +1709,7 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
 def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
              fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
              allow_personal_openrouter=False, fallback_policy=None, budget_seconds=None,
-             cache_context=None):
+             cache_context=None, result_validator=None):
     resolved_module = module or _caller_module()
     return _run_with_deadline(
         resolved_module,
@@ -1710,7 +1717,7 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         lambda: _llm_json_impl(
             prompt, max_tokens, order, tier, resolved_module, route,
             fallback_allowed, privacy_level, allow_personal_openrouter,
-            fallback_policy, cache_context,
+            fallback_policy, cache_context, result_validator,
         ),
     )
 
@@ -2073,11 +2080,11 @@ async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, 
 async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",
                     fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
                     allow_personal_openrouter=False, fallback_policy=None,
-                    budget_seconds=None, cache_context=None):
+                    budget_seconds=None, cache_context=None, result_validator=None):
     return await asyncio.to_thread(
         llm_json, prompt, max_tokens, order, tier, module, route,
         fallback_allowed, privacy_level, allow_personal_openrouter, fallback_policy,
-        budget_seconds, cache_context,
+        budget_seconds, cache_context, result_validator,
     )
 
 async def achat_chain(history, cid=None, budget_seconds=FREE_CHAT_BUDGET_SECONDS):

@@ -103,6 +103,21 @@ def test_invalid_json_from_primary_uses_the_next_provider(monkeypatch):
     assert result == {"items": [{"name": "готово"}]}
 
 
+def test_semantically_invalid_json_uses_the_next_provider(monkeypatch):
+    monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: '{"ok":false}')
+    monkeypatch.setattr(ai, "_gen_cf", lambda *_args, **_kwargs: '{"ok":true}')
+
+    result = ai.llm_json(
+        "Верни JSON", order=(ai.GROQ_STANDARD, "cf"),
+        module="test_json_fallback", result_validator=lambda value: value.get("ok") is True,
+    )
+
+    assert result == {"ok": True}
+
+
 def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)

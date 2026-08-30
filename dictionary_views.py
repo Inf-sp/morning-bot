@@ -134,11 +134,13 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
         return
     updated = await _refresh_dict_entry(cid, entry, force=True)
     if updated is entry or not updated:
-        await bot.send_message(
-            chat_id=cid,
-            text=("Не получилось пересобрать карточку. Старая версия сохранена. "
-                  "Попробуй ещё раз позже."),
-            reply_markup=back_menu_keyboard(f"a_dictlang_{_dict_lang(entry)}"),
+        _queue_dictionary_analysis(cid, _entry_term(entry), _dict_lang(entry))
+        msg = _dict_entry_message(entry, status="found")
+        await _show_screen(
+            bot, cid,
+            f"{msg.text}\n\nПересборка продолжится автоматически.",
+            msg.entities, _dict_entry_view_kb(entry, 0, ""), q=q,
+            persistent_inline=True,
         )
         return
     updated = normalize_user_dictionary(cid)

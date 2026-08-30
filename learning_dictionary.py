@@ -346,6 +346,11 @@ async def _refresh_dict_entry(cid, item, force=False):
     return await implementation(cid, item, force=force)
 
 
+def _queue_dictionary_analysis(cid, payload, lang):
+    from dictionary_import import _queue_dictionary_analysis as implementation
+    return implementation(cid, payload, lang)
+
+
 def _extract_srs_fields(data):
     from dictionary_import import _extract_srs_fields as implementation
     return implementation(data)

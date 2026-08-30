@@ -44,12 +44,12 @@ async def job_retry_dictionary_adds(context):
         return
     import dictionary_import
     await dictionary_import.process_queued_dictionary_adds(
-        context.bot, access.get_allowed_cids(), limit=10,
+        context.bot, access.get_allowed_cids(), limit=1,
     )
 
 
 async def job_dictionary_maintenance(context):
-    """Обновляет старые карточки вне пользовательского открытия словаря."""
+    """Локально нормализует словарь, не расходуя AI-квоты пользователя."""
     if tracking.has_active_actions():
         context.application.job_queue.run_once(
             job_dictionary_maintenance, when=60, name="dictionary_maintenance_once",
@@ -58,9 +58,7 @@ async def job_dictionary_maintenance(context):
         return
     for cid in access.get_allowed_cids():
         try:
-            await dictionary.rebuild_dictionary_entries(cid)
-            for lang in ("nl", "en"):
-                await dictionary.migrate_dict_entries_for_srs(cid, lang)
+            dictionary.normalize_user_dictionary(cid)
         except Exception:
             logging.exception("Dictionary maintenance failed user_id=%s", cid)
 
