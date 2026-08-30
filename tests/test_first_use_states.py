@@ -202,7 +202,10 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
         for index in range(21)
     ]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
-    monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: False)
+    monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: True)
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("opening a card must not start an AI rebuild")
+    monkeypatch.setattr(learning_dictionary, "_refresh_dict_entry", forbidden)
     bot = Bot()
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))

@@ -256,6 +256,31 @@ def test_home_cache_warm_yields_to_active_user_action(monkeypatch):
     asyncio.run(bot.job_warm_home_pages(object()))
 
 
+def test_home_cache_warm_yields_to_dictionary_migration(monkeypatch):
+    calls = []
+
+    class Job:
+        data = "wardrobe"
+
+    class Context:
+        job = Job()
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(
+        bot.store, "get_profile",
+        lambda _cid: {"dictionary_card_migration": {"version": 4}},
+    )
+    monkeypatch.setattr(
+        bot.wardrobe, "warm_home_cache",
+        lambda _cid: calls.append("warm"),
+    )
+
+    asyncio.run(bot.job_warm_home_pages(Context()))
+
+    assert calls == []
+
+
 def test_home_cache_warm_schedule_separates_heavy_sections():
     assert bot._HOME_WARM_SCHEDULE == (
         ("myday", "07:00"),

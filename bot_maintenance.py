@@ -49,7 +49,7 @@ async def job_retry_dictionary_adds(context):
 
 
 async def job_dictionary_maintenance(context):
-    """Локально нормализует словарь, не расходуя AI-квоты пользователя."""
+    """Нормализует словарь и ставит legacy-карточки в фоновую миграцию."""
     if tracking.has_active_actions():
         context.application.job_queue.run_once(
             job_dictionary_maintenance, when=60, name="dictionary_maintenance_once",
@@ -59,6 +59,7 @@ async def job_dictionary_maintenance(context):
     for cid in access.get_allowed_cids():
         try:
             dictionary.normalize_user_dictionary(cid)
+            dictionary.queue_dictionary_rebuild(cid)
         except Exception:
             logging.exception("Dictionary maintenance failed user_id=%s", cid)
 
@@ -67,9 +68,13 @@ async def job_requested_dictionary_rechecks(context):
     """Забирает пользовательские запросы полной проверки по одному за проход."""
     if tracking.has_active_actions():
         return
-    await dictionary.process_requested_dictionary_rechecks(
+    handled = await dictionary.process_requested_dictionary_rechecks(
         context.bot, access.get_allowed_cids(), limit=1,
     )
+    if not handled:
+        await dictionary.process_dictionary_rebuilds(
+            context.bot, access.get_allowed_cids(), limit=1,
+        )
 
 
 async def job_normalize_favorite_collections(context):

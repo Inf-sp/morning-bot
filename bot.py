@@ -326,6 +326,13 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_warm_weather_cache failed for cid=%s", cid)
 
 
+def _dictionary_migration_active():
+    return any(
+        bool(store.get_profile(cid).get("dictionary_card_migration"))
+        for cid in access.get_allowed_cids()
+    )
+
+
 async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
     """Globally refresh verified category news before home-screen warmups."""
     if tracking.has_active_actions():
@@ -335,6 +342,9 @@ async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
             data={"category_news_retry": True},
             **_job_options("category_news_refresh_retry"),
         )
+        return
+    if _dictionary_migration_active():
+        logging.info("category news refresh skipped: dictionary migration active")
         return
     try:
         report = await asyncio.to_thread(category_news.refresh_pool)
@@ -365,6 +375,9 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
     Ошибка одного раздела не мешает прогреть остальные. Пользователю ничего
     не отправляется; при открытии раздела бот читает уже готовый кэш.
     """
+    if _dictionary_migration_active():
+        logging.info("home cache warm skipped: dictionary migration active")
+        return
     scheduled_section = str(getattr(getattr(context, "job", None), "data", "") or "")
     for cid in access.get_allowed_cids():
         if tracking.has_active_actions():
@@ -618,7 +631,7 @@ def _build_application():
     )
     jq.run_once(
         job_dictionary_maintenance,
-        when=180,
+        when=1,
         **_job_options("dictionary_maintenance_once"),
     )
     for index, (section, _time_label) in enumerate(_HOME_WARM_SCHEDULE):

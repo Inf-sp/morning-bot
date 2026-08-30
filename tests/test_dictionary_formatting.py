@@ -331,7 +331,7 @@ def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
 
     assert study_card_is_complete(entry)
     assert entry["study_card_version"] == 1
-    assert entry["dictionary_rebuild_version"] == 2
+    assert entry["dictionary_rebuild_version"] == dictionary_import.DICTIONARY_REBUILD_VERSION
     assert len(entry["examples"]) == 2
 
 

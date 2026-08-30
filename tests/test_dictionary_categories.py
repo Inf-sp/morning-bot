@@ -414,7 +414,11 @@ def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeyp
     assert words[1]["lang"] == "en"
     assert words[2]["term"] == "Koppig"
     assert words[2].get("article", "") == ""
-    assert all(item["dictionary_rebuild_version"] == 2 for item in words[:3])
+    assert all(
+        item["dictionary_rebuild_version"]
+        == learning_dictionary._DICTIONARY_REBUILD_VERSION
+        for item in words[:3]
+    )
     assert "dictionary_rebuild_version" not in words[-1]
     assert all(item["study_card_version"] == 1 for item in words[:3])
     assert saved

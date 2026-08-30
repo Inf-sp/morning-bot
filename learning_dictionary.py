@@ -442,7 +442,10 @@ def _dict_counts(cid):
 _SRS_MIGRATION_BATCH_SIZE = 40  # ограничивает размер одного промпта на очень больших словарях
 _DICTIONARY_FORMAT_VERSION = DICTIONARY_FORMAT_VERSION
 _DICTIONARY_REBUILD_VERSION = DICTIONARY_REBUILD_VERSION
-_DICTIONARY_REBUILD_BATCH_SIZE = 10
+_DICTIONARY_REBUILD_BATCH_SIZE = 3
+_DICTIONARY_REBUILD_ORDER = (
+    "gemini", ai.GROQ_STANDARD, ai.GROQ_SIMPLE, "cf", "openrouter",
+)
 _DICTIONARY_REBUILD_RETRY_SECONDS = 3600
 
 
@@ -502,7 +505,26 @@ JSON: {{"items":[{{"keep":true,"lang":"nl|en","term":"...","translation":"...",
 """
 
 
-async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
+def _usable_dictionary_rebuild_response(value, expected_count):
+    items = value if isinstance(value, list) else (
+        value.get("items", []) if isinstance(value, dict) else []
+    )
+    if len(items) != expected_count or not all(isinstance(item, dict) for item in items):
+        return False
+    for item in items:
+        if item.get("keep") is False:
+            continue
+        lang = str(item.get("lang") or "").strip().casefold()
+        pos = canonical_part_of_speech(item)
+        if lang not in {"nl", "en"} or not study_card_is_complete(item):
+            return False
+        if (lang == "nl" and pos == "существительное"
+                and str(item.get("article") or "").strip().casefold() not in {"de", "het"}):
+            return False
+    return True
+
+
+async def rebuild_dictionary_entries(cid, *, force=False, lang=None, max_batches=None):
     """Один раз пересобирает все старые карточки, сохраняя id и SRS-прогресс."""
     words = store.get_list(config.DICT_KEY, cid)
     pending_idx = [
@@ -528,13 +550,17 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
             store.set_list(config.DICT_KEY, cid, words)
             changed = False
 
-    for batch_start in range(0, len(pending_idx), _DICTIONARY_REBUILD_BATCH_SIZE):
+    for batch_number, batch_start in enumerate(
+        range(0, len(pending_idx), _DICTIONARY_REBUILD_BATCH_SIZE), start=1,
+    ):
         batch_idx = pending_idx[batch_start:batch_start + _DICTIONARY_REBUILD_BATCH_SIZE]
         entries = [words[index] for index in batch_idx]
         try:
             response = await ai.allm_json(
-                _dictionary_rebuild_prompt(entries), 5000,
+                _dictionary_rebuild_prompt(entries), 3000,
+                order=_DICTIONARY_REBUILD_ORDER,
                 module="learning_dictionary_rebuild", fallback_allowed=True,
+                privacy_level="public", budget_seconds=30,
                 cache_context={
                     "version": _DICTIONARY_REBUILD_VERSION,
                     "manual_recheck_date": (
@@ -545,6 +571,9 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
                         for entry in entries
                     ],
                 },
+                result_validator=lambda value: _usable_dictionary_rebuild_response(
+                    value, len(entries),
+                ),
             )
             results = response if isinstance(response, list) else response.get("items", [])
         except Exception as error:
@@ -626,6 +655,8 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None):
             updated["study_card_version"] = STUDY_CARD_VERSION
             words[word_idx] = updated
             changed = True
+        if max_batches and batch_number >= max_batches:
+            break
     persist_progress()
     return words
 
@@ -748,7 +779,9 @@ _DICT_ORIGIN_TO_BACK = dict(_dictionary_views._DICT_ORIGIN_TO_BACK)
 _bind_functions(globals(), _dictionary_views, [
     "_show_screen", "send_dict", "send_dict_lang", "send_dict_category",
     "check_dictionary_entry", "request_dictionary_recheck",
-    "process_requested_dictionary_rechecks", "send_dict_manage",
+    "process_requested_dictionary_rechecks", "_pending_dictionary_rebuilds",
+    "queue_dictionary_rebuild",
+    "process_dictionary_rebuilds", "send_dict_manage",
     "send_dict_add_prompt", "_dict_manage_kb", "send_dict_search_prompt",
     "_dict_tts_row", "_dict_search_kb", "handle_dict_search", "_entry_by_id",
     "_dictionary_category", "_dict_lang_entries", "send_dict_entry_view",

@@ -66,6 +66,13 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
+        pending = [
+            item for item in entries
+            if (int(item.get("dictionary_rebuild_version") or 0)
+                < _DICTIONARY_REBUILD_VERSION or not study_card_is_complete(item))
+        ]
+        if pending:
+            text += f"\n\nОбновляю карточки: осталось {len(pending)}."
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -96,8 +103,6 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
         return
     page = max(0, min(int(page), len(entries) - 1))
     entry = entries[page]
-    if _entry_needs_ai_refresh(entry):
-        entry = await _refresh_dict_entry(cid, entry)
     msg = dict_ui.dict_category_entry(category, page, len(entries), entry)
     rows = []
     if len(entries) > 1:
@@ -153,15 +158,125 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
 
 
 async def request_dictionary_recheck(bot, cid, lang, q=None):
-    """Совместимый ответ для старой кнопки без запуска массовых AI-запросов."""
+    """Совместимо запускает безопасную пакетную пересборку старых карточек."""
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
+    queued = queue_dictionary_rebuild(cid)
+    text = (
+        f"Обновляю карточки: {queued}.\n\n"
+        "Можно пользоваться словарём — после завершения я пришлю результат."
+        if queued else "Все карточки уже приведены к единому виду."
+    )
     await _show_screen(
-        bot, cid,
-        ("Проверка всего словаря больше не запускается.\n\n"
-         "Открой нужное слово и нажми «✨ Пересобрать карточку»."),
+        bot, cid, text,
         None,
         back_menu_keyboard(f"a_dictlang_{code}"), q=q,
     )
+
+
+def _pending_dictionary_rebuilds(cid):
+    return [
+        item for item in store.get_list(config.DICT_KEY, cid)
+        if entry_is_dictionary_word(item)
+        and (
+            int(item.get("dictionary_rebuild_version") or 0)
+            < _DICTIONARY_REBUILD_VERSION
+            or not study_card_is_complete(item)
+        )
+    ]
+
+
+def queue_dictionary_rebuild(cid):
+    """Ставит все legacy-карточки пользователя в постоянную миграцию."""
+    pending = _pending_dictionary_rebuilds(cid)
+    now = datetime.now(config.TZ).isoformat()
+
+    def change(profile):
+        profile.pop("dictionary_recheck_request", None)
+        if not pending:
+            profile.pop("dictionary_card_migration", None)
+            return profile, None
+        current = dict(profile.get("dictionary_card_migration") or {})
+        if int(current.get("version") or 0) != _DICTIONARY_REBUILD_VERSION:
+            current = {
+                "version": _DICTIONARY_REBUILD_VERSION,
+                "requested_at": now,
+                "initial_total": len(pending),
+                "rebuilt": 0,
+                "attempts": 0,
+                "retry_after_at": 0,
+            }
+        else:
+            current["initial_total"] = max(
+                int(current.get("initial_total") or 0), len(pending),
+            )
+        profile["dictionary_card_migration"] = current
+        return profile, None
+
+    store.mutate_profile(cid, change)
+    return len(pending)
+
+
+async def process_dictionary_rebuilds(bot, cids, limit=1):
+    """Пересобирает один небольшой пакет legacy-карточек за проход."""
+    attempted = 0
+    for cid in cids:
+        if attempted >= limit:
+            break
+        state = dict(store.get_profile(cid).get("dictionary_card_migration") or {})
+        if int(state.get("version") or 0) != _DICTIONARY_REBUILD_VERSION:
+            continue
+        now_ts = int(datetime.now(config.TZ).timestamp())
+        if int(state.get("retry_after_at") or 0) > now_ts:
+            continue
+        pending_before = _pending_dictionary_rebuilds(cid)
+        if not pending_before:
+            def clear_empty(profile):
+                profile.pop("dictionary_card_migration", None)
+                return profile, None
+            store.mutate_profile(cid, clear_empty)
+            continue
+        lang = _dict_lang(pending_before[0])
+        attempted += 1
+        await rebuild_dictionary_entries(cid, lang=lang, max_batches=1)
+        pending_after = _pending_dictionary_rebuilds(cid)
+        progress = len(pending_before) - len(pending_after)
+        if progress <= 0:
+            def defer(profile):
+                current = dict(profile.get("dictionary_card_migration") or state)
+                attempts = int(current.get("attempts") or 0) + 1
+                current["attempts"] = attempts
+                current["retry_after_at"] = now_ts + 300
+                current["last_failed_at"] = datetime.now(config.TZ).isoformat()
+                profile["dictionary_card_migration"] = current
+                return profile, None
+            store.mutate_profile(cid, defer)
+            continue
+        total = max(int(state.get("initial_total") or 0), len(pending_before))
+        if pending_after:
+            def save_progress(profile):
+                current = dict(profile.get("dictionary_card_migration") or state)
+                current.update({
+                    "initial_total": total,
+                    "rebuilt": max(0, total - len(pending_after)),
+                    "attempts": 0,
+                    "retry_after_at": 0,
+                })
+                profile["dictionary_card_migration"] = current
+                return profile, None
+            store.mutate_profile(cid, save_progress)
+            continue
+
+        def complete(profile):
+            profile.pop("dictionary_card_migration", None)
+            return profile, None
+        store.mutate_profile(cid, complete)
+        await bot.send_message(
+            chat_id=cid,
+            text=("✅ Словарь обновлён\n\n"
+                  f"Все карточки приведены к единому виду: {total}"),
+            reply_markup=back_menu_keyboard("m_learn"),
+        )
+    return attempted
 
 
 async def process_requested_dictionary_rechecks(bot, cids, limit=1):
