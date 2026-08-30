@@ -8,15 +8,19 @@ import learning_dictionary
 import dictionary_import
 
 
-def test_expression_breakdown_is_moved_from_nouns_to_sentences(monkeypatch):
+def test_phrases_are_kept_in_storage_but_hidden_from_word_dictionary(monkeypatch):
     words = [{
         "id": "expression-1", "lang": "nl", "term": "Op dit moment",
         "translation": "В данный момент", "pos": "noun",
         "breakdown": "выражение", "examples": [],
+    }, {
+        "id": "word-1", "lang": "nl", "term": "Moment",
+        "translation": "Момент", "pos": "существительное",
+        "breakdown": "существительное", "examples": [],
     }]
     saved = []
     monkeypatch.setattr(
-        learning_dictionary.store, "get_list", lambda *_args: [dict(words[0])],
+        learning_dictionary.store, "get_list", lambda *_args: [dict(item) for item in words],
     )
     monkeypatch.setattr(
         learning_dictionary.store, "set_list",
@@ -27,8 +31,15 @@ def test_expression_breakdown_is_moved_from_nouns_to_sentences(monkeypatch):
 
     assert result[0]["pos"] == "фраза"
     assert result[0]["entry_type"] == "phrase"
-    assert learning_dictionary._dictionary_category(result[0]) == "Предложения"
     assert saved[0][0]["pos"] == "фраза"
+    assert "Предложения" not in learning_dictionary._DICT_CATEGORY_ORDER
+
+    monkeypatch.setattr(
+        learning_dictionary, "_ensure_dict", lambda _cid: result,
+    )
+    visible = learning_dictionary._dict_lang_entries("42", "nl")
+
+    assert [item["term"] for item in visible] == ["Moment"]
 
 
 def test_requested_full_dictionary_check_reports_result_and_clears_request(monkeypatch):

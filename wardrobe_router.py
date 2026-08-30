@@ -96,8 +96,11 @@ async def handle_callback(bot, cid, q, data, status=None):
         page = data.partition(":")[2]
         await show_purchase_page(bot, cid, int(page) if page.isdigit() else 0, q=q)
         return
-    if data == "w_buy_new":
-        await recommend_another_purchase(bot, cid, q=q)
+    if data == "w_buy_new" or data.startswith("w_buy_new:"):
+        page = data.partition(":")[2]
+        await recommend_another_purchase(
+            bot, cid, q=q, page=int(page) if page.isdigit() else None,
+        )
         return
     if data == "w_buy_pick":
         store.pending_input[str(cid)] = "wardrobe_buy"

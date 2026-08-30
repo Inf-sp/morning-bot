@@ -14,7 +14,7 @@ _STUDY_CARD_PLACEHOLDERS = (
 )
 
 
-_LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an)\s+", re.I)
+_LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an|to)\s+", re.I)
 _EXAMPLE_STOP_WORDS = {
     "de", "het", "een", "the", "a", "an", "wat", "wie", "waar",
     "je", "jij", "jou", "u", "you", "ik", "i", "we", "wij", "ze",
@@ -283,10 +283,8 @@ def example_matches_term(entry, example):
 
 def is_dictionary_word(term, kind=""):
     """True для одиночной словарной единицы, включая вариант с артиклем."""
-    if str(kind or "").strip().casefold() in {"word", "слово"}:
-        return True
     text = _LEADING_ARTICLE_RE.sub("", " ".join(str(term or "").split()))
-    return len(text.split()) <= 1
+    return bool(text) and len(text.split()) == 1
 
 
 def normalize_term_case(term, kind=""):
@@ -325,6 +323,17 @@ def canonical_part_of_speech(entry) -> str:
         if re.fullmatch(pattern, raw_pos, re.I):
             return canonical
     return raw_pos
+
+
+def entry_is_dictionary_word(entry) -> bool:
+    """Отделяет одиночные слова от архивных фраз и конструкций."""
+    source = entry if isinstance(entry, dict) else {"term": str(entry or "")}
+    entry_type = str(source.get("entry_type") or source.get("kind") or "").casefold()
+    if canonical_part_of_speech(source) == "фраза" or entry_type in {
+        "phrase", "sentence", "expression", "construction",
+    }:
+        return False
+    return is_dictionary_word(entry_term(source))
 
 
 def normalize_entry(entry, *, language=None):

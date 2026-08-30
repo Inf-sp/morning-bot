@@ -555,46 +555,34 @@ def test_add_dutch_phrase_uses_its_dutch_verb_as_a_language_hint():
     assert lang == "nl"
 
 
-def test_add_dutch_phrase_reaches_the_netherlands_dictionary_flow(monkeypatch):
-    normalized = []
+def test_add_dutch_phrase_offers_one_study_word_instead_of_saving_phrase(monkeypatch):
     sent = []
-
-    class Status:
-        async def stop(self):
-            return None
 
     class Bot:
         async def send_message(self, **kwargs):
             sent.append(kwargs)
 
-    async def start(*_args, **_kwargs):
-        return Status()
+    async def extract(text, lang):
+        assert text == "Ik kies voor"
+        assert lang == "nl"
+        return {"term": "kiezen", "translation": "выбирать"}
 
-    async def normalize(payload, lang, **_kwargs):
-        normalized.append((payload, lang))
-        return {
-            "id": "phrase-id", "lang": lang, "term": payload,
-            "translation": "Я выбираю", "breakdown": "фраза", "examples": [],
-        }
+    async def no_normalize(*_args, **_kwargs):
+        raise AssertionError("phrase must not reach dictionary normalization")
 
-    async def enrich(entry, _cid):
-        return entry
-
-    async def quality(entry):
-        return entry
-
-    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
-    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", normalize)
-    monkeypatch.setattr(dictionary_import, "_enrich_dutch_verb", enrich)
-    monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", quality)
-    monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", lambda _cid, entry: ("added", entry))
-    monkeypatch.setattr(dictionary_import, "_dict_entry_message", lambda *_args, **_kwargs: SimpleNamespace(
-        text="Готово", entities=[]))
-    monkeypatch.setattr(dictionary_import, "_dict_saved_kb", lambda *_args, **_kwargs: "keyboard")
+    monkeypatch.setattr(dictionary_import, "_extract_study_word", extract)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", no_normalize)
+    dictionary_import.store.dict_pending_batch.pop("42", None)
 
     assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Ik kies voor"))
-    assert normalized == [("Ik kies voor", "nl")]
-    assert [message["text"] for message in sent] == ["Готово"]
+    assert "Kiezen → выбирать" in sent[-1]["text"]
+    assert dictionary_import.store.dict_pending_batch["42"]["items"] == [
+        {"term": "kiezen", "translation": "выбирать"},
+    ]
+    buttons = [
+        button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row
+    ]
+    assert buttons[0] == "🆕 Добавить Kiezen"
 
 
 def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
@@ -728,8 +716,8 @@ def test_bare_add_aanwezig_is_saved_and_shows_card_without_ai(monkeypatch):
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
-def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
-    """Точный сценарий из чата получает полную локальную карточку."""
+def test_add_niet_storen_is_not_saved_as_a_phrase_when_ai_is_unavailable(monkeypatch):
+    """Фраза не попадает в словарь даже при недоступном подборе слова."""
     cid = "dictionary-niet-storen"
     sent = []
     saved = []
@@ -775,11 +763,8 @@ def test_add_niet_storen_uses_local_card_without_ai(monkeypatch):
     )
     asyncio.run(bot_text.handle(update, SimpleNamespace(bot=Bot()), remove_keyboard))
 
-    assert saved[0]["lang"] == "nl"
-    assert saved[0]["term"] == "Niet storen"
-    assert saved[0]["translation"] == "Не беспокоить"
-    assert "Niet storen → Не беспокоить" in sent[-1]["text"]
-    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
+    assert saved == []
+    assert "Пришли нужное слово отдельно" in sent[-1]["text"]
     assert cid not in bot_text.store.pending_input
 
 
@@ -817,7 +802,7 @@ def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
     assert cid not in dictionary_import.store.pending_input
 
 
-def test_common_dutch_phrase_is_fully_parsed_without_ai(monkeypatch):
+def test_common_dutch_phrase_is_rejected_by_word_normalizer(monkeypatch):
     monkeypatch.setattr(
         dictionary_import.ai,
         "allm_json",
@@ -825,21 +810,8 @@ def test_common_dutch_phrase_is_fully_parsed_without_ai(monkeypatch):
     )
 
     entry = asyncio.run(dictionary_import._normalize_dict_entry_full("Ik wist niet", "nl"))
-    message = dictionary_import._dict_entry_message(entry, status="added")
 
-    assert entry["translation"] == "Я не знал; я не знала"
-    assert entry["breakdown"] == "фраза · прошедшее время"
-    assert entry["examples"] == [{
-        "text": "Ik wist niet dat de winkel dicht was.",
-        "translation": "Я не знал, что магазин был закрыт.",
-    }]
-    assert "Ik wist niet → Я не знал · я не знала" in message.text
-    assert "Разбор: фраза" in message.text
-    assert (
-        "💡 Полезно: Ik wist niet dat de winkel dicht was → "
-        "Я не знал, что магазин был закрыт"
-    ) in message.text
-    assert "Перевод и пример добавлю после проверки" not in message.text
+    assert entry is None
 
 
 def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):

@@ -400,17 +400,21 @@ def _purchase_carousel_kb(page, count):
             (f"{page + 1}/{count}", "noop"),
             ("▶️", f"w_buy_page:{(page + 1) % count}"),
         ])
-    rows.append([("✨ Другой вариант", "w_buy_new")])
+    rows.append([("✨ Другой вариант", f"w_buy_new:{page}")])
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 
 
-def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=None):
-    """Фиксирует вещи карусели для стабильного листания рекомендаций."""
-    signature = hashlib.sha256(json.dumps({
+def _purchase_carousel_signature(cid, wardrobe):
+    return hashlib.sha256(json.dumps({
         "wardrobe": wardrobe,
         "styles": _settings.wardrobe_styles(cid),
     }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:24]
+
+
+def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=None):
+    """Фиксирует вещи карусели для стабильного листания рекомендаций."""
+    signature = _purchase_carousel_signature(cid, wardrobe)
     profile = store.get_profile(cid) or {}
     cached = profile.get("wardrobe_purchase_carousel") or {}
     if (not reset and cached.get("signature") == signature
@@ -421,6 +425,12 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
         for name in (exclude_names or [])
         if _clean_text(name)
     }
+    rejected = profile.get("wardrobe_purchase_rejections") or {}
+    excluded.update(
+        _clean_text(name).casefold()
+        for name in (rejected.get("items") or [])
+        if _clean_text(name)
+    )
     items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
     if excluded and not items:
         return []
@@ -465,6 +475,16 @@ async def show_purchase_page(
         return
     page = max(0, min(int(page), len(candidates) - 1))
     item = candidates[page]
+
+    def remember_page(current):
+        carousel = current.get("wardrobe_purchase_carousel") or {}
+        if isinstance(carousel, dict):
+            carousel = dict(carousel)
+            carousel["page"] = page
+            current["wardrobe_purchase_carousel"] = carousel
+        return current, None
+
+    store.mutate_profile(cid, remember_page)
     text_out, entities = _build_purchase_recommendation_message(item)
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = text_out
@@ -522,22 +542,33 @@ async def recommend_missing_purchase(bot, cid):
     await show_purchase_page(bot, cid, 0, reset_candidates=True)
 
 
-async def recommend_another_purchase(bot, cid, q=None):
-    """Пересчитывает покупки и исключает уже показанный набор рекомендаций."""
+async def recommend_another_purchase(bot, cid, q=None, page=None):
+    """Запоминает отвергнутую карточку и подбирает новую без её возврата."""
     profile = store.get_profile(cid) or {}
     cached = profile.get("wardrobe_purchase_carousel") or {}
-    excluded = {
-        _clean_text(name).casefold()
-        for name in (cached.get("seen_items") or [])
-        if _clean_text(name)
-    }
-    excluded.update(
-        _clean_text(item.get("item")).casefold()
-        for item in (cached.get("items") or [])
-        if isinstance(item, dict) and _clean_text(item.get("item"))
-    )
+    items = [item for item in (cached.get("items") or []) if isinstance(item, dict)]
+    try:
+        selected_page = int(cached.get("page", 0) if page is None else page)
+    except (TypeError, ValueError):
+        selected_page = 0
+    selected_page = max(0, min(selected_page, len(items) - 1)) if items else 0
+    rejected_name = _clean_text(items[selected_page].get("item")) if items else ""
+
+    if rejected_name:
+        def remember_rejection(current):
+            history = current.get("wardrobe_purchase_rejections") or {}
+            names = list(history.get("items") or [])
+            known = {_clean_text(name).casefold() for name in names if _clean_text(name)}
+            if rejected_name.casefold() not in known:
+                names.append(rejected_name)
+            current["wardrobe_purchase_rejections"] = {
+                "items": names[-50:],
+            }
+            return current, None
+
+        store.mutate_profile(cid, remember_rejection)
     await show_purchase_page(
-        bot, cid, 0, q=q, reset_candidates=True, exclude_names=excluded,
+        bot, cid, 0, q=q, reset_candidates=True,
     )
 
 

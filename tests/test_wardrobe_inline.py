@@ -672,6 +672,43 @@ def test_recommend_another_purchase_replaces_the_current_batch(monkeypatch):
     assert "Серые широкие джинсы" not in second_text
 
 
+def test_rejected_third_purchase_option_does_not_return_in_later_batches(monkeypatch):
+    import wardrobe_photos
+
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+
+    class Bot:
+        async def send_message(self, **_kwargs):
+            pass
+
+    cid = "rejected-third-purchase"
+    wardrobe.store.set_profile(cid, {})
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+    monkeypatch.setattr(wardrobe_photos, "purchase_photo", lambda *_args: None)
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), cid))
+    first = wardrobe.store.get_profile(cid)["wardrobe_purchase_carousel"]["items"]
+    rejected = first[2]["item"]
+
+    asyncio.run(wardrobe.show_purchase_page(Bot(), cid, 2))
+    asyncio.run(wardrobe.recommend_another_purchase(Bot(), cid, page=2))
+    rejected_history = wardrobe.store.get_profile(cid)["wardrobe_purchase_rejections"]["items"]
+    assert rejected_history == [rejected]
+    assert first[0]["item"] not in rejected_history
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), cid))
+    later = wardrobe.store.get_profile(cid)["wardrobe_purchase_carousel"]["items"]
+
+    assert rejected.casefold() not in {item["item"].casefold() for item in later}
+
+
 def test_purchase_card_falls_back_to_text_when_photo_does_not_match(monkeypatch):
     import wardrobe_photos
 
@@ -750,20 +787,20 @@ def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):
         ("Серые широкие джинсы", "male", 0),
     ]
     assert "Серые широкие джинсы" in edited[1]["media"].caption
-    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_new"
+    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_new:0"
 
     refreshed = []
 
-    async def recommend_another(_bot, cid, q=None):
-        refreshed.append((cid, q))
+    async def recommend_another(_bot, cid, q=None, page=None):
+        refreshed.append((cid, q, page))
 
     monkeypatch.setattr(
         wardrobe, "recommend_another_purchase", recommend_another, raising=False,
     )
     query = Query()
-    asyncio.run(wardrobe.handle_callback(object(), "same-purchase-photo", query, "w_buy_new"))
+    asyncio.run(wardrobe.handle_callback(object(), "same-purchase-photo", query, "w_buy_new:1"))
 
-    assert refreshed == [("same-purchase-photo", query)]
+    assert refreshed == [("same-purchase-photo", query, 1)]
 
 
 def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):

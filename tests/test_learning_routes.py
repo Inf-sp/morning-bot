@@ -44,6 +44,35 @@ def test_empty_learning_add_words_button_opens_dictionary_input(monkeypatch):
     bot_callbacks.store.pending_input.pop("42", None)
 
 
+def test_my_dictionary_opens_from_learning_menu(monkeypatch):
+    calls = []
+
+    async def send_dict_lang(bot, cid, lang, page=0, back="m_learn", q=None):
+        calls.append((bot, cid, lang, page, back, q))
+
+    class Bot:
+        pass
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(
+        bot_callbacks.learning_router.dictionary, "send_dict_lang", send_dict_lang,
+    )
+
+    class Query:
+        data = "a_dictlang_nl_from_menu"
+        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    class Update:
+        callback_query = Query()
+
+    class Context:
+        bot = Bot()
+
+    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
+
+    assert calls == [(Context.bot, "42", "nl", 0, "m_learn", Update.callback_query)]
+
+
 def test_navigation_audit_recognizes_all_travel_saved_country_callbacks():
     callbacks = (
         "a_trav_countries_0",

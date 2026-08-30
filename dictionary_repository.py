@@ -10,6 +10,7 @@ from dictionary_model import (
     language_code,
     normalize_key,
     normalize_entry,
+    entry_is_dictionary_word,
 )
 from repositories import UserListRepository
 
@@ -55,7 +56,8 @@ class DictionaryRepository:
     def training_entries(self, language):
         code = language_code(language)
         return [entry for entry in self.all()
-                if entry_language(entry) == code and entry_term(entry) and entry_translation(entry)]
+                if (entry_language(entry) == code and entry_term(entry)
+                    and entry_translation(entry) and entry_is_dictionary_word(entry))]
 
     def repair_training_state(self, language):
         """Локально чинит контракт тренажёра без сети и AI-вызова."""

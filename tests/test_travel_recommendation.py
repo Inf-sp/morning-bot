@@ -270,15 +270,9 @@ def test_country_card_uses_local_facts_when_ai_is_unavailable(monkeypatch):
     async def unavailable(*_args, **_kwargs):
         raise RuntimeError("AI temporarily unavailable")
 
-    monkeypatch.setattr(travel.store, "last_recipe", {"42": {"country": "Исландия", "flag": "🇮🇸"}})
-    monkeypatch.setattr(travel.store, "suggested_countries", {"42": "Исландия"})
+    monkeypatch.setattr(travel.store, "last_recipe", {"42": {"country": "Португалия", "flag": "🇵🇹"}})
+    monkeypatch.setattr(travel.store, "suggested_countries", {"42": "Португалия"})
     monkeypatch.setattr(travel.ai, "allm_json", unavailable)
-    monkeypatch.setattr(travel.research, "country_facts", lambda _name: {"cc": "IS", "languages": ["Icelandic", "English"]})
-    monkeypatch.setattr(
-        travel.research,
-        "country_travel_facts",
-        lambda _name: {"about": "Вулканы и горячие источники.", "languages": ["исландский", "английский"]},
-    )
     monkeypatch.setattr(travel, "_travel_interests", lambda _cid: [])
     status = FakeInlineStatus()
     bot = FakeBot()
@@ -286,8 +280,36 @@ def test_country_card_uses_local_facts_when_ai_is_unavailable(monkeypatch):
     asyncio.run(travel.send_plan(bot, "42", status=status))
 
     assert len(status.replaced) == 1
-    assert "Исландия" in status.replaced[0]["text"]
+    text = status.replaced[0]["text"]
+    assert "Португалия" in text
+    assert "✨ Тебе подойдёт" in text
+    assert "📍 Не пропусти" in text
+    assert "☀️ Когда ехать" in text
+    assert "💶 Бюджет" in text
+    assert "👩🏻‍🏫 Языки" in text
+    assert "🏳️‍🌈 LGBTQ+" in text
     assert bot.sent == []
+
+
+def test_local_recommendation_pool_has_complete_ready_made_cards():
+    required = {"about", "fit", "spots", "best_time", "budget", "languages", "lgbt", "sources"}
+
+    for country in travel._LOCAL_COUNTRY_FALLBACKS:
+        profile = research.country_travel_facts(country)
+        assert required <= profile.keys(), country
+        assert len(profile["spots"]) == 3, country
+        assert profile["sources"], country
+
+
+def test_ready_made_cards_do_not_need_network(monkeypatch):
+    monkeypatch.setattr(
+        research.country_catalog.requests,
+        "get",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network called")),
+    )
+
+    for country in travel._LOCAL_COUNTRY_FALLBACKS:
+        assert research.country_travel_facts(country)["about"]
 
 
 def test_saved_country_card_uses_inline_status_when_it_needs_building(monkeypatch):

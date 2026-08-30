@@ -27,6 +27,8 @@ from dictionary_model import (
     language_code as _code,
     normalize_entry,
     canonical_part_of_speech,
+    entry_is_dictionary_word,
+    is_dictionary_word,
     normalize_key,
     normalize_term_case,
     migrate_legacy_study_card,
@@ -209,9 +211,8 @@ def normalize_user_dictionary(cid):
     return result
 
 def _kind_of(term):
-    """Слово или фраза: считаем по термину без ведущего артикля (de/het/een/the/a/an)."""
-    t = re.sub(r"^(de|het|een|the|a|an)\s+", "", (term or "").strip().lower())
-    return "word" if len(t.split()) <= 1 else "phrase"
+    """Слово или фраза с учётом словарного артикля и английского ``to``."""
+    return "word" if is_dictionary_word(term) else "phrase"
 
 _NL_IK_INFINITIVE_FIXES = {
     "begrijpen": "begrijp",
@@ -422,11 +423,12 @@ def _dict_lang(w):
     return w.get("lang", "nl") if isinstance(w, dict) else "nl"
 
 def _dict_counts(cid):
-    """Количество записей словаря по языку — единый счётчик, без деления
-    на слова и фразы."""
+    """Количество видимых одиночных слов по языку."""
     words = _ensure_dict(cid)
     out = {"nl": 0, "en": 0}
     for w in words:
+        if not entry_is_dictionary_word(w):
+            continue
         lang = "en" if _dict_lang(w) == "en" else "nl"
         out[lang] += 1
     return out
@@ -706,6 +708,7 @@ async def migrate_dict_entries_for_srs(cid, lang):
 _DICT_LIST_PAGE_SIZE = _dictionary_views._DICT_LIST_PAGE_SIZE
 _DICT_CATEGORY_ORDER = _dictionary_views._DICT_CATEGORY_ORDER
 _DICT_VISIBLE_CATEGORY_ORDER = _dictionary_views._DICT_VISIBLE_CATEGORY_ORDER
+_DICT_ORIGIN_TO_BACK = dict(_dictionary_views._DICT_ORIGIN_TO_BACK)
 _bind_functions(globals(), _dictionary_views, [
     "_show_screen", "send_dict", "send_dict_lang", "send_dict_category",
     "check_dictionary_entry", "request_dictionary_recheck",

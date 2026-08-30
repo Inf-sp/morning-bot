@@ -24,7 +24,7 @@ from ui.constants import delete_label
 
 _log = logging.getLogger(__name__)
 _COUNTRIES_PER_PAGE = 10
-_CARD_CONTENT_VERSION = 1
+_CARD_CONTENT_VERSION = 2
 _CARD_LOCKS = {}
 _CARD_LOCKS_GUARD = threading.Lock()
 _IDEA_LOCKS = {}
@@ -69,14 +69,7 @@ _CARD_CLICHES = (
     "уникальн", "впечатляющ", "незабываем", "удивительн", "страна предлагает",
     "подходит пользовател", "различные виды транспорта", "комбинаци", "самолёт", "паром",
 )
-_TRAVEL_REBUSES = (
-    {"emoji": "🗼 🥐 🇫🇷", "answer": "Париж"},
-    {"emoji": "🚲 🌷 🧀", "answer": "Нидерланды"},
-    {"emoji": "🏛️ 🍝 🇮🇹", "answer": "Рим"},
-    {"emoji": "🌋 ♨️ ❄️", "answer": "Исландия"},
-    {"emoji": "⛩️ 🍣 🌸", "answer": "Япония"},
-    {"emoji": "🏖️ 🏛️ 🇬🇷", "answer": "Греция"},
-)
+_TRAVEL_REBUSES = monthly_rebuses.local_pool("travel")
 
 
 def _travel_interests(cid):
@@ -93,7 +86,7 @@ def _travel_interests(cid):
 
 def _daily_travel_rebus(day=None):
     day = day or datetime.now(config.TZ).date()
-    return dict(_TRAVEL_REBUSES[(day.timetuple().tm_yday - 1) % len(_TRAVEL_REBUSES)])
+    return monthly_rebuses.cached_for_day("travel", day, _TRAVEL_REBUSES)
 
 
 def _travel_week_start(day=None):
@@ -727,7 +720,9 @@ def _plan_from_sources(country, generated, facts, travel_facts, interests, photo
         ),
         "title": country,
         "about": travel_facts.get("about") or _editorial_line(generated.get("about")),
-        "fit": _editorial_line(generated.get("fit")) or _fallback_fit(interests),
+        "fit": _editorial_line(generated.get("fit"))
+            or _fallback_fit(interests)
+            or _editorial_line(travel_facts.get("fit")),
         "spots": _card_list(travel_facts.get("spots") or generated.get("spots"), 3),
         "best_time": travel_facts.get("best_time") or _card_text(generated.get("best_time")),
         "budget": travel_facts.get("budget") or _budget_line(

@@ -63,47 +63,12 @@ _GAME_RATING_OPTIONS = (
     ("8.5+", "8.5"),
 )
 
-_GAME_DAILY_CONTENT = (
-    {
-        "emoji": "🧙 🚪 3️⃣",
-        "answer": "Baldur’s Gate 3",
-        "fact": "Разработчики записали множество отдельных сцен для неудачных проверок навыков. Провал броска нередко открывает сцену, которую нельзя увидеть при успехе.",
-    },
-    {
-        "emoji": "🔥 🏛️ ⚔️",
-        "answer": "Hades",
-        "fact": "После каждого поражения появляются новые диалоги, поэтому неудача продолжает историю. Персонажи запоминают прошлые попытки и комментируют их.",
-    },
-    {
-        "emoji": "💃 💿 🕵️",
-        "answer": "Disco Elysium",
-        "fact": "Внутренние качества героя здесь спорят друг с другом как отдельные персонажи. Даже неудачный ответ может открыть новую ветку расследования.",
-    },
-    {
-        "emoji": "2️⃣ 🤝 🧩",
-        "answer": "It Takes Two",
-        "fact": "У каждого из двух игроков своя роль, и большинство головомок требует сотрудничества. Второму игроку достаточно бесплатного Friend’s Pass.",
-    },
-    {
-        "emoji": "⭐ 💧 🏞️",
-        "answer": "Stardew Valley",
-        "fact": "Большинство занятий на ферме можно проходить в своём темпе без обязательного расписания. Первую версию почти четыре года создавал один человек.",
-    },
-    {
-        "emoji": "🪽 📏 🌍",
-        "answer": "Wingspan",
-        "fact": "Карты птиц основаны на реальных видах и содержат короткие сведения о них. Их свойства связаны с тем, где они живут, чем питаются и как гнездятся.",
-    },
-    {
-        "emoji": "🔵 🧱 👑",
-        "answer": "Азул",
-        "fact": "Оформление игры вдохновлено португальской традицией декоративной керамической плитки. Узор на личном планшете собирается из плиток, которые все игроки берут из общих фабрик.",
-    },
-)
+_GAME_DAILY_CONTENT = monthly_rebuses.local_pool("games")
 
 _GAME_CATALOG = (
     {
         "id": "baldurs-gate-3", "name": "Baldur’s Gate 3", "platforms": ["pc", "ps5", "xbox"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Baldur%27s%20Gate%203-600x800.jpg",
         "year": 2023, "rating": 9.0,
         "genres": ["rpg", "strategy"],
         "description": "Большая ролевая история, где решения заметно меняют отношения, задания и финал.",
@@ -112,6 +77,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "hades", "name": "Hades", "platforms": ["pc", "ps5", "xbox", "switch", "mobile"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Hades-600x800.jpg",
         "year": 2020, "rating": 9.0,
         "genres": ["action"],
         "description": "Быстрый экшен с короткими забегами, живыми диалогами и понятным ростом между попытками.",
@@ -120,6 +86,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "alan-wake-2", "name": "Alan Wake 2", "platforms": ["pc", "ps5", "xbox"],
+        "poster": "https://cdn.prod.website-files.com/64630b03551142e3347ae3da/64e6343ba7d56667e9034e5a_AW2_poster.webp",
         "year": 2023, "rating": 8.5,
         "genres": ["horror", "adventure"],
         "description": "Мрачный детективный хоррор с двумя героями, сильной постановкой и необычной структурой.",
@@ -128,6 +95,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "disco-elysium", "name": "Disco Elysium", "platforms": ["pc", "ps5", "xbox", "switch"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Disco%20Elysium-600x800.jpg",
         "year": 2019, "rating": 9.0,
         "genres": ["rpg", "adventure"],
         "description": "Детективная RPG почти без обычных боёв, зато с сильными диалогами и свободой характера.",
@@ -136,6 +104,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "it-takes-two", "name": "It Takes Two", "platforms": ["pc", "ps5", "xbox", "switch"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/It%20Takes%20Two-600x800.jpg",
         "year": 2021, "rating": 8.5,
         "genres": ["adventure", "action"],
         "description": "Кооперативное приключение для двоих, которое постоянно меняет правила и механики.",
@@ -144,6 +113,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "stardew-valley", "name": "Stardew Valley", "platforms": ["pc", "ps5", "xbox", "switch", "mobile"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Stardew%20Valley-600x800.jpg",
         "year": 2016, "rating": 9.0,
         "genres": ["cozy", "strategy"],
         "description": "Спокойная игра о ферме, соседях и маленьких целях без обязательной гонки за результатом.",
@@ -152,6 +122,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "cocoon", "name": "Cocoon", "platforms": ["pc", "ps5", "xbox", "switch"],
+        "poster": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4v2z.jpg",
         "year": 2023, "rating": 8.0,
         "genres": ["adventure"],
         "description": "Компактное приключение-головоломка без текста, где целые миры становятся инструментами.",
@@ -160,6 +131,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "dune-imperium", "name": "Дюна: Империя", "platforms": ["board"],
+        "poster": "https://d19y2ttatozxjp.cloudfront.net/assets/dune/DuneImperium_BoxArtKey.png",
         "year": 2020, "rating": 8.4,
         "genres": ["board", "strategy"],
         "description": "Настольная стратегия, соединяющая колодостроение, борьбу за влияние и конфликт на карте.",
@@ -168,6 +140,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "cascadia", "name": "Каскадия", "platforms": ["board"],
+        "poster": "https://cdn.shopify.com/s/files/1/0440/6493/1998/products/a3220bfe8864d2929ca67e61b068cf68d5b20f4d.jpg?v=1619494793",
         "year": 2021, "rating": 8.0,
         "genres": ["board", "cozy", "strategy"],
         "description": "Спокойная настолка о создании природных зон и сочетании животных с подходящей местностью.",
@@ -176,6 +149,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "wingspan", "name": "Крылья", "platforms": ["board", "pc", "xbox", "switch", "mobile"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Wingspan-600x800.jpg",
         "year": 2019, "rating": 8.1,
         "genres": ["board", "strategy", "cozy"],
         "description": "Красочная стратегия о птицах, где постепенно собирается эффективная природная система.",
@@ -184,6 +158,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "azul", "name": "Азул", "platforms": ["board"],
+        "poster": "https://cdn.shoplightspeed.com/shops/636231/files/68363129/1652x1652x2/plan-b-games-azul.jpg",
         "year": 2017, "rating": 7.8,
         "genres": ["board", "strategy"],
         "description": "Абстрактная настолка о сборе узоров с простыми ходами и неприятно приятной конкуренцией.",
@@ -192,6 +167,7 @@ _GAME_CATALOG = (
     },
     {
         "id": "spirit-island", "name": "Остров духов", "platforms": ["board", "pc", "mobile"],
+        "poster": "https://static-cdn.jtvnw.net/ttv-boxart/Spirit%20Island-600x800.jpg",
         "year": 2017, "rating": 8.3,
         "genres": ["board", "strategy"],
         "description": "Сложная кооперативная стратегия, где духи острова вместе отражают вторжение колонизаторов.",
@@ -769,11 +745,10 @@ async def send_games_home(bot, cid, *, q=None, status=None):
     if not items:
         items = await get_game_premieres(cid, refresh=True, seasonal=True)
     today = datetime.now(config.TZ).date()
-    week_anchor = today - timedelta(days=today.weekday())
     _season_start, _season_end, season = _game_season(today)
     daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
     home_items = []
-    items = _rotated_season_items(items, week_anchor)
+    items = _rotated_season_items(items, today)
     for source in items[:3]:
         item = dict(source)
         item["trailer_url"] = str(item.get("trailer_url") or "").strip() or (

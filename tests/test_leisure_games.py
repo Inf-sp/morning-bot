@@ -448,6 +448,38 @@ def test_game_recommendation_with_poster_is_sent_as_photo(monkeypatch):
     assert sent[0][1]["photo"] == "https://images.igdb.com/example.jpg"
 
 
+def test_digital_game_recommendation_keeps_a_poster_when_igdb_is_unavailable(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    monkeypatch.setattr(
+        leisure_games,
+        "pick_game",
+        lambda *_args, **_kwargs: leisure_games._decorate_game(
+            dict(leisure_games._GAME_CATALOG[0]), "42",
+        ),
+    )
+    monkeypatch.setattr(
+        leisure_games.igdb, "enrich_game_recommendation", lambda item: item,
+    )
+
+    asyncio.run(leisure_games.send_game_recommendation(Bot(), "42"))
+
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    assert sent[0][1]["photo"].startswith("https://static-cdn.jtvnw.net/ttv-boxart/")
+
+
+def test_local_game_catalog_has_ready_poster_stock():
+    for item in leisure_games._GAME_CATALOG:
+        assert str(item.get("poster") or "").startswith("https://"), item["name"]
+
+
 def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
     today = datetime.now(leisure_games.config.TZ).date()
     release = today + timedelta(days=30)

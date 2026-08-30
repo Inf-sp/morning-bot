@@ -4,10 +4,13 @@
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
 weather._WX_CACHE.
 """
+import json
 import logging
+import random
 import re
 import time
-import random
+from pathlib import Path
+
 import requests
 
 _log = logging.getLogger(__name__)
@@ -290,27 +293,26 @@ _COUNTRY_FACTS = {
     "IS": {"capital": "Reykjavík", "languages": ["Icelandic", "English"], "region": "Europe", "currency": "ISK"},
 }
 
-# Короткие сведения, подтверждённые источниками, а не моделью. Каталог можно
-# расширять без изменения рендера карточки. Источники нужны именно для
-# практических полей путешественника; редакторский текст формируется отдельно.
-_COUNTRY_TRAVEL_FACTS = {
-    "IS": {
-        "about": "Вулканы, ледники, горячие источники и дороги через почти незаселённые пейзажи.",
-        "spots": [
-            "Золотое кольцо — Гюдльфосс, Гейсир и Тингведлир",
-            "Южное побережье и ледниковую лагуну Йёкюльсаурлоун",
-            "Рейкьявик и геотермальные бассейны",
-        ],
-        "best_time": "июнь–август — длинный световой день и удобнее всего путешествовать по стране",
-        "budget": "высокий — особенно жильё, рестораны и транспорт",
-        "languages": ["исландский", "английский"],
-        "lgbt": "очень комфортно — широкая защита от дискриминации и свободная атмосфера в Рейкьявике",
-        "sources": [
-            "https://www.visiticeland.com/article/practical-information1/",
-            "https://www.ilga-europe.org/report/rainbow-map-2026/",
-        ],
-    },
-}
+_COUNTRY_TRAVEL_PROFILES_PATH = Path(__file__).parent / "data" / "travel_country_profiles.json"
+
+
+def _load_country_travel_profiles():
+    """Загружает готовый запас карточек; сбой данных не ломает остальные сценарии."""
+    try:
+        rows = json.loads(_COUNTRY_TRAVEL_PROFILES_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        _log.error("travel country profiles could not be loaded: %s", exc)
+        return {}
+    return {
+        str(code).upper(): dict(profile)
+        for code, profile in rows.items()
+        if isinstance(profile, dict) and len(str(code)) == 2
+    }
+
+
+# Готовые редакторские карточки с источниками — основной локальный резерв при
+# недоступности AI. Каталог расширяется данными, не условиями в рендере.
+_COUNTRY_TRAVEL_FACTS = _load_country_travel_profiles()
 
 def country_facts(name, *, allow_fallback=True):
     """Проверенные факты из local dataset; редкий miss дополняется best-effort fallback."""
@@ -328,7 +330,9 @@ def country_facts(name, *, allow_fallback=True):
 
 def country_travel_facts(name):
     """Проверяемые практические поля карточки страны, если они есть в каталоге."""
-    code = str(country_facts(name).get("cc") or util.cc_of(name) or "").upper()
+    # Для готового профиля достаточно локального ISO-кода. Не ждём внешний
+    # fallback общего справочника перед чтением уже сохранённой карточки.
+    code = str(country_catalog.country_code(name) or util.cc_of(name) or "").upper()
     facts = _COUNTRY_TRAVEL_FACTS.get(code) or {}
     return {key: (list(value) if isinstance(value, list) else value)
             for key, value in facts.items()}

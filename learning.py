@@ -8,7 +8,7 @@ import store
 import trainer_engine
 from dictionary_repository import DictionaryRepository
 from learning_dictionary import entry_language, entry_term, entry_translation
-from dictionary_model import normalize_term_case
+from dictionary_model import entry_is_dictionary_word, normalize_term_case
 from trainer_engine import (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
@@ -88,7 +88,11 @@ def select_daily_material(cid):
 
     repository = DictionaryRepository(cid)
     words = repository.all()
-    pool = [w for w in words if entry_term(w) and entry_translation(w) and entry_language(w) == lang]
+    pool = [
+        w for w in words
+        if (entry_term(w) and entry_translation(w) and entry_language(w) == lang
+            and entry_is_dictionary_word(w))
+    ]
     if not pool:
         return _save_daily_material(cid, today, lang, None)
 

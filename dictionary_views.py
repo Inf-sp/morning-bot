@@ -67,7 +67,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
-        text = f"{flag} Мой словарь · {len(entries)} слов и фраз"
+        text = f"{flag} Мой словарь · {len(entries)} слов"
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -225,7 +225,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     lang_title = "нидерландского" if lang == "nl" else "английского"
     add_hint = (
-        "Пришли слово или фразу для изучения — можно сразу несколько, каждую с новой строки.\n"
+        "Пришли слово для изучения — можно сразу несколько, каждое с новой строки.\n"
         "Я сам приведу в правильную форму, переведу и разберу."
     )
     if not entries:
@@ -286,7 +286,7 @@ def _dict_manage_kb(lang: str):
 async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
-    await _show_screen(bot, cid, "🔍 Введи слово или фразу для поиска.", None, kb, q=q)
+    await _show_screen(bot, cid, "🔍 Введи слово для поиска.", None, kb, q=q)
 
 
 def _dict_tts_row(entry):
@@ -320,7 +320,7 @@ async def handle_dict_search(bot, cid, lang, query):
             reply_markup=back_menu_keyboard(f"a_dictedit_{lang}"),
         )
         return
-    words = _ensure_dict(cid)
+    words = [item for item in _ensure_dict(cid) if entry_is_dictionary_word(item)]
     match = None
     for item in words:
         if _dict_lang(item) != lang:
@@ -334,7 +334,7 @@ async def handle_dict_search(bot, cid, lang, query):
             chat_id=cid,
             text="Не нашла в словаре. Попробуй другое слово или посмотри весь список.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Мои слова и фразы", callback_data=f"a_dictedit_{lang}")],
+                [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
             ]),
@@ -356,15 +356,15 @@ def _entry_by_id(cid, word_id):
 _DICT_LIST_PAGE_SIZE = 10
 _DICT_CATEGORY_ORDER = (
     "Прилагательные", "Глаголы", "Существительные", "Местоимения",
-    "Наречия", "Предлоги", "Предложения",
+    "Наречия", "Предлоги",
 )
-_DICT_VISIBLE_CATEGORY_ORDER = tuple(
-    category for category in _DICT_CATEGORY_ORDER if category != "Местоимения"
-)
+_DICT_VISIBLE_CATEGORY_ORDER = _DICT_CATEGORY_ORDER
 
 
 def _dictionary_category(entry):
-    """Локально раскладывает записи по семи пользовательским категориям."""
+    """Локально раскладывает одиночные слова по частям речи."""
+    if not entry_is_dictionary_word(entry):
+        return ""
     pos = canonical_part_of_speech(entry)
     aliases = {
         "adjective": "Прилагательные", "adj": "Прилагательные",
@@ -375,22 +375,18 @@ def _dictionary_category(entry):
         "pronoun": "Местоимения", "местоимение": "Местоимения", "voornaamwoord": "Местоимения",
         "adverb": "Наречия", "наречие": "Наречия", "bijwoord": "Наречия",
         "preposition": "Предлоги", "предлог": "Предлоги", "voorzetsel": "Предлоги",
-        "sentence": "Предложения", "предложение": "Предложения",
-        "phrase": "Предложения", "фраза": "Предложения", "expression": "Предложения",
-        "выражение": "Предложения", "construction": "Предложения", "конструкция": "Предложения",
     }
-    entry_type = str(entry.get("entry_type") or entry.get("kind") or "").casefold()
-    if pos == "фраза" or entry_type in {"phrase", "expression", "sentence"}:
-        return "Предложения"
     if pos in aliases:
         return aliases[pos]
-    term = re.sub(r"^(de|het|een|the|a|an)\s+", "", _entry_term(entry).strip(), flags=re.I)
-    return "Предложения" if len(term.split()) > 1 else "Существительные"
+    return "Существительные"
 
 
 def _dict_lang_entries(cid, lang):
     """Записи языка, отсортированные по категории и алфавиту."""
-    entries = [w for w in _ensure_dict(cid) if _dict_lang(w) == lang]
+    entries = [
+        w for w in _ensure_dict(cid)
+        if _dict_lang(w) == lang and entry_is_dictionary_word(w)
+    ]
     category_index = {label: index for index, label in enumerate(_DICT_CATEGORY_ORDER)}
     return sorted(entries, key=lambda w: (
         category_index[_dictionary_category(w)], _cap(_entry_term(w)).casefold(),

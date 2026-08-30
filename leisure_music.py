@@ -72,28 +72,7 @@ def group_favorite_artist_items(cid, items):
         ),
     )
 
-_MUSIC_REBUSES = (
-    {
-        "emoji": "👑 🐝 🎤",
-        "answer": "Beyoncé",
-        "fact": "Эта артистка стала первой женщиной, выигравшей шесть премий «Грэмми» за один вечер."},
-    {
-        "emoji": "⚡ 🛣️ 🎸",
-        "answer": "Highway to Hell",
-        "fact": "AC/DC впервые работали с продюсером Маттом Лэнгом именно над этим альбомом."},
-    {
-        "emoji": "🌌 🚀 👨‍🚀",
-        "answer": "Space Oddity",
-        "fact": "Дэвид Боуи выпустил эту песню за несколько дней до первой высадки человека на Луну."},
-    {
-        "emoji": "👑 🎤 🎭",
-        "answer": "Bohemian Rhapsody",
-        "fact": "Фредди Меркьюри соединил в одной композиции балладу, оперу и хард-рок."},
-    {
-        "emoji": "💜 ☔ 🎸",
-        "answer": "Purple Rain",
-        "fact": "Prince связал одну историю сразу с фильмом, альбомом и мировым туром."},
-)
+_MUSIC_REBUSES = monthly_rebuses.local_pool("music")
 _MUSIC_LEGEND_FALLBACKS = {
     (8, 4): {
         "name": "Луи Армстронг",
@@ -375,7 +354,7 @@ def music_home_keyboard():
 
 
 def _daily_music_rebus(day):
-    return dict(_MUSIC_REBUSES[(day.timetuple().tm_yday - 216) % len(_MUSIC_REBUSES)])
+    return monthly_rebuses.cached_for_day("music", day, _MUSIC_REBUSES)
 
 
 def _track_parts(track):

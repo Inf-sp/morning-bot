@@ -66,28 +66,7 @@ _BOOK_CATEGORY_RU = {
     "juvenile fiction": "Детская литература",
 }
 
-_BOOK_REBUSES = (
-    {
-        "emoji": "🧙‍♀️ ⚡ 🚂",
-        "answer": "Гарри Поттер",
-        "fact": "Рукопись Джоан Роулинг отклонили несколько издательств до первой публикации.",
-    },
-    {
-        "emoji": "🐋 ⚓ 👨‍✈️",
-        "answer": "Моби Дик",
-        "fact": "Герман Мелвилл работал на китобойном судне и использовал этот опыт в романе.",
-    },
-    {
-        "emoji": "🕳️ 🐇 👧",
-        "answer": "Алиса в Стране чудес",
-        "fact": "Льюис Кэрролл сначала рассказывал эту историю устно во время лодочных прогулок.",
-    },
-    {
-        "emoji": "💍 🌋 🧙",
-        "answer": "Властелин колец",
-        "fact": "Толкин работал над этой историей больше десяти лет.",
-    },
-)
+_BOOK_REBUSES = monthly_rebuses.local_pool("books")
 _BOOK_BIRTHDAY_FALLBACKS = {
     (8, 4): {
         "name": "Кнут Гамсун",
@@ -1046,7 +1025,7 @@ async def warm_book_premieres_cache():
 
 
 def _daily_book_rebus(day):
-    return dict(_BOOK_REBUSES[(day.timetuple().tm_yday - 216) % len(_BOOK_REBUSES)])
+    return monthly_rebuses.cached_for_day("books", day, _BOOK_REBUSES)
 
 
 def _book_birthday_cache_get(day):

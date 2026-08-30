@@ -663,11 +663,23 @@ def _build_application():
         **_job_options("category_news_refresh_daily"),
     )
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
-    # Премьеры фильмов обновляются по недельному ключу в понедельник. Остальные
-    # витрины сами проверяют свой TTL и не делают лишний внешний запрос.
+    # Внешние афиши прогреваются отдельно: премьеры — по понедельникам,
+    # концерты — перед пятничной подборкой. Внутренние TTL не дают дублировать запросы.
     jq.run_daily(
         job_warm_movie_premieres_cache, time=_t("02:10"), days=(0,),
         **_job_options("movie_premieres_cache_weekly"),
+    )
+    jq.run_daily(
+        job_warm_book_premieres_cache, time=_t("02:20"), days=(0,),
+        **_job_options("book_premieres_cache_weekly"),
+    )
+    jq.run_daily(
+        job_warm_game_premieres_cache, time=_t("02:30"), days=(0,),
+        **_job_options("game_premieres_cache_weekly"),
+    )
+    jq.run_daily(
+        job_refresh_concerts_cache, time=_t("09:00"), days=(4,),
+        **_job_options("concerts_cache_weekly"),
     )
     jq.run_daily(
         job_weather_warn,
