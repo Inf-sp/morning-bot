@@ -79,12 +79,16 @@ def select_daily_material(cid):
     today = datetime.now(config.TZ).date().isoformat()
     cached = _DAILY_MATERIAL_CACHE.get(str(cid))
     if cached and cached.get("date") == today and cached.get("lang") == lang:
-        return cached.get("entry")
+        cached_entry = cached.get("entry")
+        if cached_entry is None or entry_is_dictionary_word(cached_entry):
+            return cached_entry
     saved = store.get_profile(cid).get("learning_daily_material")
     if (isinstance(saved, dict) and saved.get("date") == today
             and saved.get("lang") == lang and "entry" in saved):
-        _DAILY_MATERIAL_CACHE[str(cid)] = saved
-        return saved.get("entry")
+        saved_entry = saved.get("entry")
+        if saved_entry is None or entry_is_dictionary_word(saved_entry):
+            _DAILY_MATERIAL_CACHE[str(cid)] = saved
+            return saved_entry
 
     repository = DictionaryRepository(cid)
     words = repository.all()

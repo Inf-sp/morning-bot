@@ -191,13 +191,25 @@ def test_force_check_replaces_wrong_card_fields_and_keeps_srs(monkeypatch):
     }
     words = [old]
 
-    async def normalize(*_args, **_kwargs):
+    captured = {}
+
+    async def normalize(*_args, **kwargs):
+        captured.update(kwargs)
         return {
             "lang": "nl", "term": "Vaststellen", "article": "",
             "translation": "Устанавливать; определять", "pos": "глагол",
             "breakdown": "глагол", "forms": ["stelde vast", "vastgesteld"],
-            "examples": [{"text": "We stellen de oorzaak vast.",
-                          "translation": "Мы устанавливаем причину."}],
+            "pronunciation": "[вастсте́ллен]",
+            "essence": "Так говорят, когда точно устанавливают или определяют какой-то факт.",
+            "insight": "У отделяемого глагола vast переходит в конец предложения.",
+            "examples": [
+                {"text": "We stellen de oorzaak vast.",
+                 "translation": "Мы устанавливаем причину.", "context": "На работе"},
+                {"text": "De arts stelt de diagnose vast.",
+                 "translation": "Врач устанавливает диагноз.", "context": "У врача"},
+            ],
+            "exercise_ru": "Мы устанавливаем причину.",
+            "exercise_answer": "We stellen de oorzaak vast.",
         }
 
     async def unchanged(entry, *_args, **_kwargs):
@@ -215,6 +227,61 @@ def test_force_check_replaces_wrong_card_fields_and_keeps_srs(monkeypatch):
     assert updated["examples"][0]["text"] == "We stellen de oorzaak vast."
     assert updated["srs_level"] == 4
     assert updated["srs_due_at"] == "2026-09-01T10:00:00+02:00"
+    assert captured["rebuild_from"] is old
+    assert updated["card_rebuild_revision"] == 1
+    assert updated["card_rebuilt_at"]
+
+
+def test_card_rebuild_uses_fresh_cache_context_and_requires_new_example(monkeypatch):
+    old = {
+        "term": "Careful", "translation": "Осторожный",
+        "examples": [
+            {"text": "Be careful.", "translation": "Будь осторожен.",
+             "context": "Предупреждение"},
+            {"text": "She is careful.", "translation": "Она осторожна.",
+             "context": "О человеке"},
+        ],
+    }
+    analyzed = {
+        "ok": True, "lang": "en", "term": "careful", "article": "",
+        "translation": "осторожный; внимательный",
+        "pronunciation": "[кэ́афул]", "breakdown": "прилагательное",
+        "essence": "Так описывают внимательное действие без ненужного риска.",
+        "insight": "Часто употребляется как предупреждение.",
+        "examples": [
+            {"text": "Be careful with that glass.",
+             "translation": "Будь осторожен с этим стаканом.", "context": "Дома"},
+            {"text": "He made a careful choice.",
+             "translation": "Он сделал взвешенный выбор.", "context": "О решении"},
+        ],
+        "exercise_ru": "Будь осторожен с этим стаканом.",
+        "exercise_answer": "Be careful with that glass.",
+        "pos": "прилагательное", "plural": "", "forms": [],
+        "topic": "общение", "difficulty": "A2", "construction": "",
+        "situation_type": "", "alt_translations": [],
+        "verb": {"is_verb": False}, "needs_confirmation": False, "reason": "",
+    }
+    captured = {}
+
+    async def analyze(_prompt, **kwargs):
+        captured.update(kwargs)
+        return analyzed
+
+    monkeypatch.setattr(dictionary_import, "_dictionary_analysis_json", analyze)
+
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full(
+        "careful", "en", rebuild_from=old,
+    ))
+
+    assert entry["examples"][0]["text"] == "Be careful with that glass."
+    assert captured["cache_context"]["mode"] == "dictionary_card_rebuild"
+    assert captured["cache_context"]["request_id"]
+    assert captured["result_validator"](analyzed)
+    assert not captured["result_validator"]({**analyzed, "examples": old["examples"]})
+    assert not captured["result_validator"]({
+        **analyzed,
+        "examples": [old["examples"][0], analyzed["examples"][1]],
+    })
 
 
 def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
@@ -583,6 +650,17 @@ def test_add_dutch_phrase_offers_one_study_word_instead_of_saving_phrase(monkeyp
         button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row
     ]
     assert buttons[0] == "🆕 Добавить Kiezen"
+
+
+def test_study_word_suggestion_rejects_multiword_ai_result(monkeypatch):
+    async def phrase_result(*_args, **_kwargs):
+        return {"ok": True, "term": "kiezen voor", "translation": "выбирать"}
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", phrase_result)
+
+    assert asyncio.run(
+        dictionary_import._extract_study_word("Ik kies voor jou", "nl")
+    ) is None
 
 
 def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
@@ -989,7 +1067,7 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
         "🔊 Прослушать", "❌ Удалить", "🎚️ Мой словарь",
-        "✨ Проверить карточку", "⬅️ Назад", "#️⃣ Главная",
+        "✨ Пересобрать карточку", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 
@@ -1002,7 +1080,7 @@ def test_duplicate_word_actions_include_dictionary():
     assert keyboard.inline_keyboard[1][0].text == "🎚️ Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "🎚️ Мой словарь", "✨ Проверить карточку",
+        "❌ Удалить", "🎚️ Мой словарь", "✨ Пересобрать карточку",
         "⬅️ Назад", "#️⃣ Главная",
     ]
 

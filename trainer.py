@@ -176,7 +176,7 @@ async def start(bot, cid, language, mode=None):
         ])
         await bot.send_message(
             chat_id=cid,
-            text=f"{'🇳🇱' if lang_code == 'nl' else '🇬🇧'} В словаре нет слов или фраз с переводом. Добавь записи через словарь.",
+            text=f"{'🇳🇱' if lang_code == 'nl' else '🇬🇧'} В словаре нет слов с переводом. Добавь их через словарь.",
             reply_markup=kb,
         )
         return

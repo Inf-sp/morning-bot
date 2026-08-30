@@ -50,21 +50,19 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     """Главный экран языкового словаря: категории вместо плоской сетки."""
     # Открытие словаря — быстрый UI-маршрут. Тяжёлые одноразовые AI-миграции
     # выполняет фоновая задача, здесь остаётся только локальное чтение/нормализация.
-    entries = _dict_lang_entries(cid, lang)
+    entries = [item for item in _dict_lang_entries(cid, lang) if entry_is_dictionary_word(item)]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
     for category in _DICT_VISIBLE_CATEGORY_ORDER:
         index = _DICT_CATEGORY_ORDER.index(category)
         count = sum(1 for item in entries if _dictionary_category(item) == category)
+        if not count:
+            continue
         rows.append([InlineKeyboardButton(
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
-    if entries:
-        rows.append([InlineKeyboardButton(
-            "✨ Проверить весь словарь", callback_data=f"a_dictcheckall_{lang}",
-        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
@@ -78,6 +76,9 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
         await send_dict_lang(bot, cid, lang, q=q)
         return
     category = _DICT_CATEGORY_ORDER[category_index]
+    if not category:
+        await send_dict_lang(bot, cid, lang, q=q)
+        return
     entries = [
         item for item in _dict_lang_entries(cid, lang)
         if _dictionary_category(item) == category
@@ -109,7 +110,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
-            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
         )])
         rows.append([InlineKeyboardButton(
             delete_label("Удалить"),
@@ -126,7 +127,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
 
 
 async def check_dictionary_entry(bot, cid, word_id, q=None):
-    """Принудительно пересобирает одну карточку и показывает исправленный результат."""
+    """Детально пересобирает одну карточку и заменяет её в текущем сообщении."""
     entry = _entry_by_id(cid, word_id)
     if not entry:
         await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
@@ -134,7 +135,9 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
     updated = await _refresh_dict_entry(cid, entry, force=True)
     if updated is entry or not updated:
         await bot.send_message(
-            chat_id=cid, text="Не получилось проверить карточку. Попробую при общей проверке.",
+            chat_id=cid,
+            text=("Не получилось пересобрать карточку. Старая версия сохранена. "
+                  "Попробуй ещё раз позже."),
             reply_markup=back_menu_keyboard(f"a_dictlang_{_dict_lang(entry)}"),
         )
         return
@@ -148,41 +151,64 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
 
 
 async def request_dictionary_recheck(bot, cid, lang, q=None):
-    """Сохраняет запрос полной проверки; фоновая задача заберёт его без ожидания UI."""
+    """Совместимый ответ для старой кнопки без запуска массовых AI-запросов."""
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
-
-    def change(profile):
-        profile["dictionary_recheck_request"] = {
-            "lang": code, "requested_at": datetime.now(config.TZ).isoformat(),
-        }
-        return profile, None
-
-    store.mutate_profile(cid, change)
     await _show_screen(
         bot, cid,
-        "⏳ Проверяю словарь в фоне\n\nМожно продолжать пользоваться ботом. Я сообщу, когда закончу.",
+        ("Проверка всего словаря больше не запускается.\n\n"
+         "Открой нужное слово и нажми «✨ Пересобрать карточку»."),
         None,
         back_menu_keyboard(f"a_dictlang_{code}"), q=q,
     )
 
 
 async def process_requested_dictionary_rechecks(bot, cids, limit=1):
-    """Обрабатывает не больше limit словарей за проход и присылает итог."""
+    """Совместимо завершает старые запросы с backoff после сбоя провайдеров."""
     handled = 0
     for cid in cids:
         request = store.get_profile(cid).get("dictionary_recheck_request") or {}
         lang = request.get("lang")
         if lang not in ("nl", "en") or handled >= limit:
             continue
+        now_ts = int(datetime.now(config.TZ).timestamp())
+        if int(request.get("retry_after_at") or 0) > now_ts:
+            continue
+
+        def defer(retry_after=0):
+            def change(profile):
+                current = dict(profile.get("dictionary_recheck_request") or {})
+                if current.get("lang") != lang:
+                    return profile, None
+                attempts = int(current.get("attempts") or 0) + 1
+                exponential = min(24 * 3600, 3600 * (2 ** min(attempts - 1, 5)))
+                delay = max(60, int(retry_after or 0), exponential)
+                current.update({
+                    "attempts": attempts,
+                    "retry_after_at": now_ts + delay,
+                    "last_failed_at": datetime.now(config.TZ).isoformat(),
+                })
+                profile["dictionary_recheck_request"] = current
+                return profile, None
+
+            store.mutate_profile(cid, change)
+
         before = [dict(item) for item in _dict_lang_entries(cid, lang)]
         started_at = datetime.now(config.TZ).isoformat()
-        await rebuild_dictionary_entries(cid, force=True, lang=lang)
-        after = [dict(item) for item in normalize_user_dictionary(cid) if _dict_lang(item) == lang]
+        try:
+            await rebuild_dictionary_entries(cid, force=True, lang=lang)
+        except DictionaryRebuildDeferred as error:
+            defer(error.retry_after)
+            continue
+        after = [
+            dict(item) for item in normalize_user_dictionary(cid)
+            if _dict_lang(item) == lang and entry_is_dictionary_word(item)
+        ]
         checked = sum(
             1 for item in after
             if str(item.get("dictionary_rechecked_at") or "") >= started_at
         )
         if before and checked == 0:
+            defer()
             continue
         before_by_id = {str(item.get("id") or ""): item for item in before}
         changed = moved = 0
@@ -303,7 +329,7 @@ def _dict_search_kb(entry, term_key):
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         *([[InlineKeyboardButton(
-            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
         )]] if word_id else []),
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -316,7 +342,7 @@ async def handle_dict_search(bot, cid, lang, query):
     if not query_norm:
         await bot.send_message(
             chat_id=cid,
-            text="Пришли слово или часть фразы для поиска.",
+            text="Пришли слово или его часть для поиска.",
             reply_markup=back_menu_keyboard(f"a_dictedit_{lang}"),
         )
         return
@@ -350,15 +376,25 @@ async def handle_dict_search(bot, cid, lang, query):
 
 
 def _entry_by_id(cid, word_id):
-    return next((item for item in _ensure_dict(cid) if str(item.get("id") or "") == str(word_id)), None)
+    return next((
+        item for item in _ensure_dict(cid)
+        if (entry_is_dictionary_word(item)
+            and str(item.get("id") or "") == str(word_id))
+    ), None)
 
 
 _DICT_LIST_PAGE_SIZE = 10
+# Индекс 6 раньше открывал «Предложения». Оставляем пустой слот, чтобы старые
+# сообщения не начали неожиданно открывать новую часть речи по тому же callback.
+_DICT_LEGACY_PHRASES_SLOT = ""
 _DICT_CATEGORY_ORDER = (
     "Прилагательные", "Глаголы", "Существительные", "Местоимения",
-    "Наречия", "Предлоги",
+    "Наречия", "Предлоги", _DICT_LEGACY_PHRASES_SLOT, "Числительные",
+    "Союзы", "Частицы", "Междометия",
 )
-_DICT_VISIBLE_CATEGORY_ORDER = _DICT_CATEGORY_ORDER
+_DICT_VISIBLE_CATEGORY_ORDER = tuple(
+    category for category in _DICT_CATEGORY_ORDER if category
+)
 
 
 def _dictionary_category(entry):
@@ -375,6 +411,11 @@ def _dictionary_category(entry):
         "pronoun": "Местоимения", "местоимение": "Местоимения", "voornaamwoord": "Местоимения",
         "adverb": "Наречия", "наречие": "Наречия", "bijwoord": "Наречия",
         "preposition": "Предлоги", "предлог": "Предлоги", "voorzetsel": "Предлоги",
+        "numeral": "Числительные", "числительное": "Числительные", "telwoord": "Числительные",
+        "conjunction": "Союзы", "союз": "Союзы", "voegwoord": "Союзы",
+        "particle": "Частицы", "частица": "Частицы",
+        "interjection": "Междометия", "междометие": "Междометия",
+        "tussenwerpsel": "Междометия",
     }
     if pos in aliases:
         return aliases[pos]

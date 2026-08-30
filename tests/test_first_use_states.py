@@ -31,9 +31,9 @@ def test_learning_empty_state_has_one_clear_next_step():
 
     assert message.text == (
         "🧠 Обучение\n\n"
-        "Добавляй сюда слова и фразы, которые хочешь запомнить.\n\n"
+        "Добавляй сюда слова, которые хочешь запомнить.\n\n"
         "Можно просто написать мне в чате:\n"
-        "«добавь в словарь wennen aan»\n\n"
+        "«добавь в словарь afspraak»\n\n"
         "Я буду использовать их в практике и повторении."
     )
     assert _labels(message.reply_markup) == [
@@ -101,7 +101,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
-    assert "• В изучении 0 слов и фраз" in message.text
+    assert "• В изучении 0 слов" in message.text
     assert "• Повторить сегодня — 0" in message.text
     assert "• Без подсказок — 0%" in message.text
     assert "Фраза дня" not in message.text
@@ -162,11 +162,12 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     rows = _labels(bot.message["reply_markup"])
     assert rows[:6] == [
         [f"{category} · 1"]
-        for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER
+        for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER[:6]
     ]
-    assert not any("Местоимения" in label for row in rows for label in row)
+    assert any("Местоимения" in label for row in rows for label in row)
+    assert not any("Предложения" in label for row in rows for label in row)
     assert not any("Mooi" in label or "Lopen" in label for row in rows for label in row)
-    assert ["✨ Проверить весь словарь"] in rows
+    assert not any("Проверить весь словарь" in label for row in rows for label in row)
 
 
 def test_dictionary_home_does_not_wait_for_ai_migrations(monkeypatch):
@@ -195,7 +196,7 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
 
     entries = [
         {
-            "id": str(index), "lang": "nl", "term": f"Word {index}",
+            "id": str(index), "lang": "nl", "term": f"Word{index}",
             "translation": f"Слово {index}", "pos": "noun",
         }
         for index in range(21)
@@ -207,7 +208,7 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))
 
     assert bot.message["text"].startswith("🇳🇱 Существительные · 2/21")
-    assert "Word 1 → Слово 1" in bot.message["text"]
+    assert "Word1 → Слово 1" in bot.message["text"]
     assert ["◀️", "2 / 21", "▶️"] in _labels(bot.message["reply_markup"])
     navigation = bot.message["reply_markup"].inline_keyboard[0]
     assert navigation[0].callback_data == "a_dictcat_nl_2_0"
@@ -237,7 +238,7 @@ def test_dictionary_category_opens_a_full_word_card(monkeypatch):
     assert "Разбор: существительное · het-слово" in bot.message["text"]
     assert "Множественное число: de huizen" in bot.message["text"]
     assert _labels(bot.message["reply_markup"]) == [
-        ["🔊 Прослушать"], ["✨ Проверить карточку"], ["❌ Удалить"],
+        ["🔊 Прослушать"], ["✨ Пересобрать карточку"], ["❌ Удалить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -336,7 +337,7 @@ def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
 
     asyncio.run(dictionary_seed.send_seed_intro(Bot(), "42"))
 
-    assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова и фразы")
+    assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(sent[0]["reply_markup"]) == [
         ["🆕 Добавить слова"], ["✨ Подобрать новые слова"],
     ]

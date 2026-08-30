@@ -8,7 +8,7 @@ import config
 import store
 import learning_dictionary as dictionary
 from dictionary_model import language_code as _code
-from dictionary_seed_catalog import phrase_catalog, word_catalog
+from dictionary_seed_catalog import word_catalog
 from dictionary_seed_state import SeedStateRepository
 from dictionary_seed_ui import (
     LEVEL_LABELS,
@@ -32,7 +32,7 @@ send_dict = dictionary.send_dict
 send_dict_lang = dictionary.send_dict_lang
 
 def _seed_dataset(lang, kind):
-    dataset = phrase_catalog(lang) if kind == "phrase" else word_catalog(lang)
+    dataset = word_catalog(lang)
     # B1 раньше был отдельным «Средним». Теперь он входит в «Сложный», чтобы
     # пользователь не потерял полезный стартовый материал после упрощения шкалы.
     return {
@@ -75,6 +75,8 @@ def _seed_candidates(cid, lang, level, kind="word"):
     blocked = _seed_existing_keys(cid) | _seed_seen_keys(cid)
     out = []
     for word, ru, note in _seed_dataset(lang, kind).get(level, []):
+        if not dictionary.is_dictionary_word(word):
+            continue
         item = {"lang": lang, "word": _cap(word), "ru": ru, "kind": kind, "note": note}
         key = _dict_item_key(lang, kind, item["word"])
         if key not in blocked:
@@ -137,13 +139,15 @@ async def seed_later(bot, cid):
 
 
 async def seed_start(bot, cid, lang=None, kind="word", q=None):
+    # Старые callback-и подбора фраз совместимо открывают обычный подбор слов.
+    kind = "word"
     code, _language, level = _seed_language(cid, lang)
     items = _seed_candidates(cid, code, level, kind)
     if not items:
         text = (
             "📚 Словарь уже заполнен\n\n"
             "Для вашего уровня пока нет новых стартовых слов.\n"
-            "Можно добавить свои слова вручную или перейти к фразам."
+            "Можно добавить своё слово вручную."
         )
         if q is not None:
             try:
@@ -233,11 +237,9 @@ async def seed_choose_level(bot, cid, q=None):
 async def seed_set_level(bot, cid, lang, level, q=None):
     if level not in _SEED_LEVELS:
         return
-    st = _seed_state_get(cid)
-    kind = st.get("kind", "word") if st else "word"
     language = "нидерландский" if lang == "nl" else "английский"
     store.set_level(cid, language, level)
-    await seed_start(bot, cid, lang, kind=kind, q=q)
+    await seed_start(bot, cid, lang, kind="word", q=q)
 
 
 async def seed_add_selected(bot, cid, q=None):
@@ -251,6 +253,10 @@ async def seed_add_selected(bot, cid, q=None):
         await bot.send_message(
             chat_id=cid, text="Эта подборка уже обработана.",
             reply_markup=back_menu_keyboard("m_learn"))
+        return
+    if st.get("kind", "word") != "word":
+        _seed_state_clear(cid)
+        await seed_start(bot, cid, st.get("lang"), kind="word", q=q)
         return
     st["confirmed"] = True
     _seed_state_set(cid, st)
@@ -267,7 +273,6 @@ async def seed_add_selected(bot, cid, q=None):
         store.add_to_list(config.DICT_KEY, cid, legacy)
         existing.add(key)
         added.append(legacy)
-    kind = st.get("kind", "word")
     lang = st.get("lang", "en")
     _seed_mark_seen(cid, added)
     _seed_state_clear(cid)
@@ -276,11 +281,10 @@ async def seed_add_selected(bot, cid, q=None):
     # отложенная до первого показа в тренажёре.
     for legacy in added:
         await _refresh_dict_entry(cid, legacy)
-    noun = "фраз" if kind == "phrase" else "слов"
     if added:
         terms = ", ".join(a.get("word", "") for a in added[:10])
         more = f" и ещё {len(added) - 10}" if len(added) > 10 else ""
-        text = f"✅ Добавлено {len(added)} {noun}: {terms}{more}"
+        text = f"✅ Добавлено {len(added)} слов: {terms}{more}"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎯 Начать обучение", callback_data=f"a_train_{lang}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

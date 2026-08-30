@@ -181,10 +181,10 @@ def learning_menu(home: dict):
     if not home.get("has_material"):
         b.section("🧠 Обучение")
         b.spacer()
-        b.line("Добавляй сюда слова и фразы, которые хочешь запомнить.")
+        b.line("Добавляй сюда слова, которые хочешь запомнить.")
         b.spacer()
         b.line("Можно просто написать мне в чате:")
-        b.line("«добавь в словарь wennen aan»")
+        b.line("«добавь в словарь afspraak»")
         b.spacer()
         b.line("Я буду использовать их в практике и повторении.")
         return b.build_stripped(reply_markup=ikb([
@@ -207,7 +207,7 @@ def learning_menu(home: dict):
     b.spacer()
     b.bold("Прогресс:")
     b.newline()
-    b.bullet(f"В изучении {progress.get('total', 0)} слов и фраз")
+    b.bullet(f"В изучении {progress.get('total', 0)} слов")
     b.bullet(f"Повторить сегодня — {progress.get('due_count', 0)}")
     b.bullet(f"Без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()

@@ -24,7 +24,6 @@ def _item_line(item):
 
 def render_text(state):
     level = state.get("level", "simple")
-    kind = state.get("kind", "word")
     items = state.get("items") or []
     selected = set(state.get("selected") or [])
     page = int(state.get("page") or 0)
@@ -33,13 +32,12 @@ def render_text(state):
     start = page * PAGE_SIZE
     chunk = items[start:start + PAGE_SIZE]
     label = LEVEL_LABELS.get(level, level)
-    header = f"🧩 Стартовые фразы · {label}" if kind == "phrase" else f"📚 Популярные слова · {label}"
+    header = f"📚 Популярные слова · {label}"
     lines = [
         header,
         f"Страница {page + 1} из {total_pages}",
         "",
-        ("Отметьте слова, которые хотите добавить в словарь:"
-         if kind == "word" else "Отметьте фразы, которые хотите добавить в словарь:"),
+        "Отметьте слова, которые хотите добавить в словарь:",
         "",
     ]
     for offset, item in enumerate(chunk):

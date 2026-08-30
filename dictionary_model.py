@@ -303,6 +303,10 @@ _POS_PATTERNS = (
     ("местоимение", r"\b(?:местоимение|pronoun|voornaamwoord)\b"),
     ("наречие", r"\b(?:наречие|adverb|bijwoord)\b"),
     ("предлог", r"\b(?:предлог|preposition|voorzetsel)\b"),
+    ("числительное", r"\b(?:числительное|numeral|telwoord)\b"),
+    ("союз", r"\b(?:союз|conjunction|voegwoord)\b"),
+    ("частица", r"\b(?:частица|particle)\b"),
+    ("междометие", r"\b(?:междометие|interjection|tussenwerpsel)\b"),
     ("фраза", r"\b(?:фраза|предложение|выражение|конструкция|phrase|sentence|expression|construction)\b"),
 )
 
@@ -326,13 +330,13 @@ def canonical_part_of_speech(entry) -> str:
 
 
 def entry_is_dictionary_word(entry) -> bool:
-    """Отделяет одиночные слова от архивных фраз и конструкций."""
+    """Отделяет одиночные слова от архивных фраз и конструкций.
+
+    Форма термина надёжнее старых ``pos``/``kind``: legacy-анализ иногда
+    ошибочно помечал обычное слово как выражение. Такое слово нужно оставить
+    видимым и дать фоновой проверке исправить категорию.
+    """
     source = entry if isinstance(entry, dict) else {"term": str(entry or "")}
-    entry_type = str(source.get("entry_type") or source.get("kind") or "").casefold()
-    if canonical_part_of_speech(source) == "фраза" or entry_type in {
-        "phrase", "sentence", "expression", "construction",
-    }:
-        return False
     return is_dictionary_word(entry_term(source))
 
 

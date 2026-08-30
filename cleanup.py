@@ -304,7 +304,7 @@ def _ctx_items(cid, ctx):
         words = _l._ensure_dict(cid)
         items = []
         for i, w in enumerate(words):
-            if _l._dict_lang(w) == lang:
+            if _l._dict_lang(w) == lang and _l.entry_is_dictionary_word(w):
                 term = _l._entry_term(w)
                 ru = _l._entry_translation(w)
                 items.append((i, f"{term} — {ru}".strip(" —")))
@@ -556,7 +556,7 @@ def _view_items(ctx, cid):
         items = [
             (w["id"], f"{_l._entry_term(w)} — {_l._entry_translation(w)}".strip(" —"))
             for w in words
-            if _l._dict_lang(w) == lang
+            if _l._dict_lang(w) == lang and _l.entry_is_dictionary_word(w)
         ]
         return f"{flag} Чистка словаря", items, f"a_dictlang_{lang}"
     if ctx == "wl":

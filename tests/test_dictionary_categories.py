@@ -1,11 +1,14 @@
 import asyncio
 import os
+import time
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import learning_dictionary
 import dictionary_import
+import learning
+from dictionary_repository import DictionaryRepository
 
 
 def test_phrases_are_kept_in_storage_but_hidden_from_word_dictionary(monkeypatch):
@@ -40,6 +43,53 @@ def test_phrases_are_kept_in_storage_but_hidden_from_word_dictionary(monkeypatch
     visible = learning_dictionary._dict_lang_entries("42", "nl")
 
     assert [item["term"] for item in visible] == ["Moment"]
+
+
+def test_archived_phrases_do_not_reach_trainer(monkeypatch):
+    repository = DictionaryRepository("42")
+    monkeypatch.setattr(repository, "all", lambda: [
+        {"lang": "nl", "term": "Moment", "translation": "Момент"},
+        {"lang": "nl", "term": "Op dit moment", "translation": "Сейчас"},
+    ])
+
+    assert [item["term"] for item in repository.training_entries("nl")] == ["Moment"]
+
+
+def test_single_words_use_their_actual_part_of_speech_category():
+    assert learning_dictionary._dictionary_category({
+        "term": "Eentje", "pos": "числительное",
+    }) == "Числительные"
+
+
+def test_archived_cached_phrase_is_replaced_by_word_of_the_day(monkeypatch):
+    cid = "word-only-daily"
+    today = learning.datetime.now(learning.config.TZ).date().isoformat()
+    phrase = {"lang": "nl", "term": "Op dit moment", "translation": "Сейчас"}
+    word = {"lang": "nl", "term": "Moment", "translation": "Момент"}
+
+    class Repository:
+        def __init__(self, _cid):
+            pass
+
+        def all(self):
+            return [phrase, word]
+
+        def save_all(self, _entries):
+            pass
+
+    learning._DAILY_MATERIAL_CACHE[cid] = {
+        "date": today, "lang": "nl", "entry": phrase,
+    }
+    monkeypatch.setattr(learning, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(learning, "DictionaryRepository", Repository)
+    monkeypatch.setattr(learning.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(
+        learning, "_save_daily_material",
+        lambda _cid, _today, _lang, entry: entry,
+    )
+
+    assert learning.select_daily_material(cid)["term"] == "Moment"
+    learning._DAILY_MATERIAL_CACHE.pop(cid, None)
 
 
 def test_requested_full_dictionary_check_reports_result_and_clears_request(monkeypatch):
@@ -81,6 +131,57 @@ def test_requested_full_dictionary_check_reports_result_and_clears_request(monke
     assert "dictionary_recheck_request" not in learning_dictionary.store.get_profile(cid)
     assert "Исправлено: 1" in sent[-1]["text"]
     assert "Перенесено между категориями: 1" in sent[-1]["text"]
+
+
+def test_requested_dictionary_check_waits_for_retry_window(monkeypatch):
+    cid = "dictionary-check-backoff"
+    learning_dictionary.store.set_profile(cid, {
+        "dictionary_recheck_request": {
+            "lang": "nl", "requested_at": "2026-08-30",
+            "retry_after_at": int(time.time()) + 3600,
+        },
+    })
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("AI retry started before retry_after_at")
+
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", forbidden)
+
+    handled = asyncio.run(
+        learning_dictionary.process_requested_dictionary_rechecks(object(), [cid])
+    )
+
+    assert handled == 0
+    assert "dictionary_recheck_request" in learning_dictionary.store.get_profile(cid)
+
+
+def test_failed_requested_dictionary_check_sets_one_hour_backoff(monkeypatch):
+    cid = "dictionary-check-failed"
+    now = int(time.time())
+    learning_dictionary.store.set_profile(cid, {
+        "dictionary_recheck_request": {
+            "lang": "nl", "requested_at": "2026-08-30",
+        },
+    })
+    monkeypatch.setattr(
+        learning_dictionary, "_dict_lang_entries",
+        lambda *_args: [{"id": "1", "lang": "nl", "term": "Huis",
+                         "translation": "Дом", "pos": "существительное"}],
+    )
+
+    async def unavailable(*_args, **_kwargs):
+        raise learning_dictionary.DictionaryRebuildDeferred(3600)
+
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", unavailable)
+
+    handled = asyncio.run(
+        learning_dictionary.process_requested_dictionary_rechecks(object(), [cid])
+    )
+
+    request = learning_dictionary.store.get_profile(cid)["dictionary_recheck_request"]
+    assert handled == 0
+    assert request["retry_after_at"] >= now + 3590
+    assert request["attempts"] == 1
 
 
 def test_dictionary_migration_repairs_pos_from_grammar_breakdown(monkeypatch):
@@ -294,7 +395,6 @@ def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeyp
             }, "[ко́ппих]", "Так говорят о человеке, который не хочет менять решение.",
                 "В зависимости от ситуации звучит критично или одобрительно.",
                 "Он очень упрямый.", "Hij is erg koppig."),
-            {"keep": False},
         ]}
 
     monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
@@ -306,13 +406,38 @@ def test_full_dictionary_rebuild_repairs_language_form_category_and_junk(monkeyp
 
     asyncio.run(learning_dictionary.rebuild_dictionary_entries("42"))
 
-    assert [item["id"] for item in words] == ["verb", "english", "adjective"]
+    assert [item["id"] for item in words] == ["verb", "english", "adjective", "junk"]
+    assert words[-1]["term"].startswith("Als gegevens")
     assert words[0]["term"] == "Vaststellen"
     assert words[0]["pos"] == "глагол"
     assert words[0]["srs_level"] == 4
     assert words[1]["lang"] == "en"
     assert words[2]["term"] == "Koppig"
     assert words[2].get("article", "") == ""
-    assert all(item["dictionary_rebuild_version"] == 2 for item in words)
-    assert all(item["study_card_version"] == 1 for item in words)
+    assert all(item["dictionary_rebuild_version"] == 2 for item in words[:3])
+    assert "dictionary_rebuild_version" not in words[-1]
+    assert all(item["study_card_version"] == 1 for item in words[:3])
     assert saved
+
+
+def test_dictionary_rebuild_stops_after_first_unavailable_batch(monkeypatch):
+    words = [
+        {
+            "id": str(index), "lang": "nl", "term": f"Woord{index}",
+            "translation": f"Слово {index}", "pos": "существительное",
+        }
+        for index in range(21)
+    ]
+    calls = []
+
+    async def unavailable(*_args, **_kwargs):
+        calls.append("ai")
+        raise Exception("provider limit")
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(learning_dictionary.ai, "allm_json", unavailable)
+
+    result = asyncio.run(learning_dictionary.rebuild_dictionary_entries("42"))
+
+    assert result == words
+    assert calls == ["ai"]

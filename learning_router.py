@@ -108,7 +108,8 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictseed_start_"):
         await dictionary_seed.seed_start(bot, cid, act.split("_")[-1], q=q)
     elif act.startswith("dictseed_phrases_"):
-        await dictionary_seed.seed_start(bot, cid, act.split("_")[-1], kind="phrase", q=q)
+        # Совместимость со старыми сообщениями: подбор фраз удалён.
+        await dictionary_seed.seed_start(bot, cid, act.split("_")[-1], kind="word", q=q)
     elif act.startswith("dictseed_toggle_"):
         await dictionary_seed.seed_toggle(bot, cid, int(act.split("_")[-1]), q=q)
     elif act.startswith("dictseed_page_"):
@@ -170,8 +171,8 @@ async def handle_action(bot, cid, q, act, run_with_status):
         lang = act.split("_")[1]
         store.pending_input[str(cid)] = f"dictadd_{lang}"
         await bot.send_message(chat_id=cid, text=(
-            "✏️ Пришли слова или фразы - можно сразу много, каждую с новой строки.\n"
-            "Я сам приведу в правильную форму, переведу и разберу."))
+            "✏️ Пришли слова — можно сразу несколько, каждое с новой строки.\n"
+            "Я приведу их в правильную форму, переведу и разберу."))
     elif act.startswith("dictsearch_"):
         await dictionary.send_dict_search_prompt(bot, cid, act.split("_")[1], q=q)
     elif act.startswith("dictviewdelid_"):

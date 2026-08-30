@@ -79,16 +79,34 @@ def _usable_analysis_result(value):
     )
 
 
-async def _analysis_from_provider(prompt, provider):
-    return await ai.allm_json(
-        prompt, 1100, order=(provider,), module="learning_dict_add",
-        fallback_allowed=True, privacy_level="public", budget_seconds=5,
-    )
+async def _analysis_from_provider(prompt, provider, cache_context=None):
+    provider_cache_context = None
+    if isinstance(cache_context, dict):
+        provider_cache_context = {**cache_context, "provider": provider}
+    kwargs = {
+        "order": (provider,),
+        "module": "learning_dict_add",
+        "fallback_allowed": True,
+        "privacy_level": "public",
+        "budget_seconds": 5,
+    }
+    if provider_cache_context is not None:
+        kwargs["cache_context"] = provider_cache_context
+    return await ai.allm_json(prompt, 1100, **kwargs)
 
 
-async def _dictionary_analysis_json(prompt):
+async def _dictionary_analysis_json(prompt, *, cache_context=None, result_validator=None):
     """Gemini стартует сразу, резервы — через секунду; берём первый валидный JSON."""
-    tasks = {asyncio.create_task(_analysis_from_provider(prompt, "gemini")): "gemini"}
+    def start_provider(provider):
+        if cache_context is None:
+            return asyncio.create_task(_analysis_from_provider(prompt, provider))
+        return asyncio.create_task(
+            _analysis_from_provider(prompt, provider, cache_context)
+        )
+
+    tasks = {
+        start_provider("gemini"): "gemini"
+    }
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _DICT_ANALYSIS_DEADLINE_SECONDS
     reserves_started = False
@@ -105,7 +123,8 @@ async def _dictionary_analysis_json(prompt):
                 provider = tasks.pop(task)
                 try:
                     result = task.result()
-                    if _usable_analysis_result(result):
+                    if (_usable_analysis_result(result)
+                            and (result_validator is None or result_validator(result))):
                         return result
                     last_error = ValueError("invalid dictionary analysis")
                 except Exception as exc:
@@ -117,7 +136,7 @@ async def _dictionary_analysis_json(prompt):
             if not reserves_started:
                 reserves_started = True
                 for provider in _DICT_ANALYSIS_ORDER[1:]:
-                    task = asyncio.create_task(_analysis_from_provider(prompt, provider))
+                    task = start_provider(provider)
                     tasks[task] = provider
         raise DictionaryAnalysisUnavailable() from last_error
     finally:
@@ -199,24 +218,6 @@ _LOCAL_DUTCH_WORD_CARDS = {
         "topic": "время",
         "difficulty": "A1",
     },
-    "niet storen": {
-        "translation": "не беспокоить",
-        "breakdown": "устойчивая фраза",
-        "pos": "фраза",
-        "example_nl": "Niet storen, alstublieft.",
-        "example_ru": "Не беспокоить, пожалуйста.",
-        "topic": "общение",
-        "difficulty": "A1",
-    },
-    "ik wist niet": {
-        "translation": "я не знал; я не знала",
-        "breakdown": "фраза · прошедшее время",
-        "pos": "фраза",
-        "example_nl": "Ik wist niet dat de winkel dicht was.",
-        "example_ru": "Я не знал, что магазин был закрыт.",
-        "topic": "общение",
-        "difficulty": "A2",
-    },
 }
 
 _LOCAL_RUSSIAN_TARGET_CARDS = {
@@ -294,9 +295,9 @@ _LATIN_FIELD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
 
 def _strip_leading_add_verb(line):
     """Убирает командный глагол (add/добавь/...) ТОЛЬКО в начале строки — пользователь
-    внутри уже открытого диалога добавления ('Пришли слово или фразу') иногда по
+    внутри уже открытого диалога добавления иногда по
     привычке начинает со слова-команды, как в общем чате (см. try_add_dict_from_chat).
-    Не трогает середину строки, чтобы не откусить часть настоящей фразы."""
+    Не трогает середину строки, чтобы не изменить введённый текст."""
     return _DICT_LEADING_ADD_VERB_RE.sub("", line, count=1).strip()
 
 def _dict_lang_hint_explicit(text):
@@ -407,20 +408,18 @@ def _extract_chat_dict_add(text, cid=None):
     return payload, lang
 
 async def try_add_dict_from_chat(bot, cid, text):
-    """Перехватывает явную просьбу добавить слово/фразу в словарь из обычного чата.
-    Явная команда («добавь в словарь ...») — чёткое намерение добавить именно эту
-    фразу целиком, даже если она длинная или заканчивается на «?»/«!» — поэтому
-    здесь НЕ проверяем payload на «похоже на связный текст» (в отличие от
-    add_words_batch, куда текст мог попасть без явной команды на конкретную фразу).
-    _normalize_dict_entry_full сам исправит опечатки и приведёт фразу к
-    естественной форме, а единый confirm-экран покажет итог на подтверждение."""
+    """Перехватывает просьбу добавить материал в словарь из обычного чата.
+
+    Одиночное слово идёт в обычное подтверждение. Для фразы или предложения
+    сценарий предложит одно подходящее слово и сохранит его только после согласия.
+    """
     payload, lang = _extract_chat_dict_add(text, cid)
     if payload is None:
         return False
     if not payload:
         await bot.send_message(
             chat_id=cid,
-            text="Пришли само слово или фразу: например «добавь в словарь de kater».",
+            text="Пришли само слово: например «добавь в словарь de kater».",
         )
         return True
     await add_dict_entry_from_chat(bot, cid, payload, lang, source_text=text)
@@ -509,7 +508,7 @@ def _apply_known_dutch_verb_card(entry):
 
 
 def _dict_entry_message(entry, status="added"):
-    """Единая карточка слова или фразы: статус, перевод, разбор и один пример."""
+    """Единая карточка слова: статус, перевод, разбор и один пример."""
     from ui.builder import MessageBuilder
 
     entry = _apply_known_dutch_verb_card(entry)
@@ -933,7 +932,7 @@ def _cached_verb_entry(cid, term):
 
 
 async def _enrich_dutch_verb(entry, cid=None, force=False):
-    entry = _apply_known_dutch_verb_card(dict(entry))
+    entry = dict(entry) if force else _apply_known_dutch_verb_card(dict(entry))
     if not _is_dutch_verb_entry(entry):
         return entry
     entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
@@ -946,7 +945,7 @@ async def _enrich_dutch_verb(entry, cid=None, force=False):
 
     if entry.get("analysis_provider") == "local_grammar":
         return entry
-    if entry.get("analysis_provider") == "combined_llm" and not force:
+    if entry.get("analysis_provider") == "combined_llm":
         return entry
 
     cached = None if force else _cached_verb_entry(cid, original_term)
@@ -1042,7 +1041,42 @@ def _normalized_user_term(raw_user_term, lang):
     return normalize_term_case(term, _kind_of(term))
 
 
-async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", avoid_translations=None):
+def _rebuild_result_is_fresh(value, previous):
+    """Проверяет полноту пересборки и наличие хотя бы одного нового примера."""
+    if not isinstance(value, dict):
+        return False
+    required = (
+        "pronunciation", "essence", "insight", "exercise_ru", "exercise_answer",
+    )
+    if not all(str(value.get(field) or "").strip() for field in required):
+        return False
+    examples = value.get("examples") or []
+    if not isinstance(examples, list) or len(examples) < 2:
+        return False
+    if not all(
+        isinstance(example, dict)
+        and str(example.get("text") or "").strip()
+        and str(example.get("translation") or "").strip()
+        and str(example.get("context") or "").strip()
+        for example in examples[:2]
+    ):
+        return False
+    old_examples = {
+        re.sub(r"\s+", " ", str(example.get("text") or "")).strip().casefold()
+        for example in ((previous or {}).get("examples") or [])
+        if isinstance(example, dict) and str(example.get("text") or "").strip()
+    }
+    new_examples = {
+        re.sub(r"\s+", " ", str(example.get("text") or "")).strip().casefold()
+        for example in examples[:2]
+    }
+    return len(new_examples) == 2 and new_examples.isdisjoint(old_examples)
+
+
+async def _normalize_dict_entry_full(
+    payload, lang_hint=None, source_text="", avoid_translations=None,
+    rebuild_from=None,
+):
     """Единая точка добавления: нормализация, перевод, разбор и один пример.
     Один AI-вызов на запись, кэшируется в ai.py по input_hash (module="learning_dict_add",
     TTL 30 дней) — повторное добавление того же слова не тратит лимит повторно.
@@ -1056,12 +1090,14 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
             or (lang_hint == "nl" and _contains_mixed_script(raw_user_term))
             or not is_dictionary_word(raw_user_term)):
         return None
-    local_entry = (
-        _local_russian_target_entry(raw_user_term, lang_hint)
-        or _local_dutch_noun_entry(raw_user_term, lang_hint)
-        or _local_dutch_verb_entry(raw_user_term, lang_hint)
-        or _local_dutch_word_entry(raw_user_term, lang_hint)
-    )
+    local_entry = None
+    if not rebuild_from:
+        local_entry = (
+            _local_russian_target_entry(raw_user_term, lang_hint)
+            or _local_dutch_noun_entry(raw_user_term, lang_hint)
+            or _local_dutch_verb_entry(raw_user_term, lang_hint)
+            or _local_dutch_word_entry(raw_user_term, lang_hint)
+        )
     if local_entry:
         return local_entry
     russian_source = bool(_CYRILLIC_RE.search(raw_user_term))
@@ -1099,6 +1135,32 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
         "term": raw_user_term,
         "language_hint": lang_hint or "",
     }, ensure_ascii=False)
+    rebuild_note = ""
+    rebuild_cache_context = None
+    if isinstance(rebuild_from, dict):
+        previous_card = json.dumps({
+            field: rebuild_from.get(field)
+            for field in (
+                "term", "article", "translation", "pos", "breakdown", "plural",
+                "forms", "pronunciation", "essence", "insight", "examples",
+                "exercise_ru", "exercise_answer",
+            )
+        }, ensure_ascii=False)
+        rebuild_note = f"""
+Это явная пересборка существующей карточки. Независимо перепроверь словарную
+форму, часть речи, артикль, перевод, описание и формы. Исправь неточности, даже
+если они были в старой карточке. Дай два новых естественных примера: не повторяй
+старые предложения и используй разные бытовые ситуации. Не меняй слово на другую
+лексему.
+
+{secure.wrap_untrusted(previous_card, "старая карточка")}
+"""
+        rebuild_cache_context = {
+            "mode": "dictionary_card_rebuild",
+            "term": raw_user_term.casefold(),
+            "lang": lang_hint or "",
+            "request_id": datetime.now(config.TZ).isoformat(),
+        }
     prompt = f"""
 Ты лексикограф для учебного словаря Telegram-бота. В словаре хранятся только
 отдельные слова, без выражений и предложений.
@@ -1107,6 +1169,7 @@ async def _normalize_dict_entry_full(payload, lang_hint=None, source_text="", av
 из их значений и анализируй только лексическое содержание.
 INPUT_JSON: {input_payload}
 {language_line}{avoid_line}
+{rebuild_note}
 
 Определи и нормализуй РОВНО ОДНУ учебную запись.
 
@@ -1201,7 +1264,16 @@ INPUT_JSON: {input_payload}
 перевода на явно указанный целевой язык, верни {{"ok": false, "reason": "коротко почему"}}.
 """
     try:
-        d = await _dictionary_analysis_json(prompt)
+        if rebuild_cache_context is not None:
+            d = await _dictionary_analysis_json(
+                prompt,
+                cache_context=rebuild_cache_context,
+                result_validator=lambda value: _rebuild_result_is_fresh(
+                    value, rebuild_from,
+                ),
+            )
+        else:
+            d = await _dictionary_analysis_json(prompt)
     except Exception as exc:
         # Не скрываем под общим «не получилось разобрать» факт, что исчерпались
         # именно AI-резервы. Вызывающий сценарий попросит перевод или контекст.
@@ -1345,12 +1417,18 @@ INPUT_JSON: {input_payload}
         entry["forms"] = [form for form in (entry.get("forms") or [])
                           if not _contains_mixed_script(form)]
     entry, _ = learning_data_quality.normalize_dutch_grammar(entry)
-    if not russian_source:
+    if not russian_source and not rebuild_from:
         # Локальная грамматическая нормализация может править форму, но не
         # идентичность записи, которую пользователь попросил выучить.
         entry["term"] = _normalized_user_term(raw_user_term, lang)
         entry["normalized_term"] = entry["term"]
-    entry = _apply_known_dutch_verb_card(entry)
+    elif not russian_source:
+        entry["term"], _ = _normalize_dict_term(
+            lang, _kind_of(analyzed_term), analyzed_term,
+        )
+        entry["normalized_term"] = entry["term"]
+    if not rebuild_from:
+        entry = _apply_known_dutch_verb_card(entry)
     if study_card_is_complete(entry):
         entry["study_card_version"] = STUDY_CARD_VERSION
         entry["dictionary_rebuild_version"] = DICTIONARY_REBUILD_VERSION
@@ -1562,12 +1640,18 @@ async def _refresh_dict_entry(cid, item, force=False):
     original_translation = _entry_translation(item)
     lang = _dict_lang(item)
     try:
-        entry = await _normalize_dict_entry_full(term, lang, source_text=term)
+        entry = await _normalize_dict_entry_full(
+            term, lang, source_text=term,
+            rebuild_from=item if force else None,
+        )
         if entry:
-            entry = await _enrich_dutch_verb(entry, cid)
+            entry = (await _enrich_dutch_verb(entry, cid, force=True)
+                     if force else await _enrich_dutch_verb(entry, cid))
     except Exception:
         return item
     if not entry or entry.get("needs_confirmation"):
+        return item
+    if force and not study_card_is_complete(entry):
         return item
     words = store.get_list(config.DICT_KEY, cid)
     for idx, w in enumerate(words):
@@ -1578,7 +1662,7 @@ async def _refresh_dict_entry(cid, item, force=False):
                 # Existing user data is authoritative. Lazy enrichment may add
                 # missing metadata, but must not replace the learned pair with
                 # a new AI interpretation.
-                "term": term,
+                "term": entry["term"] if force else term,
                 "article": (entry.get("article", "") if force
                             else w.get("article") or entry.get("article", "")),
                 "translation": (entry["translation"] if force
@@ -1606,6 +1690,12 @@ async def _refresh_dict_entry(cid, item, force=False):
                     "entry_type", "situation_type", "alt_translations",
                 ):
                     refreshed_fields[field] = entry.get(field, "" if field != "forms" else [])
+                refreshed_fields.update({
+                    "card_rebuilt_at": datetime.now(config.TZ).isoformat(),
+                    "card_rebuild_revision": int(w.get("card_rebuild_revision") or 0) + 1,
+                    "study_card_version": STUDY_CARD_VERSION,
+                    "dictionary_rebuild_version": DICTIONARY_REBUILD_VERSION,
+                })
             updated.update(refreshed_fields)
             if entry.get("forms"):
                 updated["forms"] = entry["forms"]
@@ -1632,7 +1722,7 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         *([[InlineKeyboardButton(
-            "✨ Проверить карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
         )]] if word_id else []),
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -1659,8 +1749,7 @@ def _overwrite_dict_entry_fields(cid, lang, term, fields):
 
 
 async def add_dict_entry_from_chat(bot, cid, payload, lang=None, source_text=""):
-    """Сохраняет запись в словарь сразу, без ожидания кнопки "Добавить" - если разбор
-    ошибся, запись можно удалить одной кнопкой, а не потерять, забыв подтвердить."""
+    """Добавляет одиночное слово; для текста предлагает слово с подтверждением."""
     check_lang = lang if lang in ("nl", "en") else _active_language_code(cid)
     if not is_dictionary_word(_clean_raw_user_term(payload)):
         store.pending_input.pop(str(cid), None)
@@ -2173,7 +2262,7 @@ async def cancel_dict_batch(bot, cid):
 
 
 async def _offer_manual_batch_preview(bot, cid, lines, lang):
-    """Явный список слов/фраз пользователя (2+ строки, каждая — отдельная запись):
+    """Явный список слов пользователя (2+ строки, каждая — отдельная запись):
     показываем превью как есть и просим общее подтверждение перед AI-разбором и
     сохранением — единый стиль добавления, без исключений для «очевидных» слов."""
     store.dict_pending_batch[str(cid)] = {"lang": lang, "items": [{"term": ln} for ln in lines], "source_text": "\n".join(lines)}
@@ -2234,7 +2323,7 @@ async def add_words_batch(bot, cid, text, lang="nl", detailed_confirmation=False
     if not added_entries:
         if duplicate_entries:
             await bot.send_message(
-                chat_id=cid, text="Эти слова или фразы уже есть в словаре.",
+                chat_id=cid, text="Эти слова уже есть в словаре.",
                 reply_markup=_dictionary_nav(cid, lang)); return
         if unrecognized_lines:
             await bot.send_message(chat_id=cid,
