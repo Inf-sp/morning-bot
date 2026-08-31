@@ -299,14 +299,7 @@ def game_home_screen(city, items, daily, *, day=None, year=None, season="лет�
     else:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
-    b.spacer()
-    b.bold("Угадай игру:")
-    b.text_line(" ")
-    b.text_line(str(daily.get("emoji") or "🎮 ❓"))
-    b.text_line(" → ")
-    b.add(str(daily.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
-
-    fact = _safe_rebus_fact(daily, daily.get("fact"))
+    fact = str(daily.get("fact") or (daily.get("rebus") or {}).get("fact") or "").strip()
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -501,13 +494,10 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
             b.text_line(f" {birthday_fact}")
         b.newline()
 
-    fact = _safe_rebus_fact(rebus, rebus.get("fact"), cinema_day.get("fact"))
-    b.spacer()
-    b.bold("Ребус дня:")
-    b.text_line(" ")
-    b.text_line(_clean_external_text(rebus.get("emoji")) or "🎬 ❓")
-    b.text_line(" → ")
-    b.add(_clean_external_text(rebus.get("answer")) or "Ответ", MessageEntity.SPOILER)
+    fact = _strip_external_label(
+        cinema_day.get("fact") or (cinema_day.get("rebus") or {}).get("fact"),
+        "интересно", "факт",
+    )
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -989,15 +979,10 @@ def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
         b.text_line(" ")
         b.line("Пока не удалось подтвердить заметные новинки.")
 
-    fact = _safe_rebus_fact(
-        rebus, rebus.get("fact"), daily_book.get("fact"), birthday.get("fact"),
-    )
-    b.spacer()
-    b.bold("Литературный ребус:")
-    b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "📚 ❓"))
-    b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+    fact = str(
+        daily_book.get("fact") or (daily_book.get("rebus") or {}).get("fact")
+        or birthday.get("fact") or ""
+    ).strip()
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -1106,6 +1091,34 @@ def series_premiere_screen(item):
         meta.append(genres.replace(", ", " · "))
     b.line(" · ".join(meta))
     overview = _movie_premiere_summary(_item_value(item, "overview", ""), limit=180)
+    if overview:
+        b.spacer()
+        b.line(overview if overview[-1] in ".!?…" else overview + ".")
+    return b.build_stripped()
+
+
+def combined_premiere_screen(item):
+    """Одна общая карточка новой премьеры фильма или сериала."""
+    b = MessageBuilder()
+    b.section("✨ Новая премьера")
+    if not item:
+        b.spacer()
+        b.line("Пока не удалось подтвердить ближайшие премьеры.")
+        return b.build_stripped()
+    kind = str(_item_value(item, "premiere_kind", "movie"))
+    title = str(_item_value(item, "name", "") or _item_value(item, "title", "") or "Премьера").strip()
+    b.spacer()
+    b.bold(title)
+    b.newline()
+    meta = ["Сериал" if kind == "series" else "Фильм"]
+    release_date = _movie_premiere_date(item)
+    if release_date:
+        meta.append(release_date)
+    genres = _movie_genres_for_line(item)
+    if genres:
+        meta.append(genres.replace(", ", " · "))
+    b.line(" · ".join(meta))
+    overview = _movie_premiere_summary(_item_value(item, "overview", ""), limit=220)
     if overview:
         b.spacer()
         b.line(overview if overview[-1] in ".!?…" else overview + ".")
@@ -1288,13 +1301,9 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 
-    fact = _safe_rebus_fact(rebus, rebus.get("fact"), daily_music.get("fact"))
-    b.spacer()
-    b.bold("Музыкальный ребус:")
-    b.text_line(" ")
-    b.text_line(str(rebus.get("emoji") or "🎧 ❓"))
-    b.text_line(" → ")
-    b.add(str(rebus.get("answer") or "Ответ").strip(), MessageEntity.SPOILER)
+    fact = str(
+        daily_music.get("fact") or (daily_music.get("rebus") or {}).get("fact") or ""
+    ).strip()
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -1361,6 +1370,36 @@ def concerts_list(place_label, events, empty_hint=""):
                 b.line(f"Концерт: {date_place}")
             if ev.get("price"):
                 b.line(ev["price"])
+    return b.build_stripped()
+
+
+def concert_card_screen(title, event, empty_hint=""):
+    b = MessageBuilder()
+    b.section(f"✨ {title}")
+    if not event:
+        b.spacer()
+        b.line(empty_hint or "Пока не нашёл ближайших концертов.")
+        return b.build_stripped()
+    artist = str(_item_value(event, "artist", "") or "Концерт").strip()
+    b.spacer()
+    b.bold(artist)
+    b.newline()
+    details = " · ".join(value for value in (
+        str(_item_value(event, "date", "") or "").strip(),
+        str(_item_value(event, "place", "") or "").strip(),
+        str(_item_value(event, "context", "") or "").strip(),
+    ) if value)
+    if details:
+        b.line(details)
+    description = clip(str(_item_value(event, "description", "") or ""), 240)
+    if description:
+        b.spacer()
+        b.line(description if description[-1] in ".!?…" else description + ".")
+    url = str(_item_value(event, "url", "") or "").strip()
+    if url:
+        b.spacer()
+        b.link("Билеты и подробности", url)
+        b.newline()
     return b.build_stripped()
 
 

@@ -63,10 +63,6 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
-    if entries:
-        rows.append([InlineKeyboardButton(
-            "🔢 Показать списком", callback_data=f"a_dictedit_{lang}",
-        )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
@@ -126,9 +122,6 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
     rows.append([InlineKeyboardButton(
-        "🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}",
-    )])
-    rows.append([InlineKeyboardButton(
         "🔢 Показать списком",
         callback_data=f"a_dictcatlist_{lang}_{category_index}_0",
     )])
@@ -156,10 +149,11 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
     pages = max(1, (len(entries) + page_size - 1) // page_size)
     page = max(0, min(int(page), pages - 1))
     chunk = entries[page * page_size:(page + 1) * page_size]
-    rows = [[InlineKeyboardButton(
-        display_term(_entry_term(item), item.get("article") or "")[:48],
+    buttons = [InlineKeyboardButton(
+        display_term(_entry_term(item), item.get("article") or "")[:24],
         callback_data=f"a_dictcat_{lang}_{category_index}_{page * page_size + offset}",
-    )] for offset, item in enumerate(chunk)]
+    ) for offset, item in enumerate(chunk)]
+    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
     if pages > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"a_dictcatlist_{lang}_{category_index}_{(page - 1) % pages}"),

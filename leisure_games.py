@@ -21,6 +21,8 @@ import store
 import monthly_rebuses
 from ui import leisure as leisure_ui
 
+_GAME_PREMIERE_VIEWS = {}
+
 
 GAME_PLATFORMS = (
     ("pc", "💻 ПК"),
@@ -380,7 +382,8 @@ def pick_game(cid, *, genre=None, refresh=False):
 
 def _game_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_reco")],
+        [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_premieres")],
+        [InlineKeyboardButton("🎮 Во что поиграть", callback_data="vg_reco")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
         [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -1109,38 +1112,40 @@ async def send_game_premieres(bot, cid, *, status=None):
         item for item in items
         if str(item.get("poster") or "").strip()
     ][:7]
-    msg = leisure_ui.game_premieres_screen(items)
-    markup = InlineKeyboardMarkup([[
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
-    posters = [
-        InputMediaPhoto(media=str(item.get("poster") or "").strip())
-        for item in items
-    ]
-    if len(posters) >= 2:
-        try:
-            await bot.send_media_group(
-                chat_id=cid,
-                media=posters,
-                caption=msg.text,
-                caption_entities=msg.entities,
-            )
-            return
-        except Exception:
-            pass
-    if len(posters) == 1:
-        try:
-            await bot.send_photo(
-                chat_id=cid,
-                photo=posters[0].media,
-                caption=msg.text,
-                caption_entities=msg.entities,
-                reply_markup=markup,
-            )
-            return
-        except Exception:
-            pass
-    if posters:
-        msg = leisure_ui.game_premieres_screen([])
+    _GAME_PREMIERE_VIEWS[str(cid)] = items
+    msg, markup, page = _game_premiere_view(cid, 0)
+    if items:
+        await bot.send_photo(
+            chat_id=cid, photo=items[page]["poster"], caption=msg.text,
+            caption_entities=msg.entities, reply_markup=markup,
+        )
+        return
     await _deliver(bot, cid, msg, markup, status=status)
+
+
+def _game_premiere_view(cid, page=0):
+    items = _GAME_PREMIERE_VIEWS.get(str(cid)) or []
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.game_premieres_screen([items[page]] if items else [])
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"game_premiere_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"game_premiere_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def show_game_premiere_page(cid, q, page):
+    items = _GAME_PREMIERE_VIEWS.get(str(cid)) or []
+    if not items:
+        return
+    msg, kb, page = _game_premiere_view(cid, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
+                              caption_entities=msg.entities),
+        reply_markup=kb,
+    )

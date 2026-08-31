@@ -1294,6 +1294,11 @@ def _cuisine_weights_line(cuisine_weights: dict) -> str:
     ranked = [(c, w) for c, w in ranked if w != 0]
     if not ranked:
         return ""
+    if len(ranked) == 1 and ranked[0][1] >= 100:
+        return (
+            f"Жёсткий фильтр кухни: каждый рецепт должен относиться к {ranked[0][0]} "
+            f"и вернуть cuisine={ranked[0][0]}. Другие кухни запрещены.\n"
+        )
     parts = ", ".join(f"{c} (вес {w:+d})" for c, w in ranked)
     return (
         "Предпочтения пользователя по кухням, от наиболее к наименее желанной "

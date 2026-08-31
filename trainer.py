@@ -194,7 +194,7 @@ async def _render_next(bot, cid):
     state = trainer_session.get(cid)
     if not state:
         await bot.send_message(
-            chat_id=cid, text="Практика изучения языка устарела, открой заново.",
+            chat_id=cid, text="Задание устарело, подбери новое.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
     queue = state["queue"]
@@ -409,7 +409,7 @@ async def pick_option(bot, cid, index, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
         await bot.send_message(
-            chat_id=cid, text="Практика изучения языка устарела, открой заново.",
+            chat_id=cid, text="Задание устарело, подбери новое.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
@@ -440,7 +440,7 @@ async def give_up(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):
         await bot.send_message(
-            chat_id=cid, text="Практика изучения языка устарела, открой заново.",
+            chat_id=cid, text="Задание устарело, подбери новое.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
     data = state["current"]
@@ -629,7 +629,7 @@ async def next_exercise(bot, cid, *, task_id=""):
     state = trainer_session.get(cid)
     if not state:
         await bot.send_message(
-            chat_id=cid, text="Практика изучения языка устарела, открой заново.",
+            chat_id=cid, text="Задание устарело, подбери новое.",
             reply_markup=back_menu_keyboard("m_learn"))
         return
     if (state.get("current") and _task_matches(state["current"], task_id)

@@ -237,7 +237,7 @@ def progress_screen(data):
 
 def train_lang_select():
     b = MessageBuilder()
-    b.section(ui_label("word_trainer", "Практика изучения языка"))
+    b.section("✨ Подобрать новое задание")
     b.spacer()
     b.text_line("Слова и фразы для тренировки добавляются в разделе ")
     b.bold(ui_label("dictionary", "Словарь"))

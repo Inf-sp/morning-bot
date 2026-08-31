@@ -135,10 +135,11 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     expected_date = leisure_games.leisure_ui._format_date_label(today)
     assert f"👾 Игровой дайджест · {expected_date}" in status.call[0]
     assert "Свежие релизы:" in status.call[0]
-    assert "Угадай игру:" in status.call[0]
+    assert "Угадай игру:" not in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Подобрать новую игру"],
+        ["🎮 Во что поиграть"],
         ["🎲 Настолки"],
         ["🎚️ Мой набор игр"],
         ["#️⃣ Главная"],
@@ -168,12 +169,11 @@ def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
     assert message.text.count("• Игра ") == 3
     assert "• Игра 0 (RPG · ПК, PS5) · Короткое описание игры." in message.text
     assert "Игра 3" not in message.text
-    assert "Угадай игру: 🧙 🚪 3️⃣ → Baldur’s Gate 3" in message.text
-    assert "Угадай игру:\n" not in message.text
+    assert "Угадай игру:" not in message.text
     assert {
         entity.url for entity in message.entities if entity.type == "text_link"
     } == {f"https://www.youtube.com/watch?v=game{index}" for index in range(3)}
-    assert any(entity.type == "spoiler" for entity in message.entities)
+    assert not any(entity.type == "spoiler" for entity in message.entities)
 
 
 def test_game_home_youtube_fallback_searches_for_official_game_trailer():
@@ -607,7 +607,7 @@ def test_game_premiere_title_uses_youtube_trailer():
     assert links == ["https://www.youtube.com/watch?v=official-trailer"]
 
 
-def test_game_premieres_are_sent_as_native_poster_gallery(monkeypatch):
+def test_game_premieres_are_sent_as_pageable_poster_card(monkeypatch):
     sent = []
 
     class Bot:
@@ -637,10 +637,8 @@ def test_game_premieres_are_sent_as_native_poster_gallery(monkeypatch):
 
     asyncio.run(leisure_games.send_game_premieres(Bot(), "42"))
 
-    assert [kind for kind, _kwargs in sent] == ["gallery"]
-    gallery = sent[0][1]
-    assert len(gallery["media"]) == 3
-    assert gallery["caption"].startswith("🎮 Премьеры игр")
-    assert {
-        entity.url for entity in gallery["caption_entities"] if entity.type == "text_link"
-    } == {item["trailer_url"] for item in items}
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    card = sent[0][1]
+    assert card["photo"] == items[0]["poster"]
+    assert card["caption"].startswith("🎮 Премьеры игр")
+    assert _labels(card["reply_markup"])[0] == ["◀️", "1/3", "▶️"]

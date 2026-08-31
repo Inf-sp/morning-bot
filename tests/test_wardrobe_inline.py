@@ -336,7 +336,7 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
-        ["✨ Подобрать другой образ"],
+        ["✨ Подобрать новый образ"],
         ["💳 Что докупить"],
         ["🎚️ Мой шкаф"],
     ]
@@ -742,6 +742,37 @@ def test_purchase_card_falls_back_to_text_when_photo_does_not_match(monkeypatch)
     asyncio.run(wardrobe.show_purchase_page(Bot(), "42"))
 
     assert [kind for kind, _kwargs in sent] == ["message"]
+
+
+def test_purchase_analysis_restarts_after_all_previous_ideas(monkeypatch):
+    calls = []
+    monkeypatch.setattr(wardrobe, "_purchase_carousel_signature", lambda *_args: "sig")
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda *_args: {
+        "wardrobe_purchase_rejections": {"items": ["Куртка"]},
+    })
+    monkeypatch.setattr(wardrobe.store, "mutate_profile", lambda *_args: None)
+
+    def candidates(_cid, _wardrobe, exclude_names=None):
+        calls.append(set(exclude_names or []))
+        return [] if exclude_names else [{"item": "Куртка", "reason": "закрывает пробел"}]
+
+    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", candidates)
+
+    result = wardrobe._purchase_carousel_candidates("42", {}, reset=True)
+
+    assert result[0]["item"] == "Куртка"
+    assert len(calls) == 2
+
+
+def test_purchase_analysis_has_a_local_candidate_even_if_analysis_is_empty(monkeypatch):
+    monkeypatch.setattr(wardrobe, "_purchase_carousel_signature", lambda *_args: "sig")
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda *_args: {})
+    monkeypatch.setattr(wardrobe.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args, **_kwargs: [])
+
+    result = wardrobe._purchase_carousel_candidates("42", {}, reset=True)
+
+    assert result[0]["item"] == "Универсальный верхний слой"
 
 
 def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):

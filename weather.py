@@ -407,6 +407,11 @@ def _clock(value):
         return ""
 
 
+def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None):
+    icon = weather_icon(code, temp, rain, wind_ms, rain_mm)
+    return "🌙" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
+
+
 def _full_forecast_parts(now):
     """Возвращает только ещё актуальные дневные периоды без ночного блока."""
     hour = int(now.hour)
@@ -444,39 +449,33 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             probs = hourly.get("precipitation_probability") or []
             precs = hourly.get("precipitation") or []
             winds = hourly.get("windspeed_10m") or []
-            gusts = hourly.get("windgusts_10m") or []
-            clouds = hourly.get("cloudcover") or []
         except Exception:
-            hours = temps = probs = precs = winds = gusts = clouds = []
+            hours = temps = probs = precs = winds = []
         day_str = d["time"][0]
         periods = []
         parts = [(label, h1, h2, day_str, 0) for label, h1, h2 in _full_forecast_parts(dt)]
         if len(d.get("time") or []) > 1:
             parts.append(("Ночью", 0, 8, d["time"][1], 1))
         for label, h1, h2, period_day, daily_index in parts:
-            t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
+            t_vals, p_vals, w_vals, mm_vals = [], [], [], []
             for i, ts in enumerate(hours):
                 if ts.startswith(period_day) and h1 <= int(ts[11:13]) < h2:
                     if i < len(temps): t_vals.append(temps[i] or 0)
                     if i < len(probs): p_vals.append(probs[i] or 0)
                     if i < len(winds): w_vals.append(winds[i] or 0)
-                    if i < len(gusts): g_vals.append(gusts[i] or 0)
                     if i < len(precs): mm_vals.append(precs[i] or 0)
-                    if i < len(clouds) and clouds[i] is not None: cloud_vals.append(clouds[i])
             if not t_vals:
                 continue
             tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
             mm = sum(float(value or 0) for value in mm_vals)
-            icon = weather_icon(d["weathercode"][daily_index], tmx, rn, wd, mm)
+            icon = _period_weather_icon(
+                label, d["weathercode"][daily_index], tmx, rn, wd, mm,
+            )
             lines = [
                 f"Температура до {tmx:+.0f}°C",
-                f"Ветер {_speed_range(w_vals)} м/с"
-                + (f" · порывы до {max(g_vals):.0f} м/с" if g_vals else ""),
+                f"Ветер {_speed_range(w_vals)} м/с",
             ]
-            sky_parts = [f"Дождь {rn:.0f}%"]
-            if cloud_vals:
-                sky_parts.append(f"Облачность {max(cloud_vals):.0f}%")
-            lines.append(" · ".join(sky_parts))
+            lines.append(f"Дождь {rn:.0f}%")
             periods.append({
                 "title": f"{icon} {label}",
                 "lines": lines,

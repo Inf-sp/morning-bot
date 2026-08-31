@@ -32,21 +32,20 @@ def _bold_values(message):
 
 def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
-        ["✨ Подобрать новое кино"],
-        ["🎟️ Премьеры фильмов"],
-        ["📺 Премьеры сериалов"],
+        ["✨ Подобрать новую премьеру"],
+        ["🍿 Что посмотреть"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
         ["✨ Подобрать новую книгу"],
-        ["✍🏻 Премьеры"],
+        ["📖 Что почитать"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
-        ["✨ Подобрать новую музыку"],
-        ["🎫 Концерты"],
+        ["✨ Подобрать новый концерт"],
+        ["🎸 Что послушать"],
         ["🎚️ Мои артисты"],
         ["#️⃣ Главная"],
     ]
@@ -1014,7 +1013,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     )
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
-    assert "Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in movie.text
+    assert "Ребус дня:" not in movie.text
     assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
     assert "Фильм под настроение:" not in movie.text
     assert (
@@ -1025,20 +1024,20 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти»" not in movie.text
     assert "💡 Интересно: Стивен Спилберг" in movie.text
-    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("Ребус дня:") < movie.text.index("💡 Интересно:")
+    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
-    assert any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
+    assert not any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · 25 августа" in books.text
     assert "Цитата со страницы:" not in books.text
-    assert "Литературный ребус: 🧙‍♀️ ⚡ 🚂 → Гарри Поттер" in books.text
+    assert "Литературный ребус:" not in books.text
     assert "• Onyx Storm — Ребекка Яррос · Фэнтези · Вайолет ищет союзников" in books.text
     assert "Автор недели:" not in books.text
     assert "Книга под настроение:" not in books.text
-    assert books.text.index("Свежие релизы:") < books.text.index("Литературный ребус:") < books.text.index("💡 Интересно:")
-    assert any(entity.type == MessageEntity.SPOILER for entity in books.entities)
+    assert books.text.index("Свежие релизы:") < books.text.index("💡 Интересно:")
+    assert not any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка рядом · 25 августа" in music.text
     assert "Вайб дня" not in music.text
-    assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in music.text
+    assert "Музыкальный ребус:" not in music.text
     assert "Артист недели:" not in music.text
     assert "В ближайшее время:\n• Romy (21 августа · Биддингхёйзен)" in music.text
     assert any(
@@ -1046,9 +1045,9 @@ def test_category_week_screens_are_compact_and_show_only_content():
         and entity.url == "https://tickets.example/romy"
         for entity in music.entities
     )
-    assert music.text.index("В ближайшее время:") < music.text.index("Музыкальный ребус:") < music.text.index("💡 Интересно:")
+    assert music.text.index("В ближайшее время:") < music.text.index("💡 Интересно:")
     assert "Новые альбомы" not in music.text
-    assert any(entity.type == MessageEntity.SPOILER for entity in music.entities)
+    assert not any(entity.type == MessageEntity.SPOILER for entity in music.entities)
 
 
 def test_movie_home_cleans_cached_markup_fragments():
@@ -1065,7 +1064,7 @@ def test_movie_home_cleans_cached_markup_fragments():
     })
 
     assert "• «Из любви» (драма)" in movie.text
-    assert "Ребус дня: 🕶️ 💊 🤖 → Матрица" in movie.text
+    assert "Ребус дня:" not in movie.text
     assert "💡 Интересно: Сёстры Вачовски отправили актёров на подготовку." in movie.text
     assert "**" not in movie.text
     assert "&#x20;" not in movie.text
@@ -1105,7 +1104,7 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
 
     today_label = leisure_movies.leisure_ui._format_date_label(datetime.now(config.TZ).date())
     assert f"📚 Литературный вайб · {today_label}" in sent[0]["text"]
-    assert "Литературный ребус: 🧙 ⚡ → Гарри Поттер" in sent[0]["text"]
+    assert "Литературный ребус:" not in sent[0]["text"]
     assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
 
 
@@ -1451,12 +1450,10 @@ def test_daily_category_block_titles_are_bold():
         "legend": {"name": "Имя", "detail": "музыкант"},
     }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар"}])
 
-    assert {"Ребус дня:", "Именинник дня:",
+    assert {"Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
-    assert {"Литературный ребус:",
-            "Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
-    assert {"Музыкальный ребус:",
-            "В ближайшее время:", "💡 Интересно:"}.issubset(_bold_values(music))
+    assert {"Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
+    assert {"В ближайшее время:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
 
 

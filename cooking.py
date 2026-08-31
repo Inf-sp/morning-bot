@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from datetime import datetime
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 import store
@@ -63,6 +64,7 @@ def _recipe_kb(cid=None, recipe=None):
     используют m_close для закрытия карточки без возврата в конкретное меню."""
     return _kb([
         [("✨ Подобрать другой рецепт", "as_food")],
+        [("🎭 По кухне", "as_food_cuisines")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -154,17 +156,31 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     _log.info("_send_queue_card: sent message_id=%s cid=%s", msg.message_id, cid)
 
 
-async def _generate_and_store_queue(cid, meal, ingredients=None):
+def _selected_recipe_cuisine(cid):
+    return str((store.get_profile(cid) or {}).get("recipe_selected_cuisine") or "")
+
+
+def _set_selected_recipe_cuisine(cid, cuisine=""):
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "recipe_selected_cuisine": cuisine}, None,
+    ))
+
+
+async def _generate_and_store_queue(cid, meal, ingredients=None, cuisine=""):
     """Генерирует компактную очередь рецептов для категории meal и сохраняет её (§4.2/§5).
 
     ТОЛЬКО текстовые поля рецепта, без единого сетевого вызова к Pexels."""
     cuisine_weights = get_cuisine_weights(cid)
+    if cuisine:
+        cuisine_weights = {cuisine: 100}
     recent_history = get_recipe_history(cid)
     season_hint = _season_hint()
     if meal == "fridge":
         items = await asyncio.to_thread(
             _gen_leftovers_recipe_batch, ingredients or "", cid,
             cuisine_weights, recent_history, season_hint)
+        if cuisine:
+            items = [item for item in items if str(item.get("cuisine") or "") == cuisine]
     else:
         constraint = _MEAL_CONSTRAINT.get(meal, "обычное блюдо")
         meal_guard = _MEAL_GUARD.get(meal, "")
@@ -191,7 +207,7 @@ def _next_presentable_queue_recipe(cid, meal=None, avoid_names=None):
             return item
 
 
-async def enter_meal(bot, cid, meal, ingredients=None, status=None):
+async def enter_meal(bot, cid, meal, ingredients=None, status=None, cuisine=""):
     """Явный вход в категорию из меню «Готовка» (§6.1): фиксирует active_meal,
     генерирует очередь при необходимости и показывает первый рецепт."""
     set_active_meal(cid, meal)
@@ -212,7 +228,10 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None):
         if status is None:
             status = await util.StatusManager.start(bot, cid)
         try:
-            items = await _generate_and_store_queue(cid, meal, ingredients)
+            items = (
+                await _generate_and_store_queue(cid, meal, ingredients, cuisine)
+                if cuisine else await _generate_and_store_queue(cid, meal, ingredients)
+            )
         except Exception as e:
             await status.stop(delete=True)
             await verify.safe_error(bot, cid, e, back="m_food"); return
@@ -270,7 +289,11 @@ async def show_next_recipe(bot, cid, status=None):
         if status is None:
             status = await util.StatusManager.start(bot, cid)
         try:
-            items = await _generate_and_store_queue(cid, meal, ingredients)
+            selected_cuisine = _selected_recipe_cuisine(cid)
+            items = (
+                await _generate_and_store_queue(cid, meal, ingredients, selected_cuisine)
+                if selected_cuisine else await _generate_and_store_queue(cid, meal, ingredients)
+            )
         except Exception as e:
             await status.stop(delete=True)
             await verify.safe_error(bot, cid, e, back="m_food"); return
@@ -297,9 +320,30 @@ async def back_to_food_menu(bot, cid, status=None):
     await menu.send_food_menu(bot, cid, status=status)
 
 async def send_recipe_featured(bot, cid, status=None):
-    """Подбирает рецепт для текущего приёма пищи по локальному времени."""
-    meal = _home_meal_for_hour(datetime.now(config.TZ).hour)
-    await enter_meal(bot, cid, meal, status=status)
+    """Подбирает блюдо только из доступных продуктов холодильника."""
+    available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
+    if not available:
+        msg = food_ui.fridge_empty_for_recipe()
+        await status.replace(
+            msg.text, entities=msg.entities, reply_markup=back_menu_keyboard("m_food"),
+        )
+        return
+    _set_selected_recipe_cuisine(cid, "")
+    clear_recipe_queue(cid)
+    await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
+
+
+async def send_recipe_cuisines(bot, cid):
+    import settings
+    rows = [[InlineKeyboardButton(label, callback_data=f"as_food_cuisine_{code}")]
+            for code, label in settings.CUISINE_OPTIONS]
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_food_gen"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    await bot.send_message(
+        chat_id=cid, text="🎭 Выбери кухню", reply_markup=InlineKeyboardMarkup(rows), transient=True,
+    )
 
 
 
@@ -322,6 +366,26 @@ async def send_leftovers(bot, cid, ingredients, status=None):
 async def handle_callback(bot, cid, q, data, status=None):
     """Обрабатывает кулинарные callback-и. Возвращает True при совпадении."""
     import fridge as fridge_flow
+    if data == "as_food_cuisines":
+        await send_recipe_cuisines(bot, cid)
+        return True
+    if data.startswith("as_food_cuisine_"):
+        cuisine = data.removeprefix("as_food_cuisine_")
+        available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
+        if not available:
+            message = food_ui.fridge_empty_for_recipe()
+            await bot.send_message(
+                chat_id=cid, text=message.text, entities=message.entities,
+                reply_markup=back_menu_keyboard("m_food"),
+            )
+            return True
+        _set_selected_recipe_cuisine(cid, cuisine)
+        clear_recipe_queue(cid)
+        status = status or await util.StatusManager.start(bot, cid)
+        await enter_meal(
+            bot, cid, "fridge", ", ".join(available), status=status, cuisine=cuisine,
+        )
+        return True
     if data == "as_food":
         owns_status = status is None
         if owns_status:

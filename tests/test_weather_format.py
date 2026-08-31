@@ -38,7 +38,7 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
         None,
         [
             {"title": "☀️ Утром", "lines": ["Температура до +18°C", "Ветер 4 м/с"]},
-            {"title": "🌧️ Днём", "lines": ["Температура до +20°C", "Дождь 70% · Облачность 80%"]},
+            {"title": "🌧️ Днём", "lines": ["Температура до +20°C", "Дождь 70%"]},
             {"title": "🌧️ Ночью", "lines": ["Температура до +15°C", "Дождь 60%"]},
         ],
         "Восход 06:25 → Закат 21:02",
@@ -58,7 +58,9 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "08:00–12:00" not in message.text
     assert "12:00–18:00" not in message.text
     assert "• Температура до +20°C" in message.text
-    assert "• Дождь 70% · Облачность 80%" in message.text
+    assert "• Дождь 70%" in message.text
+    assert "Облачность" not in message.text
+    assert "порывы" not in message.text
     assert "Вероятность" not in message.text
     assert "Осадки до" not in message.text
     assert "Восход 06:25 → Закат 21:02" in message.text
@@ -81,6 +83,11 @@ def test_full_forecast_after_midnight_starts_with_the_coming_morning():
         ("Днём", 12, 18),
         ("Вечером", 18, 24),
     ]
+
+
+def test_night_uses_moon_only_for_dry_clear_weather():
+    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌙"
+    assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
 
 
 def test_weather_adapter_keeps_sunset_from_current_conditions():

@@ -592,6 +592,9 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=True,
         )
         return
+    if data.startswith("game_premiere_page:"):
+        await leisure_games.show_game_premiere_page(cid, q, int(data.split(":", 1)[1]))
+        return
     if data == "vg_genres":
         await _ack(q)
         await leisure_games.send_game_genres(bot, cid, q)
@@ -696,9 +699,15 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "movie_premieres":
         await _inline_status(
-            lambda status: leisure_movies.send_movie_premieres(bot, cid, status=status),
+            lambda status: leisure_movies.send_combined_premieres(bot, cid, status=status),
             preserve_message=True,
         )
+        return
+    if data.startswith("combined_premiere_page:"):
+        await leisure_movies.show_combined_premiere_page(cid, q, int(data.split(":", 1)[1]))
+        return
+    if data.startswith("concert_page:"):
+        await leisure_concerts.show_concert_page(cid, q, int(data.split(":", 1)[1]))
         return
     if data.startswith("movie_premiere_page:"):
         await _ack(q)

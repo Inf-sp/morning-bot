@@ -15,9 +15,8 @@ if TYPE_CHECKING:
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новое кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎟️ Премьеры фильмов", callback_data="movie_premieres")],
-        [InlineKeyboardButton("📺 Премьеры сериалов", callback_data="series_premieres")],
+        [InlineKeyboardButton("✨ Подобрать новую премьеру", callback_data="movie_premieres")],
+        [InlineKeyboardButton("🍿 Что посмотреть", callback_data="movie_reco")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -685,5 +684,58 @@ async def show_series_premiere_page(cid, q, page):
             media=items[page]["poster"], caption=msg.text,
             caption_entities=msg.entities,
         ),
+        reply_markup=kb,
+    )
+
+
+async def _combined_premieres(cid):
+    movies, series = await asyncio.gather(
+        _movie_premieres_with_posters(cid), get_series_premieres(cid),
+    )
+    combined = [dict(item, premiere_kind="movie") for item in movies]
+    combined.extend(dict(item, premiere_kind="series") for item in series if item.get("poster"))
+    combined.sort(key=lambda item: str(
+        item.get("release_date") or item.get("air_date") or item.get("date") or "9999-99-99"
+    ))
+    return combined[:10]
+
+
+def _combined_premieres_view(items, page=0):
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.combined_premiere_screen(items[page] if items else None)
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"combined_premiere_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"combined_premiere_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def send_combined_premieres(bot, cid, *, status=None):
+    items = await _combined_premieres(cid)
+    msg, kb, page = _combined_premieres_view(items)
+    if items:
+        await bot.send_photo(
+            chat_id=cid, photo=items[page]["poster"], caption=msg.text,
+            caption_entities=msg.entities, reply_markup=kb,
+        )
+    elif status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+    else:
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
+async def show_combined_premiere_page(cid, q, page):
+    items = await _combined_premieres(cid)
+    if not items:
+        return
+    msg, kb, page = _combined_premieres_view(items, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
+                              caption_entities=msg.entities),
         reply_markup=kb,
     )

@@ -47,6 +47,17 @@ def _flag(language):
 
 _DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 
+_GRAMMAR_RULES_NL = (
+    "В обычном предложении сказуемое стоит на втором месте: Vandaag werk ik thuis.",
+    "В вопросе без вопросительного слова глагол ставится перед подлежащим: Werk je morgen?",
+    "В придаточном предложении глагол обычно уходит в конец: omdat ik morgen werk.",
+    "С существительными общего рода используется de, со средним родом — het.",
+    "Уменьшительные существительные всегда употребляются с артиклем het.",
+    "Отделяемая приставка в главном предложении уходит в конец: Ik bel je morgen op.",
+    "После модального глагола смысловой инфинитив стоит в конце: Ik wil Nederlands leren.",
+    "Отрицание geen ставится перед неопределённым существительным: Ik heb geen auto.",
+)
+
 
 def _save_daily_material(cid, today, lang, entry):
     cached = {"date": today, "lang": lang, "entry": entry}
@@ -144,14 +155,14 @@ def build_learning_home(cid):
         return {"has_material": False, "disabled": True, "lang_code": ""}
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
-    progress = build_progress_screen(cid)
+    grammar = random.choice(_GRAMMAR_RULES_NL)
     phrase = live_language.daily_phrase(lang_code)
     if not entry:
         return {
             "has_material": False,
             "lang_code": lang_code,
             "live_language": phrase,
-            "progress": progress,
+            "grammar": grammar,
         }
     kind = daily_material_type(entry)
     raw_term = entry.get("rule") or entry_term(entry)
@@ -173,7 +184,7 @@ def build_learning_home(cid):
         "note": str(entry.get("breakdown") or "").strip(),
         "focus": _daily_focus_text(entry, kind),
         "live_language": phrase,
-        "progress": progress,
+        "grammar": grammar,
     }
 
 

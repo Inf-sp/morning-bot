@@ -426,7 +426,17 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
     )
     items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
     if excluded and not items:
-        return []
+        excluded = set()
+        items = _missing_purchase_candidates(cid, wardrobe)
+    if not items:
+        items = [{
+            "item": "Универсальный верхний слой",
+            "category": "Верхняя одежда",
+            "style": "Базовый",
+            "season": "Межсезонье",
+            "reason": "добавит шкафу новый слой и увеличит число сочетаний с уже имеющимися вещами",
+            "version": PURCHASE_RECOMMENDATION_VERSION,
+        }]
 
     def change(current):
         current["wardrobe_purchase_carousel"] = {
@@ -446,26 +456,6 @@ async def show_purchase_page(
     candidates = _purchase_carousel_candidates(
         cid, wardrobe, reset=reset_candidates, exclude_names=exclude_names,
     )
-    if not candidates:
-        no_more_text = "Других полезных покупок по текущему шкафу пока не нашлось."
-        no_more_kb = _kb([[('⬅️ Назад', 'm_wardrobe'), ('#️⃣ Главная', 'm_menu')]])
-        if q is not None:
-            for method_name, text_arg in (
-                    ("edit_message_caption", "caption"),
-                    ("edit_message_text", "text")):
-                try:
-                    await getattr(q, method_name)(
-                        **{text_arg: no_more_text}, reply_markup=no_more_kb,
-                    )
-                    return
-                except Exception:
-                    pass
-        await bot.send_message(
-            chat_id=cid,
-            text=no_more_text,
-            reply_markup=no_more_kb,
-        )
-        return
     page = max(0, min(int(page), len(candidates) - 1))
     item = candidates[page]
 

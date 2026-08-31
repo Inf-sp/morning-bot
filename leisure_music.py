@@ -345,8 +345,8 @@ def _listen_kb():
 
 def music_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую музыку", callback_data="music_reco")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
+        [InlineKeyboardButton("✨ Подобрать новый концерт", callback_data="a_concerts_find")],
+        [InlineKeyboardButton("🎸 Что послушать", callback_data="music_reco")],
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

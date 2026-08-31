@@ -5,7 +5,7 @@ import logging
 import re
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from ui.constants import COUNTRY_EMOJI
 
 import ai
@@ -21,6 +21,7 @@ import util
 from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
+_CONCERT_CARD_VIEWS = {}
 
 
 def _music_home_only_kb():
@@ -1075,6 +1076,10 @@ async def _build_new_concerts_msg(cid):
             "date": _fmt_date(date) if date else "",
             "date_unix": _concert_date_unix(date),
             "url": e.get("url", ""),
+            "poster": str(max(
+                (e.get("images") or [{}]), key=lambda image: int(image.get("width") or 0),
+            ).get("url") or ""),
+            "description": str(e.get("info") or e.get("pleaseNote") or "").strip(),
         })
 
     msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
@@ -1250,19 +1255,52 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         if artists_override else
         "Пока не нашёл ближайших концертов любимых артистов.\n\nМожно поискать другого исполнителя или сменить страну."
     )
-    msg = leisure_ui.concerts_list(
-        place_label,
-        rows_data,
-        empty_hint=empty_hint,
-    )
+    rows_data = [item for item in rows_data if item.get("poster")]
+    _CONCERT_CARD_VIEWS[str(cid)] = {"title": place_label, "items": rows_data, "empty": empty_hint}
+    msg, card_kb, page = _concert_card_view(cid, fallback_keyboard=kb)
     store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
+    if rows_data:
+        await bot.send_photo(
+            chat_id=cid, photo=rows_data[page]["poster"], caption=msg.text,
+            caption_entities=msg.entities, reply_markup=card_kb,
+        )
+    else:
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=card_kb)
+
+
+def _concert_card_view(cid, page=0, fallback_keyboard=None):
+    view = _CONCERT_CARD_VIEWS.get(str(cid)) or {}
+    items = view.get("items") or []
+    page = max(0, min(int(page), len(items) - 1)) if items else 0
+    msg = leisure_ui.concert_card_screen(
+        view.get("title") or "Концерты", items[page] if items else None,
+        view.get("empty") or "Пока не нашёл ближайших концертов.",
+    )
+    if not items and fallback_keyboard is not None:
+        return msg, fallback_keyboard, page
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"concert_page:{(page - 1) % len(items)}"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"concert_page:{(page + 1) % len(items)}"),
+        ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return msg, InlineKeyboardMarkup(rows), page
+
+
+async def show_concert_page(cid, q, page):
+    view = _CONCERT_CARD_VIEWS.get(str(cid)) or {}
+    items = view.get("items") or []
+    if not items:
+        return
+    msg, kb, page = _concert_card_view(cid, page)
+    await q.edit_message_media(
+        media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
+                              caption_entities=msg.entities),
         reply_markup=kb,
-        disable_web_page_preview=True,
     )
 
 

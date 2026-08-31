@@ -468,7 +468,28 @@ def test_dictionary_category_card_and_language_home_expose_list_view(monkeypatch
         button.text for row in bot.messages[-1]["reply_markup"].inline_keyboard for button in row
     ]
 
-    assert "🔢 Показать списком" in language_labels
+    assert "🔢 Показать списком" not in language_labels
     assert "🔢 Показать списком" in category_labels
-    assert language_labels.index("🔢 Показать списком") == language_labels.index("🆕 Добавить слово") + 1
-    assert category_labels.index("🔢 Показать списком") == category_labels.index("🆕 Добавить слово") + 1
+    assert "🆕 Добавить слово" in language_labels
+    assert "🆕 Добавить слово" not in category_labels
+
+
+def test_dictionary_category_list_uses_two_columns(monkeypatch):
+    entries = [
+        {"id": f"word-{index}", "lang": "nl", "term": f"Woord{index}",
+         "translation": f"Слово {index}", "pos": "глагол", "breakdown": "глагол"}
+        for index in range(3)
+    ]
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    bot = Bot()
+    asyncio.run(learning_dictionary.send_dict_category_list(bot, "42", "nl", 1))
+    rows = bot.message["reply_markup"].inline_keyboard
+
+    assert [len(row) for row in rows[:-1]] == [2, 1]

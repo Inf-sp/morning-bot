@@ -79,7 +79,8 @@ def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
 def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     message = menu_ui.learning_menu({
         "has_material": True, "lang_code": "nl", "kind": "word",
-        "term": "morgen", "translation": "завтра", "progress": {},
+        "term": "morgen", "translation": "завтра",
+        "grammar": "Глагол стоит на втором месте.",
         "focus": "вспомнить перевод до открытия спойлера.",
         "live_language": {
             "text": "Laat maar", "translation": "Ладно, забудь",
@@ -96,14 +97,13 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
-        ["🎯 Практика изучения языка"],
+        ["✨ Подобрать новое задание"],
         ["🕵️ Угадай персонажа"],
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
-    assert "• В изучении 0 слов" in message.text
-    assert "• Повторить сегодня — 0" in message.text
-    assert "• Без подсказок — 0%" in message.text
+    assert "Грамматика: Глагол стоит на втором месте." in message.text
+    assert "Прогресс:" not in message.text
     assert "Фраза дня" not in message.text
     assert "Слово дня" not in message.text
     assert "Живой язык: Laat maar → Ладно, забудь." in message.text
@@ -371,8 +371,8 @@ def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
 
     assert Query.message.updated["text"].startswith("🍽️ Куда сходить · Alkmaar")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["✨ Другое место"],
-        ["🍳 Рецепты"],
+        ["✨ Подобрать новое место"],
+        ["🍳 Что приготовить"],
         ["🎚️ Мой холодильник"],
         ["#️⃣ Главная"],
     ]

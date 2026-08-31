@@ -99,7 +99,7 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("✨ Подобрать другой образ", "w_look")],
+            [("✨ Подобрать новый образ", "w_look")],
             [("🎚️ Мой шкаф", "w_closet")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -109,7 +109,7 @@ _SCREENS = {
         "Питание",
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
-            [("🍳 Рецепты", "m_food_gen")],
+            [("🍳 Что приготовить", "m_food_gen")],
             [("🎚️ Мой холодильник", "as_fridge_home")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -203,20 +203,19 @@ def learning_menu(home: dict):
         b.add(finish_dot(phrase["translation"]), MessageEntity.SPOILER)
         b.newline()
 
-    progress = home.get("progress") or {}
+    grammar = str(home.get("grammar") or "").strip()
     b.spacer()
-    b.bold("Прогресс:")
+    b.bold("Грамматика:")
+    if grammar:
+        b.text_line(f" {grammar}")
     b.newline()
-    b.bullet(f"В изучении {progress.get('total', 0)} слов")
-    b.bullet(f"Повторить сегодня — {progress.get('due_count', 0)}")
-    b.bullet(f"Без подсказок — {progress.get('no_hint_pct', 0)}%")
     b.spacer()
     focus = home.get("focus") or "добавить первые слова для практики."
     b.text_line("💡 ")
     b.label("Полезно", focus)
 
     return b.build_stripped(reply_markup=ikb([
-        [(ui_label("word_trainer", "Практика изучения языка"), f"a_train_{code}")],
+        [("✨ Подобрать новое задание", f"a_train_{code}")],
         [(ui_label("game", "Угадай персонажа"), "a_game")],
         [("🎚️ Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
@@ -352,8 +351,8 @@ def restaurant_menu(card=None, *, news=None):
         b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
     append_weekly_news(b, news)
     rows = [
-        [("✨ Другое место", "m_food_next")],
-        [("🍳 Рецепты", "m_food_gen")],
+        [("✨ Подобрать новое место", "m_food_next")],
+        [("🍳 Что приготовить", "m_food_gen")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]
