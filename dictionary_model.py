@@ -5,7 +5,7 @@ import re
 
 DICTIONARY_FORMAT_VERSION = 4
 STUDY_CARD_VERSION = 1
-DICTIONARY_REBUILD_VERSION = 6
+DICTIONARY_REBUILD_VERSION = 7
 
 _STUDY_CARD_PLACEHOLDERS = (
     "русская транскрипция", "1-2 значения", "2-3 коротких предложения",

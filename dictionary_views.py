@@ -250,8 +250,16 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
                 profile["dictionary_card_migration"] = current
                 return profile, None
             store.mutate_profile(cid, defer)
+            _log.warning(
+                "dictionary migration deferred cid=%s remaining=%s retry_seconds=300",
+                cid, len(pending_after),
+            )
             continue
         total = max(int(state.get("initial_total") or 0), len(pending_before))
+        _log.info(
+            "dictionary migration progress cid=%s rebuilt=%s remaining=%s",
+            cid, progress, len(pending_after),
+        )
         if pending_after:
             def save_progress(profile):
                 current = dict(profile.get("dictionary_card_migration") or state)
@@ -270,6 +278,7 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
             profile.pop("dictionary_card_migration", None)
             return profile, None
         store.mutate_profile(cid, complete)
+        _log.info("dictionary migration complete cid=%s total=%s", cid, total)
         await bot.send_message(
             chat_id=cid,
             text=("✅ Словарь обновлён\n\n"
