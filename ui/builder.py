@@ -255,10 +255,27 @@ class MessageBuilder:
         )
 
     def build_stripped(self, reply_markup=None, parse_mode=None) -> MessageSpec:
-        """Как build(), но обрезает финальный текст от краевых пустых строк.
-        Безопасно для entities: section()/warning()/divider() добавляют пустые строки
-        только МЕЖДУ блоками (has_content-гейт), поэтому единственное, что может остаться
-        по краям — концевой перевод строки после последнего блока; entities его не занимают."""
+        """Обрезает края и пересчитывает entities в UTF-16 координатах.
+
+        Некоторые карточки начинают строку с необязательного флага. Если флаг пуст,
+        остаётся ведущий пробел; обычный ``str.strip`` удалял его, но прежде не сдвигал
+        entities и мог поставить начало bold/link внутрь surrogate pair следующего emoji.
+        """
         msg = self.build(reply_markup=reply_markup, parse_mode=parse_mode)
-        msg.text = msg.text.strip()
+        original = msg.text
+        stripped = original.strip()
+        leading_text = original[:len(original) - len(original.lstrip())]
+        leading = u16_len(leading_text)
+        total = u16_len(stripped)
+        adjusted = []
+        for entity in msg.entities or []:
+            start = max(0, entity.offset - leading)
+            end = min(total, entity.offset + entity.length - leading)
+            if end <= start:
+                continue
+            adjusted.append(MessageEntity(
+                entity.type, start, end - start, url=getattr(entity, "url", None),
+            ))
+        msg.text = stripped
+        msg.entities = adjusted
         return msg

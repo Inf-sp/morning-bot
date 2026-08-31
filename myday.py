@@ -939,6 +939,18 @@ def _clip_quote(text):
         return text
     return text[:_QUOTE_MAX_CHARS - 1].rstrip(" ,.;:") + "…"
 
+
+def _compact_translation(text):
+    """Оставляет уникальные значения перевода, сохраняя исходный порядок."""
+    values, seen = [], set()
+    for value in re.split(r"[;,]", str(text or "")):
+        value = " ".join(value.split()).strip(" .")
+        key = value.casefold()
+        if value and key not in seen:
+            values.append(value)
+            seen.add(key)
+    return ", ".join(values)
+
 def _word_of_day(cid):
     """Запись дня для карточки 'Мой день' — тот же материал, что показывает
     экран 'Обучение' (см. learning.select_daily_material): выбор и его
@@ -950,7 +962,7 @@ def _word_of_day(cid):
     if not entry:
         return "", lang
     term = dictionary.entry_term(entry)
-    ru = dictionary.entry_translation(entry).replace(";", ",")
+    ru = _compact_translation(dictionary.entry_translation(entry))
     return f"{_cap(term)} → {_cap(ru)}.", lang
 
 
@@ -960,7 +972,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 14
+_DAY_CACHE_VERSION = 15
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):

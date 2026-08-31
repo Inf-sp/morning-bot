@@ -65,6 +65,17 @@ def test_myday_skips_language_material_when_learning_is_disabled(monkeypatch):
     assert myday._word_of_day("42") == ("", "")
 
 
+def test_myday_word_removes_duplicate_translation_variants(monkeypatch):
+    monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: True)
+    monkeypatch.setattr(myday.learning, "select_daily_material", lambda _cid: {
+        "term": "aantonen",
+        "translation": "Показывать, доказывать; Доказывать, показывать",
+    })
+    monkeypatch.setattr(myday.learning, "_active_language_code", lambda _cid: "nl")
+
+    assert myday._word_of_day("42") == ("Aantonen → Показывать, доказывать.", "nl")
+
+
 def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
     message = day_summary(
         "Ср, 15 июля",

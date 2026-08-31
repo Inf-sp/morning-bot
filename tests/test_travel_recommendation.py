@@ -158,6 +158,14 @@ def test_travel_home_shows_place_of_the_day_without_rebus():
     assert not any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 
+def test_travel_card_entities_stay_on_utf16_boundaries_without_separate_flag():
+    message = travel_ui.travel_plan({"title": "🇯🇵 Япония", "about": "Горы и поезда."}, "Япония")
+    encoded = message.text.encode("utf-16-le")
+
+    for entity in message.entities:
+        encoded[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
+
+
 def test_suitcase_keeps_only_saved_countries(monkeypatch):
     monkeypatch.setattr(travel, "_sorted_countries", lambda _cid: [])
 
