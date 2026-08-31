@@ -469,10 +469,10 @@ async def send_game_set(bot, cid, q=None):
     ])
     rows = [[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
             for index, (genre, items) in enumerate(view["genres"])]
-    rows.insert(0, [InlineKeyboardButton(
+    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
+    rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="game_prefs",
     )])
-    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     await _deliver(bot, cid, msg, InlineKeyboardMarkup(rows), q=q)

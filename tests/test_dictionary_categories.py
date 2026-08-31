@@ -470,3 +470,5 @@ def test_dictionary_category_card_and_language_home_expose_list_view(monkeypatch
 
     assert "🔢 Показать списком" in language_labels
     assert "🔢 Показать списком" in category_labels
+    assert language_labels.index("🔢 Показать списком") == language_labels.index("🆕 Добавить слово") + 1
+    assert category_labels.index("🔢 Показать списком") == category_labels.index("🆕 Добавить слово") + 1

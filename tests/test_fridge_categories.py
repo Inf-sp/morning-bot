@@ -96,6 +96,7 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
         ["Специи и соусы · 0"],
         ["Заморозка · 0"],
         ["🆕 Добавить продукт"],
+        ["🔣 Выбрать предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 

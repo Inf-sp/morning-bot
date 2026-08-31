@@ -1106,7 +1106,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     labels = _labels(bot.message["reply_markup"])
     assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
     assert "Выбери категорию" not in bot.message["text"]
-    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert labels[-3:-1] == [["🆕 Добавить вещь"], ["🔣 Выбрать предпочтения"]]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)

@@ -61,12 +61,12 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         rows.append([InlineKeyboardButton(
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
+    rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
+    rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     if entries:
         rows.append([InlineKeyboardButton(
             "🔢 Показать списком", callback_data=f"a_dictedit_{lang}",
         )])
-    rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
-    rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
@@ -125,6 +125,9 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
+    rows.append([InlineKeyboardButton(
+        "🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}",
+    )])
     rows.append([InlineKeyboardButton(
         "🔢 Показать списком",
         callback_data=f"a_dictcatlist_{lang}_{category_index}_0",

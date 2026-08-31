@@ -348,7 +348,7 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-2:] == [["🆕 Добавить артиста"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[-3:] == [["🆕 Добавить артиста"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -382,7 +382,7 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-2:] == [["🆕 Добавить фильм"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[-3:] == [["🆕 Добавить фильм"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -433,7 +433,7 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
         "Комедия:\nАмели\n\n"
         "Драма:\nПатерсон"
     )
-    assert labels[-2:] == [["🆕 Добавить фильм"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert labels[-3:] == [["🆕 Добавить фильм"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     genre_callback = next(
         row[0].callback_data
         for row in bot.messages[0]["reply_markup"].inline_keyboard
@@ -679,7 +679,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-2:] == [["🆕 Добавить книгу"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[-3:] == [["🆕 Добавить книгу"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("✏️ Изменить" not in row for row in rows)
 
 

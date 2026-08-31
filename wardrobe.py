@@ -792,15 +792,16 @@ async def send_wardrobe_zones(bot, cid, q=None):
         for zone in CLOSET_ZONE_ORDER
         if counts.get(zone) or (zone == "Аксессуары" and counts.get("Другое"))
     ]
-    rows = [[InlineKeyboardButton(
-        "🔣 Выбрать предпочтения", callback_data="set_pref_style",
-    )]]
+    rows = []
     for zone in CLOSET_ZONE_ORDER:
         rows.append([InlineKeyboardButton(
             public_zone_name(zone),
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
     rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
+    rows.append([InlineKeyboardButton(
+        "🔣 Выбрать предпочтения", callback_data="set_pref_style",
+    )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)
     kb = InlineKeyboardMarkup(rows)

@@ -724,12 +724,12 @@ async def _render_view(bot, cid, view_id, q=None):
         lines.append("")
     rows = []
     cfg = _collection_cfg(ctx)
-    menu_button = cfg.get("menu_button") if cfg else None
-    if menu_button:
-        label, callback_data = menu_button
-        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
     add_button_at_bottom = bool(cfg and cfg.get("add_button_at_bottom"))
+    menu_button = cfg.get("menu_button") if cfg else None
+    if menu_button and not add_button_at_bottom:
+        label, callback_data = menu_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     if add_button and not add_button_at_bottom:
         label, callback_data = add_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
@@ -763,6 +763,9 @@ async def _render_view(bot, cid, view_id, q=None):
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla:{view_id}:{page}")])
     if add_button and add_button_at_bottom:
         label, callback_data = add_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
+    if menu_button and add_button_at_bottom:
+        label, callback_data = menu_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     if not cfg or cfg.get("allow_edit", True):
         rows.append([InlineKeyboardButton(

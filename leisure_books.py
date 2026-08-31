@@ -889,10 +889,10 @@ async def send_favorite_books(bot, cid, q=None):
     rows = [[InlineKeyboardButton(
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])]
-    rows.insert(0, [InlineKeyboardButton(
+    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
+    rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="book_prefs",
     )])
-    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
