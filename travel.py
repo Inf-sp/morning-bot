@@ -70,6 +70,18 @@ _CARD_CLICHES = (
     "подходит пользовател", "различные виды транспорта", "комбинаци", "самолёт", "паром",
 )
 _TRAVEL_REBUSES = monthly_rebuses.local_pool("travel")
+_TRAVEL_REGIONS = {
+    "europe": ("Европа", "Европа", ""),
+    "asia": ("Азия", "Азия", ""),
+    "north_america": ("Северная Америка", "Америка", "Северная Америка"),
+    "south_america": ("Южная Америка", "Америка", "Южная Америка"),
+    "africa": ("Африка", "Африка", ""),
+    "oceania": ("Океания", "Океания", ""),
+}
+_REGION_NAME_FALLBACKS = {
+    "south_america": {"бразилия", "аргентина", "чили", "перу", "колумбия"},
+    "africa": {"марокко", "юар", "намибия", "кения", "танзания"},
+}
 
 
 def _travel_interests(cid):
@@ -110,6 +122,10 @@ def _fallback_idea(cid):
     )
     return {"emoji": "🗺️", "transport_title": country, "from": city, "to": target,
             "intro": "Недалеко, красиво и без перегруженного плана.", "route": route,
+            "transport": f"Из {city}: проверь актуальный маршрут",
+            "cost": "Расходы зависят от транспорта и выбранных мест",
+            "duration": "На поездку: 1 день",
+            "why": "прогулка, новое место и свободный план без обязательной программы",
             "tip": "проверь расписание перед выходом и оставь запас на обратную дорогу."}
 
 
@@ -135,7 +151,8 @@ def _generate_home_idea(cid):
 Можно предложить ближайший город, деревню, природный маршрут или близкую зарубежную поездку.
 Не повторяй прошлое направление: {previous.get('to', '')}.
 Верни короткий JSON: {{"country_code":"ISO-код страны из разрешённого списка","to":"место","intro":"1 предложение",
-"route":["ровно 3 практичных пункта"],"tip":"короткий полезный совет"}}.
+"transport":"Из {city}: примерное время общественным транспортом","cost":"От €… только если можешь обосновать, иначе текст без суммы",
+"duration":"На поездку: 1 день","why":"почему понравится с учётом спокойной поездки","route":["ровно 3 практичных пункта"],"tip":"короткий совет"}}.
 Не используй знак =, только стрелку → там, где нужна связь."""
     try:
         raw = ai.llm_json(
@@ -161,6 +178,10 @@ def _generate_home_idea(cid):
         return _fallback_idea(cid)
     return {"emoji": "🗺️", "transport_title": _country_label(destination_cc), "from": city,
             "to": str(raw["to"]), "intro": str(raw.get("intro") or "Подходит для короткой поездки на день."),
+            "transport": str(raw.get("transport") or f"Из {city}: проверь актуальный маршрут"),
+            "cost": str(raw.get("cost") or "Расходы зависят от выбранного маршрута"),
+            "duration": str(raw.get("duration") or "На поездку: 1 день"),
+            "why": str(raw.get("why") or "новое место, прогулка и свободный план"),
             "route": route,
             "tip": str(raw.get("tip") or "проверь расписание перед выходом.")}
 
@@ -198,17 +219,96 @@ def _home_idea(cid, *, refresh=False):
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новое путешествие", callback_data="a_trav_go")],
+        [InlineKeyboardButton("🧭 Выбрать направление", callback_data="a_trav_regions")],
+        [InlineKeyboardButton("💡 Что интересного", callback_data="a_trav_interesting")],
         [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
+def _region_kb():
+    rows = [[InlineKeyboardButton(label, callback_data=f"a_trav_region_{key}")]
+            for key, (label, _region, _subregion) in _TRAVEL_REGIONS.items()]
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"),
+                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_regions(bot, cid):
+    await bot.send_message(
+        chat_id=cid, text="🧭 Выбрать направление\n\nКуда хочется отправиться?",
+        reply_markup=_region_kb(),
+    )
+
+
+def _country_in_region(country, region_key):
+    if not region_key:
+        return True
+    wanted = _TRAVEL_REGIONS.get(region_key)
+    row = country_catalog.local_country(country)
+    if str(country or "").casefold() in _REGION_NAME_FALLBACKS.get(region_key, set()):
+        return True
+    return bool(wanted and row.get("region") == wanted[1]
+                and (not wanted[2] or row.get("subregion") == wanted[2]))
+
+
+async def send_visited_interesting(bot, cid):
+    codes = _visited_codes(cid)[:5]
+    countries = [_country_name(code) for code in codes]
+    live = {}
+    if countries:
+        try:
+            rows = await asyncio.to_thread(
+                research.web_search,
+                "2026 latest openings new attractions planned projects " + " ".join(countries),
+                max_results=10, scenario="travel_visited_updates", allow_tavily=True,
+                search_priority="tavily",
+            )
+            source_text = "\n".join(
+                f"{row.get('title', '')}: {row.get('content', '')} ({row.get('url', '')})"
+                for row in rows
+            )
+            if source_text:
+                payload = await ai.allm_json(
+                    f"""По источникам ниже дай максимум по одному актуальному обновлению для каждой страны: {', '.join(countries)}.
+Это может быть новое место, открытие, транспортный маршрут или подтверждённый будущий проект.
+Не додумывай. Если для страны нет факта, пропусти её. Пиши по-русски, названия сохраняй оригинальными.
+Верни JSON: {{"items":[{{"country":"...","fact":"одно предложение","place":"название","details":["до двух коротких деталей"]}}]}}.
+Источники:\n{source_text}""",
+                    900, tier="leisure", module="travel",
+                    cache_context={"scenario": "visited_country_updates", "countries": countries,
+                                   "date": datetime.now(config.TZ).date().isoformat()},
+                )
+                live = {str(item.get("country") or "").casefold(): item
+                        for item in payload.get("items") or [] if isinstance(item, dict)}
+        except Exception as exc:
+            _log.warning("visited travel updates failed, using saved cards: %r", exc)
+    items = []
+    for code, country in zip(codes, countries):
+        card = (_card_cache().get(code) or _stub_card(
+            code, country, util.flag_from_cc(code),
+        ))
+        spots = list(card.get("spots") or [])
+        update = live.get(country.casefold()) or {}
+        items.append({
+            "flag": util.flag_from_cc(code), "country": country,
+            "fact": update.get("fact") or card.get("fact") or card.get("highlight") or card.get("description")
+                    or "Здесь всегда можно найти новый маршрут для следующего визита.",
+            "place": update.get("place") or (spots[0] if spots else ""),
+            "details": update.get("details") or spots[1:3],
+        })
+    msg = travel_ui.visited_news_screen(items)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+
+
 async def send_home(bot, cid, q=None, status=None):
     idea = await asyncio.to_thread(_home_idea, cid)
-    today = datetime.now(config.TZ).date()
-    rebus = await monthly_rebuses.for_day("travel", today, _TRAVEL_REBUSES)
     msg = travel_ui.home_screen(
-        idea, rebus=rebus, news=category_news.cached_line("travel"),
+        idea, news=category_news.cached_line("travel"),
     )
     if status is not None:
         await status.replace(
@@ -512,12 +612,14 @@ async def send_country_add_prompt(bot, cid):
     await bot.send_message(chat_id=cid, text="Напиши название страны, в которой уже был.", reply_markup=kb)
 
 
-def travel_suggest_one(cid, excluded=None):
+def travel_suggest_one(cid, excluded=None, region_key=""):
     visited = [_country_name(code) for code in _visited_codes(cid)]
     blocked = recommendation_stoplist.values(cid, "country")
     skip = ", ".join(visited + blocked + list(excluded or []))
     interests = " · ".join(_travel_interests(cid)) or "без явных предпочтений"
+    region_label = (_TRAVEL_REGIONS.get(region_key) or ("любое направление",))[0]
     prompt = f"""Не предлагай: {skip}. Предложи ровно одну новую страну для путешествия.
+Направление: {region_label}.
 Сильные интересы путешественника: {interests}.
 Верни только JSON: {{"country":"название страны по-русски"}}."""
     return ai.llm_json(prompt, 250, tier="cheap", module="travel_utility")
@@ -529,11 +631,12 @@ _LOCAL_COUNTRY_FALLBACKS = (
     "Исландия", "Португалия", "Дания", "Япония", "Канада", "Норвегия",
     "Словения", "Греция", "Хорватия", "Испания", "Италия", "Франция",
     "Австрия", "Швейцария", "Швеция", "Финляндия", "Новая Зеландия",
-    "Австралия", "США", "Тайвань",
+    "Австралия", "США", "Тайвань", "Бразилия", "Аргентина", "Чили",
+    "Марокко", "ЮАР", "Кения",
 )
 
 
-def _local_country_fallback(cid, excluded=None):
+def _local_country_fallback(cid, excluded=None, region_key=""):
     """Выбирает новое направление из локального каталога без сети и AI."""
     blocked = {
         str(value).strip().casefold()
@@ -551,6 +654,8 @@ def _local_country_fallback(cid, excluded=None):
         if str(value).strip()
     }
     for country in _LOCAL_COUNTRY_FALLBACKS:
+        if not _country_in_region(country, region_key):
+            continue
         if country.casefold() in blocked:
             continue
         country_code = country_catalog.country_code(country)
@@ -585,7 +690,7 @@ def _resolve_country_code(country):
     return str((lookup or {}).get("iso") or "").upper()
 
 
-async def send_go(bot, cid, *, status=None):
+async def send_go(bot, cid, *, status=None, region_key=""):
     visited_codes = set(_visited_codes(cid))
     skip_set = {name.strip().casefold() for name in (
         [_country_name(code) for code in visited_codes]
@@ -595,7 +700,7 @@ async def send_go(bot, cid, *, status=None):
     rejected = []
     try:
         for _ in range(5):
-            candidate = await asyncio.to_thread(travel_suggest_one, cid, rejected)
+            candidate = await asyncio.to_thread(travel_suggest_one, cid, rejected, region_key)
             candidate_name = str(candidate.get("country") or "").strip()
             candidate_code = await asyncio.to_thread(_resolve_country_code, candidate_name)
             if candidate_code in visited_codes:
@@ -610,12 +715,12 @@ async def send_go(bot, cid, *, status=None):
                 rejected.append(candidate_name)
     except Exception as exc:
         _log.warning("travel suggestion failed, using local fallback: %r", exc)
-        data = _local_country_fallback(cid, rejected)
+        data = _local_country_fallback(cid, rejected, region_key)
     if not data:
         # AI может быть доступен, но несколько раз вернуть уже посещённую или
         # скрытую страну. Это такой же повод перейти к локальной новой стране,
         # как и сетевой сбой, а не показывать пользователю ошибку подбора.
-        data = _local_country_fallback(cid, rejected)
+        data = _local_country_fallback(cid, rejected, region_key)
     if not data:
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✨ Попробовать ещё", callback_data="a_trav_go")],

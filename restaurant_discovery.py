@@ -32,10 +32,13 @@ _CITY_FALLBACKS = {
         },
         {
             "name": "Roest Alkmaar",
+            "address": "Hekelstraat 30", "format": "Cocktail bar · restaurant · café",
             "cuisine": "современная европейская", "price": "€€",
             "signature_dish": "Roest Smashburger",
+            "dish_price": "€19",
+            "dish_description": "Двойная говяжья котлета, BBQ-соус, маринованный огурец, томат, салат, brioche bun и фри.",
             "description": "Неформальный ресторан и коктейль-бар в старом центре Alkmaar.",
-            "fact": "Сам ресторан называет Roest Smashburger своим фирменным блюдом.",
+            "fact": "Smashburger — фирменное блюдо Roest и логичный выбор для первого визита; сюда стоит идти за неформальным ужином и коктейлями.",
             "source_url": "https://roestalkmaar.nl/",
         },
     ),
@@ -204,23 +207,27 @@ def get_restaurant(cid, *, refresh=False):
 Не повторяй уже показанные места: {', '.join(used_names) or 'нет'}.
 Не придумывай цену, блюдо или факт:
 каждое поле должно прямо следовать из источников. Описание — одна короткая строка
-по-русски. price только €, €€ или €€€. signature_dish — конкретное блюдо.
+по-русски. price только €, €€ или €€€. address — подтверждённый адрес, format — до трёх форматов места через ·. signature_dish — конкретное блюдо.
 fact — один проверяемый факт о месте или его кухне. opening_hours и dish_price
 заполняй только при явном подтверждении источником, иначе оставь пустыми.
+dish_description — одна короткая строка о составе блюда только по меню.
 dish_emoji — один подходящий эмодзи блюда. Для каждого фактического поля верни
 evidence с source_id и короткой ДОСЛОВНОЙ цитатой из TITLE или TEXT, которая его
 подтверждает. Не переводи evidence.quote. Если подтверждения нет, не выбирай место.
 
 {secure.wrap_untrusted(sources, "результаты поиска")}
 
-Верни JSON: {{"name":"...","cuisine":"...","price":"€€",
+Верни JSON: {{"name":"...","address":"...","format":"restaurant · café","cuisine":"...","price":"€€",
 "opening_hours":"...","signature_dish":"...","dish_emoji":"🍽️","dish_price":"...",
-"description":"...","fact":"...","evidence":{{
+"dish_description":"...","description":"...","fact":"...","evidence":{{
 "name":{{"source_id":"source:0","quote":"..."}},
+"address":{{"source_id":"source:0","quote":"..."}},
+"format":{{"source_id":"source:0","quote":"..."}},
 "cuisine":{{"source_id":"source:0","quote":"..."}},
 "price":{{"source_id":"source:0","quote":"..."}},
 "signature_dish":{{"source_id":"source:0","quote":"..."}},
 "description":{{"source_id":"source:0","quote":"..."}},
+"dish_description":{{"source_id":"source:0","quote":"..."}},
 "fact":{{"source_id":"source:0","quote":"..."}},
 "opening_hours":{{"source_id":"source:0","quote":"..."}},
 "dish_price":{{"source_id":"source:0","quote":"..."}}}}}}
@@ -239,7 +246,7 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
     required = ("cuisine", "price", "signature_dish", "description", "fact")
     evidence_fields = ["name", *required]
     evidence_fields.extend(
-        field for field in ("opening_hours", "dish_price")
+        field for field in ("address", "format", "opening_hours", "dish_price", "dish_description")
         if str(result.get(field) or "").strip()
     )
     source_url = _validated_evidence(result, rows, evidence_fields)
@@ -251,11 +258,14 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
         return _reserve(cid, cached, city, previous, context_key)
     card = {
         "city": city, "name": name,
+        "address": " ".join(str(result.get("address") or "").split()),
+        "format": " ".join(str(result.get("format") or "").split()),
         "cuisine": " ".join(str(result["cuisine"]).split()),
         "price": result["price"],
         "signature_dish": " ".join(str(result["signature_dish"]).split()),
         "dish_emoji": " ".join(str(result.get("dish_emoji") or "🍽️").split()),
         "dish_price": " ".join(str(result.get("dish_price") or "").split()),
+        "dish_description": " ".join(str(result.get("dish_description") or "").split()),
         "opening_hours": " ".join(str(result.get("opening_hours") or "").split()),
         "description": " ".join(str(result["description"]).split()),
         "fact": " ".join(str(result["fact"]).split()),

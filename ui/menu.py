@@ -320,17 +320,14 @@ def restaurant_menu(card=None, *, news=None):
     b.section(f"🍽️ Куда сходить · {city}")
     name = _cooking_text(card.get("name"))
     if name and card.get("map_url"):
-        b.bold("Сегодня:")
-        b.text_line(" ")
         b.link(name, str(card["map_url"]))
         b.newline()
-        for detail in (
-            f"Цена {_cooking_text(card.get('price'))}" if card.get("price") else "",
-            _cooking_text(card.get("cuisine")),
-            f"Открыто {_cooking_text(card.get('opening_hours'))}." if card.get("opening_hours") else "",
-        ):
-            if detail:
-                b.line(f"- {detail}")
+        meta = " · ".join(value for value in (
+            _cooking_text(card.get("address")), _cooking_text(card.get("format")),
+            _cooking_text(card.get("cuisine")), _cooking_text(card.get("price")),
+        ) if value)
+        if meta:
+            b.line(f"({meta})")
         dish = _cooking_text(card.get("signature_dish"))
         if dish:
             b.spacer()
@@ -341,10 +338,17 @@ def restaurant_menu(card=None, *, news=None):
             if card.get("dish_price"):
                 b.text_line(f" · {_cooking_text(card.get('dish_price'))}")
             b.newline()
+            dish_description = _cooking_sentence(card.get("dish_description"))
+            if dish_description:
+                b.line(dish_description)
+        description = _cooking_sentence(card.get("description"))
+        if description:
+            b.spacer()
+            b.line(description)
         fact = _cooking_sentence(card.get("fact"))
         if fact:
             b.spacer()
-            b.bold("Интересно:")
+            b.bold("💡 Интересно:")
             b.text_line(f" {fact}")
             b.newline()
     else:

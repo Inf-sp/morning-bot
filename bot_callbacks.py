@@ -358,6 +358,16 @@ async def handle(update, context, remove_reply_keyboard):
                     lambda status: travel.send_go(bot, cid, status=status),
                     preserve_message=True,
                 )
+            elif act == "trav_regions":
+                await travel.send_regions(bot, cid)
+            elif act == "trav_interesting":
+                await travel.send_visited_interesting(bot, cid)
+            elif act.startswith("trav_region_"):
+                region_key = act.removeprefix("trav_region_")
+                await _inline_status(
+                    lambda status: travel.send_go(bot, cid, status=status, region_key=region_key),
+                    preserve_message=True,
+                )
             elif act == "trav_no":
                 await _inline_status(
                     lambda status: travel.travel_dislike(bot, cid, status=status),

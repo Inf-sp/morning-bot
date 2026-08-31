@@ -15,6 +15,7 @@ from ui.menu import restaurant_menu
 def test_restaurant_card_has_google_link_and_compact_details():
     message = restaurant_menu({
         "city": "Alkmaar", "name": "De Eendracht",
+        "address": "Hekelstraat 30", "format": "restaurant · café",
         "map_url": "https://www.google.com/maps/search/?api=1&query=De+Eendracht%2C+Alkmaar",
         "cuisine": "нидерландская", "price": "€€", "signature_dish": "сате",
         "opening_hours": "с 09:00 до 00:00", "dish_emoji": "🍔", "dish_price": "€22,50",
@@ -22,10 +23,10 @@ def test_restaurant_card_has_google_link_and_compact_details():
         "fact": "Ресторан находится в здании бывшей школы.",
     })
 
-    assert message.text.startswith("🍽️ Куда сходить · Alkmaar\n\nСегодня: De Eendracht")
-    assert "- Цена €€\n- нидерландская\n- Открыто с 09:00 до 00:00." in message.text
+    assert message.text.startswith("🍽️ Куда сходить · Alkmaar\n\nDe Eendracht")
+    assert "(Hekelstraat 30 · restaurant · café · нидерландская · €€)" in message.text
     assert "Что взять: 🍔 сате · €22,50" in message.text
-    assert "Интересно: Ресторан находится в здании бывшей школы." in message.text
+    assert "💡 Интересно: Ресторан находится в здании бывшей школы." in message.text
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
     assert len(links) == 1
     assert links[0].url.startswith("https://www.google.com/maps/search/")

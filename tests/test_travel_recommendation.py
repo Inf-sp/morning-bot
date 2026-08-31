@@ -84,6 +84,8 @@ def test_travel_home_keeps_preferences_inside_suitcase():
 
     assert labels == [
         ["✨ Подобрать новое путешествие"],
+        ["🧭 Выбрать направление"],
+        ["💡 Что интересного"],
         ["🎚️ Мой чемодан"],
         ["#️⃣ Главная"],
     ]
@@ -135,10 +137,12 @@ def test_today_trip_cache_is_invalidated_when_home_country_changes(monkeypatch):
     assert state["42"]["cc"] == "DE"
 
 
-def test_travel_home_shows_a_daily_tourist_emoji_rebus():
+def test_travel_home_shows_place_of_the_day_without_rebus():
     idea = {
         "emoji": "🚆", "transport_title": "Поезд", "intro": "Короткий маршрут.",
         "from": "Алкмар", "to": "Лейден", "route": [], "tip": "Проверь расписание.",
+        "transport": "Из Алкмара: 1 ч", "cost": "От €20",
+        "duration": "На поездку: 1 день", "why": "каналы и прогулка без спешки",
     }
 
     message = travel_ui.home_screen(
@@ -147,9 +151,11 @@ def test_travel_home_shows_a_daily_tourist_emoji_rebus():
 
     assert "Прогресс:" not in message.text
     assert "посещено" not in message.text
-    assert "Туристический ребус: 🌋 ♨️ ❄️ → Исландия" in message.text
-    assert message.text.index("Маршрут:") < message.text.index("Туристический ребус:") < message.text.index("💡 Полезно:")
-    assert any(entity.type == MessageEntity.SPOILER for entity in message.entities)
+    assert message.text.startswith("🚆 Место дня\n\nЛейден")
+    assert "Туристический ребус:" not in message.text
+    assert "🚆 Из Алкмара: 1 ч" in message.text
+    assert "Почему тебе может понравиться: каналы и прогулка без спешки" in message.text
+    assert not any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 
 def test_suitcase_keeps_only_saved_countries(monkeypatch):

@@ -20,29 +20,42 @@ def visited_summary(n):
 def home_screen(idea, rebus=None, *, news=None):
     b = MessageBuilder()
     b.text_line(f"{idea['emoji']} ")
-    b.bold(f"Поездка на сегодня · {idea['transport_title']}")
+    b.bold("Место дня")
     b.newline()
     b.spacer()
+    b.bold(str(idea.get("to") or idea.get("transport_title") or ""))
+    b.newline()
     b.line(idea["intro"])
+    for icon, value in (
+        ("🚆", idea.get("transport")), ("💶", idea.get("cost")),
+        ("⏱️", idea.get("duration")),
+    ):
+        if value:
+            b.line(f"{icon} {value}")
     b.spacer()
-    b.bold(f"{idea['from']} → {idea['to']}")
+    b.bold("Почему тебе может понравиться:")
+    b.text_line(f" {idea.get('why') or idea.get('tip')}")
     b.newline()
-    b.spacer()
-    b.bold("Маршрут:")
-    b.newline()
-    for item in idea.get("route", [])[:3]:
-        b.bullet(str(item).replace(" = ", " → "))
-    if rebus and rebus.get("emoji") and rebus.get("answer"):
-        b.spacer()
-        b.bold("Туристический ребус:")
-        b.text_line(" ")
-        b.text_line(str(rebus["emoji"]))
-        b.text_line(" → ")
-        b.add(str(rebus["answer"]), MessageEntity.SPOILER)
-        b.newline()
-    b.spacer()
-    b.line(f"💡 Полезно: {idea['tip']}")
     append_weekly_news(b, news)
+    return b.build_stripped()
+
+
+def visited_news_screen(items):
+    b = MessageBuilder()
+    b.title("💡 Что интересного")
+    if not items:
+        b.line("Добавь посещённые страны в «Мой чемодан» — здесь появятся интересные обновления.")
+        return b.build_stripped()
+    for item in items[:5]:
+        b.spacer()
+        b.bold(f"{item.get('flag', '')} {item.get('country', '')}".strip())
+        b.newline()
+        b.line(str(item.get("fact") or ""))
+        if item.get("place"):
+            b.bold(str(item["place"]))
+            b.newline()
+        for detail in item.get("details") or []:
+            b.line(str(detail))
     return b.build_stripped()
 
 
