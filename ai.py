@@ -33,6 +33,7 @@ FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "groq_standard": 2.5,
     "cf": 2.0,
+    "mistral": 2.5,
     "openrouter": 2.5,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
@@ -217,6 +218,7 @@ _TIMEOUT_CAPS = {
     "gemini": 6.0,
     "groq": 5.0,
     "cf": 4.0,
+    "mistral": 6.0,
 }
 
 
@@ -530,6 +532,8 @@ def _provider_model_name(provider: str) -> str:
         return config.GROQ_STANDARD_MODEL
     if provider == "cf":
         return config.CF_MODEL
+    if provider == "mistral":
+        return config.MISTRAL_MODEL
     return ""
 
 
@@ -917,6 +921,25 @@ def _as_text(x):
                 return v
     return None
 
+
+def _cloudflare_response_text(payload) -> str | None:
+    """Support both legacy Workers AI and OpenAI-compatible result shapes."""
+    result = payload.get("result") if isinstance(payload, dict) else None
+    text = _as_text(result)
+    if text:
+        return text
+    if not isinstance(result, dict):
+        return None
+    for choice in result.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message") or {}
+        content = message.get("content") if isinstance(message, dict) else ""
+        text = _stream_content(content)
+        if text:
+            return text
+    return None
+
 # ---------- одиночная генерация ----------
 def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text",
                 model=None, provider="gemini"):
@@ -1028,6 +1051,15 @@ def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_tex
     return False
 
 
+def _openrouter_routing_payload() -> dict:
+    """Return one model or an ordered OpenRouter model failover chain."""
+    models = tuple(getattr(config, "OPENROUTER_MODELS", ()) or ())[:5]
+    if not models:
+        models = (config.OPENROUTER_MODEL,)
+    route = {"model": models[0]} if len(models) == 1 else {"models": list(models)}
+    return {**route, "provider": {"allow_fallbacks": True}}
+
+
 def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason,
                                     response_mode: ResponseMode = "plain_text", _retry=False):
     if not config.OPENROUTER_API_KEY:
@@ -1041,7 +1073,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     status_code = None
     try:
         payload = {
-            "model": config.OPENROUTER_MODEL,
+            **_openrouter_routing_payload(),
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": min(int(max_tokens or 400), token_cap),
             "temperature": min(float(temperature or 0.7), 0.8),
@@ -1135,6 +1167,28 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
         )
     return r.json()["choices"][0]["message"]["content"]
 
+
+def _gen_mistral(prompt, max_tokens, temperature,
+                 response_mode: ResponseMode = "plain_text"):
+    """Direct Mistral reserve through its OpenAI-compatible chat endpoint."""
+    if not config.MISTRAL_API_KEY:
+        raise LLMProviderError("mistral", "no Mistral key", error_type="credentials")
+    payload = {
+        "model": config.MISTRAL_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
+    r = _post(
+        "https://api.mistral.ai/v1/chat/completions",
+        {"Authorization": f"Bearer {config.MISTRAL_API_KEY}",
+         "Content-Type": "application/json"},
+        payload, 40, "mistral", timeout_cap=6,
+    )
+    return r.json()["choices"][0]["message"]["content"]
+
 def _gen_cf(prompt, max_tokens):
     if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
         raise Exception("no cf")
@@ -1142,7 +1196,7 @@ def _gen_cf(prompt, max_tokens):
         {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
         40, "cf", timeout_cap=4)
-    output = _as_text(r.json().get("result", {}).get("response"))
+    output = _cloudflare_response_text(r.json())
     api_usage.record_request(
         "cloudflare", units={"neurons": api_usage.estimate_cloudflare_neurons(prompt, output)},
         include_request=False,
@@ -1241,11 +1295,11 @@ def _reserve_gemini_for_action() -> bool:
     except Exception:
         return True
 
-# Три понятных маршрута: простой, обычный и сложный. OpenRouter вызывается
-# только последним резервом через общую политику fallback.
-SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "openrouter")
-STANDARD_ORDER = (GROQ_STANDARD, "cf", "openrouter")
-COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "openrouter")
+# Три понятных маршрута: простой, обычный и сложный. Прямой Mistral работает
+# общим резервом, OpenRouter остаётся последней разрешённой попыткой.
+SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "mistral", "openrouter")
+STANDARD_ORDER = (GROQ_STANDARD, "cf", "mistral", "openrouter")
+COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "mistral", "openrouter")
 UTILITY_ORDER = SIMPLE_ORDER
 DEFAULT_ORDER = STANDARD_ORDER
 CHAT_ORDER = STANDARD_ORDER
@@ -1255,9 +1309,10 @@ FOOD_ORDER = COMPLEX_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "openrouter"),
+    "cf": ("cf", "mistral", "openrouter"),
     "groq": STANDARD_ORDER,
     "gemini": COMPLEX_ORDER,
+    "mistral": ("mistral", "openrouter"),
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -1312,7 +1367,7 @@ def _resolve(tier, order, route=None, module=""):
             n for n in order
             if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
             or n in {GROQ_SIMPLE, GROQ_STANDARD, GROQ_COMPLEX,
-                     "groq", "gemini", "cf"}
+                     "groq", "gemini", "cf", "mistral"}
         )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
@@ -1417,6 +1472,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
+        "mistral": lambda: _gen_mistral(prompt, max_tokens, temperature, response_mode),
     }
     errs = []
     temporary_errs = []
@@ -1779,13 +1835,25 @@ def _chat(provider, history, system, timeout_cap=None):
              "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5),
              usage_service=api_usage.groq_model_service(_provider_model_name(provider)))
         return r.json()["choices"][0]["message"]["content"]
+    if provider == "mistral":
+        if not config.MISTRAL_API_KEY:
+            raise LLMProviderError("mistral", "no Mistral key", error_type="credentials")
+        r = _post(
+            "https://api.mistral.ai/v1/chat/completions",
+            {"Authorization": f"Bearer {config.MISTRAL_API_KEY}", "Content-Type": "application/json"},
+            {"model": config.MISTRAL_MODEL,
+             "messages": [{"role": "system", "content": system}] + history,
+             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
+            40, "mistral", timeout_cap=bounded_cap(5),
+        )
+        return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
             raise LLMProviderError("openrouter", "no OpenRouter key", error_type="credentials")
         r = _post(
             "https://openrouter.ai/api/v1/chat/completions",
             {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
-            {"model": config.OPENROUTER_MODEL,
+            {**_openrouter_routing_payload(),
              "messages": [{"role": "system", "content": system}] + history,
              "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
             40,
@@ -1800,7 +1868,7 @@ def _chat(provider, history, system, timeout_cap=None):
             {"Authorization": f"Bearer {config.CF_API_TOKEN}", "Content-Type": "application/json"},
             {"messages": [{"role": "system", "content": system}] + history,
              "max_tokens": FREE_CHAT_MAX_TOKENS}, 40, "cf", timeout_cap=bounded_cap(4))
-        output = _as_text(r.json().get("result", {}).get("response"))
+        output = _cloudflare_response_text(r.json())
         api_usage.record_request(
             "cloudflare",
             units={"neurons": api_usage.estimate_cloudflare_neurons(
@@ -1844,6 +1912,19 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
             bounded_cap(5), provider, emit,
             usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
         )
+    if provider == "mistral":
+        if not config.MISTRAL_API_KEY:
+            raise LLMProviderError(provider, "no Mistral key", error_type="credentials")
+        return _stream_openai_chat(
+            "https://api.mistral.ai/v1/chat/completions",
+            {
+                "Authorization": f"Bearer {config.MISTRAL_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            {**payload, "model": config.MISTRAL_MODEL},
+            bounded_cap(5), provider, emit,
+        )
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
             raise LLMProviderError(provider, "no OpenRouter key", error_type="credentials")
@@ -1854,7 +1935,7 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
             },
-            {**payload, "model": config.OPENROUTER_MODEL},
+            {**payload, **_openrouter_routing_payload()},
             bounded_cap(4), provider, emit,
         )
 
@@ -1886,7 +1967,7 @@ def _chat_chain_impl(history, cid=None):
         tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
     except Exception:
         pass
-    for p in CHAT_ORDER:
+    for provider_index, p in enumerate(CHAT_ORDER):
         remaining = _remaining_seconds()
         if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
             errs.append("chain:deadline")
@@ -1900,10 +1981,14 @@ def _chat_chain_impl(history, cid=None):
             continue
         try:
             attempt_started = time.time()
-            attempt_timeout = min(
-                _FREE_CHAT_PROVIDER_TIMEOUTS[p],
-                remaining if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+            later_reserve = (
+                len(CHAT_ORDER[provider_index + 1:]) * _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS
             )
+            usable = (
+                max(_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS, remaining - later_reserve)
+                if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p]
+            )
+            attempt_timeout = min(_FREE_CHAT_PROVIDER_TIMEOUTS[p], usable)
             out = _as_text(_chat(p, history, system, timeout_cap=attempt_timeout))
             if out and out.strip():
                 _record_ai_attempt(
@@ -1963,7 +2048,7 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
     except Exception:
         pass
 
-    for p in CHAT_ORDER:
+    for provider_index, p in enumerate(CHAT_ORDER):
         remaining = _remaining_seconds()
         if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
             errs.append("chain:deadline")
@@ -1988,10 +2073,14 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
 
         try:
             attempt_started = time.time()
-            attempt_timeout = min(
-                _FREE_CHAT_PROVIDER_TIMEOUTS[p],
-                remaining if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p],
+            later_reserve = (
+                len(CHAT_ORDER[provider_index + 1:]) * _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS
             )
+            usable = (
+                max(_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS, remaining - later_reserve)
+                if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p]
+            )
+            attempt_timeout = min(_FREE_CHAT_PROVIDER_TIMEOUTS[p], usable)
             out = _as_text(_chat_stream(p, history, system, send_delta, timeout_cap=attempt_timeout))
             if out and out.strip():
                 _record_ai_attempt(

@@ -29,7 +29,7 @@ _blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("groq", "gemini", "cloudflare", "openrouter")
+_AI_SERVICES = ("groq", "gemini", "cloudflare", "mistral", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
@@ -51,6 +51,7 @@ _DATA_CATEGORIES = {
 _AI_ROLES = {
     "gemini": "Сложные задачи",
     "cloudflare": "Резерв",
+    "mistral": "Резерв",
     "openrouter": "Последний резерв",
 }
 _GROQ_MODELS = (
@@ -92,6 +93,11 @@ def _usage_detail(service: str) -> str:
     if service == "cloudflare":
         return f"{_number(usage['neurons_today'])} нейронов сегодня"
     if service == "openrouter":
+        balance = api_usage.openrouter_key_usage()
+        if balance is not None and balance.get("remaining") is not None:
+            return f"${float(balance['remaining']):.2f} осталось"
+        return f"{_number(requests_today)} сегодня"
+    if service == "mistral":
         return f"{_number(requests_today)} сегодня"
     if service == "gtts" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
@@ -139,7 +145,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if service == "groq":
         return _format_groq_row(state)
-    if service in ("gemini", "cloudflare", "openrouter"):
+    if service in ("gemini", "cloudflare", "mistral", "openrouter"):
         return _format_ai_row(service, state)
     if service == "google_books":
         usage = api_usage.google_books_requests()
@@ -183,6 +189,8 @@ def _format_groq_row(state: dict | None = None) -> str:
             for model in {model for _kind, model, _role in _GROQ_MODELS}
         )
         detail = f"{_number(used)} сегодня"
+    if status in (WARNING, DOWN) and state.get("error_type") == "rate_limit":
+        detail = str(state.get("last_error") or "слишком много запросов")
     return f"{_DOT[status]} Groq · Основной · {detail}"
 
 
@@ -198,7 +206,10 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     # ошибка (авторизация, лимит, сеть или 5xx) либо успешная проверка.
     if state.get("error_type") == "unknown":
         status = UNKNOWN
-    quota_remaining, quota_total = _confirmed_quota(service, state)
+    quota_remaining, quota_total = (
+        (None, None) if service == "openrouter"
+        else _confirmed_quota(service, state)
+    )
     if service == "gemini":
         detail = _usage_detail(service)
     else:
@@ -209,8 +220,10 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         )
     if service == "gemini" and quota_remaining is not None and quota_remaining <= 0:
         detail = "лимит исчерпан"
-    if (status in (DOWN, WARNING)
-            and state.get("error_type") not in ("quota", "rate_limit", "unknown")):
+    if status in (DOWN, WARNING) and state.get("error_type") == "rate_limit":
+        detail = str(state.get("last_error") or "слишком много запросов")
+    elif (status in (DOWN, WARNING)
+            and state.get("error_type") not in ("quota", "unknown")):
         detail = str(state.get("last_error") or detail)
     return f"{_DOT[status]} {label} · {role} · {detail}"
 
@@ -218,7 +231,7 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
 def rows() -> list[str]:
     current = _load().get("services") or {}
     out = ["AI"]
-    for service in ("groq", "gemini", "cloudflare", "openrouter"):
+    for service in ("groq", "gemini", "cloudflare", "mistral", "openrouter"):
         state = current.get(service) or provider_runtime.get_state(service)
         if service == "groq":
             out.append(_format_groq_row(state))
@@ -249,8 +262,22 @@ def _probe_request(service: str):
     probes = {
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
+        "mistral": ("GET", "https://api.mistral.ai/v1/models", {"headers": {"Authorization": f"Bearer {config.MISTRAL_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
-        "cloudflare": ("GET", f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/models/search", {"headers": {"Authorization": f"Bearer {config.CF_API_TOKEN}"}, "params": {"per_page": 1}}),
+        "cloudflare": (
+            "POST",
+            f"https://api.cloudflare.com/client/v4/accounts/{config.CF_ACCOUNT_ID}/ai/run/{config.CF_MODEL}",
+            {
+                "headers": {
+                    "Authorization": f"Bearer {config.CF_API_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                "json": {
+                    "messages": [{"role": "user", "content": "Reply only OK"}],
+                    "max_tokens": 8,
+                },
+            },
+        ),
         "openweather": ("GET", "https://api.openweathermap.org/data/2.5/weather", {"params": {"q": "Amsterdam", "appid": config.WEATHER_API_KEY}}),
         "tavily": ("GET", "https://api.tavily.com/usage", {"headers": {"Authorization": f"Bearer {config.TAVILY_API_KEY}"}}),
         "firecrawl": ("GET", "https://api.firecrawl.dev/v2/team/credit-usage", {"headers": {"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"}}),
@@ -323,12 +350,6 @@ def probe(service: str) -> bool:
             total = payload.get("totalCredits")
             if total is None:
                 total = payload.get("total_credits")
-        elif service == "openrouter" and ok:
-            payload = (response.json() or {}).get("data") or {}
-            limit = payload.get("limit")
-            used = payload.get("usage")
-            if limit is not None and used is not None:
-                total, remaining = int(limit), max(0, int(limit) - int(used))
         elif service == "tavily" and ok:
             payload = (response.json() or {}).get("key") or {}
             used, limit = payload.get("usage"), payload.get("limit")

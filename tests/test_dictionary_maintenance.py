@@ -50,7 +50,7 @@ def test_version_two_card_is_rebuilt_into_the_current_uniform_style(monkeypatch)
         calls.append("ai")
         assert kwargs["order"] == (
             "gemini", learning_dictionary.ai.GROQ_STANDARD,
-            learning_dictionary.ai.GROQ_SIMPLE, "cf", "openrouter",
+            learning_dictionary.ai.GROQ_SIMPLE, "cf", "mistral", "openrouter",
         )
         assert kwargs["privacy_level"] == "public"
         assert kwargs["fallback_allowed"] is True

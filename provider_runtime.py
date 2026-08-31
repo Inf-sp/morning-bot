@@ -56,12 +56,14 @@ class ProviderSpec:
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
     ProviderSpec("gemini", "Gemini", ("Питание", "Обучение", "Ассистент"),
-                 ("groq", "openrouter"), 3600, role="Сложные задачи"),
+                 ("groq", "mistral", "openrouter"), 3600, role="Сложные задачи"),
     ProviderSpec("groq", "Groq", ("Питание", "Обучение", "Ассистент"),
-                 ("cloudflare", "openrouter"), 3600, role="Основной"),
+                 ("cloudflare", "mistral", "openrouter"), 3600, role="Основной"),
+    ProviderSpec("mistral", "Mistral", ("Питание", "Обучение", "Ассистент"),
+                 ("openrouter",), 3600, role="Резерв"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Последний резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
-                 ("openrouter",), 3600, role="Резерв"),
+                 ("mistral", "openrouter"), 3600, role="Резерв"),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),
@@ -81,13 +83,14 @@ SPECS = (
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"gemini", "groq", "mistral", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "gemini": config.GEMINI_API_KEY,
         "groq": config.GROQ_API_KEY,
+        "mistral": config.MISTRAL_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,
         "cloudflare": config.CF_API_TOKEN and config.CF_ACCOUNT_ID,
         "openweather": config.WEATHER_API_KEY,
@@ -500,8 +503,13 @@ def record_result(
             old_error_type == "quota"
             and int(remaining or 0) > 0
         )
-        if (ok and not allow_quota_recovery and old_error_type in ("quota", "rate_limit")
-                and not quota_recovered):
+        active_rate_limit = (
+            old_error_type == "rate_limit"
+            and int(state.get("cooldown_until") or 0) > now
+        )
+        if (ok and not allow_quota_recovery
+                and ((old_error_type == "quota" and not quota_recovered)
+                     or active_rate_limit)):
             return data, None
         if remaining is not None and total is not None:
             try:
@@ -525,6 +533,8 @@ def record_result(
                 "fallback": "",
                 "fallback_reason": "",
             })
+            if int(state.get("cooldown_until") or 0) <= now:
+                state["cooldown_until"] = None
             if real_request:
                 state["last_real_success"] = now
                 state["cooldown_until"] = None
@@ -562,6 +572,12 @@ def record_result(
                 )
         else:
             kind, friendly = _friendly_error(error, status_code, provider)
+            if kind == "rate_limit" and provider in AI_PROVIDERS:
+                retry_after = _retry_after_seconds(headers)
+                state["cooldown_until"] = max(
+                    int(state.get("cooldown_until") or 0),
+                    now + max(60, retry_after or 300),
+                )
             if provider == "tavily" and status_code == 429:
                 kind, friendly = "rate_limit", "слишком много запросов"
                 retry_after = _retry_after_seconds(headers)

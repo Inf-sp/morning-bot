@@ -136,6 +136,86 @@ def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch)
     assert result == "резервный ответ"
 
 
+def test_mistral_json_reserve_uses_direct_api(monkeypatch):
+    captured = {}
+
+    class Response:
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": '{"ok":true}'}}]}
+
+    def fake_post(url, headers, payload, *_args, **_kwargs):
+        captured.update(url=url, headers=headers, payload=payload)
+        return Response()
+
+    monkeypatch.setattr(ai.config, "MISTRAL_API_KEY", "secret")
+    monkeypatch.setattr(ai.config, "MISTRAL_MODEL", "mistral-small-2603")
+    monkeypatch.setattr(ai, "_post", fake_post)
+
+    result = ai._gen_mistral("Верни JSON", 120, 0.0, "json")
+
+    assert result == '{"ok":true}'
+    assert captured["url"] == "https://api.mistral.ai/v1/chat/completions"
+    assert captured["payload"]["model"] == "mistral-small-2603"
+    assert captured["payload"]["response_format"] == {"type": "json_object"}
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+
+
+def test_cloudflare_accepts_openai_compatible_choices(monkeypatch):
+    class Response:
+        @staticmethod
+        def json():
+            return {
+                "result": {
+                    "choices": [{"message": {"content": '{"ok":true}'}}],
+                    "usage": {"prompt_tokens": 4, "completion_tokens": 3},
+                },
+            }
+
+    monkeypatch.setattr(ai.config, "CF_API_TOKEN", "token")
+    monkeypatch.setattr(ai.config, "CF_ACCOUNT_ID", "account")
+    monkeypatch.setattr(ai, "_post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(ai.api_usage, "record_request", lambda *_args, **_kwargs: None)
+
+    assert ai._gen_cf("Верни JSON", 50) == '{"ok":true}'
+
+
+def test_cloudflare_accepts_short_railway_variable_names(monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.setenv("CF_API_TOKEN", "token")
+    monkeypatch.setenv("CF_ACCOUNT_ID", "account")
+
+    assert ai.config._env_first("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN") == "token"
+    assert ai.config._env_first("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID") == "account"
+
+
+def test_openrouter_uses_ordered_model_fallbacks(monkeypatch):
+    monkeypatch.setattr(
+        ai.config, "OPENROUTER_MODELS",
+        (
+            "openai/gpt-oss-120b",
+            "google/gemini-2.5-flash-lite",
+            "deepseek/deepseek-v4-flash-20260423",
+        ),
+    )
+
+    assert ai._openrouter_routing_payload() == {
+        "models": [
+            "openai/gpt-oss-120b",
+            "google/gemini-2.5-flash-lite",
+            "deepseek/deepseek-v4-flash-20260423",
+        ],
+        "provider": {"allow_fallbacks": True},
+    }
+
+
+def test_all_central_routes_try_direct_mistral_before_openrouter():
+    for order in {ai.SIMPLE_ORDER, ai.STANDARD_ORDER, ai.COMPLEX_ORDER}:
+        assert "mistral" in order
+        assert order.index("mistral") < order.index("openrouter")
+
+
 def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
     for module in ("travel", "food", "wardrobe"):
         assert ai._resolve(None, None, module=module)[0] == "gemini"

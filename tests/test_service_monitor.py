@@ -36,7 +36,28 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
 
 def test_ai_provider_catalog_uses_roles_not_sections():
     assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Сложные задачи"
+    assert provider_runtime.SPEC_BY_KEY["mistral"].category == "Резерв"
     assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Питание"
+
+
+def test_mistral_is_a_configured_ai_reserve(monkeypatch):
+    monkeypatch.setattr(provider_runtime.config, "MISTRAL_API_KEY", "secret")
+
+    assert "mistral" in provider_runtime.AI_PROVIDERS
+    assert provider_runtime.is_configured("mistral")
+    assert provider_runtime.SPEC_BY_KEY["mistral"].fallbacks == ("openrouter",)
+
+
+def test_cloudflare_probe_uses_real_workers_ai_route(monkeypatch):
+    monkeypatch.setattr(service_monitor.config, "CF_ACCOUNT_ID", "account")
+    monkeypatch.setattr(service_monitor.config, "CF_API_TOKEN", "token")
+    monkeypatch.setattr(service_monitor.config, "CF_MODEL", "@cf/openai/gpt-oss-20b")
+
+    method, url, kwargs = service_monitor._probe_request("cloudflare")
+
+    assert method == "POST"
+    assert url.endswith("/ai/run/@cf/openai/gpt-oss-20b")
+    assert kwargs["json"]["messages"][0]["content"] == "Reply only OK"
 
 
 def test_quota_rows_show_remaining_not_usage(monkeypatch):
@@ -154,6 +175,39 @@ def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
     provider_runtime.record_result("groq", True, quota_remaining=499, quota_total=1000)
     assert service_monitor.format_row("groq") == (
         "🟡 Groq · Основной · 499/1 000 осталось"
+    )
+
+
+def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+
+    provider_runtime.record_result(
+        "groq", False, status_code=429, error="HTTP 429",
+        headers={"Retry-After": "60"}, checked_at=100,
+    )
+    provider_runtime.record_result(
+        "groq", True, quota_remaining=1000, quota_total=1000,
+        checked_at=161, allow_quota_recovery=False, record_history=False,
+    )
+
+    assert service_monitor.format_row("groq") == (
+        "🟢 Groq · Основной · 1 000/1 000 осталось"
+    )
+
+
+def test_openrouter_balance_is_shown_as_money_not_requests(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    monkeypatch.setattr(
+        service_monitor.api_usage, "openrouter_key_usage",
+        lambda: {"remaining": 0.999994555, "limit": 1},
+    )
+    state = provider_runtime.blank_state("openrouter")
+    state.update({"status": provider_runtime.OK, "quota_remaining": 1, "quota_total": 1})
+
+    assert service_monitor.format_row("openrouter", state) == (
+        "🟢 OpenRouter · Последний резерв · $1.00 осталось"
     )
 
 

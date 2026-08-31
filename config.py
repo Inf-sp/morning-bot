@@ -22,12 +22,22 @@ def _env_bool(name, default=False):
     return value in {"1", "true", "yes", "on"}
 
 
+def _env_first(*names, default=""):
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return default
+
+
 WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
 WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
 WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 GEMINI_DAILY_LIMIT = _env_int("GEMINI_DAILY_LIMIT", 0)
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "").strip()
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small-2603").strip() or "mistral-small-2603"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL_DAILY_LIMIT = _env_int("GROQ_MODEL_DAILY_LIMIT", 1000)
 GROQ_SIMPLE_MODEL = os.environ.get("GROQ_SIMPLE_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
@@ -40,13 +50,18 @@ LANGUAGETOOL_API_URL = os.environ.get(
 ).strip().rstrip("/")
 SPOONACULAR_API_KEY = os.environ.get("SPOONACULAR_API_KEY", "").strip()
 THEMEALDB_API_KEY = os.environ.get("THEMEALDB_API_KEY", "1").strip() or "1"
-CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
-CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+CF_API_TOKEN = _env_first("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN")
+CF_ACCOUNT_ID = _env_first("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")
 CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free").strip() or "openrouter/free"
+OPENROUTER_MODELS = tuple(dict.fromkeys([
+    OPENROUTER_MODEL,
+    *(model.strip() for model in os.environ.get("OPENROUTER_MODELS", "").split(",")
+      if model.strip()),
+]))
 OPENROUTER_DAILY_LIMIT = _env_int("OPENROUTER_DAILY_LIMIT", 50)
 CF_NEURON_DAILY_LIMIT = _env_int("CF_NEURON_DAILY_LIMIT", 10000)
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
@@ -86,6 +101,9 @@ API_QUOTAS = {
     "gemini": [
         {"mode": "local", "unit": "requests", "period": "day"},
         {"mode": "local", "unit": "tokens", "period": "day"},
+    ],
+    "mistral": [
+        {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "tavily": [
         {"mode": "local", "unit": "credits", "period": "month"},
