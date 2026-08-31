@@ -97,11 +97,7 @@ def wardrobe_style(styles, fit, palette, avoid):
     b.section("🧵 Стиль")
     b.spacer()
     b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
-    b.labeled_line("Посадка", fit or "не выбрана")
-    b.labeled_line("Цвета", " · ".join(palette) if palette else "не выбраны")
-    b.labeled_line("Не предлагать", ", ".join(avoid) if avoid else "нет ограничений")
-    b.line("Выбери стиль, посадку и цвета. Изменения сохраняются сразу.")
-    b.line("Кнопки «Без…» и «Меньше…» — дополнительные ограничения.")
+    b.line("Выбери до трёх стилей. Изменения сохраняются сразу.")
     return b.build_stripped()
 
 

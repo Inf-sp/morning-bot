@@ -66,13 +66,6 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
-        pending = [
-            item for item in entries
-            if (int(item.get("dictionary_rebuild_version") or 0)
-                < _DICTIONARY_REBUILD_VERSION or not study_card_is_complete(item))
-        ]
-        if pending:
-            text += f"\n\nОбновляю карточки: осталось {len(pending)}."
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
@@ -115,7 +108,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
-            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
         )])
         rows.append([InlineKeyboardButton(
             delete_label("Удалить"),
@@ -172,7 +165,7 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
 
 
 async def check_dictionary_entry(bot, cid, word_id, q=None):
-    """Ставит карточку в фон, не заменяя сообщение, по которому листают словарь."""
+    """Сразу обновляет одну карточку через платную модель OpenRouter."""
     entry = _entry_by_id(cid, word_id)
     if not entry:
         await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
@@ -184,13 +177,8 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
             item["manual_rebuild_requested_at"] = datetime.now(config.TZ).isoformat()
             break
     store.set_list(config.DICT_KEY, cid, words)
-    queue_dictionary_rebuild(cid)
-    await bot.send_message(
-        chat_id=cid,
-        text=(f"⏳ Пересобираю «{display_term(_entry_term(entry), entry.get('article') or '')}»\n\n"
-              "Карточка обновится автоматически. Можно продолжать листать словарь."),
-        reply_markup=back_menu_keyboard(f"a_dictlang_{_dict_lang(entry)}"),
-    )
+    await rebuild_dictionary_entries(cid, force=True, word_id=word_id, max_batches=1)
+    await send_dict_entry_view_by_id(bot, cid, 0, word_id)
 
 
 async def request_dictionary_recheck(bot, cid, lang, q=None):
@@ -491,7 +479,7 @@ def _dict_search_kb(entry, term_key):
     return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         *([[InlineKeyboardButton(
-            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
         )]] if word_id else []),
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

@@ -1051,9 +1051,9 @@ def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_tex
     return False
 
 
-def _openrouter_routing_payload() -> dict:
+def _openrouter_routing_payload(models_override=None) -> dict:
     """Return one model or an ordered OpenRouter model failover chain."""
-    models = tuple(getattr(config, "OPENROUTER_MODELS", ()) or ())[:5]
+    models = tuple(models_override or getattr(config, "OPENROUTER_MODELS", ()) or ())[:5]
     if not models:
         models = (config.OPENROUTER_MODEL,)
     route = {"model": models[0]} if len(models) == 1 else {"models": list(models)}
@@ -1061,7 +1061,8 @@ def _openrouter_routing_payload() -> dict:
 
 
 def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_provider, reason,
-                                    response_mode: ResponseMode = "plain_text", _retry=False):
+                                    response_mode: ResponseMode = "plain_text", _retry=False,
+                                    models_override=None):
     if not config.OPENROUTER_API_KEY:
         return None
     token_cap = 5000 if response_mode == "json" else 700
@@ -1073,7 +1074,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     status_code = None
     try:
         payload = {
-            **_openrouter_routing_payload(),
+            **_openrouter_routing_payload(models_override),
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": min(int(max_tokens or 400), token_cap),
             "temperature": min(float(temperature or 0.7), 0.8),
@@ -1097,7 +1098,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                 time.sleep(0.3)
                 return _openrouter_plain_text_fallback(
                     prompt, max_tokens, temperature, origin_provider, reason,
-                    response_mode=response_mode, _retry=True,
+                    response_mode=response_mode, _retry=True, models_override=models_override,
                 )
             _log_openrouter_fallback(origin_provider, reason, False, status_code,
                                      int((time.time() - t0) * 1000))
@@ -1109,7 +1110,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                 time.sleep(0.3)
                 return _openrouter_plain_text_fallback(
                     prompt, max_tokens, temperature, origin_provider, reason,
-                    response_mode=response_mode, _retry=True,
+                    response_mode=response_mode, _retry=True, models_override=models_override,
                 )
             _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
                                      int((time.time() - t0) * 1000))
@@ -1127,11 +1128,28 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
             time.sleep(0.3)
             return _openrouter_plain_text_fallback(
                 prompt, max_tokens, temperature, origin_provider, reason,
-                response_mode=response_mode, _retry=True,
+                response_mode=response_mode, _retry=True, models_override=models_override,
             )
         _log_openrouter_fallback(origin_provider, err_type, False, status_code,
                                  int((time.time() - t0) * 1000))
         return None
+
+
+async def aopenrouter_paid_json(prompt, max_tokens=1200, *, model=None, result_validator=None):
+    """Прямой оплачиваемый OpenRouter-вызов для явного пользовательского действия."""
+    selected = model or config.OPENROUTER_DICTIONARY_MODEL
+    raw = await asyncio.to_thread(
+        _openrouter_plain_text_fallback,
+        prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown.",
+        max_tokens, 0.4, "manual_action", "paid_direct",
+        "json", False, (selected,),
+    )
+    if not raw:
+        raise LLMProviderError("openrouter", "empty paid response", temporary=True)
+    parsed = _parse_json_response(raw)
+    if result_validator is not None and not result_validator(parsed):
+        raise LLMProviderError("openrouter", "invalid paid response", temporary=True)
+    return parsed
 
 def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text",
               model=None, provider="groq"):

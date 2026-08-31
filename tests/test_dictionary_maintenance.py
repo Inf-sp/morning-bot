@@ -190,7 +190,7 @@ def test_failed_dictionary_migration_attempt_still_respects_the_job_limit(monkey
     assert calls == [cids[0]]
 
 
-def test_failed_manual_rebuild_is_queued_without_a_dead_end_error(monkeypatch):
+def test_manual_rebuild_updates_one_card_without_a_progress_message(monkeypatch):
     cid = "rebuild-queued"
     old = {
         "id": "word-1", "lang": "nl", "term": "Benadering",
@@ -203,20 +203,19 @@ def test_failed_manual_rebuild_is_queued_without_a_dead_end_error(monkeypatch):
         async def send_message(self, **kwargs):
             sent.append(kwargs)
 
-    async def unavailable(*_args, **_kwargs):
-        return old
+    rebuilt = []
+    async def rebuild(*_args, **kwargs):
+        rebuilt.append(kwargs)
+        return [old]
+
+    async def show(_bot, _cid, _page, _word_id, q=None):
+        sent.append({"text": "Benadering → Подход"})
 
     monkeypatch.setattr(learning_dictionary, "_entry_by_id", lambda *_args: old)
-    monkeypatch.setattr(learning_dictionary, "_refresh_dict_entry", unavailable)
-    monkeypatch.setattr(learning_dictionary, "_dict_entry_message", lambda *_args, **_kwargs: SimpleNamespace(
-        text="Benadering → Подход", entities=None,
-    ))
-    monkeypatch.setattr(learning_dictionary, "_dict_entry_view_kb", lambda *_args: None)
-    monkeypatch.setattr(learning_dictionary, "_queue_dictionary_analysis", lambda *_args: True, raising=False)
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", rebuild)
+    monkeypatch.setattr(learning_dictionary, "send_dict_entry_view_by_id", show)
 
     asyncio.run(learning_dictionary.check_dictionary_entry(Bot(), cid, "word-1"))
 
-    assert sent
-    assert "Карточка обновится автоматически" in sent[-1]["text"]
-    assert "Можно продолжать листать словарь" in sent[-1]["text"]
-    assert "Не получилось" not in sent[-1]["text"]
+    assert rebuilt == [{"force": True, "word_id": "word-1", "max_batches": 1}]
+    assert sent == [{"text": "Benadering → Подход"}]

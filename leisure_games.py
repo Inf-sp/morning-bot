@@ -392,7 +392,7 @@ def _game_home_keyboard():
 
 def _game_keyboard(*, no_match=False, genre=None):
     next_callback = f"vg_next_{genre}" if genre else "vg_next"
-    rows = [[InlineKeyboardButton("✨ Другая игра", callback_data=next_callback)]]
+    rows = [[InlineKeyboardButton("✨ Обновить", callback_data=next_callback)]]
     if genre != "board":
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])

@@ -21,24 +21,12 @@ NOTIF_TYPES = [
 ]
 
 CUISINE_OPTIONS = [
-    ("asian", cuisine_label("asian", "Азиатская")),
-    ("russian", cuisine_label("russian", "Русская")),
     ("italian", cuisine_label("italian", "Итальянская")),
     ("mediterranean", cuisine_label("mediterranean", "Средиземноморская")),
     ("mexican", cuisine_label("mexican", "Мексиканская")),
     ("french", cuisine_label("french", "Французская")),
     ("japanese", cuisine_label("japanese", "Японская")),
-    ("korean", cuisine_label("korean", "Корейская")),
-    ("chinese", cuisine_label("chinese", "Китайская")),
-    ("thai", cuisine_label("thai", "Тайская")),
-    ("vietnamese", cuisine_label("vietnamese", "Вьетнамская")),
     ("indian", cuisine_label("indian", "Индийская")),
-    ("turkish", cuisine_label("turkish", "Турецкая")),
-    ("greek", cuisine_label("greek", "Греческая")),
-    ("spanish", cuisine_label("spanish", "Испанская")),
-    ("german", cuisine_label("german", "Немецкая")),
-    ("american", cuisine_label("american", "Американская")),
-    ("georgian", cuisine_label("georgian", "Грузинская")),
 ]
 
 STYLES = [
@@ -950,24 +938,11 @@ def _wardrobe_style_state(cid):
 def _wardrobe_style_kb(cid, state=None):
     state = state or _wardrobe_style_state(cid)
     selected_styles = set(state["styles"])
-    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + s.capitalize(), callback_data=f"set_style_{i}")
+    emojis = {"Минимализм": "👕", "Скандинавский": "🧥", "Повседневный": "👖",
+              "Городской": "🧢", "Классический": "👔", "Спортивный": "👟"}
+    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + f"{emojis[s]} {s}", callback_data=f"set_style_{i}")
                      for i, s in enumerate(STYLES)]
-    fit = state["fit"]
-    fit_buttons = [InlineKeyboardButton(("✅ " if fit == f else "") + f.capitalize(), callback_data=f"set_fit_{i}")
-                   for i, f in enumerate(FIT_OPTIONS)]
-    palette = set(state["palette"])
-    avoid = set(state["avoid"])
     rows = [[button] for button in style_buttons]
-    rows.extend([[button] for button in fit_buttons])
-    palette_buttons = [InlineKeyboardButton(("✅ " if value in palette else "") + value.capitalize(), callback_data=f"set_palette_{i}")
-                       for i, value in enumerate(PALETTE_OPTIONS)]
-    rows.extend([[button] for button in palette_buttons])
-    avoid_buttons = [InlineKeyboardButton(
-        ("✅ " if value in avoid else "") + STYLE_AVOID_LABELS[value],
-        callback_data=f"set_stylelimit_{i}",
-    )
-                     for i, value in enumerate(STYLE_AVOID_OPTIONS)]
-    rows.extend([[button] for button in avoid_buttons])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -976,7 +951,7 @@ async def send_wardrobe_style(bot, cid, q=None):
     """Стиль гардероба — один экран, все переключатели нажимаются сразу (стиль и
     посадка — toggle с галочкой на месте, без перехода на отдельный подэкран)."""
     state = _wardrobe_style_state(cid)
-    msg = settings_ui.wardrobe_style(state["styles"], state["fit"], state["palette"], state["avoid"])
+    msg = settings_ui.wardrobe_style(state["styles"], "", [], [])
     kb = _wardrobe_style_kb(cid, state)
     if q is not None:
         try:

@@ -393,7 +393,7 @@ def _purchase_photo_audience(cid):
 
 
 def _purchase_carousel_kb(page, count):
-    rows = [[("✨ Подобрать другую вещь", f"w_buy_new:{page}")]]
+    rows = [[("✨ Обновить", f"w_buy_new:{page}")]]
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 
@@ -425,13 +425,21 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
         if _clean_text(name)
     )
     items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
-    if excluded and not items:
-        excluded = set()
-        items = _missing_purchase_candidates(cid, wardrobe)
     if not items:
+        reserves = [
+            ("Универсальный верхний слой", "Верхняя одежда"),
+            ("Фактурный трикотажный джемпер", "Верх"),
+            ("Прямые брюки нейтрального цвета", "Низ"),
+            ("Минималистичные кожаные кеды", "Обувь"),
+            ("Компактная сумка на каждый день", "Аксессуары"),
+        ]
+        name, category = next(
+            ((name, category) for name, category in reserves if name.casefold() not in excluded),
+            reserves[len(excluded) % len(reserves)],
+        )
         items = [{
-            "item": "Универсальный верхний слой",
-            "category": "Верхняя одежда",
+            "item": name,
+            "category": category,
             "style": "Базовый",
             "season": "Межсезонье",
             "reason": "добавит шкафу новый слой и увеличит число сочетаний с уже имеющимися вещами",
@@ -563,6 +571,7 @@ async def recommend_another_purchase(bot, cid, q=None, page=None):
         store.mutate_profile(cid, remember_rejection)
     await show_purchase_page(
         bot, cid, 0, q=q, reset_candidates=True,
+        exclude_names=[rejected_name] if rejected_name else None,
     )
 
 

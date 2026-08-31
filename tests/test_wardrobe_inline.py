@@ -295,8 +295,7 @@ def test_purchase_check_card_uses_decision_format_and_limits_outfits():
     assert "Дублирует: нет." in message.text
     assert "Закрывает пробел: да." in message.text
     assert "Почему: добавляет недостающий яркий низ" in message.text
-    assert "Как носить:" in message.text
-    assert "Третий комплект" in message.text
+    assert "Как носить:" not in message.text
 
 
 def test_purchase_check_rejects_unexplained_negative_verdict():
@@ -336,7 +335,7 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
-        ["✨ Подобрать новый образ"],
+        ["✨ Обновить"],
         ["💳 Что докупить"],
         ["🎚️ Мой шкаф"],
     ]
@@ -744,7 +743,7 @@ def test_purchase_card_falls_back_to_text_when_photo_does_not_match(monkeypatch)
     assert [kind for kind, _kwargs in sent] == ["message"]
 
 
-def test_purchase_analysis_restarts_after_all_previous_ideas(monkeypatch):
+def test_purchase_analysis_uses_new_reserve_after_all_previous_ideas(monkeypatch):
     calls = []
     monkeypatch.setattr(wardrobe, "_purchase_carousel_signature", lambda *_args: "sig")
     monkeypatch.setattr(wardrobe.store, "get_profile", lambda *_args: {
@@ -760,8 +759,8 @@ def test_purchase_analysis_restarts_after_all_previous_ideas(monkeypatch):
 
     result = wardrobe._purchase_carousel_candidates("42", {}, reset=True)
 
-    assert result[0]["item"] == "Куртка"
-    assert len(calls) == 2
+    assert result[0]["item"] != "Куртка"
+    assert len(calls) == 1
 
 
 def test_purchase_analysis_has_a_local_candidate_even_if_analysis_is_empty(monkeypatch):
@@ -773,6 +772,19 @@ def test_purchase_analysis_has_a_local_candidate_even_if_analysis_is_empty(monke
     result = wardrobe._purchase_carousel_candidates("42", {}, reset=True)
 
     assert result[0]["item"] == "Универсальный верхний слой"
+
+
+def test_purchase_refresh_never_returns_the_just_rejected_item(monkeypatch):
+    monkeypatch.setattr(wardrobe, "_purchase_carousel_signature", lambda *_args: "sig")
+    monkeypatch.setattr(wardrobe.store, "get_profile", lambda *_args: {})
+    monkeypatch.setattr(wardrobe.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(wardrobe, "_missing_purchase_candidates", lambda *_args, **_kwargs: [])
+
+    result = wardrobe._purchase_carousel_candidates(
+        "42", {}, reset=True, exclude_names=["Универсальный верхний слой"],
+    )
+
+    assert result[0]["item"] != "Универсальный верхний слой"
 
 
 def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):

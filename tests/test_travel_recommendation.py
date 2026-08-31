@@ -84,7 +84,6 @@ def test_travel_home_keeps_preferences_inside_suitcase():
 
     assert labels == [
         ["✨ Подобрать новое путешествие"],
-        ["🧭 Выбрать направление"],
         ["💡 Что интересного"],
         ["🎚️ Мой чемодан"],
         ["#️⃣ Главная"],

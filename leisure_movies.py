@@ -343,7 +343,7 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
-        [InlineKeyboardButton("✨ Другое кино", callback_data=f"movie_no_{i}")],
+        [InlineKeyboardButton("✨ Обновить", callback_data=f"movie_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
     ]
     rows.append([

@@ -56,6 +56,9 @@ CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() 
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_DICTIONARY_MODEL = os.environ.get(
+    "OPENROUTER_DICTIONARY_MODEL", "openai/gpt-oss-120b",
+).strip() or "openai/gpt-oss-120b"
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free").strip() or "openrouter/free"
 OPENROUTER_MODELS = tuple(dict.fromkeys([
     OPENROUTER_MODEL,

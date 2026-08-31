@@ -241,7 +241,8 @@ def test_dictionary_category_opens_a_full_word_card(monkeypatch):
     assert "Разбор: существительное · het-слово" in bot.message["text"]
     assert "Множественное число: de huizen" in bot.message["text"]
     assert _labels(bot.message["reply_markup"]) == [
-        ["🔊 Прослушать"], ["✨ Пересобрать карточку"], ["❌ Удалить"],
+        ["🔊 Прослушать"], ["✨ Обновить"], ["❌ Удалить"],
+        ["🔢 Показать списком"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 

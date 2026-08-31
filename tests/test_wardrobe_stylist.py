@@ -63,7 +63,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
     assert "- Белые носки" in message.text
-    assert "Как носить:\n- Футболку оставить навыпуск" in message.text
+    assert "Как носить:" not in message.text
     assert "💡 Главный акцент:" in message.text
     assert "💡 Полезно:" not in message.text
 
@@ -575,15 +575,16 @@ def test_style_preferences_invalidate_current_outfit_and_purchase_advice(monkeyp
     assert invalidated == [("look", "42"), ("purchase", "42")]
 
 
-def test_wardrobe_preferences_hide_less_sporty_button():
+def test_wardrobe_preferences_show_only_six_emoji_styles():
     markup = settings._wardrobe_style_kb("prefs-test", state={
         "styles": [], "fit": "", "palette": [], "avoid": [],
     })
     labels = [button.text for row in markup.inline_keyboard for button in row]
 
-    assert "Меньше спортивного" not in labels
-    assert "Без крупных принтов" in labels
-    assert "Без узкого кроя" in labels
+    assert labels[:-2] == [
+        "👕 Минимализм", "🧥 Скандинавский", "👖 Повседневный",
+        "🧢 Городской", "👔 Классический", "👟 Спортивный",
+    ]
     assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 

@@ -219,7 +219,6 @@ def _home_idea(cid, *, refresh=False):
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новое путешествие", callback_data="a_trav_go")],
-        [InlineKeyboardButton("🧭 Выбрать направление", callback_data="a_trav_regions")],
         [InlineKeyboardButton("💡 Что интересного", callback_data="a_trav_interesting")],
         [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -227,8 +226,9 @@ def _home_kb():
 
 
 def _region_kb():
-    rows = [[InlineKeyboardButton(label, callback_data=f"a_trav_region_{key}")]
-            for key, (label, _region, _subregion) in _TRAVEL_REGIONS.items()]
+    rows = [[InlineKeyboardButton("🌍 Любое направление", callback_data="a_trav_region_any")]]
+    rows.extend([[InlineKeyboardButton(label, callback_data=f"a_trav_region_{key}")]
+                 for key, (label, _region, _subregion) in _TRAVEL_REGIONS.items()])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -236,7 +236,7 @@ def _region_kb():
 
 async def send_regions(bot, cid):
     await bot.send_message(
-        chat_id=cid, text="🧭 Выбрать направление\n\nКуда хочется отправиться?",
+        chat_id=cid, text="✨ Подобрать новое путешествие\n\n🧭 Выбери направление",
         reply_markup=_region_kb(),
     )
 

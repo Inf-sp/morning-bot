@@ -1100,7 +1100,7 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
         "🔊 Прослушать", "❌ Удалить", "🎚️ Мой словарь",
-        "✨ Пересобрать карточку", "⬅️ Назад", "#️⃣ Главная",
+        "✨ Обновить", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 
@@ -1113,7 +1113,7 @@ def test_duplicate_word_actions_include_dictionary():
     assert keyboard.inline_keyboard[1][0].text == "🎚️ Мой словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "🎚️ Мой словарь", "✨ Пересобрать карточку",
+        "❌ Удалить", "🎚️ Мой словарь", "✨ Обновить",
         "⬅️ Назад", "#️⃣ Главная",
     ]
 

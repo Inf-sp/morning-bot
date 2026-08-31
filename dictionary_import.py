@@ -1657,7 +1657,7 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
     ] if show_dictionary else []) + [
         *([[InlineKeyboardButton(
-            "✨ Пересобрать карточку", callback_data=f"a_dictcheck_{word_id}",
+            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
         )]] if word_id else []),
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

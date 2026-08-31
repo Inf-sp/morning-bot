@@ -7,11 +7,13 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import cooking
 import recipe_generation
+import settings
 
 
-def test_recipe_card_offers_cuisine_choice():
+def test_recipe_card_refreshes_without_separate_cuisine_picker():
     labels = [[button.text for button in row] for row in cooking._recipe_kb().inline_keyboard]
-    assert labels[1] == ["🎭 По кухне"]
+    assert labels[0] == ["✨ Обновить"]
+    assert all("По кухне" not in label for row in labels for label in row)
 
 
 def test_featured_recipe_uses_available_fridge_products(monkeypatch):
@@ -36,6 +38,25 @@ def test_featured_recipe_uses_available_fridge_products(monkeypatch):
     assert calls[0][:2] == ("42", "fridge")
     assert set(calls[0][2].split(", ")) == {"яйца", "сыр"}
     assert calls[0][3] == ""
+
+
+def test_recipe_queue_uses_one_of_selected_cuisines_as_a_hard_filter(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(settings, "cuisines", lambda _cid: ["italian", "japanese"])
+    monkeypatch.setattr(cooking, "get_recipe_history", lambda _cid: [])
+    monkeypatch.setattr(cooking, "get_cuisine_weights", lambda _cid: {})
+    monkeypatch.setattr(cooking, "_season_hint", lambda: "")
+    monkeypatch.setattr(cooking, "set_recipe_queue", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cooking, "add_to_recipe_history", lambda *_args, **_kwargs: None)
+
+    def generate(_constraint, _cid, weights, *_args):
+        captured.update(weights)
+        return [{"name": "Паста", "cuisine": "italian", "ingredients": "паста", "steps": ["Свари"]}]
+
+    monkeypatch.setattr(cooking, "_gen_recipe_batch", generate)
+    asyncio.run(cooking._generate_and_store_queue("42", "dinner"))
+
+    assert captured == {"italian": 100}
 
 
 def test_inline_recipe_result_replaces_search_status(monkeypatch):

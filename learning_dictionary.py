@@ -524,12 +524,14 @@ def _usable_dictionary_rebuild_response(value, expected_count):
     return True
 
 
-async def rebuild_dictionary_entries(cid, *, force=False, lang=None, max_batches=None):
+async def rebuild_dictionary_entries(
+        cid, *, force=False, lang=None, max_batches=None, word_id=None):
     """Один раз пересобирает все старые карточки, сохраняя id и SRS-прогресс."""
     words = store.get_list(config.DICT_KEY, cid)
     pending_idx = [
         index for index, entry in enumerate(words)
         if (lang not in ("nl", "en") or _dict_lang(entry) == lang)
+        and (word_id is None or str(entry.get("id") or "") == str(word_id))
         and entry_is_dictionary_word(entry)
         and (force or int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION)
     ]
@@ -559,25 +561,33 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None, max_batches
         batch_idx = pending_idx[batch_start:batch_start + _DICTIONARY_REBUILD_BATCH_SIZE]
         entries = [words[index] for index in batch_idx]
         try:
-            response = await ai.allm_json(
-                _dictionary_rebuild_prompt(entries), 3000,
-                order=_DICTIONARY_REBUILD_ORDER,
-                module="learning_dictionary_rebuild", fallback_allowed=True,
-                privacy_level="public", budget_seconds=30,
-                cache_context={
-                    "version": _DICTIONARY_REBUILD_VERSION,
-                    "manual_recheck_date": (
-                        datetime.now(config.TZ).date().isoformat() if force else ""
+            if word_id is not None:
+                response = await ai.aopenrouter_paid_json(
+                    _dictionary_rebuild_prompt(entries), 3000,
+                    result_validator=lambda value: _usable_dictionary_rebuild_response(
+                        value, len(entries),
                     ),
-                    "entries": [
-                        (_dict_lang(entry), normalize_key(_entry_term(entry)), _entry_translation(entry))
-                        for entry in entries
-                    ],
-                },
-                result_validator=lambda value: _usable_dictionary_rebuild_response(
-                    value, len(entries),
-                ),
-            )
+                )
+            else:
+                response = await ai.allm_json(
+                    _dictionary_rebuild_prompt(entries), 3000,
+                    order=_DICTIONARY_REBUILD_ORDER,
+                    module="learning_dictionary_rebuild", fallback_allowed=True,
+                    privacy_level="public", budget_seconds=30,
+                    cache_context={
+                        "version": _DICTIONARY_REBUILD_VERSION,
+                        "manual_recheck_date": (
+                            datetime.now(config.TZ).date().isoformat() if force else ""
+                        ),
+                        "entries": [
+                            (_dict_lang(entry), normalize_key(_entry_term(entry)), _entry_translation(entry))
+                            for entry in entries
+                        ],
+                    },
+                    result_validator=lambda value: _usable_dictionary_rebuild_response(
+                        value, len(entries),
+                    ),
+                )
             results = response if isinstance(response, list) else response.get("items", [])
         except Exception as error:
             _log.warning("dictionary rebuild paused after provider failure: %r", error)

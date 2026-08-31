@@ -354,16 +354,15 @@ async def handle(update, context, remove_reply_keyboard):
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
             elif act == "trav_go":
-                await _inline_status(
-                    lambda status: travel.send_go(bot, cid, status=status),
-                    preserve_message=True,
-                )
+                await travel.send_regions(bot, cid)
             elif act == "trav_regions":
                 await travel.send_regions(bot, cid)
             elif act == "trav_interesting":
                 await travel.send_visited_interesting(bot, cid)
             elif act.startswith("trav_region_"):
                 region_key = act.removeprefix("trav_region_")
+                if region_key == "any":
+                    region_key = ""
                 await _inline_status(
                     lambda status: travel.send_go(bot, cid, status=status, region_key=region_key),
                     preserve_message=True,

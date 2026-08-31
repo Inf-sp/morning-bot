@@ -465,7 +465,7 @@ def _save_cached_look(cid, item_ids, look_data):
 
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard(has_result=True):
-    rows = [[("✨ Подобрать новый образ" if has_result else "✨ Подобрать образ", "w_look")]]
+    rows = [[("✨ Обновить" if has_result else "✨ Подобрать образ", "w_look")]]
     rows.extend([
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Мой шкаф", "w_closet")],
@@ -610,7 +610,8 @@ def _no_outfit_screen(result_kb, alternative=False):
 
 
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
-                     previous_style_tip=None, previous_weather_intro=None, q=None):
+                     previous_style_tip=None, previous_weather_intro=None,
+                     previous_style=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -704,6 +705,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
     selected_styles = _settings.wardrobe_styles(cid)
+    if previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
+        next_index = (selected_styles.index(previous_style) + 1) % len(selected_styles)
+        selected_styles = [selected_styles[next_index]]
     wardrobe_history = store.get_wardrobe_history(cid)
     best = pick_best_outfit(
         w, weather_ctx, wardrobe_history, style_block,

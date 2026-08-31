@@ -140,15 +140,6 @@ def render_wardrobe_message(look_data, *, news=None):
             for item in extras:
                 b.line(f"- {item}")
 
-    how_to_wear = [_clean_text(value).rstrip(".") for value in (look_data.get("how_to_wear") or [])]
-    how_to_wear = [value for value in how_to_wear if value]
-    if how_to_wear:
-        b.spacer()
-        b.bold("Как носить:")
-        b.newline()
-        for action in how_to_wear[:3]:
-            b.line(f"- {action}")
-
     main_accent = _finish_dot(look_data.get("main_accent"))
     if main_accent:
         b.spacer()
@@ -269,11 +260,6 @@ def purchase_check_card(data):
         b.spacer()
         b.labeled_line("Почему", why)
 
-    wear_with = [_finish_dot(x) for x in (data.get("wear_with") or []) if _clean_text(x)]
-    if wear_with:
-        b.section("Как носить:")
-        b.line("\n".join(f"- {x}" for x in wear_with[:3]))
-
     return b.build_stripped()
 
 
@@ -355,7 +341,11 @@ def purchase_recommendation_card(item):
     b.section("💳 Что докупить")
     b.spacer()
     name = _clean_text(item.get("item")) or "Полезная вещь для гардероба"
-    b.bold(name)
+    product_url = _clean_text(item.get("product_url"))
+    if product_url:
+        b.link(name, product_url)
+    else:
+        b.bold(name)
     b.newline()
     meta = " · ".join(
         value for value in (
@@ -371,7 +361,6 @@ def purchase_recommendation_card(item):
         b.spacer()
         b.line(_upper_first(reason))
     product_title = _clean_text(item.get("product_title"))
-    product_url = _clean_text(item.get("product_url"))
     product_price = _clean_text(item.get("product_price"))
     product_source = _clean_text(item.get("product_source"))
     if product_title:
@@ -380,10 +369,6 @@ def purchase_recommendation_card(item):
     shop_meta = " · ".join(value for value in (product_price, product_source) if value)
     if shop_meta:
         b.line(shop_meta)
-    if product_url:
-        b.spacer()
-        b.link("Где купить", product_url)
-        b.newline()
     return b.build_stripped()
 
 

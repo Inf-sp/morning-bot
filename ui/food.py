@@ -168,15 +168,11 @@ def food_card(
         MEAL_EMOJI.get(meal, ui_label("food", "").strip())
         if show_leading_emoji else ""
     )
-    header = f"{meal_emoji} {label}".strip()
+    header = "🍳 Что приготовить"
     if cuisine_label:
         cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label
-        if meal in ("breakfast", "lunch", "dinner"):
-            header = f"{header} · {cuisine_part}"
+        header = f"{header} • {cuisine_part}"
     b.section(header)
-    if cuisine_label and meal not in ("breakfast", "lunch", "dinner"):
-        b.spacer()
-        b.line(cuisine_part)
     if name:
         b.spacer()
         b.bold(name)
@@ -201,8 +197,6 @@ def food_card(
     if chef_tip:
         b.spacer()
         b.labeled_line("💡 Полезно", chef_tip, lowercase=False)
-    b.spacer()
-    b.bold("😋 Приятного аппетита!")
     return b.build_stripped()
 
 

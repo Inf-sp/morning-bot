@@ -63,8 +63,7 @@ def _recipe_kb(cid=None, recipe=None):
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
     return _kb([
-        [("✨ Подобрать другой рецепт", "as_food")],
-        [("🎭 По кухне", "as_food_cuisines")],
+        [("✨ Обновить", "as_food")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -74,7 +73,7 @@ def _fridge_recipe_kb():
     через enter_meal/show_next_recipe). «Заменить» переиспользует as_fridge_cook,
     который теперь тоже заводит активную категорию fridge и общую очередь."""
     return _kb([
-        [("✨ Подобрать другой рецепт", "as_fridge_cook")],
+        [("✨ Обновить", "as_fridge_cook")],
         [("⬅️ Назад", "m_food"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -123,7 +122,7 @@ _MEAL_GUARD = {
 
 
 async def _send_queue_card(bot, cid, meal, d, status=None):
-    """Отправляет карточку ОДНОГО показываемого рецепта без фото."""
+    """Отправляет одну компактную карточку рецепта с фото, если источник его дал."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -139,6 +138,19 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     _persist_current_queue_recipe(cid, d)
     _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
               meal, cid, getattr(status, "mode", None), len(card.text or ""))
+    image = str(d.get("image") or d.get("thumbnail") or "").strip()
+    if image and len(card.text) <= 1024:
+        if status is not None:
+            await status.stop(delete=getattr(status, "mode", None) != "inline")
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=image, caption=card.text,
+                caption_entities=card.entities, reply_markup=kb,
+            )
+            return
+        except Exception as exc:
+            _log.warning("recipe photo delivery failed, using text: %s", type(exc).__name__)
+            status = None
     if status is not None and getattr(status, "mode", None) == "inline":
         # В preserve_message-сценарии StatusManager оставляет старую карточку
         # видимой, отправляет готовый рецепт новым сообщением и восстанавливает
@@ -171,6 +183,11 @@ async def _generate_and_store_queue(cid, meal, ingredients=None, cuisine=""):
 
     ТОЛЬКО текстовые поля рецепта, без единого сетевого вызова к Pexels."""
     cuisine_weights = get_cuisine_weights(cid)
+    if not cuisine:
+        import settings as user_settings
+        preferred = user_settings.cuisines(cid)
+        if preferred:
+            cuisine = preferred[len(get_recipe_history(cid)) % len(preferred)]
     if cuisine:
         cuisine_weights = {cuisine: 100}
     recent_history = get_recipe_history(cid)
