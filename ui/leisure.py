@@ -232,8 +232,6 @@ def game_card(data):
         year = int(data.get("year") or 0)
     except (TypeError, ValueError):
         year = 0
-    if year:
-        meta.append(str(year))
     try:
         rating = float(data.get("rating") or 0)
     except (TypeError, ValueError):
@@ -244,6 +242,8 @@ def game_card(data):
     if meta:
         b.text_line(f" · {' · '.join(meta)}")
     b.newline()
+    if year:
+        b.labeled_line("Дата выхода", str(year), lowercase=False)
     if data.get("lgbt"):
         b.line("🏳️‍🌈 ЛГБТ")
     description = str(data.get("description") or "").strip()
@@ -609,7 +609,7 @@ def movie_card(item, tm):
     """
     item = item if isinstance(item, dict) else {"title": str(item)}
     title = (tm.get("name") if tm else "") or item.get("title", "")
-    year = f" ({tm.get('year')})" if tm and tm.get("year") else ""
+    year = str(tm.get("year") or "") if tm else ""
     kind = (tm.get("kind") if tm else "") or ""
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
 
@@ -617,7 +617,7 @@ def movie_card(item, tm):
 
     # 1. Что это — заголовок.
     b.text_line(f"{ui_label('cinema', '')} ")
-    b.bold(f"{title}{year}")
+    b.bold(title)
     b.newline()
 
     # 2. Стоит ли смотреть + что за жанр — одна строка-якорь без источника рейтинга.
@@ -635,6 +635,8 @@ def movie_card(item, tm):
     if meta_parts:
         b.spacer()
         b.line(" · ".join(meta_parts))
+    if year:
+        b.labeled_line("Дата выхода", year, lowercase=False)
 
     # 3. Насколько это долго — компактная строка деталей (одна).
     detail = _detail_line(tm)
@@ -687,12 +689,9 @@ def _reason_line(item, tm):
         if kind == "mood":
             return f"Подборка для настроения «{label}»"
     because = tm.get("because")
-    if because:
-        if tm.get("via") == "similar":
-            genres = ", ".join(tm.get("shared_genres") or [])
-            return f"Подходит по жанрам: {genres}" if genres else ""
-        title = _clip_title(because)
-        return f"Потому что вам понравился «{title}»"
+    if because and tm.get("via") == "similar":
+        genres = ", ".join(tm.get("shared_genres") or [])
+        return f"Подходит по жанрам: {genres}" if genres else ""
     hook = (item.get("hook") or "").strip()
     return hook if hook else ""
 
@@ -743,12 +742,13 @@ def _fmt_date(iso):
 
 
 def book_text(item):
-    """Карточка книги в том же ритме, что карточка кино: название → метаданные → описание."""
+    """Compact book card: title → author/original/year → genre → plot."""
     author = str(item.get("author") or "").strip()
     title = str(item.get("title") or "Книга").strip()
-    en = str(item.get("title_en") or "").strip()
+    original = str(
+        item.get("original_title") or item.get("title_en") or item.get("alternative_title") or ""
+    ).strip()
     year = str(item.get("year") or "").strip()
-    url = str(item.get("url") or "").strip()
     categories = item.get("categories") or []
     if isinstance(categories, str):
         categories = [categories]
@@ -762,57 +762,29 @@ def book_text(item):
                   for value in categories if str(value).strip()), "")
 
     b = MessageBuilder()
-    b.text_line("📚 ")
-    if url:
-        b.link(title, url)
-    else:
-        b.bold(title)
+    b.bold(title)
     b.newline()
-    metadata = [value for value in (author, en if en.casefold() != title.casefold() else "", year, genre)
-                if value]
+    metadata = [value for value in (
+        author,
+        original if original.casefold() != title.casefold() else "",
+        year,
+    ) if value]
     if metadata:
         b.line(" · ".join(metadata))
-    if item.get("lgbt"):
-        b.line("🏳️‍🌈 ЛГБТ")
-    try:
-        rating = float(item.get("rating"))
-        ratings_count = int(item.get("ratings_count") or 0)
-    except (TypeError, ValueError):
-        rating = 0
-        ratings_count = 0
-    if rating > 0 and ratings_count > 0:
-        b.spacer()
-        count_text = f"{ratings_count:,}".replace(",", " ")
-        b.line(f"⭐ Оценка читателей: {rating:.1f}/5 · {count_text} оценок")
-    description = item.get("desc") or item.get("description")
-    if description:
-        desc = str(description).strip()
-        if desc and desc[-1] not in ".!?…":
-            desc += "."
-        b.spacer()
-        b.line(desc)
-    why = item.get("why") or []
-    if isinstance(why, list) and why:
-        b.spacer()
-        b.bold("Почему стоит читать:")
-        b.newline()
-        for w in why:
-            b.bullet(str(w).lstrip("-–— "))
-    if item.get("plot"):
-        plot = str(item["plot"]).strip()
+    if genre:
+        b.line(f"Жанр: {genre}")
+
+    plot_source = item.get("plot") or item.get("description") or item.get("desc")
+    if plot_source:
+        plot = " ".join(str(plot_source).split()).strip()
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", plot) if part.strip()]
+        plot = " ".join(sentences[:3])
         if plot and plot[-1] not in ".!?…":
             plot += "."
         b.spacer()
-        b.bold("Коротко о сюжете:")
-        b.text_line(" ")
-        b.line(plot)
-    if item.get("quote"):
-        quote = str(item["quote"]).strip().strip("«»\"")
-        quote_author = str(item.get("quote_author") or item.get("author") or "").strip()
-        quote_line = f"💭 «{quote}»" + (f" — {quote_author}" if quote_author else "")
-        b.spacer()
-        b.add(quote_line, MessageEntity.ITALIC)
+        b.bold("Сюжет")
         b.newline()
+        b.line(plot)
     return b.build_stripped()
 
 
@@ -1301,10 +1273,6 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
             date = str(_item_value(event, "date", "") or "").strip()
             place = str(_item_value(event, "place", "") or "").strip()
             context = _concert_context_text(_item_value(event, "context", ""))
-            description = clip(
-                _clean_external_text(_item_value(event, "description", "")),
-                limit=140,
-            )
             url = str(_item_value(event, "url", "") or "").strip()
             details = " · ".join(value for value in (
                 _lower_initial(context), date, place,
@@ -1316,8 +1284,6 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
                 b.text_line(artist)
             if details:
                 b.text_line(f" ({details})")
-            if description:
-                b.text_line(f" · {description}")
             b.newline()
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")

@@ -62,7 +62,9 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     available = sum(1 for it in items if it.get("on", True))
     by_cat = _fridge_by_cat_display(items)
     msg = food_ui.fridge_home(available)
-    rows = []
+    rows = [[InlineKeyboardButton(
+        "🔣 Выбрать предпочтения", callback_data="set_pref_cuisines",
+    )]]
     for ci, cat in enumerate(_CAT_ORDER):
         cat_items = by_cat[cat]
         on_cnt = sum(1 for _, it in cat_items if it.get("on", True))

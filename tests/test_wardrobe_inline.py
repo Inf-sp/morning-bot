@@ -401,8 +401,7 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
     assert "Закроют пробел в шкафу" in sent[0]["text"]
     assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
     assert _labels(sent[0]["reply_markup"]) == [
-        ["◀️", "1/3", "▶️"],
-        ["✨ Другой вариант"],
+        ["✨ Подобрать другую вещь"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     wardrobe.store.pending_input.pop("42", None)
@@ -450,6 +449,7 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
     assert [kind for kind, _kwargs in sent] == ["photo"]
     assert sent[0][1]["photo"] == "https://images.pexels.com/example.jpg"
     assert sent[0][1]["caption"].startswith("💳 Что докупить")
+    assert "Где купить" in sent[0][1]["caption"]
     assert photo_calls == [("Серые широкие джинсы", "male")]
 
 
@@ -480,7 +480,7 @@ def test_purchase_carousel_edits_the_same_photo_card(monkeypatch):
 
     assert len(edited) == 1
     assert edited[0]["media"].caption.startswith("💳 Что докупить")
-    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/3", "▶️"]
+    assert _labels(edited[0]["reply_markup"])[0] == ["✨ Подобрать другую вещь"]
 
 
 def test_purchase_photos_are_male_for_admin_even_without_profile_name(monkeypatch):
@@ -787,7 +787,7 @@ def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):
         ("Серые широкие джинсы", "male", 0),
     ]
     assert "Серые широкие джинсы" in edited[1]["media"].caption
-    assert edited[0]["reply_markup"].inline_keyboard[1][0].callback_data == "w_buy_new:0"
+    assert edited[0]["reply_markup"].inline_keyboard[0][0].callback_data == "w_buy_new:0"
 
     refreshed = []
 

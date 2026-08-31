@@ -533,6 +533,9 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None, max_batches
         and entry_is_dictionary_word(entry)
         and (force or int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION)
     ]
+    pending_idx.sort(
+        key=lambda index: (not bool(words[index].get("manual_rebuild_requested_at")), index),
+    )
     if not pending_idx:
         return words
     remove_idx = set()
@@ -652,6 +655,7 @@ async def rebuild_dictionary_entries(cid, *, force=False, lang=None, max_batches
             })
             if not study_card_is_complete(updated):
                 continue
+            updated.pop("manual_rebuild_requested_at", None)
             updated["study_card_version"] = STUDY_CARD_VERSION
             words[word_idx] = updated
             changed = True
@@ -778,6 +782,7 @@ _DICT_VISIBLE_CATEGORY_ORDER = _dictionary_views._DICT_VISIBLE_CATEGORY_ORDER
 _DICT_ORIGIN_TO_BACK = dict(_dictionary_views._DICT_ORIGIN_TO_BACK)
 _bind_functions(globals(), _dictionary_views, [
     "_show_screen", "send_dict", "send_dict_lang", "send_dict_category",
+    "send_dict_category_list",
     "check_dictionary_entry", "request_dictionary_recheck",
     "process_requested_dictionary_rechecks", "_pending_dictionary_rebuilds",
     "queue_dictionary_rebuild",

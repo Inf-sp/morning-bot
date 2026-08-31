@@ -889,6 +889,9 @@ async def send_favorite_books(bot, cid, q=None):
     rows = [[InlineKeyboardButton(
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])]
+    rows.insert(0, [InlineKeyboardButton(
+        "🔣 Выбрать предпочтения", callback_data="book_prefs",
+    )])
     rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -1718,7 +1721,7 @@ def _book_preferences_kb(cid):
         *[[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                 callback_data=f"bookpref_rating_{value}")]
           for label, value in _PREF_RATING],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -1878,6 +1881,52 @@ _GENRE_FALLBACKS = {
     ],
 }
 
+# Расширенный проверенный резерв включается только после персонального поиска и
+# Google Books. Новые годы идут первыми, затем подбор естественно углубляется в
+# прошлые годы, не заканчиваясь после двух карточек.
+_GENRE_TOP_BOOKS = {
+    "fantasy": [
+        ("Заражённая чаша", "The Tainted Cup", "2024", "Роберт Джексон Беннетт"),
+        ("Приключения Амины аль-Сирафи", "The Adventures of Amina al-Sirafi", "2023", "Шеннон Чакраборти"),
+        ("Вавилон", "Babel", "2022", "Ребекка Куанг"),
+    ],
+    "scifi": [
+        ("Министерство времени", "The Ministry of Time", "2024", "Калиан Брэдли"),
+        ("Море Спокойствия", "Sea of Tranquility", "2022", "Эмили Сент-Джон Мандел"),
+        ("Проект „Аве Мария“", "Project Hail Mary", "2021", "Энди Вейер"),
+    ],
+    "detective": [
+        ("Последний дьявол", "The Last Devil to Die", "2023", "Ричард Осман"),
+        ("Горничная", "The Maid", "2022", "Нита Проуз"),
+        ("Клуб убийств по четвергам", "The Thursday Murder Club", "2020", "Ричард Осман"),
+    ],
+    "thriller": [
+        ("Ничего из этого не правда", "None of This Is True", "2023", "Лиза Джуэлл"),
+        ("Список гостей", "The Guest List", "2020", "Люси Фоли"),
+        ("Безмолвный пациент", "The Silent Patient", "2019", "Алекс Михаэлидес"),
+    ],
+    "romance": [
+        ("Забавная история", "Funny Story", "2024", "Эмили Генри"),
+        ("Счастливое место", "Happy Place", "2023", "Эмили Генри"),
+        ("Книжные любовники", "Book Lovers", "2022", "Эмили Генри"),
+    ],
+    "history": [
+        ("Джеймс", "James", "2024", "Персиваль Эверетт"),
+        ("Шоссе Линкольна", "The Lincoln Highway", "2021", "Амор Тоулз"),
+        ("Хэмнет", "Hamnet", "2020", "Мэгги О’Фаррелл"),
+    ],
+    "biography": [
+        ("Илон Маск", "Elon Musk", "2023", "Уолтер Айзексон"),
+        ("Запасной", "Spare", "2023", "Принц Гарри"),
+        ("Образованная", "Educated", "2018", "Тара Вестовер"),
+    ],
+    "psychology": [
+        ("Тревожное поколение", "The Anxious Generation", "2024", "Джонатан Хайдт"),
+        ("Атомные привычки", "Atomic Habits", "2018", "Джеймс Клир"),
+        ("Тело помнит всё", "The Body Keeps the Score", "2014", "Бессел ван дер Колк"),
+    ],
+}
+
 def _book_used(cid):
     """Названия книг, которые нельзя повторять: любимые, показанные и отклонённые."""
     used = set()
@@ -1942,11 +1991,21 @@ def _record_book_recommendation(cid, item):
 def _genre_fallback_book(cid, genre_key, extra_skip=()):
     """Локальный резерв сохраняет смысл выбранного жанра при пустом каталоге."""
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    top = [{
+        "title": title, "title_en": title_en, "year": year, "author": author,
+        "desc": "Заметная книга жанра с сильными читательскими и критическими отзывами.",
+    } for title, title_en, year, author in _GENRE_TOP_BOOKS.get(genre_key, [])]
+    source = [*top, *_GENRE_FALLBACKS.get(genre_key, [])]
     pool = [
-        item for item in _GENRE_FALLBACKS.get(genre_key, [])
+        item for item in source
         if item["title"].casefold() not in used
     ]
-    return dict(random.choice(pool)) if pool else None
+    if not pool:
+        # После полного длинного круга начинаем новый, но никогда не возвращаем
+        # текущую карточку и не показываем ошибку вместо рекомендации.
+        current = {str(x).strip().casefold() for x in extra_skip[-1:]}
+        pool = [item for item in source if item["title"].casefold() not in current]
+    return dict(pool[0]) if pool else None
 
 def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
     """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей."""

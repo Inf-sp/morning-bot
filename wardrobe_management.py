@@ -393,14 +393,7 @@ def _purchase_photo_audience(cid):
 
 
 def _purchase_carousel_kb(page, count):
-    rows = []
-    if count > 1:
-        rows.append([
-            ("◀️", f"w_buy_page:{(page - 1) % count}"),
-            (f"{page + 1}/{count}", "noop"),
-            ("▶️", f"w_buy_page:{(page + 1) % count}"),
-        ])
-    rows.append([("✨ Другой вариант", f"w_buy_new:{page}")])
+    rows = [[("✨ Подобрать другую вещь", f"w_buy_new:{page}")]]
     rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
     return _kb(rows)
 
@@ -485,9 +478,6 @@ async def show_purchase_page(
         return current, None
 
     store.mutate_profile(cid, remember_page)
-    text_out, entities = _build_purchase_recommendation_message(item)
-    store.last_source[str(cid)] = "Гардероб · Что докупить"
-    store.last_answer[str(cid)] = text_out
     import asyncio
     import wardrobe_photos
 
@@ -498,6 +488,20 @@ async def show_purchase_page(
     if photo and not wardrobe_photos._photo_matches_item(
             _clean_text(item.get("item")), photo):
         photo = None
+    card_item = dict(item)
+    if photo:
+        card_item.update({
+            "product_title": _clean_text(photo.get("product_title")),
+            "product_url": _clean_text(photo.get("page_url")),
+            "product_price": _clean_text(photo.get("price")),
+            "product_source": _clean_text(photo.get("source")),
+        })
+    if not card_item.get("product_url"):
+        query = quote_plus(_clean_text(item.get("item")))
+        card_item["product_url"] = f"https://www.google.com/search?tbm=shop&q={query}"
+    text_out, entities = _build_purchase_recommendation_message(card_item)
+    store.last_source[str(cid)] = "Гардероб · Что докупить"
+    store.last_answer[str(cid)] = text_out
     kb = _purchase_carousel_kb(page, len(candidates))
     if q is not None and photo and photo.get("url") and len(text_out) <= 1024:
         try:

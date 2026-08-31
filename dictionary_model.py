@@ -186,6 +186,91 @@ def entry_language(entry):
     return str(entry.get("lang") or "nl") if isinstance(entry, dict) else "nl"
 
 
+_DUTCH_PRESENT_IRREGULAR = {
+    "zijn": ("ben", "bent", "is"),
+    "hebben": ("heb", "hebt", "heeft"),
+    "gaan": ("ga", "gaat", "gaat"),
+    "doen": ("doe", "doet", "doet"),
+    "komen": ("kom", "komt", "komt"),
+    "kunnen": ("kan", "kunt", "kan"),
+    "mogen": ("mag", "mag", "mag"),
+    "moeten": ("moet", "moet", "moet"),
+    "willen": ("wil", "wilt", "wil"),
+    "zullen": ("zal", "zult", "zal"),
+    "weten": ("weet", "weet", "weet"),
+}
+_DUTCH_SEPARABLE_PREFIXES = (
+    "achter", "binnen", "boven", "buiten", "tegen", "terug", "samen",
+    "vast", "verder", "aan", "af", "bij", "in", "mee", "na", "om",
+    "op", "toe", "uit", "weg",
+)
+
+
+def _dutch_present_stem(infinitive):
+    word = str(infinitive or "").casefold()
+    if not word.endswith("en") or len(word) < 4:
+        return ""
+    stem = word[:-2]
+    if len(stem) >= 2 and stem[-1] == stem[-2]:
+        stem = stem[:-1]
+    elif (len(stem) >= 3 and stem[-1] not in "aeiou"
+          and stem[-2] in "aeiou" and stem[-3] not in "aeiou"):
+        stem = stem[:-1] + stem[-2] + stem[-1]
+    if stem.endswith("v"):
+        stem = stem[:-1] + "f"
+    elif stem.endswith("z"):
+        stem = stem[:-1] + "s"
+    return stem
+
+
+def _english_third_person(verb):
+    if verb.endswith(("s", "sh", "ch", "x", "z", "o")):
+        return verb + "es"
+    if len(verb) > 1 and verb.endswith("y") and verb[-2] not in "aeiou":
+        return verb[:-1] + "ies"
+    return verb + "s"
+
+
+def present_conjugation(entry):
+    """Возвращает компактное настоящее спряжение глагола без AI-запроса."""
+    if not isinstance(entry, dict):
+        return []
+    pos = canonical_part_of_speech(entry)
+    infinitive = str(entry.get("infinitive") or entry_term(entry)).strip().casefold()
+    if pos != "глагол" and not entry.get("infinitive"):
+        return []
+    if not infinitive or len(infinitive.split()) != 1:
+        return []
+    if entry_language(entry) == "en":
+        if infinitive == "be":
+            return ["I am", "you/we/they are", "he/she/it is"]
+        third = {"have": "has", "do": "does", "go": "goes"}.get(
+            infinitive, _english_third_person(infinitive),
+        )
+        return [f"I/you/we/they {infinitive}", f"he/she/it {third}"]
+
+    irregular = _DUTCH_PRESENT_IRREGULAR.get(infinitive)
+    if irregular:
+        first, second, third = irregular
+        return [
+            f"ik {first}", f"jij/u {second}", f"hij/zij {third}",
+            f"wij/jullie/zij {infinitive}",
+        ]
+    else:
+        prefix = next((p for p in _DUTCH_SEPARABLE_PREFIXES if infinitive.startswith(p)
+                       and len(infinitive) > len(p) + 2), "")
+        core = infinitive[len(prefix):] if prefix else infinitive
+        stem = _dutch_present_stem(core)
+        if not stem:
+            return []
+        first = f"{stem} {prefix}".strip()
+        with_t = stem if stem.endswith("t") else stem + "t"
+        second = third = f"{with_t} {prefix}".strip()
+    return [
+        f"ik {first}", f"jij/u/hij {second}", f"wij/jullie/zij {infinitive}",
+    ]
+
+
 def normalize_key(text):
     return " ".join(re.findall(
         r"[\wÀ-ÖØ-öø-ÿ'-]+", str(text or "").lower(), re.UNICODE))

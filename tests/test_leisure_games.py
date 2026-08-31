@@ -320,6 +320,23 @@ def test_next_board_game_never_repeats_the_current_game(monkeypatch):
     assert all(current != previous for previous, current in zip(picks, picks[1:]))
 
 
+def test_personal_game_pool_does_not_loop_between_two_best_matches(monkeypatch):
+    _profile_store(monkeypatch)
+    monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        leisure_games.store, "get_list",
+        lambda key, _cid: [leisure_games.normalize_favorite_game("Hades")]
+        if key == leisure_games.config.FAVORITE_GAMES_KEY else [],
+    )
+
+    picks = [
+        leisure_games.pick_game("42", refresh=True)["id"]
+        for _index in range(5)
+    ]
+
+    assert len(set(picks)) == 5
+
+
 def test_favorite_games_influence_recommendation_and_are_not_repeated(monkeypatch):
     _profile_store(monkeypatch)
     monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])

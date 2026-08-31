@@ -349,7 +349,7 @@ def purchase_recommendations_card(items):
 
 
 def purchase_recommendation_card(item):
-    """Одна рекомендация для фотокарусели покупок."""
+    """Одна конкретная недостающая вещь с проверенным товаром и покупкой."""
     item = item or {}
     b = MessageBuilder()
     b.section("💳 Что докупить")
@@ -370,6 +370,20 @@ def purchase_recommendation_card(item):
     if reason:
         b.spacer()
         b.line(_upper_first(reason))
+    product_title = _clean_text(item.get("product_title"))
+    product_url = _clean_text(item.get("product_url"))
+    product_price = _clean_text(item.get("product_price"))
+    product_source = _clean_text(item.get("product_source"))
+    if product_title:
+        b.spacer()
+        b.labeled_line("Конкретный вариант", product_title, lowercase=False)
+    shop_meta = " · ".join(value for value in (product_price, product_source) if value)
+    if shop_meta:
+        b.line(shop_meta)
+    if product_url:
+        b.spacer()
+        b.link("Где купить", product_url)
+        b.newline()
     return b.build_stripped()
 
 

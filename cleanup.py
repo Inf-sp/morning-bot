@@ -72,7 +72,7 @@ COLLECTIONS = {
         "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить фильм", "as_loveadd_movies"),
-        menu_button=None,
+        menu_button=("🔣 Выбрать предпочтения", "movie_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
     "cinema_watched": _collection(
@@ -87,7 +87,7 @@ COLLECTIONS = {
         "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить книгу", "as_loveadd_books"),
-        menu_button=None,
+        menu_button=("🔣 Выбрать предпочтения", "book_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
     "books_read": _collection(
@@ -102,7 +102,7 @@ COLLECTIONS = {
         "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("🆕 Добавить артиста", "as_loveadd_artists"),
-        menu_button=None,
+        menu_button=("🔣 Выбрать предпочтения", "music_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
     "music_hidden_artists": _collection(

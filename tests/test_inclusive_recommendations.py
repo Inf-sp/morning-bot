@@ -45,7 +45,7 @@ def test_cards_show_lgbt_marker_only_when_confirmed():
     game = leisure_ui.game_card({"name": "Hades", "lgbt": True})
 
     assert "🏳️‍🌈 ЛГБТ" in movie.text
-    assert "🏳️‍🌈 ЛГБТ" in book.text
+    assert "🏳️‍🌈 ЛГБТ" not in book.text
     assert "🏳️‍🌈 ЛГБТ" in game.text
     assert "🏳️‍🌈 ЛГБТ" not in leisure_ui.game_card({"name": "Другая игра"}).text
 
@@ -74,4 +74,3 @@ def test_due_book_pick_uses_curated_item_and_skips_seen(monkeypatch):
 
     assert item["title"] == "Комната Джованни"
     assert item["lgbt"] is True
-

@@ -254,7 +254,7 @@ def _movie_prefs_kb(cid):
     rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 

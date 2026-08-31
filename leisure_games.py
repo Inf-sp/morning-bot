@@ -345,26 +345,31 @@ def pick_game(cid, *, genre=None, refresh=False):
     not_favorite = [item for item in pool if item["name"].casefold() not in favorite_names]
     if not_favorite:
         pool = not_favorite
-    if favorite_genres:
-        best_overlap = max(len(favorite_genres.intersection(item.get("genres") or [])) for item in pool)
-        if best_overlap:
-            pool = [item for item in pool
-                    if len(favorite_genres.intersection(item.get("genres") or [])) == best_overlap]
     seen = [str(value) for value in profile.get("game_seen", []) if str(value)]
+    current_year = datetime.now(config.TZ).year
+
+    def recommendation_rank(item):
+        overlap = len(favorite_genres.intersection(item.get("genres") or []))
+        year = int(item.get("year") or 0)
+        # Сначала персональное совпадение, затем лучшие новые игры; после них
+        # каталог естественно переходит к прошлым годам без ошибки и повтора.
+        year_distance = abs(current_year - year) if year else 999
+        return (-overlap, year_distance, -float(item.get("rating") or 0), item["name"])
+
+    pool = sorted(pool, key=recommendation_rank)
     fresh = [item for item in pool if item["id"] not in seen]
     # После полного круга все элементы находятся в seen. Не начинаем новый
     # круг с текущей карточки: кнопка «Другая игра» обязана видимо менять игру.
     without_current = [item for item in pool if not seen or item["id"] != seen[-1]]
     candidates = fresh or without_current or pool
-    seed = int(hashlib.sha256(f"{cid}|{week_key}|{genre or ''}".encode()).hexdigest()[:8], 16)
-    item = candidates[seed % len(candidates)]
+    item = candidates[0]
     seen = [value for value in seen if value != item["id"]]
     daily_entry = {"week": week_key, "signature": signature, "item": dict(item)}
 
     def save_selection(current):
         current_seen = [str(value) for value in current.get("game_seen", []) if str(value)]
         current_seen = [value for value in current_seen if value != item["id"]]
-        current["game_seen"] = [*current_seen, item["id"]][-20:]
+        current["game_seen"] = [*current_seen, item["id"]][-200:]
         if not genre:
             current["game_daily"] = daily_entry
         return current, None
@@ -389,7 +394,7 @@ def _game_keyboard(*, no_match=False, genre=None):
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
     if no_match:
-        rows.append([InlineKeyboardButton("📝 Платформы", callback_data="set_pref_games")])
+        rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -464,6 +469,9 @@ async def send_game_set(bot, cid, q=None):
     ])
     rows = [[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
             for index, (genre, items) in enumerate(view["genres"])]
+    rows.insert(0, [InlineKeyboardButton(
+        "🔣 Выбрать предпочтения", callback_data="game_prefs",
+    )])
     rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -838,7 +846,7 @@ def _preferences_keyboard(cid):
         callback_data=f"set_game_rating_{value}",
     )] for label, value in _GAME_RATING_OPTIONS])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)

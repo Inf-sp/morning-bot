@@ -203,7 +203,7 @@ def test_restaurant_is_stable_when_context_changes_during_same_day(monkeypatch):
     )
     monkeypatch.setattr(
         restaurant_discovery, "_fallback_card",
-        lambda city, previous="", context_key="": {
+        lambda city, previous="", context_key="", history=None: {
             "city": city, "name": "Stable", "description": "Description",
             "map_url": "https://maps.example/stable", "context_key": context_key,
             "cached_at": Clock.now().isoformat(),
@@ -269,3 +269,13 @@ def test_other_place_rotates_through_alkmaar_reserve(monkeypatch):
 
     assert card["name"] != cached["name"]
     assert card["map_url"].startswith("https://www.google.com/maps/search/")
+def test_city_fallback_rotates_through_every_place_before_repeating():
+    first = restaurant_discovery._fallback_card("Alkmaar")
+    second = restaurant_discovery._fallback_card(
+        "Alkmaar", history=[first["name"]],
+    )
+    third = restaurant_discovery._fallback_card(
+        "Alkmaar", history=[first["name"], second["name"]],
+    )
+
+    assert len({first["name"], second["name"], third["name"]}) == 3

@@ -145,6 +145,13 @@ async def handle_action(bot, cid, q, act, run_with_status):
             await dictionary.confirm_delete_dict_category_entry(
                 bot, cid, parts[0], int(parts[1]), int(parts[2]), parts[3], q=q,
             )
+    elif act.startswith("dictcatlist_"):
+        parts = act[len("dictcatlist_"):].split("_", 2)
+        if (len(parts) == 3 and parts[0] in ("nl", "en")
+                and parts[1].isdigit() and parts[2].isdigit()):
+            await dictionary.send_dict_category_list(
+                bot, cid, parts[0], int(parts[1]), int(parts[2]), q=q,
+            )
     elif act.startswith("dictcat_"):
         parts = act.split("_")
         if len(parts) == 4 and parts[1] in ("nl", "en") and parts[2].isdigit() and parts[3].isdigit():

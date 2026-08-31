@@ -189,8 +189,8 @@ def _format_groq_row(state: dict | None = None) -> str:
             for model in {model for _kind, model, _role in _GROQ_MODELS}
         )
         detail = f"{_number(used)} сегодня"
-    if status in (WARNING, DOWN) and state.get("error_type") == "rate_limit":
-        detail = str(state.get("last_error") or "слишком много запросов")
+    if status in (WARNING, DOWN) and state.get("error_type") not in ("", "quota", "unknown"):
+        detail = str(state.get("last_error") or "сервис не ответил")
     return f"{_DOT[status]} Groq · Основной · {detail}"
 
 
@@ -222,9 +222,20 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         detail = "лимит исчерпан"
     if status in (DOWN, WARNING) and state.get("error_type") == "rate_limit":
         detail = str(state.get("last_error") or "слишком много запросов")
+        if service == "gemini":
+            cooldown = api_usage.gemini_state(config.GEMINI_MODEL)
+            if int(cooldown.get("cooldown_remaining") or 0) > 0:
+                detail = {
+                    "RPD": "дневной лимит исчерпан",
+                    "RPM": "слишком много запросов",
+                    "TPM": "лимит токенов",
+                }.get(str(cooldown.get("cooldown_scope") or "").upper(), detail)
     elif (status in (DOWN, WARNING)
             and state.get("error_type") not in ("quota", "unknown")):
         detail = str(state.get("last_error") or detail)
+    fallback = str(state.get("fallback") or "")
+    if fallback and fallback in SPEC_BY_KEY:
+        detail = f"{detail} → {SPEC_BY_KEY[fallback].label}"
     return f"{_DOT[status]} {label} · {role} · {detail}"
 
 

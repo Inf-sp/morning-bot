@@ -178,6 +178,43 @@ def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
     )
 
 
+def test_groq_error_is_not_hidden_by_stale_full_quota(monkeypatch):
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    state = provider_runtime.blank_state("groq")
+    state.update({
+        "status": provider_runtime.DOWN,
+        "quota_remaining": 1000,
+        "quota_total": 1000,
+        "error_type": "auth",
+        "last_error": "неверный API-ключ",
+    })
+
+    assert service_monitor.format_row("groq", state) == (
+        "🔴 Groq · Основной · неверный API-ключ"
+    )
+
+
+def test_ai_warning_shows_reason_and_active_fallback(monkeypatch):
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    monkeypatch.setattr(
+        service_monitor.api_usage, "gemini_state",
+        lambda *_args, **_kwargs: {
+            "cooldown_remaining": 3600, "cooldown_scope": "RPD",
+        },
+    )
+    state = provider_runtime.blank_state("gemini")
+    state.update({
+        "status": provider_runtime.WARNING,
+        "error_type": "rate_limit",
+        "last_error": "основной сервис недоступен",
+        "fallback": "openrouter",
+    })
+
+    assert service_monitor.format_row("gemini", state) == (
+        "🟡 Gemini · Сложные задачи · дневной лимит исчерпан → OpenRouter"
+    )
+
+
 def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)

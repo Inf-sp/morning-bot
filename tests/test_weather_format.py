@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import weather
+import weather_weekly
 import weather_provider
 import weather_warn
 import settings
@@ -38,31 +39,32 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
         [
             {"title": "☀️ Утром", "lines": ["Температура до +18°C", "Ветер 4 м/с"]},
             {"title": "🌧️ Днём", "lines": ["Температура до +20°C", "Дождь 70% · Облачность 80%"]},
+            {"title": "🌧️ Ночью", "lines": ["Температура до +15°C", "Дождь 60%"]},
         ],
-        "Восход 06:25",
-        "Закат 21:02",
-        "Alkmaar сегодня мокрый. Лучше взять дождевик и зонт.",
+        "Восход 06:25 → Закат 21:02",
+        "",
+        "Завтра будет часто идти дождь, но возможны короткие сухие окна.",
     )
 
     assert message.text.startswith(
         "Полный прогноз • Пт, 21 августа · Alkmaar, NL 🇳🇱\n\n"
-        "Восход 06:25\n\n"
+        "Восход 06:25 → Закат 21:02\n\n"
         "☀️ Утром"
     )
     assert "Сейчас" not in message.text
     assert "• Ветер 4 м/с" in message.text
     assert "🌧️ Днём" in message.text
+    assert "🌧️ Ночью" in message.text
     assert "08:00–12:00" not in message.text
     assert "12:00–18:00" not in message.text
     assert "• Температура до +20°C" in message.text
     assert "• Дождь 70% · Облачность 80%" in message.text
     assert "Вероятность" not in message.text
     assert "Осадки до" not in message.text
-    assert "Восход 06:25" in message.text
-    assert message.text.index("Закат 21:02") < message.text.index("💡 Полезно:")
-    assert message.text.index("🌧️ Днём") < message.text.index("Закат 21:02")
+    assert "Восход 06:25 → Закат 21:02" in message.text
+    assert message.text.index("Закат 21:02") < message.text.index("🌧️ Днём")
     assert "☀️ Солнце" not in message.text
-    assert "💡 Полезно: Alkmaar сегодня мокрый." in message.text
+    assert "💡 Полезно: Завтра будет часто идти дождь" in message.text
 
 
 def test_full_forecast_at_23_keeps_only_weather_until_midnight():
@@ -124,6 +126,29 @@ def test_week_forecast_marks_extreme_heat_as_a_reason_to_change_plans():
     assert advice.startswith("В четверг до +40°C")
     assert "избегай долгих прогулок и велосипеда днём" in advice
     assert "💡 Полезно: В четверг до +40°C" in message.text
+
+
+def test_qualitative_outlook_describes_weather_without_numbers():
+    days = [
+        {"code": 61, "tmax": 19, "wind": 9, "rain_real": True},
+        {"code": 3, "tmax": 18, "wind": 5, "rain_real": False},
+    ]
+
+    outlook = weather_weekly.qualitative_outlook(days)
+
+    assert outlook.startswith("На следующей неделе")
+    assert "дожд" in outlook
+    assert not any(character.isdigit() for character in outlook)
+
+
+def test_week_useful_label_is_bold():
+    message = weather_ui.week_forecast(
+        "1–7 сен", "Alkmaar", "Переменно", [],
+        "На следующей неделе будет переменчиво.", country="NL", country_code="nl",
+    )
+
+    useful = [entity for entity in message.entities if entity.type == "bold"][-1]
+    assert useful.length == len("💡 Полезно:".encode("utf-16-le")) // 2
 
 
 def test_weather_warning_is_scheduled_for_eight():

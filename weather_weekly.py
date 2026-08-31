@@ -3,6 +3,34 @@
 SNOW_CODES = (71, 73, 75, 77, 85, 86)
 
 
+def qualitative_outlook(days, period="На следующей неделе"):
+    """Describe expected weather in words, without exposing numeric values."""
+    rainy = sum(bool(day.get("rain_real")) for day in days)
+    snowy = sum(day.get("code") in SNOW_CODES for day in days)
+    windy = sum(float(day.get("wind") or 0) >= 8 for day in days)
+    hot = sum(float(day.get("tmax") or 0) >= 30 for day in days)
+    cold = sum(float(day.get("tmax") or 0) <= 10 for day in days)
+
+    if snowy:
+        weather = "ожидается снег, возможны скользкие дороги"
+    elif rainy >= max(1, len(days) // 2):
+        weather = "будет часто идти дождь, но возможны короткие сухие окна"
+    elif rainy:
+        weather = "погода будет переменчивой, местами пройдут дожди"
+    elif hot:
+        weather = "будет жарко и преимущественно сухо"
+    elif cold:
+        weather = "будет прохладно, тёплый слой пригодится"
+    else:
+        weather = "ожидается спокойная погода без продолжительных осадков"
+
+    if windy >= max(1, len(days) // 2):
+        weather += ", ветер будет заметным"
+    elif windy:
+        weather += ", временами усилится ветер"
+    return f"{period} {weather}."
+
+
 def week_overview(days):
     """Build a short summary from daily weather without nightly lows."""
     low = min(day["tmax"] for day in days)

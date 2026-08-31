@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_import
+from dictionary_model import present_conjugation
 
 
 def _base_entry(term="vervangen"):
@@ -57,6 +58,7 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert "Vervangen → Заменять, менять" in message.text
     assert "Разбор: сильный глагол" in message.text
     assert "Формы: vervangen · verving · heeft vervangen" in message.text
+    assert "Спряжение: ik vervang · jij/u/hij vervangt · wij/jullie/zij vervangen" in message.text
     assert "💡 Полезно: Ik ga mijn oude telefoon vervangen → Я собираюсь заменить свой старый телефон" in message.text
     assert "auxiliary" not in message.text
     assert "confidence" not in message.text
@@ -81,6 +83,7 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
 
     assert "Формы: werken · werkte · heeft gewerkt" in text
     assert "Разбор: слабый глагол" in text
+    assert "Спряжение: ik werk · jij/u/hij werkt · wij/jullie/zij werken" in text
     assert "💡 Полезно: Ik werk vandaag thuis → Сегодня я работаю дома" in text
 
 
@@ -121,6 +124,15 @@ def test_verb_with_zijn_uses_is_perfect_form(monkeypatch):
 
     assert entry["auxiliary"] == "zijn"
     assert "Формы: vertrekken · vertrok · is vertrokken" in text
+
+
+def test_irregular_and_english_present_conjugation_are_explicit():
+    assert present_conjugation({"lang": "nl", "term": "zijn", "pos": "глагол"}) == [
+        "ik ben", "jij/u bent", "hij/zij is", "wij/jullie/zij zijn",
+    ]
+    assert present_conjugation({"lang": "en", "term": "work", "pos": "verb"}) == [
+        "I/you/we/they work", "he/she/it works",
+    ]
 
 
 def test_low_confidence_hides_forms_and_type_but_keeps_valid_example(monkeypatch):
@@ -297,9 +309,10 @@ def test_bevelen_card_uses_verb_analysis_and_related_noun():
     assert message.text == (
         "🇳🇱 Добавлено в нидерландский словарь\n\n"
         "Bevelen → Приказывать\n\n"
-        "Разбор: глагол\n"
-        "Формы: bevelen · beval · bevolen\n"
-        "Пример:\n"
+            "Разбор: глагол\n"
+            "Формы: bevelen · beval · bevolen\n"
+            "Спряжение: ik beveel · jij/u/hij beveelt · wij/jullie/zij bevelen\n"
+            "Пример:\n"
         "Ik moet hem bevelen om te stoppen. → Мне нужно приказать ему остановиться.\n\n"
         "💡 Полезно: het bevel → приказ (множественное число: de bevelen)"
     )

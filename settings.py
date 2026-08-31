@@ -191,7 +191,6 @@ async def send_home(bot, cid, q=None):
     rows = [
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -664,7 +663,7 @@ async def send_personalization(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-def _cuisines_kb(cid, back="set_preferences"):
+def _cuisines_kb(cid, back="as_fridge_home"):
     selected = set(cuisines(cid))
     buttons = [
         InlineKeyboardButton(
@@ -969,7 +968,7 @@ def _wardrobe_style_kb(cid, state=None):
     )
                      for i, value in enumerate(STYLE_AVOID_OPTIONS)]
     rows.extend([[button] for button in avoid_buttons])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
 

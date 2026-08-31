@@ -25,8 +25,7 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     labels = _labels(sent[0]["reply_markup"])
     assert "🔄 Обновить" not in labels
     assert labels == [
-        "📍 Город", "🔔 Уведомления", "📝 Предпочтения",
-        "📤 Экспорт данных", "#️⃣ Главная",
+        "📍 Город", "🔔 Уведомления", "📤 Экспорт данных", "#️⃣ Главная",
     ]
 
 

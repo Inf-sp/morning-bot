@@ -445,3 +445,28 @@ def test_dictionary_rebuild_stops_after_first_unavailable_batch(monkeypatch):
 
     assert result == words
     assert calls == ["ai"]
+def test_dictionary_category_card_and_language_home_expose_list_view(monkeypatch):
+    entries = [{
+        "id": "verb-1", "lang": "nl", "term": "Werken",
+        "translation": "Работать", "pos": "глагол", "breakdown": "глагол",
+    }]
+    monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+
+    class Bot:
+        messages = []
+
+        async def send_message(self, **kwargs):
+            self.messages.append(kwargs)
+
+    bot = Bot()
+    asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
+    language_labels = [
+        button.text for row in bot.messages[-1]["reply_markup"].inline_keyboard for button in row
+    ]
+    asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 1))
+    category_labels = [
+        button.text for row in bot.messages[-1]["reply_markup"].inline_keyboard for button in row
+    ]
+
+    assert "🔢 Показать списком" in language_labels
+    assert "🔢 Показать списком" in category_labels

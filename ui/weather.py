@@ -108,7 +108,8 @@ def week_forecast(rng, city, overview, days, advice, country="", country_code=""
     for day in days:
         b.line(f"{day['abbrev']} · {day['icon']} {day['tmax']:+.0f}°")
     b.spacer()
-    b.line(f"💡 Полезно: {_finish_sentence(cap_sentence(advice))}")
+    b.bold("💡 Полезно:")
+    b.text_line(f" {_finish_sentence(cap_sentence(advice))}")
     return b.build_stripped()
 
 

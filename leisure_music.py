@@ -2,7 +2,6 @@
 
 import asyncio
 from copy import deepcopy
-import json
 import logging
 import re
 import threading
@@ -659,44 +658,10 @@ async def _weekly_concerts(cid):
             "date": date_label,
             "place": city,
             "context": leisure_concerts._concert_context(event),
-            "description": str(event.get("description") or event.get("info") or "").strip(),
             "url": str(event.get("url") or "").strip(),
         })
         if len(rows) >= 3:
             break
-    return await _concert_descriptions_in_russian(rows)
-
-
-async def _concert_descriptions_in_russian(rows):
-    """Переводит до трёх внешних описаний; английский fallback не показывается."""
-    rows = [dict(row) for row in (rows or [])]
-    indexes, source_texts = [], []
-    for index, row in enumerate(rows[:3]):
-        description = " ".join(str(row.get("description") or "").split()).strip()
-        row["description"] = description if re.search(r"[А-Яа-яЁё]", description) else ""
-        if description and not row["description"]:
-            indexes.append(index)
-            source_texts.append(description[:500])
-    if not source_texts:
-        return rows
-    prompt = (
-        "Переведи описания концертов на естественный русский язык. Сохрани смысл, "
-        "не добавляй факты и сократи каждое до одного предложения не длиннее 140 символов. "
-        "Верни только JSON вида {\"translations\":[\"...\"]}.\nINPUT_JSON: "
-        + json.dumps({"descriptions": source_texts}, ensure_ascii=False)
-    )
-    try:
-        data = await ai.allm_json(
-            prompt, 500, tier="cheap", module="music_concert_translation",
-            fallback_allowed=True, privacy_level="public", budget_seconds=8,
-        )
-        translations = data.get("translations") if isinstance(data, dict) else []
-    except Exception:
-        translations = []
-    for index, translation in zip(indexes, translations or []):
-        text = " ".join(str(translation or "").split()).strip()[:180]
-        if re.search(r"[А-Яа-яЁё]", text):
-            rows[index]["description"] = text
     return rows
 
 
@@ -769,7 +734,7 @@ def _music_preferences_kb(cid):
         for key, label, _prompt_name in _MUSIC_GENRES
     ]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_preferences"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -788,14 +753,14 @@ async def send_music_preferences(bot, cid, q=None):
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_pref_music")],
+        [InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="music_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 async def _prompt_for_music_styles(bot, cid, *, status=None):
-    text = "Сначала отметь хотя бы один жанр в 📝 Предпочтения → Музыка."
+    text = "Сначала выбери хотя бы один музыкальный жанр."
     kb = _music_preferences_required_kb()
     if status is not None:
         await status.replace(text, reply_markup=kb)

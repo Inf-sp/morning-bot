@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import re
+from urllib.parse import quote_plus
 import config
 import category_news
 import store
@@ -791,7 +792,9 @@ async def send_wardrobe_zones(bot, cid, q=None):
         for zone in CLOSET_ZONE_ORDER
         if counts.get(zone) or (zone == "Аксессуары" and counts.get("Другое"))
     ]
-    rows = []
+    rows = [[InlineKeyboardButton(
+        "🔣 Выбрать предпочтения", callback_data="set_pref_style",
+    )]]
     for zone in CLOSET_ZONE_ORDER:
         rows.append([InlineKeyboardButton(
             public_zone_name(zone),

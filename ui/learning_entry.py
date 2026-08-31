@@ -4,7 +4,7 @@ import re
 
 from telegram import MessageEntity
 
-from dictionary_model import example_matches_term, study_card_data
+from dictionary_model import example_matches_term, present_conjugation, study_card_data
 
 from dictionary_model import display_term
 
@@ -120,6 +120,10 @@ def render_study_card(builder, entry, *, include_exercise=True):
     builder.label("В чём суть", explanation, lowercase=False)
     builder.newline()
 
+    conjugation = present_conjugation(entry)
+    if conjugation:
+        builder.labeled_line("Спряжение", " · ".join(conjugation), lowercase=False)
+
     builder.spacer()
     builder.bold("Живые примеры:")
     builder.newline()
@@ -168,6 +172,9 @@ def render_learning_entry(
     forms = _verified_forms(entry)
     if forms:
         builder.labeled_line("Формы", " · ".join(forms), lowercase=False)
+    conjugation = present_conjugation(entry)
+    if conjugation:
+        builder.labeled_line("Спряжение", " · ".join(conjugation), lowercase=False)
     example, example_translation = _example(entry, term)
     if example and example_translation:
         related_noun = entry.get("related_noun")

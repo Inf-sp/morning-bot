@@ -12,7 +12,11 @@ from util import cap_sentence, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
 import verify
 from ui import weather as weather_ui
 import weather_provider as _provider
-from weather_weekly import week_advice as _weekly_advice, week_overview as _week_overview
+from weather_weekly import (
+    qualitative_outlook as _qualitative_outlook,
+    week_advice as _weekly_advice,
+    week_overview as _week_overview,
+)
 from module_binding import bind_functions as _bind_functions
 import weather_location as _weather_location
 
@@ -445,16 +449,14 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         except Exception:
             hours = temps = probs = precs = winds = gusts = clouds = []
         day_str = d["time"][0]
-        current_prob = next((
-            probs[index] for index, stamp in enumerate(hours)
-            if stamp.startswith(dt.strftime("%Y-%m-%dT%H")) and index < len(probs)
-        ), d["precipitation_probability_max"][0] or 0)
         periods = []
-        parts = _full_forecast_parts(dt)
-        for label, h1, h2 in parts:
+        parts = [(label, h1, h2, day_str, 0) for label, h1, h2 in _full_forecast_parts(dt)]
+        if len(d.get("time") or []) > 1:
+            parts.append(("Ночью", 0, 8, d["time"][1], 1))
+        for label, h1, h2, period_day, daily_index in parts:
             t_vals, p_vals, w_vals, g_vals, mm_vals, cloud_vals = [], [], [], [], [], []
             for i, ts in enumerate(hours):
-                if ts.startswith(day_str) and h1 <= int(ts[11:13]) < h2:
+                if ts.startswith(period_day) and h1 <= int(ts[11:13]) < h2:
                     if i < len(temps): t_vals.append(temps[i] or 0)
                     if i < len(probs): p_vals.append(probs[i] or 0)
                     if i < len(winds): w_vals.append(winds[i] or 0)
@@ -465,7 +467,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                 continue
             tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
             mm = sum(float(value or 0) for value in mm_vals)
-            icon = weather_icon(d["weathercode"][0], tmx, rn, wd, mm)
+            icon = weather_icon(d["weathercode"][daily_index], tmx, rn, wd, mm)
             lines = [
                 f"Температура до {tmx:+.0f}°C",
                 f"Ветер {_speed_range(w_vals)} м/с"
@@ -484,19 +486,23 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         )
         sunrise = _clock((d.get("sunrise") or [""])[0])
         sunset = _clock((d.get("sunset") or [""])[0])
-        sunrise_line = f"Восход {sunrise}" if sunrise else ""
-        sunset_line = f"Закат {sunset}" if sunset else ""
-        today_probs = [
-            float(probs[index] or 0) for index, stamp in enumerate(hours)
-            if stamp.startswith(day_str) and index < len(probs)
-        ]
-        rain_max = max([float(current_prob or 0), *today_probs])
-        if rain_max >= RAIN_PROB_MIN:
-            advice = f"{s['city']} сегодня мокрый. Лучше взять дождевик и зонт, особенно если собираешься выходить днём."
-        elif float(d["windspeed_10m_max"][0] or 0) >= 8:
-            advice = f"В {s['city']} сегодня ветрено. Для велосипеда и долгой прогулки лучше выбрать защищённый маршрут."
-        else:
-            advice = f"В {s['city']} сегодня без сильных погодных помех — можно планировать дела на улице."
+        sunrise_line = (
+            f"Восход {sunrise} → Закат {sunset}" if sunrise and sunset
+            else f"Восход {sunrise}" if sunrise
+            else f"Закат {sunset}" if sunset
+            else ""
+        )
+        sunset_line = ""
+        tomorrow = {
+            "code": d["weathercode"][1],
+            "tmax": d["temperature_2m_max"][1],
+            "rain_real": _rain_real(
+                d["precipitation_probability_max"][1] or 0,
+                (d.get("precipitation_sum") or [None, None])[1],
+            ),
+            "wind": d["windspeed_10m_max"][1] or 0,
+        }
+        advice = _qualitative_outlook([tomorrow], "Завтра")
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"),
@@ -651,7 +657,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     else:
         rng = f"{d1.day} {_MONTHS_SHORT[d1.month-1]} – {d2.day} {_MONTHS_SHORT[d2.month-1]}"
     overview = _week_overview(day_data)
-    advice = _week_advice(day_data)
+    advice = _qualitative_outlook(day_data)
 
     kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
     msg = weather_ui.week_forecast(

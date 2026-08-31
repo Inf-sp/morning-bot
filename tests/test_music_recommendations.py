@@ -208,7 +208,8 @@ def test_music_home_shows_three_nearby_concerts_as_separate_items():
     ], day=date(2026, 8, 25))
 
     assert "🎧 Музыка рядом · 25 августа" in message.text
-    assert "В ближайшее время:\n• Romy (21 августа · Алкмар) · Тёплая электроника и сильное живое шоу." in message.text
+    assert "В ближайшее время:\n• Romy (21 августа · Алкмар)" in message.text
+    assert "Тёплая электроника" not in message.text
     assert "• FKA twigs (3 сентября · Амстердам)" in message.text
     assert "• The National (14 сентября · Утрехт)" in message.text
 
@@ -261,14 +262,14 @@ def test_weekly_concert_loader_keeps_three_confirmed_events(monkeypatch):
         "country": "Нидерланды",
     }
     assert [item["artist"] for item in result] == ["Romy", "FKA twigs", "The National"]
-    assert result[0]["description"] == "Тёплая электроника и сильное живое шоу."
-    assert result[1]["description"] == "Театральный поп и пластичное сценическое шоу."
+    assert "description" not in result[0]
+    assert "description" not in result[1]
     message = leisure_ui.music_week_screen("Алкмар", {}, result, day=today)
     assert "• Romy (сольный концерт" in message.text
-    assert ") · Тёплая электроника и сильное живое шоу." in message.text
+    assert "Тёплая электроника" not in message.text
 
 
-def test_weekly_concert_loader_translates_english_descriptions_to_russian(monkeypatch):
+def test_weekly_concert_loader_does_not_translate_descriptions(monkeypatch):
     import leisure_concerts
 
     event_date = (leisure_music.datetime.now(leisure_music.config.TZ).date()
@@ -285,25 +286,21 @@ def test_weekly_concert_loader_translates_english_descriptions_to_russian(monkey
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: [event])
 
     async def translate(*_args, **_kwargs):
-        return {"translations": ["Тёплая электроника и сильное живое шоу."]}
+        raise AssertionError("concert descriptions must not call AI")
 
     monkeypatch.setattr(leisure_music.ai, "allm_json", translate)
 
     result = asyncio.run(leisure_music._weekly_concerts("42"))
 
-    assert result[0]["description"] == "Тёплая электроника и сильное живое шоу."
+    assert "description" not in result[0]
 
 
-def test_music_home_hides_english_description_when_translation_is_unavailable(monkeypatch):
-    async def unavailable(*_args, **_kwargs):
-        raise RuntimeError("AI unavailable")
-
-    monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
-    rows = asyncio.run(leisure_music._concert_descriptions_in_russian([{
+def test_music_home_ignores_concert_description_without_ai():
+    message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [{
         "artist": "Romy", "description": "Warm electronic music and a powerful live show.",
-    }]))
+    }])
 
-    assert rows[0]["description"] == ""
+    assert "Warm electronic" not in message.text
 
 
 def test_weekly_concert_loader_uses_confirmed_fallback_when_ticketmaster_is_empty(monkeypatch):
@@ -360,9 +357,9 @@ def test_music_recommendation_requires_a_selected_style(monkeypatch):
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
-    assert calls[0][0] == "Сначала отметь хотя бы один жанр в 📝 Предпочтения → Музыка."
+    assert calls[0][0] == "Сначала выбери хотя бы один музыкальный жанр."
     assert [(button.text, button.callback_data) for button in calls[0][1]["reply_markup"].inline_keyboard[0]] == [
-        ("📝 Предпочтения", "set_pref_music"),
+        ("🔣 Выбрать предпочтения", "music_prefs"),
     ]
 
 

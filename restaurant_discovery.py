@@ -76,12 +76,15 @@ def _usable(value, city):
     )
 
 
-def _fallback_card(city, previous="", context_key=""):
+def _fallback_card(city, previous="", context_key="", history=None):
     items = _CITY_FALLBACKS.get(str(city or "").casefold()) or ()
+    used = {_normal(value) for value in (history or []) if _normal(value)}
     picked = next(
         (item for item in items
-         if str(item.get("name") or "").casefold() != str(previous or "").casefold()),
-        items[0] if items else None,
+         if _normal(item.get("name")) not in used
+         and _normal(item.get("name")) != _normal(previous)),
+        next((item for item in items
+              if _normal(item.get("name")) != _normal(previous)), items[0] if items else None),
     )
     if not picked:
         return {"city": city}
@@ -90,6 +93,7 @@ def _fallback_card(city, previous="", context_key=""):
         "city": city, **picked,
         "map_url": f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{name}, {city}')}",
         "context_key": context_key,
+        "history": [*(history or []), name][-20:],
         "cached_at": datetime.now(config.TZ).isoformat(),
     }
 
@@ -98,7 +102,7 @@ def _reserve(cid, cached, city, previous="", context_key=""):
     if (_usable(cached, city) and cached.get("context_key") == context_key
             and str(cached.get("name") or "").casefold() != str(previous or "").casefold()):
         return cached
-    card = _fallback_card(city, previous, context_key)
+    card = _fallback_card(city, previous, context_key, cached.get("history") or [])
     if card.get("name"):
         _save(cid, card)
     return card
@@ -194,8 +198,10 @@ def get_restaurant(cid, *, refresh=False):
     if not rows:
         return _reserve(cid, cached, city, previous, context_key)
     sources = _source_text(rows)
+    used_names = [str(value) for value in cached.get("history") or [] if str(value).strip()]
     prompt = f"""Выбери ОДИН реально существующий ресторан в городе {city} по источникам.
 Подбери его для контекста: {search_context}. Не используй место {previous or 'без исключений'}.
+Не повторяй уже показанные места: {', '.join(used_names) or 'нет'}.
 Не придумывай цену, блюдо или факт:
 каждое поле должно прямо следовать из источников. Описание — одна короткая строка
 по-русски. price только €, €€ или €€€. signature_dish — конкретное блюдо.
@@ -238,7 +244,7 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
     )
     source_url = _validated_evidence(result, rows, evidence_fields)
     if (
-        not name or _normal(name) == _normal(previous) or not source_url
+        not name or _normal(name) in {_normal(value) for value in used_names} or not source_url
         or result.get("price") not in {"€", "€€", "€€€"}
         or not all(str(result.get(field) or "").strip() for field in required)
     ):
@@ -256,6 +262,7 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
         "source_url": source_url,
         "map_url": f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{name}, {city}')}",
         "context_key": context_key,
+        "history": [*(cached.get("history") or []), name][-20:],
         "cached_at": datetime.now(config.TZ).isoformat(),
     }
     _save(cid, card)

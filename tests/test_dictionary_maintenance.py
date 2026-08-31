@@ -217,5 +217,6 @@ def test_failed_manual_rebuild_is_queued_without_a_dead_end_error(monkeypatch):
     asyncio.run(learning_dictionary.check_dictionary_entry(Bot(), cid, "word-1"))
 
     assert sent
-    assert "Пересборка продолжится автоматически" in sent[-1]["text"]
+    assert "Карточка обновится автоматически" in sent[-1]["text"]
+    assert "Можно продолжать листать словарь" in sent[-1]["text"]
     assert "Не получилось" not in sent[-1]["text"]

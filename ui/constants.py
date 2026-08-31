@@ -95,7 +95,7 @@ UI_EMOJI = {
 # локальных вариантов, чтобы подписи не расходились между разделами.
 HOME_LABEL = "#️⃣ Главная"
 BACK_LABEL = "⬅️ Назад"
-PREFERENCES_LABEL = "📝 Предпочтения"
+PREFERENCES_LABEL = "🔣 Выбрать предпочтения"
 SETTINGS_LABEL = "🎚️ Настройки"
 
 CUISINE_EMOJI = {

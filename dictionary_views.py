@@ -61,6 +61,10 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         rows.append([InlineKeyboardButton(
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
+    if entries:
+        rows.append([InlineKeyboardButton(
+            "🔢 Показать списком", callback_data=f"a_dictedit_{lang}",
+        )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
     rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -121,6 +125,10 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
+    rows.append([InlineKeyboardButton(
+        "🔢 Показать списком",
+        callback_data=f"a_dictcatlist_{lang}_{category_index}_0",
+    )])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -131,29 +139,60 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     )
 
 
+async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None):
+    """Компактный список одной части речи: слово открывает прежнюю карточку."""
+    if not 0 <= category_index < len(_DICT_CATEGORY_ORDER):
+        await send_dict_lang(bot, cid, lang, q=q)
+        return
+    category = _DICT_CATEGORY_ORDER[category_index]
+    entries = [
+        item for item in _dict_lang_entries(cid, lang)
+        if _dictionary_category(item) == category
+    ]
+    page_size = 12
+    pages = max(1, (len(entries) + page_size - 1) // page_size)
+    page = max(0, min(int(page), pages - 1))
+    chunk = entries[page * page_size:(page + 1) * page_size]
+    rows = [[InlineKeyboardButton(
+        display_term(_entry_term(item), item.get("article") or "")[:48],
+        callback_data=f"a_dictcat_{lang}_{category_index}_{page * page_size + offset}",
+    )] for offset, item in enumerate(chunk)]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"a_dictcatlist_{lang}_{category_index}_{(page - 1) % pages}"),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"a_dictcatlist_{lang}_{category_index}_{(page + 1) % pages}"),
+        ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    flag = "🇳🇱" if lang == "nl" else "🇬🇧"
+    await _show_screen(
+        bot, cid, f"{flag} {category} · {len(entries)}\n\nВыбери слово.", None,
+        InlineKeyboardMarkup(rows), q=q,
+    )
+
+
 async def check_dictionary_entry(bot, cid, word_id, q=None):
-    """Детально пересобирает одну карточку и заменяет её в текущем сообщении."""
+    """Ставит карточку в фон, не заменяя сообщение, по которому листают словарь."""
     entry = _entry_by_id(cid, word_id)
     if not entry:
         await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
         return
-    updated = await _refresh_dict_entry(cid, entry, force=True)
-    if updated is entry or not updated:
-        _queue_dictionary_analysis(cid, _entry_term(entry), _dict_lang(entry))
-        msg = _dict_entry_message(entry, status="found")
-        await _show_screen(
-            bot, cid,
-            f"{msg.text}\n\nПересборка продолжится автоматически.",
-            msg.entities, _dict_entry_view_kb(entry, 0, ""), q=q,
-            persistent_inline=True,
-        )
-        return
-    updated = normalize_user_dictionary(cid)
-    match = next((item for item in updated if str(item.get("id") or "") == str(word_id)), entry)
-    msg = _dict_entry_message(match, status="updated")
-    await _show_screen(
-        bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, 0, ""),
-        q=q, persistent_inline=True,
+    words = normalize_user_dictionary(cid)
+    for item in words:
+        if str(item.get("id") or "") == str(word_id):
+            item["dictionary_rebuild_version"] = 0
+            item["manual_rebuild_requested_at"] = datetime.now(config.TZ).isoformat()
+            break
+    store.set_list(config.DICT_KEY, cid, words)
+    queue_dictionary_rebuild(cid)
+    await bot.send_message(
+        chat_id=cid,
+        text=(f"⏳ Пересобираю «{display_term(_entry_term(entry), entry.get('article') or '')}»\n\n"
+              "Карточка обновится автоматически. Можно продолжать листать словарь."),
+        reply_markup=back_menu_keyboard(f"a_dictlang_{_dict_lang(entry)}"),
     )
 
 

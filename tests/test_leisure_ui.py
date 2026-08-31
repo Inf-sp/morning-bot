@@ -62,17 +62,17 @@ def test_recommendation_cards_use_content_specific_next_labels():
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_preferences_are_kept_out_of_personal_content_lists():
+def test_preferences_are_available_in_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] is None
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "movie_prefs")
     assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] is None
+    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "book_prefs")
     assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] is None
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("🔣 Выбрать предпочтения", "music_prefs")
     assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is True
     assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
 
@@ -308,6 +308,16 @@ def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypat
     assert leisure_books._pick_good_book(items, "42", fallback=False)["title"] == "Новая подходящая"
 
 
+def test_genre_book_reserve_keeps_producing_distinct_cards(monkeypatch):
+    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
+    shown = []
+    for _index in range(5):
+        item = leisure_books._genre_fallback_book("42", "fantasy", shown)
+        shown.append(item["title"])
+
+    assert len(set(shown)) == 5
+
+
 def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     view_id = "artists-layout"
     cleanup._views[view_id] = {
@@ -436,7 +446,8 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     ))
 
     assert bot.photos[-1]["photo"] == "https://img/paterson.jpg"
-    assert "Патерсон (2016)" in bot.photos[-1]["caption"]
+    assert "Патерсон" in bot.photos[-1]["caption"]
+    assert "Дата выхода: 2016" in bot.photos[-1]["caption"]
     assert "Фильм · драма, комедия" in bot.photos[-1]["caption"]
     assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
@@ -845,7 +856,7 @@ def test_book_genre_uses_a_matching_fallback_when_catalogue_is_empty(monkeypatch
     bot = Bot()
     asyncio.run(leisure_books.send_book_by_genre(bot, "genre-empty", "fantasy"))
 
-    assert selected[0]["title"] in {"Хоббит", "Волшебник Земноморья"}
+    assert selected[0]["title"] == "Заражённая чаша"
     assert bot.sent == []
 
 
@@ -892,31 +903,34 @@ def test_book_home_reads_its_fresh_daily_cache(monkeypatch):
     assert leisure_books._cached_book("42")["title"] == "Дюна"
 
 
-def test_book_card_has_complete_description_and_reader_rating():
+def test_book_card_has_modern_compact_hierarchy():
     message = leisure_books._book_text({
-        "title": "Night Night Fawn", "desc": "Город в вечной темноте, где мечты становятся оружием",
-        "plot": "Герой пытается спасти сестру из подпольного рынка снов",
+        "title": "Ночной город", "title_en": "Night Night Fawn", "author": "Автор",
+        "year": "2026", "categories": ["Fantasy"],
+        "plot": "Первое предложение. Второе предложение. Третье предложение. Четвёртое предложение.",
         "rating": 4.7, "ratings_count": 1234,
         "why": ["Необычный мир"],
+        "quote": "Выдуманная цитата",
     })
-    assert "Город в вечной темноте, где мечты становятся оружием." in message.text
-    assert "Герой пытается спасти сестру из подпольного рынка снов." in message.text
-    assert "Коротко о сюжете: Герой пытается спасти сестру из подпольного рынка снов." in message.text
-    assert "⭐ Оценка читателей: 4.7/5 · 1 234 оценок" in message.text
-    assert "Почему стоит читать:" in message.text
+    assert message.text == (
+        "Ночной город\n\n"
+        "Автор · Night Night Fawn · 2026\n"
+        "Жанр: Фэнтези\n\n"
+        "Сюжет\n"
+        "Первое предложение. Второе предложение. Третье предложение."
+    )
+    assert "⭐" not in message.text
+    assert "Почему стоит читать" not in message.text
+    assert "цитат" not in message.text.casefold()
 
 
-def test_book_card_title_links_to_google_books():
+def test_book_card_hides_missing_metadata_instead_of_inventing_it():
     message = leisure_books._book_text({
         "title": "Night Night Fawn",
         "url": "https://books.google.com/books?id=test",
     })
 
-    assert any(
-        entity.type == MessageEntity.TEXT_LINK
-        and entity.url == "https://books.google.com/books?id=test"
-        for entity in message.entities
-    )
+    assert message.text == "Night Night Fawn"
 
 
 def test_book_card_from_inline_status_is_sent_with_cover(monkeypatch):
@@ -1446,12 +1460,11 @@ def test_daily_category_block_titles_are_bold():
     assert "Вайб дня:" not in _bold_values(music)
 
 
-def test_book_quote_uses_the_my_day_italic_format():
+def test_book_card_does_not_show_quote():
     message = leisure_books._book_text({
         "title": "1984", "author": "Джордж Оруэлл", "quote": "Война - это мир.",
     })
-    assert "💭 «Война - это мир.» — Джордж Оруэлл" in message.text
-    assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)
+    assert "Война - это мир" not in message.text
 
 
 def test_local_cinema_catalogue_is_reused_for_a_week(monkeypatch):
