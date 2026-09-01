@@ -221,6 +221,7 @@ def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Подобрать новое путешествие", callback_data="a_trav_go")],
         [InlineKeyboardButton("💡 Что интересного", callback_data="a_trav_interesting")],
+        [InlineKeyboardButton("🧳 Другая страна", callback_data="a_trav_go")],
         [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
