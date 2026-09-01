@@ -280,7 +280,7 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     ]
 
 
-def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypatch):
+def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch):
     _profile_store(monkeypatch)
     monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(
@@ -299,9 +299,12 @@ def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypa
     ))
 
     assert "🎲 Настолки" in status.call[0]
-    assert _labels(status.call[1]["reply_markup"]) == [
+    labels = _labels(status.call[1]["reply_markup"])
+    assert labels == [
+        ["🎭 По жанру"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
+    assert all("Мой набор игр" not in line for lines in labels for line in lines)
 
 
 def test_next_board_game_never_repeats_the_current_game(monkeypatch):

@@ -395,6 +395,9 @@ def _game_keyboard(*, no_match=False, genre=None):
     if genre != "board":
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
+    else:
+        # На настолках тоже доступен подбор по жанру.
+        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
     if no_match:
         rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
     rows.append([
