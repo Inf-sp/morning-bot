@@ -242,7 +242,6 @@ def _book_matches_preferences(item, cid):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Обновить", callback_data=f"book_no_{i}")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

@@ -477,13 +477,12 @@ def _save_cached_look(cid, item_ids, look_data):
 
 
 # ---------- главный экран раздела (панель состояния) ----------
-def build_wardrobe_keyboard(has_result=True):
-    rows = [[("✨ Обновить" if has_result else "✨ Подобрать образ", "w_look")]]
-    rows.extend([
+def build_wardrobe_keyboard():
+    rows = [
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Мой шкаф", "w_closet")],
         [("#️⃣ Главная", "m_menu")],
-    ])
+    ]
     return _kb(rows)
 
 

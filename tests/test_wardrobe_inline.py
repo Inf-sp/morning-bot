@@ -335,10 +335,11 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard())[:3] == [
-        ["✨ Обновить"],
         ["💳 Что докупить"],
         ["🎚️ Мой шкаф"],
+        ["#️⃣ Главная"],
     ]
+    assert "✨ Обновить" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
     assert "📝 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
