@@ -85,7 +85,7 @@ def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
         word_lang="nl",
     )
 
-    assert "🇳🇱 Нидерландский: Slim → Худой, умный." in message.text
+    assert "🎯 Тренажер: Slim → Худой, умный." in message.text
     assert "→ Худой" in message.text
 
 
