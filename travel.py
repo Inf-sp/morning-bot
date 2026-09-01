@@ -14,6 +14,7 @@ import config
 import memory
 import monthly_rebuses
 import recommendation_stoplist
+import recommendation_rotation as rotation
 import research
 import settings
 import store
@@ -638,15 +639,11 @@ _LOCAL_COUNTRY_FALLBACKS = (
 
 def _local_country_fallback(cid, excluded=None, region_key=""):
     """Выбирает новое направление из локального каталога без сети и AI."""
-    blocked = {
-        str(value).strip().casefold()
-        for value in [
+    blocked = rotation.markers([
             *(excluded or []),
             *recommendation_stoplist.values(cid, "country"),
             *(_country_name(code) for code in _visited_codes(cid)),
-        ]
-        if str(value).strip()
-    }
+        ])
     visited_codes = set(_visited_codes(cid))
     blocked_codes = {
         country_catalog.country_code(str(value))

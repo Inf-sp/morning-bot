@@ -32,6 +32,26 @@ def test_restaurant_card_has_google_link_and_compact_details():
     assert links[0].url.startswith("https://www.google.com/maps/search/")
 
 
+def test_myday_restaurant_summary_reads_only_ready_cached_card(monkeypatch):
+    card = {
+        "city": "Alkmaar", "name": "Roest Alkmaar",
+        "cuisine": "современная европейская", "price": "€€",
+        "map_url": "https://maps.example/roest",
+        "cached_at": datetime.now(restaurant_discovery.config.TZ).isoformat(),
+    }
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"},
+    )
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_profile",
+        lambda _cid: {"food_restaurant_recommendation": card},
+    )
+
+    assert restaurant_discovery.cached_restaurant_summary("42") == (
+        "Roest Alkmaar · современная европейская · €€"
+    )
+
+
 def test_restaurant_screen_always_disables_link_preview(monkeypatch):
     replaced = {}
 
@@ -280,3 +300,40 @@ def test_city_fallback_rotates_through_every_place_before_repeating():
     )
 
     assert len({first["name"], second["name"], third["name"]}) == 3
+
+
+def test_restaurant_search_excludes_full_recent_history_from_search_and_ai_cache(monkeypatch):
+    cached = restaurant_discovery._fallback_card("Alkmaar")
+    cached["history"] = ["Roest Alkmaar", "MADA", cached["name"]]
+    queries = []
+    cache_contexts = []
+
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"},
+    )
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_profile",
+        lambda _cid: {"food_restaurant_recommendation": cached},
+    )
+    monkeypatch.setattr(restaurant_discovery.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(
+        restaurant_discovery.research, "web_search",
+        lambda query, **_kwargs: queries.append(query) or [{
+            "title": "Another restaurant Alkmaar",
+            "url": "https://example.com/another",
+            "content": "Another restaurant in Alkmaar with a documented menu and prices.",
+        }],
+    )
+
+    def llm(*_args, **kwargs):
+        cache_contexts.append(kwargs["cache_context"])
+        raise RuntimeError("use reserve")
+
+    monkeypatch.setattr(restaurant_discovery.ai, "llm_json", llm)
+
+    restaurant_discovery.get_restaurant("42", refresh=True)
+
+    assert all(f'-"{name}"' in queries[0] for name in cached["history"])
+    assert cache_contexts[0]["history"] == [
+        "roest alkmaar", "mada", cached["name"].casefold(),
+    ]

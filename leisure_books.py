@@ -21,6 +21,7 @@ import google_books
 import open_library
 import monthly_rebuses
 import recommendation_stoplist
+import recommendation_rotation as rotation
 import research
 import secure
 import inclusive_recommendations
@@ -1941,7 +1942,14 @@ def _book_used(cid):
 def _fallback_book(cid, extra_skip=()):
     """Гарантированная рекомендация: популярная must-read книга, ещё не виденная пользователем."""
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
-    pool = [b for b in _FALLBACK_BOOKS if b["title"].lower() not in used] or _FALLBACK_BOOKS
+    book_key = lambda value: (
+        str(value.get("title") or "").casefold()
+        if isinstance(value, dict) else str(value or "").casefold()
+    )
+    pool = rotation.candidates_for_cycle(
+        _FALLBACK_BOOKS, used,
+        current=extra_skip[-1] if extra_skip else None, key=book_key,
+    )
     return random.choice(pool)
 
 
@@ -1996,15 +2004,14 @@ def _genre_fallback_book(cid, genre_key, extra_skip=()):
         "desc": "Заметная книга жанра с сильными читательскими и критическими отзывами.",
     } for title, title_en, year, author in _GENRE_TOP_BOOKS.get(genre_key, [])]
     source = [*top, *_GENRE_FALLBACKS.get(genre_key, [])]
-    pool = [
-        item for item in source
-        if item["title"].casefold() not in used
-    ]
-    if not pool:
-        # После полного длинного круга начинаем новый, но никогда не возвращаем
-        # текущую карточку и не показываем ошибку вместо рекомендации.
-        current = {str(x).strip().casefold() for x in extra_skip[-1:]}
-        pool = [item for item in source if item["title"].casefold() not in current]
+    book_key = lambda value: (
+        str(value.get("title") or "").casefold()
+        if isinstance(value, dict) else str(value or "").casefold()
+    )
+    pool = rotation.candidates_for_cycle(
+        source, used,
+        current=extra_skip[-1] if extra_skip else None, key=book_key,
+    )
     return dict(pool[0]) if pool else None
 
 def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):

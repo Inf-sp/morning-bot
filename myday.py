@@ -972,7 +972,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 15
+_DAY_CACHE_VERSION = 16
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -1133,7 +1133,9 @@ def _build_day_text(cid, *, refresh_current=False):
     word_line, word_lang = _word_of_day(cid) if learning_enabled else ("", "")
     movie_rebus = {} if learning_enabled else _movie_rebus_of_day(now.date())
     import wardrobe
-    outfit_items = wardrobe.get_cached_outfit_items(cid)
+    outfit_summary = wardrobe.get_cached_outfit_summary(cid)
+    import restaurant_discovery
+    restaurant_line = restaurant_discovery.cached_restaurant_summary(cid)
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
@@ -1153,7 +1155,9 @@ def _build_day_text(cid, *, refresh_current=False):
         word_line=word_line,
         word_lang=word_lang,
         movie_rebus=movie_rebus,
-        outfit_items=outfit_items,
+        outfit_items=outfit_summary["items"],
+        outfit_emoji=outfit_summary["emoji"],
+        restaurant_line=restaurant_line,
         lifehack=hack_text,
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
         _flat_wardrobe_items, _get_cached_look, _kb, _log,
         _purchase_candidate, _settings, ai, closet_kb, config,
         delete_label, has_wardrobe_items, normalize_parsed_item,
-        public_item_name, re, secure, send_home, send_item_card,
+        public_item_name, re, rotation, secure, send_home, send_item_card,
         send_wardrobe_zones, store, verify, wardrobe_stats, wardrobe_ui,
     )
 
@@ -413,17 +413,10 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
     if (not reset and cached.get("signature") == signature
             and isinstance(cached.get("items"), list) and cached["items"]):
         return [dict(item) for item in cached["items"] if isinstance(item, dict)]
-    excluded = {
-        _clean_text(name).casefold()
-        for name in (exclude_names or [])
-        if _clean_text(name)
-    }
+    name_key = lambda value: _clean_text(value).casefold()
+    excluded = rotation.markers(exclude_names or [], key=name_key)
     rejected = profile.get("wardrobe_purchase_rejections") or {}
-    excluded.update(
-        _clean_text(name).casefold()
-        for name in (rejected.get("items") or [])
-        if _clean_text(name)
-    )
+    excluded.update(rotation.markers(rejected.get("items") or [], key=name_key))
     items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
     if not items:
         reserves = [
@@ -433,10 +426,12 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
             ("Минималистичные кожаные кеды", "Обувь"),
             ("Компактная сумка на каждый день", "Аксессуары"),
         ]
-        name, category = next(
-            ((name, category) for name, category in reserves if name.casefold() not in excluded),
-            reserves[len(excluded) % len(reserves)],
+        reserve_key = lambda value: name_key(value[0] if isinstance(value, tuple) else value)
+        available = rotation.candidates_for_cycle(
+            reserves, excluded,
+            current=(exclude_names or [None])[-1], key=reserve_key,
         )
+        name, category = available[0]
         items = [{
             "item": name,
             "category": category,
@@ -559,12 +554,11 @@ async def recommend_another_purchase(bot, cid, q=None, page=None):
     if rejected_name:
         def remember_rejection(current):
             history = current.get("wardrobe_purchase_rejections") or {}
-            names = list(history.get("items") or [])
-            known = {_clean_text(name).casefold() for name in names if _clean_text(name)}
-            if rejected_name.casefold() not in known:
-                names.append(rejected_name)
             current["wardrobe_purchase_rejections"] = {
-                "items": names[-50:],
+                "items": rotation.remember(
+                    history.get("items") or [], rejected_name,
+                    limit=50, key=lambda value: _clean_text(value).casefold(),
+                ),
             }
             return current, None
 

@@ -269,6 +269,7 @@ def audit_architecture(root=None):
         "dictionary_seed_catalog.py": {"telegram", "store", "ai", "config", "repositories"},
         "wardrobe_model.py": {"telegram", "store", "ai", "config", "repositories"},
         "fridge_model.py": {"telegram", "store", "ai", "config", "repositories"},
+        "recommendation_rotation.py": {"telegram", "store", "ai", "config", "repositories"},
         "wardrobe_outfit.py": {"telegram", "ai"},
         "weather_provider.py": {"telegram", "ai"},
         "response_delivery.py": {"ai"},

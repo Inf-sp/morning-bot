@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 import ai
 import config
 import research
+import recommendation_rotation as rotation
 import secure
 import store
 
@@ -69,6 +70,24 @@ def _save(cid, card):
     store.mutate_profile(cid, lambda profile: (
         {**profile, "food_restaurant_recommendation": dict(card)}, None,
     ))
+    try:
+        import myday
+        myday.reset_day_cache(cid)
+    except Exception:
+        pass
+
+
+def cached_restaurant_summary(cid):
+    """Короткая строка только из готовой сегодняшней карточки, без поиска и AI."""
+    city = str(store.get_settings(cid).get("city") or "").strip()
+    card = _cache(cid)
+    if not _fresh(card, city):
+        return ""
+    return " · ".join(
+        str(card.get(field) or "").strip()
+        for field in ("name", "cuisine", "price")
+        if str(card.get(field) or "").strip()
+    )
 
 
 def _usable(value, city):
@@ -193,15 +212,22 @@ def get_restaurant(cid, *, refresh=False):
     if not refresh and _fresh(cached, city):
         return cached
     previous = str(cached.get("name") or "") if _usable(cached, city) else ""
-    rows = research.web_search(
+    used_names = rotation.recent(
+        [*(cached.get("history") or []), previous], limit=20,
+    )
+    exclusions = rotation.search_exclusions(used_names, limit=10)
+    search_query = " ".join(part for part in (
         f"best {search_context} in {city} official menu opening hours signature dish price",
-        max_results=6, scenario="restaurant_local", allow_tavily=True,
+        exclusions,
+    ) if part)
+    rows = research.web_search(
+        search_query,
+        max_results=8, scenario="restaurant_local", allow_tavily=True,
         search_priority="tavily",
     )
     if not rows:
         return _reserve(cid, cached, city, previous, context_key)
     sources = _source_text(rows)
-    used_names = [str(value) for value in cached.get("history") or [] if str(value).strip()]
     prompt = f"""Выбери ОДИН реально существующий ресторан в городе {city} по источникам.
 Подбери его для контекста: {search_context}. Не используй место {previous or 'без исключений'}.
 Не повторяй уже показанные места: {', '.join(used_names) or 'нет'}.
@@ -236,7 +262,9 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
         result = ai.llm_json(
             prompt, 900, module="food_restaurant", fallback_allowed=True,
             cache_context={"city": city.casefold(), "context": context_key,
-                           "previous": previous.casefold(), "sources": sources},
+                           "previous": previous.casefold(),
+                           "history": rotation.cache_history(used_names, limit=20),
+                           "sources": sources},
         )
     except Exception:
         return _reserve(cid, cached, city, previous, context_key)

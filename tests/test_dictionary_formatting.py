@@ -335,7 +335,7 @@ def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
     assert len(entry["examples"]) == 2
 
 
-def test_incomplete_daily_word_is_not_sent_or_marked_as_shown(monkeypatch):
+def test_incomplete_daily_word_uses_learning_fallback_without_marking_it_shown(monkeypatch):
     words = [{
         "term": "Ontwikkelen", "translation": "развивать", "lang": "nl",
         "breakdown": "глагол",
@@ -345,11 +345,11 @@ def test_incomplete_daily_word_is_not_sent_or_marked_as_shown(monkeypatch):
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert msg is None
+    assert "В словаре пока нет одиночных слов" in msg.text
     assert "daily_word_shown_at" not in words[0]
 
 
-def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):
+def test_daily_word_starts_a_new_cycle_after_every_single_word_was_shown(monkeypatch):
     words = [
         _complete_study_entry("Immers", "ведь"),
         _complete_study_entry("Inmiddels", "тем временем"),
@@ -366,7 +366,13 @@ def test_daily_word_uses_only_single_words_without_repeating_pool(monkeypatch):
 
     assert set(shown) == {"Immers", "Inmiddels", "Eigenlijk"}
     assert "Laat maar" not in shown
-    assert dictionary_morning.build_daily_practice("42", "nl", mark_shown=True)["entries"] == []
+    next_cycle = [
+        dictionary_morning.build_daily_practice(
+            "42", "nl", mark_shown=True,
+        )["entries"][0]["term"]
+        for _ in range(3)
+    ]
+    assert set(next_cycle) == {"Immers", "Inmiddels", "Eigenlijk"}
 
 
 def test_legacy_daily_word_deep_dive_migrates_into_dictionary_entry():
@@ -392,7 +398,7 @@ def test_legacy_daily_word_deep_dive_migrates_into_dictionary_entry():
     assert study_card_is_complete(entry)
 
 
-def test_placeholder_daily_word_is_not_migrated_or_sent(monkeypatch):
+def test_placeholder_daily_word_uses_safe_fallback_and_is_not_migrated(monkeypatch):
     placeholder = {
         "pronunciation": "[русская транскрипция с ударением]",
         "translation": "1-2 значения",
@@ -415,6 +421,7 @@ def test_placeholder_daily_word_is_not_migrated_or_sent(monkeypatch):
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert msg is None
+    assert "В словаре пока нет одиночных слов" in msg.text
+    assert "русская транскрипция" not in msg.text
     assert "daily_word_shown_at" not in words[0]
     assert migrate_legacy_study_card(words[0]) is False

@@ -10,7 +10,10 @@ from telegram import MessageEntity
 
 import wardrobe
 from ui.settings import wardrobe_style
-from ui.wardrobe import outfit_header, render_wardrobe_message
+from ui.myday import day_summary
+from ui.wardrobe import (
+    outfit_emoji, outfit_header, outfit_item_names, render_wardrobe_message,
+)
 from wardrobe_model import normalize_parsed_item, public_item_name
 from wardrobe_outfit import (
     build_how_to_wear,
@@ -154,6 +157,31 @@ def test_outfit_header_uses_emoji_of_selected_style():
     assert outfit_header("Скандинавский") == "🧥 Образ на сегодня · Скандинавский"
     assert outfit_header("Классический") == "👔 Образ на сегодня · Классический"
     assert outfit_header("Спортивный") == "👟 Образ на сегодня · Спортивный"
+
+
+def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypatch):
+    look = {
+        "primary_style": "Минимализм",
+        "items": [
+            {"name": "Белая футболка", "zone": "Верх"},
+            {"name": "Чёрные брюки", "zone": "Низ"},
+            {"name": "Белые кеды", "zone": "Обувь"},
+            {"name": "Серые часы", "zone": "Аксессуары"},
+        ],
+    }
+
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {"look_data": look})
+    summary = wardrobe.get_cached_outfit_summary("42")
+
+    assert summary["emoji"] == outfit_emoji(look["primary_style"]) == "👕"
+    assert summary["items"] == outfit_item_names(look) == [
+        "Белая футболка", "Чёрные брюки", "Белые кеды", "Серые часы",
+    ]
+    message = day_summary(
+        "Вт, 1 сентября", "Алкмар",
+        outfit_items=summary["items"], outfit_emoji=summary["emoji"],
+    )
+    assert "👕 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
 
 
 def test_other_outfit_changes_the_base_not_one_random_item():

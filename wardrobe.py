@@ -9,6 +9,7 @@ import re
 from urllib.parse import quote_plus
 import config
 import category_news
+import recommendation_rotation as rotation
 import store
 import ai
 import weather
@@ -441,6 +442,18 @@ def get_cached_outfit_items(cid):
         for item in (cached.get("look_data") or {}).get("items", [])
         if _clean_text(_item_name(item))
     ]
+
+
+def get_cached_outfit_summary(cid):
+    """Эмодзи стиля и точный видимый список текущего образа для «Моего дня»."""
+    cached = _get_cached_look(cid)
+    if not cached:
+        return {"emoji": "", "items": []}
+    look_data = cached.get("look_data") or {}
+    return {
+        "emoji": wardrobe_ui.outfit_emoji(look_data.get("primary_style")),
+        "items": wardrobe_ui.outfit_item_names(look_data),
+    }
 
 def _item_name(it):
     return it.get("name") if isinstance(it, dict) else it

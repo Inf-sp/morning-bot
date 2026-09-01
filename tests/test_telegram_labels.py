@@ -76,9 +76,28 @@ def test_day_summary_puts_quote_after_movie_rebus():
 
 
 def test_day_summary_outfit_keeps_capital_letter_after_label():
-    message = day_summary("Пн, 20 июля", "Алкмар", outfit_items=["светло-серая рубашка", "чёрные брюки"])
+    message = day_summary(
+        "Пн, 20 июля", "Алкмар",
+        outfit_items=["светло-серая рубашка", "чёрные брюки"],
+        outfit_emoji="👕",
+    )
 
-    assert "Надень: Светло-серая рубашка, чёрные брюки" in message.text
+    assert "👕 Образ: Светло-серая рубашка, чёрные брюки" in message.text
+
+
+def test_day_summary_puts_cached_restaurant_immediately_after_outfit():
+    message = day_summary(
+        "Вт, 1 сентября", "Алкмар",
+        outfit_items=["Белая футболка", "Чёрные брюки"], outfit_emoji="👕",
+        restaurant_line="Roest Alkmaar · современная европейская · €€",
+        lifehack="возьми зонт",
+    )
+
+    outfit_at = message.text.index("👕 Образ:")
+    restaurant_at = message.text.index("🍽️ Куда сходить:")
+    lifehack_at = message.text.index("🦉Лайфхак:")
+    assert outfit_at < restaurant_at < lifehack_at
+    assert "🍽️ Куда сходить: Roest Alkmaar · современная европейская · €€." in message.text
 
 
 def test_day_summary_word_keeps_capital_letter_after_label():

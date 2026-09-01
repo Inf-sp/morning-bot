@@ -84,8 +84,13 @@ _STYLE_EMOJI = {
 def outfit_header(primary_style=""):
     """Единый заголовок образа: эмодзи отражает выбранный стиль."""
     style = _clean_text(primary_style)
-    emoji = _STYLE_EMOJI.get(style, "👕")
+    emoji = outfit_emoji(style)
     return f"{emoji} Образ на сегодня" + (f" · {style}" if style else "")
+
+
+def outfit_emoji(primary_style=""):
+    """Тот же эмодзи стиля для карточки гардероба и кратких сводок."""
+    return _STYLE_EMOJI.get(_clean_text(primary_style), "👕")
 
 
 def empty_wardrobe():
@@ -177,6 +182,23 @@ def _outfit_slots(items):
         slot = zone if zone in grouped else zone_of(name)
         grouped[slot if slot in grouped else "Другое"].append(name)
     return grouped
+
+
+def outfit_item_names(look_data):
+    """Все показанные в образе вещи в том же порядке, но одним списком."""
+    look_data = look_data or {}
+    slots = _outfit_slots(look_data.get("items") or [])
+    names = [*slots["Верх"], *slots["Низ"], *slots["Обувь"]]
+    sock_recommendation = _upper_first(
+        _clean_text(look_data.get("sock_recommendation"))
+    )
+    selected_socks = any("носк" in item.casefold() for item in slots["Аксессуары"])
+    if sock_recommendation and not selected_socks:
+        names.append(sock_recommendation)
+    names.extend(slots["Верхняя одежда"])
+    names.extend(slots["Аксессуары"])
+    names.extend(slots["Другое"])
+    return names
 
 
 def _pluralize_items(n):

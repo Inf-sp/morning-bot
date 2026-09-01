@@ -15,6 +15,7 @@ import config
 import inclusive_recommendations
 import igdb
 import research
+import recommendation_rotation as rotation
 import secure
 import settings
 import store
@@ -359,19 +360,19 @@ def pick_game(cid, *, genre=None, refresh=False):
         return (-overlap, year_distance, -float(item.get("rating") or 0), item["name"])
 
     pool = sorted(pool, key=recommendation_rank)
-    fresh = [item for item in pool if item["id"] not in seen]
-    # После полного круга все элементы находятся в seen. Не начинаем новый
-    # круг с текущей карточки: кнопка «Другая игра» обязана видимо менять игру.
-    without_current = [item for item in pool if not seen or item["id"] != seen[-1]]
-    candidates = fresh or without_current or pool
+    game_key = lambda value: (
+        str(value.get("id") or "") if isinstance(value, dict) else str(value or "")
+    )
+    candidates = rotation.candidates_for_cycle(
+        pool, seen, current=seen[-1] if seen else None, key=game_key,
+    )
     item = candidates[0]
-    seen = [value for value in seen if value != item["id"]]
     daily_entry = {"week": week_key, "signature": signature, "item": dict(item)}
 
     def save_selection(current):
-        current_seen = [str(value) for value in current.get("game_seen", []) if str(value)]
-        current_seen = [value for value in current_seen if value != item["id"]]
-        current["game_seen"] = [*current_seen, item["id"]][-200:]
+        current["game_seen"] = rotation.remember(
+            current.get("game_seen", []), item["id"], limit=200,
+        )
         if not genre:
             current["game_daily"] = daily_entry
         return current, None

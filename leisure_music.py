@@ -15,6 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import config
 import recommendation_stoplist
+import recommendation_rotation as rotation
 import secure
 import settings
 import store
@@ -241,12 +242,9 @@ def _invalidate_artist(cid):
 def _recent_artists(cid):
     profile = store.get_profile(cid)
     values = profile.get("music_recent_artists", []) if isinstance(profile, dict) else []
-    recent = []
-    for value in values if isinstance(values, list) else []:
-        artist = str(value or "").strip()
-        if artist and artist.casefold() not in {item.casefold() for item in recent}:
-            recent.append(artist)
-    return recent[-_RECENT_ARTISTS_LIMIT:]
+    return rotation.recent(
+        values if isinstance(values, list) else [], limit=_RECENT_ARTISTS_LIMIT,
+    )
 
 
 def _remember_artist(cid, artist):
@@ -255,14 +253,10 @@ def _remember_artist(cid, artist):
         return
     def change(profile):
         values = profile.get("music_recent_artists", [])
-        recent = []
-        for value in values if isinstance(values, list) else []:
-            item = str(value or "").strip()
-            if item and item.casefold() != artist.casefold() and item.casefold() not in {
-                known.casefold() for known in recent
-            }:
-                recent.append(item)
-        profile["music_recent_artists"] = [*recent, artist][-_RECENT_ARTISTS_LIMIT:]
+        profile["music_recent_artists"] = rotation.remember(
+            values if isinstance(values, list) else [], artist,
+            limit=_RECENT_ARTISTS_LIMIT,
+        )
         return profile, None
 
     store.mutate_profile(cid, change)

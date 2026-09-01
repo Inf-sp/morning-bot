@@ -18,6 +18,7 @@ _PURCHASE_QUERIES = (
     (("рубаш",), "oversized shirt"),
     (("сумк",), "crossbody bag"),
     (("ремень",), "leather belt"),
+    (("брюк",), "straight leg trousers"),
     (("джинс",), "wide leg jeans"),
     (("худи",), "hoodie"),
     (("ботин",), "ankle boots"),
@@ -27,6 +28,7 @@ _PURCHASE_QUERIES = (
 )
 
 _PURCHASE_COLORS = (
+    (("нейтраль",), "neutral"),
     (("тёмно-син", "темно-син"), "navy"),
     (("молочн", "кремов"), "cream"),
     (("графитов",), "charcoal"),
@@ -48,6 +50,7 @@ _TYPE_TOKENS = (
     (("рубаш",), ("shirt",)),
     (("сумк",), ("bag",)),
     (("ремень",), ("belt",)),
+    (("брюк",), ("trouser", "trousers", "pants")),
     (("джинс",), ("jeans", "denim")),
     (("худи",), ("hoodie", "sweatshirt")),
     (("ботин",), ("boot", "boots")),
@@ -57,6 +60,10 @@ _TYPE_TOKENS = (
 )
 
 _COLOR_TOKENS = {
+    "neutral": (
+        "neutral", "beige", "tan", "gray", "grey", "black", "navy",
+        "brown", "cream", "white",
+    ),
     "navy": ("navy", "dark blue"),
     "cream": ("cream", "off-white", "ivory"),
     "charcoal": ("charcoal", "dark gray", "dark grey"),

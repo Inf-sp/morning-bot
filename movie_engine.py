@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 import config
 import recommendation_stoplist
+import recommendation_rotation as rotation
 import store
 import tmdb
 
@@ -48,9 +49,10 @@ def mark_shown(cid, name):
     if not name:
         return
     shown = store.get_list(config.MOVIE_SHOWN_KEY, cid)
-    key = _norm(name)
-    shown = [s for s in shown if _norm(s) != key] + [name]
-    store.set_list(config.MOVIE_SHOWN_KEY, cid, shown[-SHOWN_LIMIT:])
+    store.set_list(
+        config.MOVIE_SHOWN_KEY, cid,
+        rotation.remember(shown, name, limit=SHOWN_LIMIT, key=_norm),
+    )
 
 
 def _shown_norms(cid):

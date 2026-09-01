@@ -44,21 +44,33 @@ def _entries_review_sorted(pool):
     return sorted(pool, key=_key)
 
 
+def _shown_at_sort_key(entry):
+    """Старые и повреждённые даты считаются самыми давними, а не ломают рассылку."""
+    try:
+        return datetime.fromisoformat(
+            str(entry.get("daily_word_shown_at") or "")
+        ).timestamp()
+    except (TypeError, ValueError):
+        return float("-inf")
+
+
 def build_daily_practice(cid, language, *, mark_shown=False):
-    """Одно одиночное слово, которое ещё никогда не было словом дня."""
+    """Одно одиночное слово; после полного прохода начинает новый цикл."""
     lang_code = _code(language)
     words = _ensure_dict(cid)
-    pool = [
+    eligible = [
         word for word in words
         if (
             _dict_lang(word) == lang_code
             and _entry_term(word)
             and _entry_translation(word)
             and len(_entry_term(word).split()) == 1
-            and not word.get("daily_word_shown_at")
             and study_card_is_complete(word)
         )
     ]
+    pool = [word for word in eligible if not word.get("daily_word_shown_at")]
+    if not pool and eligible:
+        pool = [min(eligible, key=_shown_at_sort_key)]
     if not pool:
         return {"flag": _flag(language), "entries": []}
 
@@ -95,7 +107,9 @@ def _build_morning_word(cid, language):
     """Собирает карточку одного слова и отмечает его показ скрытым полем."""
     practice = build_daily_practice(cid, language, mark_shown=True)
     if not practice["entries"]:
-        return None, []
+        return learning_ui.morning_words(
+            practice["flag"], entries=[], empty_hint=True,
+        ), []
     msg = learning_ui.morning_words(
         practice["flag"], entries=practice["entries"], empty_hint=not practice["entries"],
     )

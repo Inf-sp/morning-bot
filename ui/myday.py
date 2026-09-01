@@ -31,6 +31,8 @@ def day_summary(
     word_lang="nl",
     movie_rebus=None,
     outfit_items=None,
+    outfit_emoji="🧶",
+    restaurant_line="",
     lifehack="",
     quote_text="",
     quote_author="",
@@ -81,8 +83,16 @@ def day_summary(
     )
     outfit = cap_sentence(outfit)
     if outfit:
-        b.text_line("🧶 ")
-        b.labeled_line("Надень", finish_dot(outfit), lowercase=False)
+        b.text_line(f"{str(outfit_emoji or '👕').strip()} ")
+        b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
+        b.spacer()
+
+    if restaurant_line:
+        b.text_line("🍽️ ")
+        b.labeled_line(
+            "Куда сходить", finish_dot(str(restaurant_line).strip()),
+            lowercase=False,
+        )
         b.spacer()
 
     if lifehack:

@@ -8,6 +8,7 @@ import ai
 import config
 import secure
 import provider_runtime
+import recommendation_rotation as rotation
 import spoonacular
 import store
 import themealdb
@@ -1423,7 +1424,6 @@ def _meal_fallback_batch(constraint, n, recent_history=None):
         "гречка, грибы, лук",
         "нут, кабачок, помидоры",
     )
-    avoided = {str(name or "").casefold() for name in recent_history or []}
     candidates = []
     for ingredients in ingredient_sets:
         recipe = _fallback_leftovers_recipe(ingredients, meal=meal)
@@ -1431,9 +1431,15 @@ def _meal_fallback_batch(constraint, n, recent_history=None):
         name = str(recipe.get("name") or "").casefold()
         if (name and _queue_recipe_presentable(recipe) and _recipe_matches_meal(recipe, meal)):
             candidates.append(recipe)
-    fresh = [recipe for recipe in candidates
-             if str(recipe.get("name") or "").casefold() not in avoided]
-    return (fresh or candidates)[:n]
+    recipe_key = lambda value: (
+        str(value.get("name") or "").casefold()
+        if isinstance(value, dict) else str(value or "").casefold()
+    )
+    selected = rotation.candidates_for_cycle(
+        candidates, recent_history or [],
+        current=(recent_history or [None])[-1], key=recipe_key,
+    )
+    return selected[:n]
 
 
 def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history=None,

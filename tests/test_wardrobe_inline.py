@@ -521,6 +521,71 @@ def test_purchase_photo_query_keeps_color_and_silhouette_in_english():
     ) == "men cream oversized shirt"
 
 
+def test_purchase_photo_supports_neutral_straight_trousers(monkeypatch):
+    import wardrobe_photos
+
+    calls = []
+    wardrobe_photos.purchase_photo.cache_clear()
+    monkeypatch.setattr(wardrobe_photos.config, "SERP_API_KEY", "")
+    monkeypatch.setattr(
+        wardrobe_photos, "pexels_photo",
+        lambda query, **kwargs: calls.append((query, kwargs)) or {
+            "url": "https://images.pexels.com/neutral-trousers.jpg",
+            "alt": "Man wearing beige straight leg trousers",
+        },
+    )
+
+    photo = wardrobe_photos.purchase_photo(
+        "Прямые брюки нейтрального цвета", "male",
+    )
+
+    assert photo is not None
+    assert calls[0][0] == "men neutral straight leg trousers"
+    assert calls[0][1]["result_validator"](photo) is True
+
+
+def test_neutral_straight_trousers_card_is_sent_with_photo(monkeypatch):
+    import wardrobe_photos
+
+    sent = []
+    cid = "neutral-trousers-photo"
+    wardrobe.store.set_profile(cid, {})
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("message", kwargs))
+
+    candidate = {
+        "item": "Прямые брюки нейтрального цвета",
+        "category": "Низ", "style": "Базовый", "season": "Межсезонье",
+        "reason": "Добавит шкафу новый слой.",
+    }
+
+    def pexels(_query, **kwargs):
+        photo = {
+            "url": "https://images.pexels.com/neutral-trousers.jpg",
+            "alt": "Man wearing beige straight leg trousers",
+        }
+        return photo if kwargs["result_validator"](photo) else None
+
+    wardrobe_photos.purchase_photo.cache_clear()
+    monkeypatch.setattr(wardrobe_photos.config, "SERP_API_KEY", "")
+    monkeypatch.setattr(wardrobe_photos, "pexels_photo", pexels)
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {})
+    monkeypatch.setattr(
+        wardrobe, "_purchase_carousel_candidates", lambda *_args, **_kwargs: [candidate],
+    )
+    monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
+
+    asyncio.run(wardrobe.show_purchase_page(Bot(), cid))
+
+    assert [kind for kind, _kwargs in sent] == ["photo"]
+    assert sent[0][1]["photo"] == "https://images.pexels.com/neutral-trousers.jpg"
+
+
 def test_purchase_photo_rejects_an_image_that_describes_another_item():
     import wardrobe_photos
 
