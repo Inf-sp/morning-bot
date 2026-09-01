@@ -719,11 +719,15 @@ async def send_combined_premieres(bot, cid, *, status=None):
     items = await _combined_premieres(cid)
     msg, kb, page = _combined_premieres_view(items)
     if items:
-        await bot.send_photo(
-            chat_id=cid, photo=items[page]["poster"], caption=msg.text,
-            caption_entities=msg.entities, reply_markup=kb,
-        )
-    elif status is not None:
+        try:
+            await bot.send_photo(
+                chat_id=cid, photo=items[page]["poster"], caption=msg.text,
+                caption_entities=msg.entities, reply_markup=kb,
+            )
+            return
+        except Exception:
+            pass
+    if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
     else:
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
@@ -734,8 +738,18 @@ async def show_combined_premiere_page(cid, q, page):
     if not items:
         return
     msg, kb, page = _combined_premieres_view(items, page)
-    await q.edit_message_media(
-        media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
-                              caption_entities=msg.entities),
-        reply_markup=kb,
-    )
+    try:
+        await q.edit_message_media(
+            media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
+                                  caption_entities=msg.entities),
+            reply_markup=kb,
+        )
+        return
+    except Exception:
+        pass
+    try:
+        await q.edit_message_caption(
+            caption=msg.text, caption_entities=msg.entities, reply_markup=kb,
+        )
+    except Exception:
+        await q.edit_message_text(text=msg.text, entities=msg.entities, reply_markup=kb)

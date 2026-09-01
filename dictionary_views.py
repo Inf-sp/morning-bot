@@ -104,7 +104,6 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
             InlineKeyboardButton(f"{page + 1} / {len(entries)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % len(entries)}"),
         ])
-    rows.extend(_dict_tts_row(entry))
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
@@ -114,6 +113,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
+    rows.extend(_dict_tts_row(entry))
     rows.append([InlineKeyboardButton(
         "🔢 Показать списком",
         callback_data=f"a_dictcatlist_{lang}_{category_index}_0",
@@ -476,11 +476,13 @@ def _dict_search_kb(entry, term_key):
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
-    return InlineKeyboardMarkup(_dict_tts_row(entry) + delete_row + [
-        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+    return InlineKeyboardMarkup([
         *([[InlineKeyboardButton(
             "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
         )]] if word_id else []),
+        *delete_row,
+        *_dict_tts_row(entry),
+        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

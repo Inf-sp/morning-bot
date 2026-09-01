@@ -8,6 +8,82 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_books
 import leisure_movies
+from telegram.error import BadRequest
+
+
+def _combined_items():
+    return [{
+        "id": 1,
+        "title": "Новая премьера",
+        "release_date": "2026-08-31",
+        "poster": "https://images.test/unavailable.jpg",
+        "overview": "Короткая завязка.",
+        "premiere_kind": "movie",
+    }]
+
+
+def test_combined_premieres_screen_has_bound_loader(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(kwargs)
+
+    async def movies(_cid):
+        return _combined_items()
+
+    async def series(_cid):
+        return []
+
+    monkeypatch.setattr(leisure_movies, "_movie_premieres_with_posters", movies)
+    monkeypatch.setattr(leisure_movies, "get_series_premieres", series)
+
+    asyncio.run(leisure_movies.send_combined_premieres(Bot(), "42"))
+
+    assert sent and sent[0]["photo"] == "https://images.test/unavailable.jpg"
+
+
+def test_combined_premieres_uses_text_when_telegram_rejects_poster(monkeypatch):
+    replaced = []
+
+    class Bot:
+        async def send_photo(self, **_kwargs):
+            raise BadRequest("Failed to get http url content")
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            replaced.append((text, kwargs))
+
+    async def combined(_cid):
+        return _combined_items()
+
+    monkeypatch.setattr(leisure_movies, "_combined_premieres", combined, raising=False)
+
+    asyncio.run(leisure_movies.send_combined_premieres(
+        Bot(), "42", status=Status(),
+    ))
+
+    assert replaced and "Новая премьера" in replaced[0][0]
+
+
+def test_combined_premieres_keeps_card_when_next_poster_is_rejected(monkeypatch):
+    captions = []
+
+    class Query:
+        async def edit_message_media(self, **_kwargs):
+            raise BadRequest("Failed to get http url content")
+
+        async def edit_message_caption(self, **kwargs):
+            captions.append(kwargs)
+
+    async def combined(_cid):
+        return _combined_items()
+
+    monkeypatch.setattr(leisure_movies, "_combined_premieres", combined)
+
+    asyncio.run(leisure_movies.show_combined_premiere_page("42", Query(), 0))
+
+    assert captions and "Новая премьера" in captions[0]["caption"]
 
 
 def test_movie_premieres_keep_only_current_year_and_cache_by_country(monkeypatch):
