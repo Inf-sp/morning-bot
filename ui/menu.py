@@ -197,12 +197,13 @@ def learning_menu(home: dict):
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
-        b.text_line(str(phrase["text"]).strip())
-        translation = finish_dot(str(phrase["translation"]).strip())
-        b.text_line(f" — {translation}")
-        meaning = finish_dot(str(phrase.get("meaning") or "").strip())
+        b.add(str(phrase["text"]).strip(), MessageEntity.SPOILER)
+        translation = str(phrase["translation"]).strip().rstrip(".")
+        meaning = str(phrase.get("meaning") or "").strip().rstrip(".")
         if meaning:
-            b.text_line(f" {meaning}")
+            b.text_line(f" → {translation} ({meaning})")
+        else:
+            b.text_line(f" → {translation}")
         b.newline()
 
     grammar_rules = home.get("grammar_rules") or []
