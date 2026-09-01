@@ -25,7 +25,7 @@ def test_restaurant_card_has_google_link_and_compact_details():
 
     assert message.text.startswith("🍽️ Куда сходить · Alkmaar\n\nDe Eendracht")
     assert "(Hekelstraat 30 · restaurant · café · нидерландская · €€)" in message.text
-    assert "Что взять: 🍔 сате · €22,50" in message.text
+    assert "Что взять: сате · €22,50" in message.text
     assert "💡 Интересно: Ресторан находится в здании бывшей школы." in message.text
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
     assert len(links) == 1

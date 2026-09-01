@@ -332,8 +332,7 @@ def restaurant_menu(card=None, *, news=None):
         if dish:
             b.spacer()
             b.bold("Что взять:")
-            dish_emoji = str(card.get("dish_emoji") or "🍽️").strip()
-            b.text_line(f" {dish_emoji} ")
+            b.text_line(" ")
             b.bold(dish)
             if card.get("dish_price"):
                 b.text_line(f" · {_cooking_text(card.get('dish_price'))}")
