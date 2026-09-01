@@ -88,6 +88,33 @@ _PREMIERE_SUMMARIES = {
 # авторы взяты с официальных страниц издателей.
 _VERIFIED_SEASON_RELEASES = (
     {
+        "title": "The Disappearers", "author": "Marlon James",
+        "published_date": "2026-09-01", "isbn": "9780593717202",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9780593717202",
+        "info_link": "https://www.penguinrandomhouse.com/books/742603/the-disappearers-by-marlon-james/9780593717202/",
+        "publisher": "Riverhead Books", "publisher_date_confirmed": True,
+        "categories": ["Literary Fiction"],
+        "description": "Восемь мужчин ставят пьесу в Кингстоне 1980-х, но жестокое нападение превращает их историю в расследование о памяти, насилии и попытке выжить.",
+    },
+    {
+        "title": "Under Story", "author": "Chloe Benjamin",
+        "published_date": "2026-09-01", "isbn": "9780593545218",
+        "cover_url": "https://images4.penguinrandomhouse.com/cover/9780593545218",
+        "info_link": "https://www.penguinrandomhouse.com/books/723843/under-story-a-gma-book-club-pick-by-chloe-benjamin/9780593545218/",
+        "publisher": "Penguin Random House", "publisher_date_confirmed": True,
+        "categories": ["Fiction"],
+        "description": "История любви и научного поиска о цене дополнительного времени и о том, как далеко человек готов зайти ради близких.",
+    },
+    {
+        "title": "The Neverfear", "author": "Katherine Rundell",
+        "published_date": "2026-09-01", "isbn": "9780593809945",
+        "cover_url": "https://images1.penguinrandomhouse.com/cover/9780593809945",
+        "info_link": "https://www.penguinrandomhouse.com/books/743373/the-neverfear-by-katherine-rundell-illustrated-by-ashley-mackenzie/9780593809945/",
+        "publisher": "Penguin Random House", "publisher_date_confirmed": True,
+        "categories": ["Juvenile Fiction", "Fantasy"],
+        "description": "Кристофер и Аня возвращаются в волшебный Архипелаг, где им предстоит столкнуться с великанами, опасной гонкой и новыми врагами.",
+    },
+    {
         "title": "The Residency", "author": "C. D. Major",
         "published_date": "2026-08-04", "isbn": "9798217269495",
         "cover_url": "https://images1.penguinrandomhouse.com/cover/9798217269495",

@@ -1768,6 +1768,32 @@ def test_literary_vibe_replaces_incomplete_weekly_cache(monkeypatch):
     items = asyncio.run(leisure_books.get_weekly_new_books())
 
     assert [item["title"] for item in items] == ["Резерв 1", "Резерв 2", "Резерв 3"]
+
+
+def test_literary_vibe_has_verified_reserve_on_first_day_of_autumn(monkeypatch):
+    autumn_start = date(2026, 9, 1)
+    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(
+        leisure_books, "_book_season",
+        lambda _today=None: (autumn_start, date(2026, 11, 30), "осени"),
+    )
+
+    items = asyncio.run(leisure_books.get_weekly_new_books())
+    tolkien = next(
+        item for item in leisure_books._BOOK_REBUSES
+        if item.get("answer") == "Властелин колец"
+    )
+    message = leisure_books.leisure_ui.weekly_books_screen(
+        "Алкмар", {"rebus": tolkien}, items, day=autumn_start,
+    )
+    empty_message = leisure_books.leisure_ui.weekly_books_screen(
+        "Алкмар", {"rebus": tolkien}, [], day=autumn_start,
+    )
+
+    assert len(items) == 3
+    assert "Пока не удалось подтвердить заметные новинки" not in message.text
+    assert "Толкин работал над «Властелином колец»" in message.text
+    assert "💡 Интересно:" not in empty_message.text
     assert all(item.get("summary") for item in items)
 
 

@@ -789,6 +789,14 @@ async def send_games_home(bot, cid, *, q=None, status=None):
     await _deliver(bot, cid, msg, markup, q=q, status=status)
 
 
+async def warm_games_home_cache(cid):
+    """Готовит сезонную витрину и дневной ребус без отправки сообщения."""
+    items = await get_game_premieres(cid, seasonal=True)
+    today = datetime.now(config.TZ).date()
+    daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
+    return bool(items or daily)
+
+
 async def send_game_recommendation(
     bot, cid, *, q=None, status=None, refresh=False, genre=None,
 ):

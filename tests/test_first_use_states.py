@@ -97,7 +97,6 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
-        ["✨ Обновить"],
         ["🎯 Тренажёр"],
         ["🕵️ Угадай персонажа"],
         ["🎚️ Мой словарь"],

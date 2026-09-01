@@ -196,17 +196,26 @@ _LOCAL_ARTIST_FALLBACKS = {
 }
 
 
-def _local_artist_fallback(known, category=None):
-    """Возвращает нового артиста без сетевого запроса, если AI-цепочка недоступна."""
+def _local_artist_fallback(known, category=None, *, recent=None):
+    """Возвращает артиста без сети; после полного круга начинает новый цикл."""
     key = category.get("value") if isinstance(category, dict) else "default"
-    candidates = list(_LOCAL_ARTIST_FALLBACKS.get(key, []))
-    if key == "default":
-        candidates.extend(_LOCAL_ARTIST_FALLBACKS["default"])
-    known = {str(value or "").casefold() for value in known}
-    for item in candidates:
-        if item["artist"].casefold() not in known:
-            return dict(item)
-    return None
+    candidates = list(
+        _LOCAL_ARTIST_FALLBACKS.get(key) or _LOCAL_ARTIST_FALLBACKS["default"]
+    )
+    blocked = {str(value or "").casefold() for value in known}
+    candidates = [
+        item for item in candidates
+        if str(item.get("artist") or "").casefold() not in blocked
+    ]
+    recent = list(recent or [])
+    available = rotation.candidates_for_cycle(
+        candidates, recent,
+        current=recent[-1] if recent else None,
+        key=lambda item: str(
+            item.get("artist") if isinstance(item, dict) else item or ""
+        ).casefold(),
+    )
+    return dict(available[0]) if available else None
 
 
 def _cached_artist(cid):
@@ -839,8 +848,10 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     }
     blocked = recommendation_stoplist.values(cid, "artist")
     recent = _recent_artists(cid)
-    known = (set(a.lower() for a in arts)
-             | set(value.lower() for value in blocked) | set(value.lower() for value in recent))
+    hard_blocked = (
+        set(a.lower() for a in arts) | set(value.lower() for value in blocked)
+    )
+    known = hard_blocked | set(value.lower() for value in recent)
     avoid_all = ", ".join(list(arts) + blocked + recent)[:600]
     safe_anchors = secure.wrap_untrusted(anchors or "список пуст", "любимые артисты")
     safe_avoid = secure.wrap_untrusted(avoid_all or "список пуст", "исключённые артисты")
@@ -890,7 +901,9 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             data = cand
             break
     if not data or not data.get("artist"):
-        data = _local_artist_fallback(known, fallback_category)
+        data = _local_artist_fallback(
+            hard_blocked, fallback_category, recent=recent,
+        )
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         if preview:

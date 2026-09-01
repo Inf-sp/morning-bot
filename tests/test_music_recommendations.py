@@ -139,6 +139,36 @@ def test_music_keeps_recommending_when_ai_is_unavailable_and_first_fallback_is_k
     assert "Alvvays" in calls[0][0]
 
 
+def test_music_starts_a_new_local_cycle_when_ai_and_fresh_fallbacks_are_exhausted(monkeypatch):
+    calls = []
+    profile = {"music_recent_artists": ["Big Thief", "Alvvays"]}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    async def unavailable(*_args, **_kwargs):
+        raise Exception("AI cooldown")
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(
+        leisure_music.store, "mutate_profile",
+        lambda _cid, change: profile.update(change(dict(profile))[0]),
+    )
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert calls
+    assert "Не удалось подобрать" not in calls[0][0]
+    assert "Big Thief" in calls[0][0]
+
+
 def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
     sent = []
 

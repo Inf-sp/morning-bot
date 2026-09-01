@@ -55,14 +55,15 @@ _RECENT_HOME_OPENINGS = {}
 _HOME_OPENING_DEDUP_SECONDS = 3
 _WEATHER_WARNING_TIME = "08:00"
 _HOME_WARM_SCHEDULE = (
-    ("myday", "07:00"),
-    ("wardrobe", "08:05"),
-    ("cooking", "03:20"),
-    ("travel", "08:15"),
-    ("cinema", "08:20"),
-    ("books", "08:25"),
-    ("music", "08:30"),
-    ("learning", "08:35"),
+    ("wardrobe", "00:00"),
+    ("cooking", "00:05"),
+    ("learning", "00:10"),
+    ("travel", "00:15"),
+    ("cinema", "00:20"),
+    ("music", "00:25"),
+    ("books", "00:30"),
+    ("games", "00:35"),
+    ("myday", "00:40"),
 )
 
 
@@ -392,6 +393,7 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
             ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
             ("books", lambda: leisure_books.warm_books_home_cache(cid)),
             ("music", lambda: leisure_music.warm_music_home_cache(cid)),
+            ("games", lambda: leisure_games.warm_games_home_cache(cid)),
         )
         if scheduled_section:
             steps = tuple(step for step in steps if step[0] == scheduled_section)
@@ -661,15 +663,12 @@ def _build_application():
         **_job_options("dictionary_recheck_repeating"),
     )
     for section, time_label in _HOME_WARM_SCHEDULE:
-        weekly_home_sections = {"travel", "cinema", "books", "music"}
-        warm_days = (0,) if section in weekly_home_sections else tuple(range(7))
-        cadence = "weekly" if section in weekly_home_sections else "daily"
         jq.run_daily(
             job_warm_home_pages,
             time=_t(time_label),
-            days=warm_days,
+            days=tuple(range(7)),
             data=section,
-            **_job_options(f"warm_home_{section}_{cadence}"),
+            **_job_options(f"warm_home_{section}_daily"),
         )
     jq.run_daily(
         job_refresh_category_news, time=_t("01:30"), days=tuple(range(7)),

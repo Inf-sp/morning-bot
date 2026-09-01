@@ -50,7 +50,7 @@ def _nav_row():
 
 
 def _result_keyboard(data, *, allow_remove=True):
-    rows = [[("✨ Другое задание", f"ex_next_{data['_task_id']}")]]
+    rows = [[("✨ Следующее задание", f"ex_next_{data['_task_id']}")]]
     if allow_remove and not data.get("_removed"):
         rows.append([("❌ Удалить", f"ex_remove_{data['_task_id']}")])
     rows.append(_nav_row())

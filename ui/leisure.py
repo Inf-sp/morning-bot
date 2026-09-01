@@ -985,7 +985,7 @@ def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
         daily_book.get("fact") or (daily_book.get("rebus") or {}).get("fact")
         or birthday.get("fact") or ""
     ).strip()
-    if fact:
+    if fact and premieres:
         b.spacer()
         b.bold("💡 Интересно:")
         b.text_line(" ")
