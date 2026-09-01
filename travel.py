@@ -905,7 +905,8 @@ async def send_plan(bot, cid, *, status=None):
         "plan_entities": util.entities_to_json(msg.entities), "details": plan,
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новое путешествие", callback_data="a_trav_no")],
+        [InlineKeyboardButton("🧳 Другая страна", callback_data="a_trav_no")],
+        [InlineKeyboardButton("🧭 По направлению", callback_data="a_trav_regions")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     photo = plan.get("photo") or {}
