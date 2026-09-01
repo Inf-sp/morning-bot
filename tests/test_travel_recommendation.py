@@ -150,10 +150,29 @@ def test_travel_home_shows_place_of_the_day_without_rebus():
 
     assert "Прогресс:" not in message.text
     assert "посещено" not in message.text
-    assert message.text.startswith("🚆 Место дня · Поезд\nЛейден — короткий маршрут.")
+    assert message.text.startswith("🚆 Место дня · Поезд\n\nЛейден — короткий маршрут.")
     assert "Туристический ребус:" not in message.text
     assert "💡 Полезно: Проверь расписание." in message.text
     assert not any(entity.type == MessageEntity.SPOILER for entity in message.entities)
+
+    # Дизайн: заголовок и подпись совета жирные, блоки разделены пустыми строками.
+    assert message.text.split("\n")[0] == "🚆 Место дня · Поезд"
+    _types = [entity.type for entity in message.entities]
+    assert _types.count(MessageEntity.BOLD) >= 2
+    assert "\n\n" in message.text
+
+
+def test_travel_home_renders_route_as_bulleted_section():
+    idea = {
+        "emoji": "🗺️", "transport_title": "ТиД", "to": "Утрехт", "intro": "На один день.",
+        "route": ["Центр и рынок", "Старый город", "Набережная"], "tip": "Проверь график.",
+    }
+    message = travel_ui.home_screen(idea)
+    expected = (
+        "🗺️ Место дня · ТиД\n\nУтрехт — на один день.\n\nЧто интересного:\n"
+        "• Центр и рынок\n• Старый город\n• Набережная\n\n💡 Полезно: Проверь график."
+    )
+    assert message.text == expected
 
 
 def test_travel_card_entities_stay_on_utf16_boundaries_without_separate_flag():

@@ -594,8 +594,9 @@ def movie_card(item, tm):
     """Карточка рекомендации кино, спроектированная под быстрое решение (3-5 сек).
 
     Иерархия сверху вниз: что это (заголовок) → стоит ли смотреть и что за жанр
-    (рейтинг · тип · жанры) → насколько долго (одна строка) → о чём (короткое
-    описание) → почему именно мне (персональная причина).
+    (рейтинг · тип · жанры) → о чём (короткое описание) → почему именно мне
+    (персональная причина) → дата выхода последней строкой. Длительность фильма,
+    страна и подпись «Подборка в жанре…» не показываются.
     """
     item = item if isinstance(item, dict) else {"title": str(item)}
     title = (tm.get("name") if tm else "") or item.get("title", "")
@@ -625,12 +626,11 @@ def movie_card(item, tm):
     if meta_parts:
         b.spacer()
         b.line(" · ".join(meta_parts))
-    if year:
-        b.labeled_line("Дата выхода", year, lowercase=False)
 
-    # 3. Насколько это долго — компактная строка деталей (одна).
+    # 3. Статус и объём сериала (для фильма пусто — длительность и страна не показываются).
     detail = _detail_line(tm)
     if detail:
+        b.spacer()
         b.line(detail)
 
     # 4. О чём — короткое описание (2-4 строки).
@@ -643,6 +643,11 @@ def movie_card(item, tm):
     if reason:
         b.spacer()
         b.line(reason)
+
+    # 6. Дата выхода — последняя строка карточки.
+    if year:
+        b.spacer()
+        b.labeled_line("Дата выхода", year, lowercase=False)
 
     return title, b.build_stripped()
 
@@ -675,7 +680,8 @@ def _reason_line(item, tm):
         kind = reason.get("kind")
         label = _clip_title(reason.get("label", ""))
         if kind == "genre":
-            return f"Подборка в жанре «{label}»"
+            # Подборку по жанру в карточке не подписываем строкой «Подборка в жанре…».
+            return ""
         if kind == "mood":
             return f"Подборка для настроения «{label}»"
     because = tm.get("because")
@@ -687,7 +693,8 @@ def _reason_line(item, tm):
 
 
 def _detail_line(tm):
-    """Одна компактная строка длительности/объёма. Статус сериала — ровно один вариант."""
+    """Строка статуса и объёма для сериала. Для фильма длительность и страна
+    не показываются, поэтому строка пустая. Статус сериала — ровно один вариант."""
     if not tm:
         return ""
     kind = tm.get("kind")
@@ -712,13 +719,8 @@ def _detail_line(tm):
             parts.append(vol)
         return " · ".join(parts)
     if kind == "movie":
-        parts = []
-        if tm.get("runtime"):
-            parts.append(f"{tm['runtime']} мин")
-        countries = tm.get("countries") or []
-        if countries:
-            parts.append(", ".join(countries[:2]))
-        return " · ".join(parts)
+        # Длительность и страна в карточке фильма не показываются.
+        return ""
     return ""
 
 

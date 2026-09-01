@@ -119,7 +119,8 @@ def _reason_label(reason):
     kind = reason.get("kind")
     label = reason.get("label", "")
     if kind == "genre":
-        return f"Подборка в жанре «{label}»"
+        # Подборку по жанру отдельной строкой на карточке не подписываем.
+        return ""
     return ""
 
 

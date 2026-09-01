@@ -20,27 +20,37 @@ def visited_summary(n):
 def home_screen(idea, rebus=None, *, news=None):
     b = MessageBuilder()
     title = idea.get("transport_title") or ""
-    header = f"{idea.get('emoji', '🗺️')} Место дня" + (f" · {title}" if title else "")
-    b.line(header)
-    
+    # Заголовок: жирный, четвёртая по общему языку карточек разделов.
+    b.text_line(f"{idea.get('emoji', '🗺️')} ")
+    b.bold("Место дня" + (f" · {title}" if title else ""))
+    b.newline()
+
     to = str(idea.get("to") or "")
     intro = str(idea.get("intro") or "")
-    if to and intro and not intro.startswith(to):
-        intro_low = intro[0].lower() + intro[1:] if intro else ""
-        b.line(f"{to} — {intro_low}")
-    elif to or intro:
-        b.line(to or intro)
-        
+    # Название места выделяем жирным, описание — рядом через тире.
+    if to:
+        b.bold(to)
+        if intro and not intro.startswith(to):
+            intro_low = intro[0].lower() + intro[1:] if intro else ""
+            b.line(f" — {intro_low}")
+        elif intro:
+            b.line(f" — {intro}")
+        else:
+            b.newline()
+    elif intro:
+        b.line(intro)
+
     route = idea.get("route")
     if route:
-        b.line("Что интересного:")
+        b.section("Что интересного:")
         for point in route:
-            b.line(str(point))
-            
+            b.bullet(str(point))
+
     tip = idea.get("tip")
     if tip:
         tip_text = tip[0].upper() + tip[1:] if tip else ""
-        b.line(f"💡 Полезно: {tip_text}")
+        b.spacer()
+        b.labeled_line("💡 Полезно", tip_text, lowercase=False)
 
     if news:
         b.spacer()
