@@ -489,6 +489,13 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
             reserve_history,
             current=(reserve_history or [None])[-1], key=reserve_key,
         )
+        if not available:
+            # Все резервные варианты отклонены — сбрасываем rejected-фильтр
+            # и выбираем следующий в цикле (без уже показанного последним).
+            available = rotation.candidates_for_cycle(
+                reserves, reserve_history,
+                current=(reserve_history or [None])[-1], key=reserve_key,
+            )
         if available:
             name, category = available[0]
             items = [{
@@ -521,19 +528,15 @@ async def show_purchase_page(
         cid, wardrobe, reset=reset_candidates, exclude_names=exclude_names,
     )
     if not candidates:
-        text_out = (
-            "💳 Что докупить · Гардероб\n\n"
-            "Свежие полезные варианты закончились. Вернись после обновления шкафа — "
-            "тогда я заново проверю пробелы и сочетания."
-        )
-        kb = _purchase_hub_kb()
-        if q is not None:
-            try:
-                await q.edit_message_text(text=text_out, reply_markup=kb)
-                return
-            except Exception:
-                pass
-        await bot.send_message(chat_id=cid, text=text_out, reply_markup=kb)
+        # Полный сброс seen + rejections, чтобы экран всегда показывал рекомендацию
+        def full_reset(current):
+            current["wardrobe_purchase_seen"] = {"items": []}
+            current["wardrobe_purchase_rejections"] = {"items": []}
+            current.pop("wardrobe_purchase_carousel", None)
+            return current, None
+        store.mutate_profile(cid, full_reset)
+        candidates = _purchase_carousel_candidates(cid, wardrobe, reset=True)
+    if not candidates:
         return
     page = max(0, min(int(page), len(candidates) - 1))
     item = candidates[page]
