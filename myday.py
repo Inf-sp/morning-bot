@@ -1135,7 +1135,7 @@ def _build_day_text(cid, *, refresh_current=False):
     import wardrobe
     outfit_summary = wardrobe.get_cached_outfit_summary(cid)
     import restaurant_discovery
-    restaurant_line = restaurant_discovery.cached_restaurant_summary(cid)
+    restaurant_preview = restaurant_discovery.cached_restaurant_preview(cid)
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
@@ -1157,7 +1157,9 @@ def _build_day_text(cid, *, refresh_current=False):
         movie_rebus=movie_rebus,
         outfit_items=outfit_summary["items"],
         outfit_emoji=outfit_summary["emoji"],
-        restaurant_line=restaurant_line,
+        restaurant_name=restaurant_preview.get("name", ""),
+        restaurant_url=restaurant_preview.get("url", ""),
+        restaurant_line=restaurant_preview.get("details", ""),
         lifehack=hack_text,
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),

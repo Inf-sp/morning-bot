@@ -128,6 +128,30 @@ class MessageBuilder:
             self._has_content = True
         return self
 
+    def bold_link(self, text: str, url: str):
+        """Кликабельное имя, которое одновременно остаётся визуальным заголовком."""
+        self._ensure_gap_after_title(text)
+        offset = u16_len(self.text)
+        self._chunks.append(text)
+        if text:
+            length = u16_len(text)
+            self._entities.append(MessageEntity(MessageEntity.TEXT_LINK, offset, length, url=url))
+            self._entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
+            self._has_content = True
+        return self
+
+    def bold_italic(self, text: str):
+        """Текст с одновременно жирным и курсивным начертанием."""
+        self._ensure_gap_after_title(text)
+        offset = u16_len(self.text)
+        self._chunks.append(text)
+        if text:
+            length = u16_len(text)
+            self._entities.append(MessageEntity(MessageEntity.BOLD, offset, length))
+            self._entities.append(MessageEntity(MessageEntity.ITALIC, offset, length))
+            self._has_content = True
+        return self
+
     def blank(self):
         return self.add("\n\n")
 

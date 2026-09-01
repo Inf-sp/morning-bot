@@ -120,7 +120,13 @@ def _with_recipe_source(item, sources, index=0):
         result.get("source_recipe_id") or result.get("source_meal_id")
         or result.get("spoonacular_id") or result.get("themealdb_id") or ""
     )
-    source = by_id.get(source_id) or sources[index % len(sources)]
+    source = by_id.get(source_id)
+    if not source:
+        # Никогда не подставляем фото соседнего рецепта по позиции: если модель
+        # потеряла или исказила source_recipe_id, безопаснее показать карточку без
+        # изображения, чем визуально выдать другое блюдо за выбранное.
+        result.pop("image", None)
+        return result
     result["source_recipe_id"] = str(source["id"])
     if source.get("thumbnail"):
         result["image"] = str(source.get("thumbnail") or "").strip()

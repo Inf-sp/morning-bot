@@ -484,10 +484,8 @@ async def show_purchase_page(
     card_item = dict(item)
     if photo:
         card_item.update({
-            "product_title": _clean_text(photo.get("product_title")),
             "product_url": _clean_text(photo.get("page_url")),
-            "product_price": _clean_text(photo.get("price")),
-            "product_source": _clean_text(photo.get("source")),
+            "product_brand": _clean_text(photo.get("brand")),
         })
     if not card_item.get("product_url"):
         query = quote_plus(_clean_text(item.get("item")))

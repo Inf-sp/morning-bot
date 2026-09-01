@@ -1,6 +1,7 @@
 """Подтверждённые фото рекомендованной покупки из Shopping и Pexels."""
 
 from functools import lru_cache
+import re
 import time
 
 import requests
@@ -78,6 +79,18 @@ _COLOR_TOKENS = {
     "green": ("green",),
 }
 
+_POPULAR_BRANDS = {
+    "uniqlo": "Uniqlo", "cos": "COS", "arket": "Arket", "weekday": "Weekday",
+    "zara": "Zara", "mango": "Mango", "h&m": "H&M", "massimo dutti": "Massimo Dutti",
+    "selected homme": "Selected Homme", "levi's": "Levi’s", "levis": "Levi’s",
+    "nike": "Nike", "adidas": "Adidas", "new balance": "New Balance",
+}
+_EXPENSIVE_BRANDS = (
+    "gucci", "prada", "balenciaga", "bottega veneta", "saint laurent",
+    "louis vuitton", "burberry", "moncler", "tom ford", "brunello cucinelli",
+)
+_MAX_PRODUCT_PRICE_EUR = 200
+
 
 def _english_color(name):
     for markers, color in _PURCHASE_COLORS:
@@ -120,6 +133,49 @@ def _photo_matches_item(item, photo):
     return not color or any(token in alt for token in _COLOR_TOKENS.get(color, (color,)))
 
 
+def _popular_brand(row):
+    text = " ".join(str((row or {}).get(field) or "") for field in ("title", "source")).casefold()
+    if any(brand in text for brand in _EXPENSIVE_BRANDS):
+        return ""
+    return next((label for marker, label in _POPULAR_BRANDS.items() if marker in text), "")
+
+
+def _affordable(row):
+    extracted = (row or {}).get("extracted_price")
+    if isinstance(extracted, (int, float)):
+        return float(extracted) <= _MAX_PRODUCT_PRICE_EUR
+    price = str(extracted or (row or {}).get("price") or "")
+    match = re.search(r"\d[\d.,]*", price.replace(" ", ""))
+    if not match:
+        return True
+    normalized = match.group(0)
+    if "," in normalized and "." not in normalized:
+        tail = normalized.rsplit(",", 1)[1]
+        normalized = normalized.replace(",", "" if len(tail) == 3 else ".")
+    elif "." in normalized and "," not in normalized:
+        tail = normalized.rsplit(".", 1)[1]
+        if len(tail) == 3:
+            normalized = normalized.replace(".", "")
+    elif "," in normalized and "." in normalized:
+        normalized = normalized.replace(".", "").replace(",", ".")
+    try:
+        return float(normalized) <= _MAX_PRODUCT_PRICE_EUR
+    except ValueError:
+        return True
+
+
+def _high_quality(photo):
+    """Отклоняет известные маленькие изображения; неизвестный размер проверит Telegram."""
+    try:
+        width = int((photo or {}).get("width") or 0)
+        height = int((photo or {}).get("height") or 0)
+    except (TypeError, ValueError):
+        return False
+    if not width and not height:
+        return True
+    return width >= 1000 and height >= 1000
+
+
 def _serpapi_purchase_photo(item, audience="neutral"):
     """Возвращает первый подтверждённый товар Google Shopping для Нидерландов."""
     if not config.SERP_API_KEY:
@@ -156,8 +212,15 @@ def _serpapi_purchase_photo(item, audience="neutral"):
             if not isinstance(row, dict):
                 continue
             title = " ".join(str(row.get("title") or "").split()).strip()
-            url = str(row.get("thumbnail") or row.get("serpapi_thumbnail") or "").strip()
-            if not title or not url or not _photo_matches_item(item, {"alt": title}):
+            url = str(row.get("serpapi_thumbnail") or row.get("thumbnail") or "").strip()
+            brand = _popular_brand(row)
+            photo_meta = {
+                "alt": title,
+                "width": row.get("thumbnail_width") or row.get("image_width"),
+                "height": row.get("thumbnail_height") or row.get("image_height"),
+            }
+            if (not title or not url or not brand or not _affordable(row)
+                    or not _photo_matches_item(item, photo_meta) or not _high_quality(photo_meta)):
                 continue
             return {
                 "provider": "serpapi",
@@ -165,8 +228,7 @@ def _serpapi_purchase_photo(item, audience="neutral"):
                 "url": url,
                 "page_url": str(row.get("product_link") or row.get("link") or ""),
                 "alt": title,
-                "product_title": title,
-                "price": str(row.get("price") or ""),
+                "brand": brand,
                 "source": str(row.get("source") or ""),
                 "query": query,
             }
@@ -188,7 +250,9 @@ def purchase_photo(item, audience="neutral", variant=0):
     fallback = pexels_photo(
         _purchase_query(name, audience), strict=False, first_result=True,
         result_index=max(0, int(variant)),
-        result_validator=lambda photo: _photo_matches_item(name, photo),
+        result_validator=lambda photo: (
+            _photo_matches_item(name, photo) and _high_quality(photo)
+        ),
     )
     if fallback and config.SERP_API_KEY:
         provider_runtime.activate_fallback("serpapi", "pexels", reason="request")

@@ -128,14 +128,9 @@ def render_wardrobe_message(look_data, *, news=None):
         if slots["Обувь"]:
             b.line(f"- {', '.join(slots['Обувь'])}")
 
-        sock_recommendation = _upper_first(_clean_text(look_data.get("sock_recommendation")))
-        selected_socks = any("носк" in item.casefold() for item in slots["Аксессуары"])
-        if sock_recommendation and not selected_socks:
-            b.line(f"- {sock_recommendation}")
-
         extras = [
             *slots["Верхняя одежда"],
-            *slots["Аксессуары"],
+            *(item for item in slots["Аксессуары"] if "носк" not in item.casefold()),
             *slots["Другое"],
         ]
         if extras:
@@ -145,7 +140,16 @@ def render_wardrobe_message(look_data, *, news=None):
             for item in extras:
                 b.line(f"- {item}")
 
-    main_accent = _finish_dot(look_data.get("main_accent"))
+    selected_socks = next(
+        (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
+    )
+    sock_recommendation = _upper_first(
+        _clean_text(look_data.get("sock_recommendation")) or selected_socks
+    )
+    main_accent = _finish_dot(
+        f"{sock_recommendation} поддержат обувь и соберут образ"
+        if sock_recommendation else look_data.get("main_accent")
+    )
     if main_accent:
         b.spacer()
         b.text_line("💡 ")
@@ -189,14 +193,8 @@ def outfit_item_names(look_data):
     look_data = look_data or {}
     slots = _outfit_slots(look_data.get("items") or [])
     names = [*slots["Верх"], *slots["Низ"], *slots["Обувь"]]
-    sock_recommendation = _upper_first(
-        _clean_text(look_data.get("sock_recommendation"))
-    )
-    selected_socks = any("носк" in item.casefold() for item in slots["Аксессуары"])
-    if sock_recommendation and not selected_socks:
-        names.append(sock_recommendation)
     names.extend(slots["Верхняя одежда"])
-    names.extend(slots["Аксессуары"])
+    names.extend(item for item in slots["Аксессуары"] if "носк" not in item.casefold())
     names.extend(slots["Другое"])
     return names
 
@@ -382,15 +380,10 @@ def purchase_recommendation_card(item):
     if reason:
         b.spacer()
         b.line(_upper_first(reason))
-    product_title = _clean_text(item.get("product_title"))
-    product_price = _clean_text(item.get("product_price"))
-    product_source = _clean_text(item.get("product_source"))
-    if product_title:
+    product_brand = _clean_text(item.get("product_brand"))
+    if product_brand:
         b.spacer()
-        b.labeled_line("Конкретный вариант", product_title, lowercase=False)
-    shop_meta = " · ".join(value for value in (product_price, product_source) if value)
-    if shop_meta:
-        b.line(shop_meta)
+        b.labeled_line("Бренд", product_brand, lowercase=False)
     return b.build_stripped()
 
 

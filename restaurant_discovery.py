@@ -24,11 +24,12 @@ _CITY_FALLBACKS = {
             "source_url": "https://www.deeendracht-alkmaar.nl/",
         },
         {
-            "name": "MADA",
+            "name": "Mada - Smaak van Georgië",
             "cuisine": "грузинская", "price": "€€",
             "signature_dish": "аджарули хачапури",
-            "description": "Грузинский ресторан с выпечкой из печи, хинкали и блюдами на углях.",
-            "fact": "Винная часть меню опирается на грузинскую традицию выдержки вина в квеври.",
+            "signature_dishes": ["Аджарули хачапури", "Хинкали"],
+            "description": "Душевный грузинский ресторан в центре Алкмара, идеальный для уютного вечера с дровяной выпечкой и блюдами с огня. Выпечка из печи, сочные хинкали и аутентичные блюда на углях.",
+            "fact": "Традиционные грузинские глиняные сосуды квеври, которые Mada использует для выдержки вина, закопаны глубоко под землю для поддержания постоянной температуры. Этот метод виноделия внесён в список нематериального культурного наследия ЮНЕСКО.",
             "source_url": "https://restaurant-mada.nl/",
         },
         {
@@ -77,16 +78,29 @@ def _save(cid, card):
         pass
 
 
-def cached_restaurant_summary(cid):
-    """Короткая строка только из готовой сегодняшней карточки, без поиска и AI."""
+def cached_restaurant_preview(cid):
+    """Готовые данные для «Моего дня» без нового поиска и AI."""
     city = str(store.get_settings(cid).get("city") or "").strip()
     card = _cache(cid)
     if not _fresh(card, city):
-        return ""
+        return {}
+    return {
+        "name": str(card.get("name") or "").strip(),
+        "url": str(card.get("map_url") or "").strip(),
+        "details": " · ".join(
+            str(card.get(field) or "").strip()
+            for field in ("cuisine", "price")
+            if str(card.get(field) or "").strip()
+        ),
+    }
+
+
+def cached_restaurant_summary(cid):
+    """Совместимая короткая строка из готовой сегодняшней карточки."""
+    preview = cached_restaurant_preview(cid)
     return " · ".join(
-        str(card.get(field) or "").strip()
-        for field in ("name", "cuisine", "price")
-        if str(card.get(field) or "").strip()
+        value for value in (preview.get("name", ""), preview.get("details", ""))
+        if value
     )
 
 

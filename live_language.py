@@ -10,7 +10,7 @@ _DAILY_PHRASES = {
         {
             "text": "Dat is de druppel!",
             "translation": "Это последняя капля",
-            "meaning": "Когда мелкие неприятности копятся, и очередная окончательно добивает.",
+            "meaning": "Популярное выражение, которое буквально переводится как «Это капля!». Аналог нашей фразы «Это последняя капля» — когда терпение окончательно лопнуло.",
         },
         {
             "text": "Geen probleem.",
@@ -113,9 +113,9 @@ _DAILY_PHRASES = {
 }
 
 
-def daily_phrase(language="nl") -> dict:
+def daily_phrase(language="nl", variant=0) -> dict:
     """Одна проверенная фраза на календарный день без AI и сетевых запросов."""
     code = language if language in _DAILY_PHRASES else "nl"
     phrases = _DAILY_PHRASES[code]
-    index = datetime.now(config.TZ).date().toordinal() % len(phrases)
+    index = (datetime.now(config.TZ).date().toordinal() + max(0, int(variant))) % len(phrases)
     return dict(phrases[index])

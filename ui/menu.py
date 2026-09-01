@@ -198,24 +198,38 @@ def learning_menu(home: dict):
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
-        b.bold("Живой язык:")
-        b.text_line(f" {phrase['text']} → ")
-        b.add(finish_dot(phrase["translation"]), MessageEntity.SPOILER)
+        b.text_line(str(phrase["text"]).strip())
+        b.text_line(" (")
+        b.add(str(phrase["translation"]).strip(), MessageEntity.SPOILER)
+        b.text_line(")")
+        meaning = finish_dot(str(phrase.get("meaning") or "").strip())
+        if meaning:
+            b.text_line(f" — {meaning}")
         b.newline()
 
-    grammar = str(home.get("grammar") or "").strip()
+    grammar_rules = home.get("grammar_rules") or []
     b.spacer()
     b.bold("Грамматика:")
-    if grammar:
-        b.text_line(f" {grammar}")
     b.newline()
+    for rule in grammar_rules:
+        title = str((rule or {}).get("title") or "").strip()
+        if not title:
+            continue
+        b.text_line("- ")
+        b.bold(f"{title}:")
+        b.text_line(" ")
+        for text, style in (rule.get("parts") or []):
+            getattr(b, style if style in {"italic", "bold_italic"} else "text_line")(str(text))
+        b.newline()
     b.spacer()
-    focus = home.get("focus") or "добавить первые слова для практики."
+    focus = home.get("focus") or "Сначала составь своё предложение, затем проверь себя."
     b.text_line("💡 ")
-    b.label("Полезно", focus)
+    b.bold("Полезно:")
+    b.text_line(f" {focus}")
 
     return b.build_stripped(reply_markup=ikb([
-        [("✨ Подобрать новое задание", f"a_train_{code}")],
+        [("✨ Обновить", "a_learning_refresh")],
+        [("🎯 Тренажёр", f"a_train_{code}")],
         [(ui_label("game", "Угадай персонажа"), "a_game")],
         [("🎚️ Мой словарь", f"a_dictlang_{code}_from_menu")],
         [("#️⃣ Главная", "m_menu")],
@@ -320,34 +334,27 @@ def restaurant_menu(card=None, *, news=None):
     b.section(f"🍽️ Куда сходить · {city}")
     name = _cooking_text(card.get("name"))
     if name and card.get("map_url"):
-        b.link(name, str(card["map_url"]))
-        b.newline()
-        meta = " · ".join(value for value in (
-            _cooking_text(card.get("address")), _cooking_text(card.get("format")),
-            _cooking_text(card.get("cuisine")), _cooking_text(card.get("price")),
-        ) if value)
-        if meta:
-            b.line(f"({meta})")
-        dish = _cooking_text(card.get("signature_dish"))
-        if dish:
-            b.spacer()
-            b.bold("Что взять:")
-            b.text_line(" ")
-            b.bold(dish)
-            if card.get("dish_price"):
-                b.text_line(f" · {_cooking_text(card.get('dish_price'))}")
-            b.newline()
-            dish_description = _cooking_sentence(card.get("dish_description"))
-            if dish_description:
-                b.line(dish_description)
+        b.bold_link(name, str(card["map_url"]))
         description = _cooking_sentence(card.get("description"))
         if description:
+            b.text_line(f" — {description}")
+        b.newline()
+        dishes = [
+            _cooking_text(value)
+            for value in (card.get("signature_dishes") or [card.get("signature_dish")])
+            if _cooking_text(value)
+        ][:2]
+        if dishes:
             b.spacer()
-            b.line(description)
+            b.italic("Что взять:")
+            b.newline()
+            for dish in dishes:
+                b.line(f"- {dish}")
         fact = _cooking_sentence(card.get("fact"))
         if fact:
             b.spacer()
-            b.bold("💡 Интересно:")
+            b.text_line("💡 ")
+            b.bold("Интересный факт:")
             b.text_line(f" {fact}")
             b.newline()
     else:

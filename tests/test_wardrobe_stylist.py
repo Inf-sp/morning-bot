@@ -65,9 +65,10 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
-    assert "- Белые носки" in message.text
+    assert "- Белые носки" not in message.text
     assert "Как носить:" not in message.text
     assert "💡 Главный акцент:" in message.text
+    assert "белые носки поддержат обувь и соберут образ." in message.text
     assert "💡 Полезно:" not in message.text
 
 
@@ -132,7 +133,8 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
 
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
-    assert "Дополнительно:\n- Синие носки" in message.text
+    assert "Дополнительно:\n- Синие носки" not in message.text
+    assert "Главный акцент: синие носки поддержат обувь и соберут образ." in message.text
 
 
 def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
@@ -167,7 +169,9 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
             {"name": "Чёрные брюки", "zone": "Низ"},
             {"name": "Белые кеды", "zone": "Обувь"},
             {"name": "Серые часы", "zone": "Аксессуары"},
+            {"name": "Белые носки", "zone": "Аксессуары"},
         ],
+        "sock_recommendation": "Белые носки",
     }
 
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {"look_data": look})
@@ -182,6 +186,7 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
         outfit_items=summary["items"], outfit_emoji=summary["emoji"],
     )
     assert "👕 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
+    assert "носки" not in message.text.casefold()
 
 
 def test_other_outfit_changes_the_base_not_one_random_item():

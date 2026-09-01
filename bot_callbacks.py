@@ -187,7 +187,7 @@ async def handle(update, context, remove_reply_keyboard):
         await cleanup.open_collection(bot, cid, collection_id, back=back)
         return
     # Настройки обучения
-    if data in ("set_learning", "set_learning_dict", "toggle_learning_language", "toggle_learning_language_dict"):
+    if data in ("set_learning", "set_learning_dict", "set_learning_dictionary", "toggle_learning_language", "toggle_learning_language_dict"):
         try:
             await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:

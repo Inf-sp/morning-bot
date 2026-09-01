@@ -13,6 +13,7 @@ import learning_settings as learning_preferences
 import store
 import trainer
 import util
+from ui import menu as menu_ui
 
 
 async def handle_callback(bot, cid, data, run_with_status, q=None):
@@ -67,7 +68,18 @@ async def handle_callback(bot, cid, data, run_with_status, q=None):
 
 async def handle_action(bot, cid, q, act, run_with_status):
     """Действия раздела «Обучение» из общего префикса a_."""
-    if act == "train":
+    if act == "learning_refresh":
+        msg = menu_ui.learning_menu(learning.refresh_learning_home(cid))
+        try:
+            await q.message.edit_text(
+                msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+            )
+        except Exception:
+            await bot.send_message(
+                chat_id=cid, text=msg.text,
+                entities=msg.entities, reply_markup=msg.reply_markup,
+            )
+    elif act == "train":
         await learning.send_train_lang_select(bot, cid)
     elif act in ("train_nl", "train_en"):
         await run_with_status(lambda _s: trainer.start(

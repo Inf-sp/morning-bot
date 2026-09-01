@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import cooking
 import recipe_generation
+import recipe_generation
 import settings
 
 
@@ -245,3 +246,18 @@ def test_next_dinner_skips_recipe_that_was_just_shown(monkeypatch):
     )
 
     assert result["name"] == "Гречка с грибами"
+def test_recipe_never_borrows_image_from_an_unmatched_source():
+    recipe = {
+        "name": "Спагетти с креветками и чесноком",
+        "source_recipe_id": "missing-id",
+    }
+    sources = [{
+        "id": "other-id",
+        "name": "Beef lasagna",
+        "thumbnail": "https://images.example/beef-lasagna.jpg",
+        "source_provider": "spoonacular",
+    }]
+
+    result = recipe_generation._with_recipe_source(recipe, sources)
+
+    assert result.get("image", "") == ""

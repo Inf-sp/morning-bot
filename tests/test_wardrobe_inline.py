@@ -8,7 +8,7 @@ import wardrobe
 import bot_callbacks
 import travel
 import util
-from ui.wardrobe import purchase_check_card, purchase_suggestions_card
+from ui.wardrobe import purchase_check_card, purchase_recommendation_card, purchase_suggestions_card
 
 
 def _labels(markup):
@@ -374,6 +374,19 @@ def test_purchase_suggestions_show_colors_and_three_real_outfits():
     assert "• Худи + белые кеды." in message.text
 
 
+def test_purchase_card_hides_price_and_size_but_shows_popular_brand():
+    message = purchase_recommendation_card({
+        "item": "Прямые брюки нейтрального цвета",
+        "category": "Низ", "style": "Базовый", "season": "Межсезонье",
+        "reason": "Добавят больше сочетаний.",
+        "product_brand": "Uniqlo", "product_price": "€79", "size": "L",
+    })
+
+    assert "Бренд: Uniqlo" in message.text
+    assert "€79" not in message.text
+    assert "Размер" not in message.text
+
+
 def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypatch):
     sent = []
     wardrobe_data = {
@@ -616,11 +629,11 @@ def test_serpapi_shopping_is_primary_for_purchase_photo(monkeypatch):
                 },
                 {
                     "product_id": "right",
-                    "title": "Men gray wide leg jeans",
+                    "title": "Uniqlo men gray wide leg jeans",
                     "thumbnail": "https://shop.example/jeans.jpg",
                     "product_link": "https://shop.example/jeans",
                     "price": "€79",
-                    "source": "Example Shop",
+                    "source": "Uniqlo",
                 },
             ]}
 
@@ -644,6 +657,7 @@ def test_serpapi_shopping_is_primary_for_purchase_photo(monkeypatch):
     assert photo["id"] == "right"
     assert photo["url"] == "https://shop.example/jeans.jpg"
     assert photo["page_url"] == "https://shop.example/jeans"
+    assert photo["brand"] == "Uniqlo"
     assert calls[0][1]["params"] == {
         "engine": "google_shopping",
         "q": "men gray wide leg jeans",
@@ -651,6 +665,17 @@ def test_serpapi_shopping_is_primary_for_purchase_photo(monkeypatch):
         "hl": "en",
         "api_key": "test-key",
     }
+
+
+def test_purchase_product_policy_rejects_luxury_expensive_and_small_images():
+    import wardrobe_photos
+
+    assert wardrobe_photos._popular_brand({"title": "Uniqlo straight trousers"}) == "Uniqlo"
+    assert wardrobe_photos._popular_brand({"title": "Gucci straight trousers"}) == ""
+    assert wardrobe_photos._affordable({"price": "€79,90"}) is True
+    assert wardrobe_photos._affordable({"price": "€1,299"}) is False
+    assert wardrobe_photos._high_quality({"width": 1600, "height": 1200}) is True
+    assert wardrobe_photos._high_quality({"width": 640, "height": 480}) is False
 
 
 def test_purchase_photo_falls_back_to_pexels_when_shopping_has_no_match(monkeypatch):

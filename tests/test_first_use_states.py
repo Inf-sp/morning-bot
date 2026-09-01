@@ -80,8 +80,8 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     message = menu_ui.learning_menu({
         "has_material": True, "lang_code": "nl", "kind": "word",
         "term": "morgen", "translation": "завтра",
-        "grammar": "Глагол стоит на втором месте.",
-        "focus": "вспомнить перевод до открытия спойлера.",
+        "grammar_rules": list(learning._GRAMMAR_RULES_NL),
+        "focus": "Сначала попробуй составить своё предложение с каждым правилом в уме, а только потом проверяй себя по словарю.",
         "live_language": {
             "text": "Laat maar", "translation": "Ладно, забудь",
             "meaning": "Когда решаешь не продолжать тему.",
@@ -92,29 +92,54 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         },
     })
 
-    assert "Живой язык: Laat maar" in message.text
+    assert "Laat maar (Ладно, забудь)" in message.text
     assert "Inmiddels" not in message.text
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
-        ["✨ Подобрать новое задание"],
+        ["✨ Обновить"],
+        ["🎯 Тренажёр"],
         ["🕵️ Угадай персонажа"],
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
-    assert "Грамматика: Глагол стоит на втором месте." in message.text
+    assert "Грамматика:\n- Порядок слов в придаточном (Bijzin):" in message.text
+    assert "- Инверсия после обстоятельств:" in message.text
+    assert "- Разделяемые глаголы (Scheidbare werkwoorden):" in message.text
     assert "Прогресс:" not in message.text
     assert "Фраза дня" not in message.text
     assert "Слово дня" not in message.text
-    assert "Живой язык: Laat maar → Ладно, забудь." in message.text
-    assert "Когда говорят?" not in message.text
-    assert "Когда решаешь не продолжать тему." not in message.text
+    assert "Laat maar (Ладно, забудь) — Когда решаешь не продолжать тему." in message.text
     spoiler_texts = [
         message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
         for entity in message.entities
         if entity.type == "spoiler"
     ]
-    assert spoiler_texts == ["Ладно, забудь."]
+    assert spoiler_texts == ["Ладно, забудь"]
+
+
+def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary(monkeypatch):
+    profile = {"learning_home_variant": 0}
+    entry = {"term": "morgen", "translation": "завтра", "language": "nl"}
+
+    monkeypatch.setattr(learning.store, "learning_is_enabled", lambda _cid: True)
+    monkeypatch.setattr(learning, "select_daily_material", lambda _cid: dict(entry))
+    monkeypatch.setattr(learning, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(learning.store, "get_profile", lambda _cid: dict(profile))
+
+    def mutate(_cid, change):
+        updated, result = change(dict(profile))
+        profile.clear()
+        profile.update(updated)
+        return result
+
+    monkeypatch.setattr(learning.store, "mutate_profile", mutate)
+    before = learning.build_learning_home("42")
+    after = learning.refresh_learning_home("42")
+
+    assert before["term"] == after["term"] == "Morgen"
+    assert before["live_language"] != after["live_language"]
+    assert before["grammar_rules"] != after["grammar_rules"]
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):
@@ -283,6 +308,34 @@ def test_learning_preferences_return_to_active_dictionary():
     assert keyboard.inline_keyboard[2][0].callback_data == "set_learning_language_none_dict"
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_active"
+
+
+def test_dictionary_overview_has_learning_language_preferences(monkeypatch):
+    class Bot:
+        message = None
+
+        async def send_message(self, **kwargs):
+            self.message = kwargs
+
+    monkeypatch.setattr(learning_dictionary, "_dict_counts", lambda _cid: {"nl": 12, "en": 8})
+    bot = Bot()
+    asyncio.run(learning_dictionary.send_dict(bot, "42"))
+
+    assert _labels(bot.message["reply_markup"]) == [
+        ["🇳🇱 Нидерландский (12)"],
+        ["🇬🇧 Английский (8)"],
+        ["📝 Выбрать предпочтения"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert bot.message["reply_markup"].inline_keyboard[2][0].callback_data == "set_learning_dictionary"
+
+
+def test_dictionary_preferences_return_to_dictionary_overview():
+    keyboard = learning_settings.learning_settings_kb("nl", "simple", back="a_dict")
+
+    assert keyboard.inline_keyboard[0][0].callback_data == "set_learning_language_nl_dict_home"
+    assert keyboard.inline_keyboard[1][0].callback_data == "set_learning_language_en_dict_home"
+    assert keyboard.inline_keyboard[-1][0].callback_data == "a_dict"
 
 
 def test_learning_level_picker_has_two_levels_and_returns_to_language_selection():

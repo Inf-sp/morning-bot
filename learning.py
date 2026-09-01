@@ -48,14 +48,54 @@ def _flag(language):
 _DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 
 _GRAMMAR_RULES_NL = (
-    "В обычном предложении сказуемое стоит на втором месте: Vandaag werk ik thuis.",
-    "В вопросе без вопросительного слова глагол ставится перед подлежащим: Werk je morgen?",
-    "В придаточном предложении глагол обычно уходит в конец: omdat ik morgen werk.",
-    "С существительными общего рода используется de, со средним родом — het.",
-    "Уменьшительные существительные всегда употребляются с артиклем het.",
-    "Отделяемая приставка в главном предложении уходит в конец: Ik bel je morgen op.",
-    "После модального глагола смысловой инфинитив стоит в конце: Ik wil Nederlands leren.",
-    "Отрицание geen ставится перед неопределённым существительным: Ik heb geen auto.",
+    {
+        "title": "Порядок слов в придаточном (Bijzin)",
+        "parts": (
+            ("Соединительные союзы (", "text"), ("omdat", "italic"), (", ", "text"),
+            ("als", "italic"), (", ", "text"), ("dat", "italic"),
+            (" и проч.) отправляют спрягаемый глагол в самый конец предложения: ", "text"),
+            ("...omdat ik morgen werk", "italic"), (".", "text"),
+        ),
+    },
+    {
+        "title": "Инверсия после обстоятельств",
+        "parts": (
+            ("Если предложение начинается со времени или места, подлежащее и глагол меняются местами: ", "text"),
+            ("Vandaag ", "italic"), ("werk ik", "bold_italic"), (" thuis", "italic"),
+            (" (вместо ", "text"), ("Ik werk vandaag thuis", "italic"), ( ").", "text"),
+        ),
+    },
+    {
+        "title": "Разделяемые глаголы (Scheidbare werkwoorden)",
+        "parts": (
+            ("Приставка отрывается и уходит в конец простого предложения: ", "text"),
+            ("opbellen", "italic"), (" → ", "text"), ("Ik ", "italic"),
+            ("bel", "bold_italic"), (" je zo ", "italic"), ("op", "bold_italic"), (".", "text"),
+        ),
+    },
+    {
+        "title": "Глагол на втором месте (V2)",
+        "parts": (
+            ("В обычном главном предложении спрягаемый глагол занимает вторую позицию: ", "text"),
+            ("Ik ", "italic"), ("werk", "bold_italic"), (" vandaag thuis", "italic"), (".", "text"),
+        ),
+    },
+    {
+        "title": "Модальные глаголы",
+        "parts": (
+            ("После модального глагола смысловой инфинитив уходит в конец: ", "text"),
+            ("Ik ", "italic"), ("wil", "bold_italic"), (" Nederlands ", "italic"),
+            ("leren", "bold_italic"), (".", "text"),
+        ),
+    },
+    {
+        "title": "Отрицание geen",
+        "parts": (
+            ("Перед неопределённым существительным отрицание выражается словом ", "text"),
+            ("geen", "italic"), (": ", "text"), ("Ik heb ", "italic"),
+            ("geen", "bold_italic"), (" auto", "italic"), (".", "text"),
+        ),
+    },
 )
 
 
@@ -155,14 +195,22 @@ def build_learning_home(cid):
         return {"has_material": False, "disabled": True, "lang_code": ""}
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
-    grammar = random.choice(_GRAMMAR_RULES_NL)
-    phrase = live_language.daily_phrase(lang_code)
+    variant = int((store.get_profile(cid) or {}).get("learning_home_variant") or 0)
+    if lang_code == "nl":
+        start = (variant * 3) % len(_GRAMMAR_RULES_NL)
+        grammar_rules = [
+            _GRAMMAR_RULES_NL[(start + offset) % len(_GRAMMAR_RULES_NL)]
+            for offset in range(3)
+        ]
+    else:
+        grammar_rules = []
+    phrase = live_language.daily_phrase(lang_code, variant=variant)
     if not entry:
         return {
             "has_material": False,
             "lang_code": lang_code,
             "live_language": phrase,
-            "grammar": grammar,
+            "grammar_rules": grammar_rules,
         }
     kind = daily_material_type(entry)
     raw_term = entry.get("rule") or entry_term(entry)
@@ -182,10 +230,19 @@ def build_learning_home(cid):
         "example_text": str(example.get("text") or "").strip(),
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
-        "focus": _daily_focus_text(entry, kind),
+        "focus": "Сначала попробуй составить своё предложение с каждым правилом в уме, а только потом проверяй себя по словарю.",
         "live_language": phrase,
-        "grammar": grammar,
+        "grammar_rules": grammar_rules,
     }
+
+
+def refresh_learning_home(cid):
+    """Переключает только фразу и грамматику, не меняя материал словаря."""
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "learning_home_variant": int(profile.get("learning_home_variant") or 0) + 1},
+        None,
+    ))
+    return build_learning_home(cid)
 
 
 def warm_home_cache(cid):

@@ -790,6 +790,7 @@ _DICT_LIST_PAGE_SIZE = _dictionary_views._DICT_LIST_PAGE_SIZE
 _DICT_CATEGORY_ORDER = _dictionary_views._DICT_CATEGORY_ORDER
 _DICT_VISIBLE_CATEGORY_ORDER = _dictionary_views._DICT_VISIBLE_CATEGORY_ORDER
 _DICT_ORIGIN_TO_BACK = dict(_dictionary_views._DICT_ORIGIN_TO_BACK)
+_DICT_BACK_TO_ORIGIN = dict(_dictionary_views._DICT_BACK_TO_ORIGIN)
 _bind_functions(globals(), _dictionary_views, [
     "_show_screen", "send_dict", "send_dict_lang", "send_dict_category",
     "send_dict_category_list",
