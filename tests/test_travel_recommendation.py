@@ -150,10 +150,9 @@ def test_travel_home_shows_place_of_the_day_without_rebus():
 
     assert "Прогресс:" not in message.text
     assert "посещено" not in message.text
-    assert message.text.startswith("🚆 Место дня\n\nЛейден")
+    assert message.text.startswith("🚆 Место дня · Поезд\nЛейден — короткий маршрут.")
     assert "Туристический ребус:" not in message.text
-    assert "🚆 Из Алкмара: 1 ч" in message.text
-    assert "Почему тебе может понравиться: каналы и прогулка без спешки" in message.text
+    assert "💡 Полезно: Проверь расписание." in message.text
     assert not any(entity.type == MessageEntity.SPOILER for entity in message.entities)
 
 

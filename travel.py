@@ -123,10 +123,6 @@ def _fallback_idea(cid):
     )
     return {"emoji": "🗺️", "transport_title": country, "from": city, "to": target,
             "intro": "Недалеко, красиво и без перегруженного плана.", "route": route,
-            "transport": f"Из {city}: проверь актуальный маршрут",
-            "cost": "Расходы зависят от транспорта и выбранных мест",
-            "duration": "На поездку: 1 день",
-            "why": "прогулка, новое место и свободный план без обязательной программы",
             "tip": "проверь расписание перед выходом и оставь запас на обратную дорогу."}
 
 
@@ -152,12 +148,11 @@ def _generate_home_idea(cid):
 Можно предложить ближайший город, деревню, природный маршрут или близкую зарубежную поездку.
 Не повторяй прошлое направление: {previous.get('to', '')}.
 Верни короткий JSON: {{"country_code":"ISO-код страны из разрешённого списка","to":"место","intro":"1 предложение",
-"transport":"Из {city}: примерное время общественным транспортом","cost":"От €… только если можешь обосновать, иначе текст без суммы",
-"duration":"На поездку: 1 день","why":"почему понравится с учётом спокойной поездки","route":["ровно 3 практичных пункта"],"tip":"короткий совет"}}.
+"route":["ровно 3 практичных пункта"],"tip":"короткий совет"}}.
 Не используй знак =, только стрелку → там, где нужна связь."""
     try:
         raw = ai.llm_json(
-            prompt, 650, tier="leisure", module="travel",
+            prompt, 450, tier="leisure", module="travel",
             cache_context={
                 "scenario": "travel_home_idea",
                 "city": city,
@@ -179,10 +174,6 @@ def _generate_home_idea(cid):
         return _fallback_idea(cid)
     return {"emoji": "🗺️", "transport_title": _country_label(destination_cc), "from": city,
             "to": str(raw["to"]), "intro": str(raw.get("intro") or "Подходит для короткой поездки на день."),
-            "transport": str(raw.get("transport") or f"Из {city}: проверь актуальный маршрут"),
-            "cost": str(raw.get("cost") or "Расходы зависят от выбранного маршрута"),
-            "duration": str(raw.get("duration") or "На поездку: 1 день"),
-            "why": str(raw.get("why") or "новое место, прогулка и свободный план"),
             "route": route,
             "tip": str(raw.get("tip") or "проверь расписание перед выходом.")}
 

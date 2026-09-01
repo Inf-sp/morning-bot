@@ -19,24 +19,32 @@ def visited_summary(n):
 
 def home_screen(idea, rebus=None, *, news=None):
     b = MessageBuilder()
-    b.text_line(f"{idea['emoji']} ")
-    b.bold("Место дня")
-    b.newline()
-    b.spacer()
-    b.bold(str(idea.get("to") or idea.get("transport_title") or ""))
-    b.newline()
-    b.line(idea["intro"])
-    for icon, value in (
-        ("🚆", idea.get("transport")), ("💶", idea.get("cost")),
-        ("⏱️", idea.get("duration")),
-    ):
-        if value:
-            b.line(f"{icon} {value}")
-    b.spacer()
-    b.bold("Почему тебе может понравиться:")
-    b.text_line(f" {idea.get('why') or idea.get('tip')}")
-    b.newline()
-    append_weekly_news(b, news)
+    title = idea.get("transport_title") or ""
+    header = f"{idea.get('emoji', '🗺️')} Место дня" + (f" · {title}" if title else "")
+    b.line(header)
+    
+    to = str(idea.get("to") or "")
+    intro = str(idea.get("intro") or "")
+    if to and intro and not intro.startswith(to):
+        intro_low = intro[0].lower() + intro[1:] if intro else ""
+        b.line(f"{to} — {intro_low}")
+    elif to or intro:
+        b.line(to or intro)
+        
+    route = idea.get("route")
+    if route:
+        b.line("Что интересного:")
+        for point in route:
+            b.line(str(point))
+            
+    tip = idea.get("tip")
+    if tip:
+        tip_text = tip[0].upper() + tip[1:] if tip else ""
+        b.line(f"💡 Полезно: {tip_text}")
+
+    if news:
+        b.spacer()
+        append_weekly_news(b, news)
     return b.build_stripped()
 
 
