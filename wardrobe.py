@@ -642,7 +642,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             cached["text"] = text
             store.set_wardrobe_daylook(cid, cached)
         if kb is None:
-            result_kb = build_wardrobe_keyboard(has_result=True)
+            result_kb = build_wardrobe_keyboard()
         if status is not None:
             await status.replace(
                 text, entities=entities, reply_markup=result_kb,
@@ -765,7 +765,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
-        result_kb = build_wardrobe_keyboard(has_result=True)
+        result_kb = build_wardrobe_keyboard()
     text, entities = _build_look_message(
         look_data, news=category_news.cached_line("wardrobe"),
     )
