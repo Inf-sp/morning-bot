@@ -99,7 +99,6 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("✨ Обновить", "w_look")],
             [("🎚️ Мой шкаф", "w_closet")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -319,7 +318,6 @@ def food_menu(idea=None):
         b.labeled_line("Полезно", tip)
 
     rows = [
-        [("✨ Обновить", "m_food_next")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]
@@ -346,7 +344,7 @@ def restaurant_menu(card=None, *, news=None):
         ][:2]
         if dishes:
             b.spacer()
-            b.italic("Что взять:")
+            b.bold("Что взять:")
             b.newline()
             for dish in dishes:
                 b.line(f"- {dish}")
@@ -361,7 +359,6 @@ def restaurant_menu(card=None, *, news=None):
         b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
     append_weekly_news(b, news)
     rows = [
-        [("✨ Обновить", "m_food_next")],
         [("🍳 Что приготовить", "m_food_gen")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],

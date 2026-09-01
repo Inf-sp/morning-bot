@@ -11,9 +11,10 @@ import recipe_generation
 import settings
 
 
-def test_recipe_card_refreshes_without_separate_cuisine_picker():
+def test_recipe_card_has_no_refresh_label():
     labels = [[button.text for button in row] for row in cooking._recipe_kb().inline_keyboard]
-    assert labels[0] == ["✨ Обновить"]
+    assert all("✨ Обновить" not in label for row in labels for label in row)
+    assert labels[0] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all("По кухне" not in label for row in labels for label in row)
 
 

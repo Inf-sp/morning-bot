@@ -58,12 +58,11 @@ def _finish_dot(value):
 def _recipe_kb(cid=None, recipe=None):
     """Единая клавиатура карточки рецепта для всех 4 категорий (§6.2 спеки).
 
-    «Другой рецепт» (as_food) и «Назад» (as_food_back) работают в рамках активной
-    категории (recipe_state.get_active_meal) — см. handle_callback. «Назад» — отдельный
+    «Назад» (as_food_back) работает в рамках активной категории
+    (recipe_state.get_active_meal) — см. handle_callback. «Назад» — отдельный
     callback, а не общий m_close, чтобы не задевать другие разделы, которые тоже
     используют m_close для закрытия карточки без возврата в конкретное меню."""
     return _kb([
-        [("✨ Обновить", "as_food")],
         [("⬅️ Назад", "as_food_back"), ("#️⃣ Главная", "m_menu")],
     ])
 

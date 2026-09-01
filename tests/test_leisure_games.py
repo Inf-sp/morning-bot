@@ -275,7 +275,6 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
 
     assert "👾 Игра для тебя" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
-        ["✨ Другая игра"],
         ["🎭 По жанру"],
         ["🎚️ Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
@@ -302,10 +301,8 @@ def test_board_recommendation_stays_in_board_games_without_genre_button(monkeypa
 
     assert "🎲 Настолки" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
-        ["✨ Другая игра"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
-    assert status.call[1]["reply_markup"].inline_keyboard[0][0].callback_data == "vg_next_board"
 
 
 def test_next_board_game_never_repeats_the_current_game(monkeypatch):

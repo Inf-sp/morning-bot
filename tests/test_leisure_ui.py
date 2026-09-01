@@ -51,13 +51,13 @@ def test_category_homes_keep_personal_lists_in_their_own_sections():
     ]
 
 
-def test_recommendation_cards_use_one_refresh_label():
-    assert _labels(leisure_movies._movie_kb(0))[0] == ["✨ Обновить"]
-    assert _labels(leisure_books._book_kb(0))[0] == ["✨ Обновить"]
-    assert _labels(leisure_music._listen_kb())[0] == ["✨ Обновить"]
-    assert _labels(leisure_books._book_kb(0))[1] == ["🎭 По жанру"]
-    assert _labels(leisure_movies._movie_kb(0))[1] == ["🎭 По жанру"]
-    assert _labels(leisure_music._listen_kb())[1] == ["🎭 По жанру"]
+def test_recommendation_cards_have_no_refresh_label():
+    assert "✨ Обновить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
+    assert "✨ Обновить" not in sum(_labels(leisure_books._book_kb(0)), [])
+    assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
+    assert _labels(leisure_books._book_kb(0))[0] == ["🎭 По жанру"]
+    assert _labels(leisure_movies._movie_kb(0))[0] == ["🎭 По жанру"]
+    assert _labels(leisure_music._listen_kb())[0] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 

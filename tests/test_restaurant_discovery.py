@@ -34,7 +34,7 @@ def test_restaurant_card_has_google_link_and_compact_details():
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
     assert len(links) == 1
     assert links[0].url.startswith("https://www.google.com/maps/search/")
-    assert any(entity.type == MessageEntity.ITALIC for entity in message.entities)
+    assert any(entity.type == MessageEntity.BOLD for entity in message.entities)
 
 
 def test_restaurant_card_supports_two_signature_dishes():
