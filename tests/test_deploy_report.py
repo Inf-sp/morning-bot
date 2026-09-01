@@ -21,9 +21,9 @@ def test_deploy_report_filters_duplicate_status_lines():
     assert message.text.count("Бот развёрнут и работает ✅") == 1
 
 
-def test_repository_version_has_current_release_notes():
+def test_repository_version_does_not_require_release_notes():
     notes, source = deploy_report.load_release_notes()
 
     assert deploy_report.get_app_version() == "1.16.243"
-    assert source == "file"
-    assert any("Другой вариант" in note for note in notes)
+    assert source == "disabled"
+    assert notes == []

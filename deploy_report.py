@@ -2,14 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 
 import config
 import store
 from ui import admin as admin_ui
 
 
-_ROOT = Path(__file__).parent
 _DEFAULT_NOTE = "Бот получил небольшие внутренние улучшения."
 _DEFAULT_TITLE = "Обновление"
 
@@ -25,20 +23,6 @@ def get_app_version() -> str:
     return _normalize_app_version(config.APP_VERSION or config._read_text_file("VERSION"))
 
 
-def _release_heading(line: str) -> tuple[str, str] | None:
-    line = line.strip()
-    if not line.startswith("## "):
-        return None
-    title = line[3:].strip()
-    version = title.split()[0] if title else ""
-    release_title = ""
-    for separator in (" · ", " - ", " — "):
-        if separator in title:
-            release_title = title.split(separator, 1)[1].strip()
-            break
-    return _normalize_app_version(version), release_title
-
-
 def _clean_release_note_line(line: str) -> str:
     line = line.strip()
     if line.startswith("- ") or line.startswith("* "):
@@ -52,41 +36,12 @@ def _clean_release_note_line(line: str) -> str:
 
 
 def load_release_notes() -> tuple[list[str], str]:
-    version = get_app_version()
-    if not version:
-        return [], "empty"
-    path = _ROOT / "RELEASE_NOTES.md"
-    if not path.exists():
-        return [], "missing"
-
-    current_lines = []
-    in_current_section = False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        heading = _release_heading(raw_line)
-        if heading is not None:
-            if in_current_section:
-                break
-            heading_version, _ = heading
-            in_current_section = heading_version == version
-            continue
-        if in_current_section:
-            line = _clean_release_note_line(raw_line)
-            if line:
-                current_lines.append(line)
-    if not current_lines:
-        return [], "fallback"
-    return current_lines, "file"
+    """История релизов отключена; уведомление использует нейтральный fallback."""
+    return [], "disabled"
 
 
 def load_release_title(version, release_notes) -> str:
     version = _normalize_app_version(version)
-    path = _ROOT / "RELEASE_NOTES.md"
-    if path.exists() and version:
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            heading = _release_heading(raw_line)
-            if heading and heading[0] == version and heading[1]:
-                return heading[1]
-
     text = " ".join(str(note) for note in (release_notes or [])).lower()
     if not text:
         return _DEFAULT_TITLE
