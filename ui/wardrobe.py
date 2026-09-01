@@ -121,12 +121,9 @@ def render_wardrobe_message(look_data, *, news=None):
         b.spacer()
         b.bold("Надень:")
         b.newline()
-        if slots["Верх"]:
-            b.line(f"- {', '.join(slots['Верх'])}")
-        if slots["Низ"]:
-            b.line(f"- {', '.join(slots['Низ'])}")
-        if slots["Обувь"]:
-            b.line(f"- {', '.join(slots['Обувь'])}")
+        for zone in ("Верх", "Низ", "Обувь"):
+            for item in slots[zone]:
+                b.line(f"- {item}")
 
         extras = [
             *slots["Верхняя одежда"],
@@ -147,8 +144,9 @@ def render_wardrobe_message(look_data, *, news=None):
         _clean_text(look_data.get("sock_recommendation")) or selected_socks
     )
     main_accent = _finish_dot(
-        f"{sock_recommendation} поддержат обувь и соберут образ"
-        if sock_recommendation else look_data.get("main_accent")
+        look_data.get("main_accent")
+        or (f"{sock_recommendation} поддержат обувь и соберут образ"
+            if sock_recommendation else "")
     )
     if main_accent:
         b.spacer()
@@ -358,7 +356,7 @@ def purchase_recommendation_card(item):
     """Одна конкретная недостающая вещь с проверенным товаром и покупкой."""
     item = item or {}
     b = MessageBuilder()
-    b.section("💳 Что докупить")
+    b.section("💳 Что докупить · Гардероб")
     b.spacer()
     name = _clean_text(item.get("item")) or "Полезная вещь для гардероба"
     product_url = _clean_text(item.get("product_url"))
@@ -366,20 +364,30 @@ def purchase_recommendation_card(item):
         b.link(name, product_url)
     else:
         b.bold(name)
-    b.newline()
-    meta = " · ".join(
-        value for value in (
-            _clean_text(item.get("category")),
-            _clean_text(item.get("style")),
-            _clean_text(item.get("season")),
-        ) if value
-    )
-    if meta:
-        b.line(meta)
     reason = _finish_dot(item.get("reason"))
     if reason:
+        b.text_line(" — ")
+        b.text_line(_lower_first(reason))
+    b.newline()
+    outfits = [_finish_dot(value) for value in (item.get("outfits") or []) if _clean_text(value)]
+    if outfits:
         b.spacer()
-        b.line(_upper_first(reason))
+        b.section("С чем носить из твоего гардероба:")
+        for outfit in outfits[:3]:
+            b.line(f"• {outfit}")
+    count = int(item.get("combinations_count") or 0)
+    gap_reason = _finish_dot(item.get("gap_reason"))
+    if count or gap_reason:
+        b.spacer()
+        b.section("Зачем добавить:")
+        if count:
+            b.line(f"• Даст до {count} новых сочетаний с твоими вещами.")
+        if gap_reason:
+            b.line(f"• {_upper_first(gap_reason)}")
+    choice_tip = _finish_dot(item.get("choice_tip"))
+    if choice_tip:
+        b.spacer()
+        b.labeled_line("💡 Совет по выбору", choice_tip, lowercase=False)
     product_brand = _clean_text(item.get("product_brand"))
     if product_brand:
         b.spacer()

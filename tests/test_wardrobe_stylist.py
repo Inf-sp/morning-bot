@@ -16,6 +16,7 @@ from ui.wardrobe import (
 )
 from wardrobe_model import normalize_parsed_item, public_item_name
 from wardrobe_outfit import (
+    build_main_accent,
     build_how_to_wear,
     build_sock_recommendation,
     SAFE_NEUTRAL_STYLE_TIP,
@@ -68,7 +69,8 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белые носки" not in message.text
     assert "Как носить:" not in message.text
     assert "💡 Главный акцент:" in message.text
-    assert "белые носки поддержат обувь и соберут образ." in message.text
+    assert "белая футболка связывает светлую обувь с низом." in message.text
+    assert "белые носки поддержат" not in message.text
     assert "💡 Полезно:" not in message.text
 
 
@@ -135,6 +137,49 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
     assert "- Кеды" in message.text
     assert "Дополнительно:\n- Синие носки" not in message.text
     assert "Главный акцент: синие носки поддержат обувь и соберут образ." in message.text
+
+
+def test_outfit_card_puts_each_selected_top_on_its_own_line():
+    message = render_wardrobe_message({
+        "items": [
+            {"name": "Голубая рубашка", "zone": "Верх"},
+            {"name": "Белая футболка", "zone": "Верх"},
+            {"name": "Тёмные брюки", "zone": "Низ"},
+        ],
+    })
+
+    assert "- Голубая рубашка\n- Белая футболка" in message.text
+    assert "Голубая рубашка, Белая футболка" not in message.text
+
+
+def test_selected_accessory_can_be_the_main_accent_instead_of_socks():
+    message = render_wardrobe_message({
+        "items": [
+            {"name": "Белая футболка", "zone": "Верх"},
+            {"name": "Чёрные брюки", "zone": "Низ"},
+            {"name": "Серебристый браслет", "zone": "Аксессуары"},
+        ],
+        "sock_recommendation": "Белые носки",
+        "main_accent": "Серебристый браслет добавит контраст",
+    })
+
+    assert "главный акцент: серебристый браслет" in message.text.casefold()
+    assert "белые носки поддержат" not in message.text.casefold()
+
+
+def test_main_accent_rotates_and_can_use_an_accessory():
+    items = [
+        {"name": "Белая футболка", "zone": "Верх", "colors": ["белый"]},
+        {"name": "Синие брюки", "zone": "Низ", "colors": ["синий"]},
+        {"name": "Белые кеды", "zone": "Обувь", "colors": ["белый"]},
+        {"name": "Серебристый браслет", "zone": "Аксессуары", "colors": ["серебристый"]},
+    ]
+
+    first = build_main_accent(items)
+    second = build_main_accent(items, avoid_accents={first})
+
+    assert "браслет" in first.casefold()
+    assert second != first
 
 
 def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():

@@ -89,6 +89,14 @@ class RetryingHTTPXRequest(HTTPXRequest):
 class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
+    @staticmethod
+    def _without_link_preview(kwargs):
+        """Глобальный UI-контракт: бот никогда не прикрепляет превью ссылок."""
+        kwargs = dict(kwargs)
+        kwargs.pop("link_preview_options", None)
+        kwargs["disable_web_page_preview"] = True
+        return kwargs
+
     def mark_transient_message(self, chat_id, message_id):
         """Compatibility hook: temporary screens now remain available in chat."""
         key = str(chat_id)
@@ -134,6 +142,7 @@ class MenuCleanupBot(ExtBot):
         transient = kwargs.pop("transient", False)
         preserve_previous_inline = kwargs.pop("preserve_previous_inline", False)
         persistent_inline = kwargs.pop("persistent_inline", False)
+        kwargs = self._without_link_preview(kwargs)
         send = asyncio.create_task(super().send_message(chat_id, *args, **kwargs))
         send.add_done_callback(self._mark_send_done)
         if preserve_previous_inline:
@@ -172,6 +181,12 @@ class MenuCleanupBot(ExtBot):
                 last = await self._send_message_once(chat_id, *tail_args, **part)
             return last
         return await self._send_message_once(chat_id, *args, **kwargs)
+
+    async def edit_message_text(self, *args, **kwargs):
+        """Отключает превью и при обновлении уже отправленной карточки."""
+        return await super().edit_message_text(
+            *args, **self._without_link_preview(kwargs),
+        )
 
     async def _send_rich_message_once(self, chat_id, rich_message, **kwargs):
         """Send a Bot API Rich Message while preserving normal send semantics.
@@ -273,4 +288,3 @@ class MenuCleanupBot(ExtBot):
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
-

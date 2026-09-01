@@ -669,10 +669,34 @@ def build_sock_recommendation(items):
     return "Белые носки"
 
 
-def build_main_accent(items, weather_ctx=None):
-    """Одна grounded-строка о том, что связывает цвета и вещи в образе."""
-    reasons = build_outfit_reasons(items, weather_ctx or {})
-    return reasons[0] if reasons else "Спокойная палитра связывает вещи, а обувь завершает образ."
+def build_main_accent(items, weather_ctx=None, avoid_accents=None):
+    """Выбирает grounded-акцент и ротирует его для другого образа."""
+    candidates = []
+    for accessory in (
+        item for item in items
+        if item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item)
+    ):
+        candidates.append(
+            f"{_sentence_item_name(accessory)} становится заметной деталью и завершает образ."
+        )
+    candidates.extend(build_outfit_reasons(items, weather_ctx or {}))
+    shoe = next((item for item in items if item.get("zone") == "Обувь"), None)
+    if shoe:
+        candidates.append(
+            f"{_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ и держит на себе главный акцент."
+        )
+    candidates.append("Спокойная палитра связывает вещи, а обувь завершает образ.")
+
+    unique = list(dict.fromkeys(candidate for candidate in candidates if candidate))
+    avoided = {
+        re.sub(r"\s+", " ", str(accent or "")).strip().casefold()
+        for accent in (avoid_accents or ()) if str(accent or "").strip()
+    }
+    return next(
+        (candidate for candidate in unique
+         if re.sub(r"\s+", " ", candidate).strip().casefold() not in avoided),
+        unique[0],
+    )
 
 
 _COLOR_CLAIM_MARKERS = (

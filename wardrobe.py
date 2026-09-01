@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 from urllib.parse import quote_plus
 import config
@@ -623,7 +623,7 @@ def _no_outfit_screen(result_kb, alternative=False):
 
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
-                     previous_style=None, q=None):
+                     previous_style=None, previous_main_accent=None, q=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -758,7 +758,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "style_tip": fallback_tip,
         "sock_recommendation": build_sock_recommendation(best_sorted),
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "main_accent": build_main_accent(best_sorted, weather_ctx),
+        "main_accent": build_main_accent(
+            best_sorted, weather_ctx,
+            avoid_accents={previous_main_accent} if previous_main_accent else None,
+        ),
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
@@ -914,5 +917,5 @@ _PURCHASE_REJECT_REASONS = {
     "material_or_season", "price_vs_utility", "poor_condition",
 }
 
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_carousel_kb","_purchase_carousel_signature","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","recommend_another_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_card_details","_purchase_carousel_kb","_purchase_carousel_signature","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","recommend_another_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
 _bind_functions(globals(), _wardrobe_router, ["ingest", "handle_callback"])

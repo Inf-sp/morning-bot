@@ -1,3 +1,4 @@
+import html
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
@@ -197,12 +198,11 @@ def learning_menu(home: dict):
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
         b.text_line(str(phrase["text"]).strip())
-        b.text_line(" (")
-        b.add(str(phrase["translation"]).strip(), MessageEntity.SPOILER)
-        b.text_line(")")
+        translation = finish_dot(str(phrase["translation"]).strip())
+        b.text_line(f" — {translation}")
         meaning = finish_dot(str(phrase.get("meaning") or "").strip())
         if meaning:
-            b.text_line(f" — {meaning}")
+            b.text_line(f" {meaning}")
         b.newline()
 
     grammar_rules = home.get("grammar_rules") or []
@@ -210,13 +210,11 @@ def learning_menu(home: dict):
     b.bold("Грамматика:")
     b.newline()
     for rule in grammar_rules:
-        title = str((rule or {}).get("title") or "").strip()
-        if not title:
+        parts = (rule or {}).get("parts") or []
+        if not parts:
             continue
         b.text_line("- ")
-        b.bold(f"{title}:")
-        b.text_line(" ")
-        for text, style in (rule.get("parts") or []):
+        for text, style in parts:
             getattr(b, style if style in {"italic", "bold_italic"} else "text_line")(str(text))
         b.newline()
     b.spacer()
@@ -253,7 +251,9 @@ _COOKING_EMOJI_RE = re.compile(
 
 
 def _cooking_text(value) -> str:
-    value = _COOKING_EMOJI_RE.sub("", str(value or ""))
+    value = html.unescape(str(value or ""))
+    value = value.replace("**", "").replace("\\-", "-")
+    value = _COOKING_EMOJI_RE.sub("", value)
     return " ".join(value.split()).strip(" -•")
 
 
@@ -332,6 +332,15 @@ def restaurant_menu(card=None, *, news=None):
     name = _cooking_text(card.get("name"))
     if name and card.get("map_url"):
         b.bold_link(name, str(card["map_url"]))
+        details = " · ".join(
+            value for value in (
+                _cooking_text(card.get("address")),
+                _cooking_text(card.get("cuisine")),
+                _cooking_text(card.get("price")),
+            ) if value
+        )
+        if details:
+            b.text_line(f" ({details})")
         description = _cooking_sentence(card.get("description"))
         if description:
             b.text_line(f" — {description}")
@@ -340,13 +349,12 @@ def restaurant_menu(card=None, *, news=None):
             _cooking_text(value)
             for value in (card.get("signature_dishes") or [card.get("signature_dish")])
             if _cooking_text(value)
-        ][:2]
+        ][:3]
         if dishes:
             b.spacer()
-            b.bold("Что взять:")
-            b.newline()
+            b.section("Что взять:")
             for dish in dishes:
-                b.line(f"- {dish}")
+                b.line(f"• {dish}")
         fact = _cooking_sentence(card.get("fact"))
         if fact:
             b.spacer()

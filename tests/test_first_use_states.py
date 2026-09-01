@@ -92,7 +92,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         },
     })
 
-    assert "Laat maar (Ладно, забудь)" in message.text
+    assert "Laat maar — Ладно, забудь." in message.text
     assert "Inmiddels" not in message.text
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
@@ -103,19 +103,20 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         ["🎚️ Мой словарь"],
         ["#️⃣ Главная"],
     ]
-    assert "Грамматика:\n- Порядок слов в придаточном (Bijzin):" in message.text
-    assert "- Инверсия после обстоятельств:" in message.text
-    assert "- Разделяемые глаголы (Scheidbare werkwoorden):" in message.text
+    assert "Грамматика:\n- Союзы omdat, als, dat уводят глагол в самый конец" in message.text
+    assert "- Время или место на первом месте" in message.text
+    assert "- Приставка разделяемого глагола" in message.text
+    assert "Bijzin" not in message.text
     assert "Прогресс:" not in message.text
     assert "Фраза дня" not in message.text
     assert "Слово дня" not in message.text
-    assert "Laat maar (Ладно, забудь) — Когда решаешь не продолжать тему." in message.text
+    assert "Laat maar — Ладно, забудь. Когда решаешь не продолжать тему." in message.text
     spoiler_texts = [
         message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
         for entity in message.entities
         if entity.type == "spoiler"
     ]
-    assert spoiler_texts == ["Ладно, забудь"]
+    assert spoiler_texts == []
 
 
 def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary(monkeypatch):
@@ -381,6 +382,21 @@ def test_cuisine_preferences_use_one_column():
     keyboard = settings._cuisines_kb("42")
 
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
+    assert _labels(keyboard)[:-1] == [
+        ["🍣 Азиатская"],
+        ["🍕 Итальянская"],
+        ["🥗 Средиземноморская"],
+        ["🥐 Французская"],
+        ["🌶️ Мексиканская"],
+        ["🍛 Индийская"],
+        ["🍲 Восточноевропейская"],
+    ]
+
+
+def test_legacy_japanese_cuisine_preference_migrates_to_asian(monkeypatch):
+    monkeypatch.setattr(settings, "get", lambda *_args: ["japanese", "italian"])
+
+    assert settings.cuisines("42") == ["asian", "italian"]
 
 
 def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):

@@ -21,12 +21,13 @@ NOTIF_TYPES = [
 ]
 
 CUISINE_OPTIONS = [
+    ("asian", cuisine_label("asian", "Азиатская")),
     ("italian", cuisine_label("italian", "Итальянская")),
     ("mediterranean", cuisine_label("mediterranean", "Средиземноморская")),
-    ("mexican", cuisine_label("mexican", "Мексиканская")),
     ("french", cuisine_label("french", "Французская")),
-    ("japanese", cuisine_label("japanese", "Японская")),
+    ("mexican", cuisine_label("mexican", "Мексиканская")),
     ("indian", cuisine_label("indian", "Индийская")),
+    ("eastern_european", cuisine_label("eastern_european", "Восточноевропейская")),
 ]
 
 STYLES = [
@@ -124,7 +125,8 @@ def cuisines(cid):
     if not isinstance(saved, list):
         return []
     valid = {key for key, _ in CUISINE_OPTIONS}
-    return [key for key in saved if key in valid]
+    migrated = ["asian" if key == "japanese" else key for key in saved]
+    return list(dict.fromkeys(key for key in migrated if key in valid))
 
 
 def cuisine_labels(cid):

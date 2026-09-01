@@ -51,24 +51,24 @@ _GRAMMAR_RULES_NL = (
     {
         "title": "Порядок слов в придаточном (Bijzin)",
         "parts": (
-            ("Соединительные союзы (", "text"), ("omdat", "italic"), (", ", "text"),
+            ("Союзы ", "text"), ("omdat", "italic"), (", ", "text"),
             ("als", "italic"), (", ", "text"), ("dat", "italic"),
-            (" и проч.) отправляют спрягаемый глагол в самый конец предложения: ", "text"),
-            ("...omdat ik morgen werk", "italic"), (".", "text"),
+            (" уводят глагол в самый конец — ", "text"),
+            ("...omdat ik morgen ", "italic"), ("werk", "bold_italic"), (".", "text"),
         ),
     },
     {
         "title": "Инверсия после обстоятельств",
         "parts": (
-            ("Если предложение начинается со времени или места, подлежащее и глагол меняются местами: ", "text"),
+            ("Время или место на первом месте меняют подлежащее и глагол — ", "text"),
             ("Vandaag ", "italic"), ("werk ik", "bold_italic"), (" thuis", "italic"),
-            (" (вместо ", "text"), ("Ik werk vandaag thuis", "italic"), ( ").", "text"),
+            (".", "text"),
         ),
     },
     {
         "title": "Разделяемые глаголы (Scheidbare werkwoorden)",
         "parts": (
-            ("Приставка отрывается и уходит в конец простого предложения: ", "text"),
+            ("Приставка разделяемого глагола уходит в финал — ", "text"),
             ("opbellen", "italic"), (" → ", "text"), ("Ik ", "italic"),
             ("bel", "bold_italic"), (" je zo ", "italic"), ("op", "bold_italic"), (".", "text"),
         ),

@@ -11,6 +11,7 @@ async def handle_callback(bot, cid, q, data, status=None):
         previous = _get_cached_look(cid) or {}
         previous_style_tip = (previous.get("look_data") or {}).get("style_tip") or None
         previous_style = (previous.get("look_data") or {}).get("primary_style") or None
+        previous_main_accent = (previous.get("look_data") or {}).get("main_accent") or None
         store.clear_wardrobe_daylook(cid)
         owns_status = status is None
         if owns_status:
@@ -25,6 +26,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 previous_item_ids=previous.get("item_ids") or [],
                 previous_style_tip=previous_style_tip,
                 previous_style=previous_style,
+                previous_main_accent=previous_main_accent,
             )
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_wardrobe")

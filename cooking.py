@@ -121,7 +121,7 @@ _MEAL_GUARD = {
 
 
 async def _send_queue_card(bot, cid, meal, d, status=None):
-    """Отправляет одну компактную карточку рецепта с фото, если источник его дал."""
+    """Отправляет одну компактную текстовую карточку рецепта."""
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe_queue", meal)
     store.last_source[str(cid)] = "Питание · Рецепт"
@@ -137,19 +137,6 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     _persist_current_queue_recipe(cid, d)
     _log.info("_send_queue_card: meal=%s cid=%s status_mode=%s text_len=%s",
               meal, cid, getattr(status, "mode", None), len(card.text or ""))
-    image = str(d.get("image") or d.get("thumbnail") or "").strip()
-    if image and len(card.text) <= 1024:
-        if status is not None:
-            await status.stop(delete=getattr(status, "mode", None) != "inline")
-        try:
-            await bot.send_photo(
-                chat_id=cid, photo=image, caption=card.text,
-                caption_entities=card.entities, reply_markup=kb,
-            )
-            return
-        except Exception as exc:
-            _log.warning("recipe photo delivery failed, using text: %s", type(exc).__name__)
-            status = None
     if status is not None and getattr(status, "mode", None) == "inline":
         # В preserve_message-сценарии StatusManager оставляет старую карточку
         # видимой, отправляет готовый рецепт новым сообщением и восстанавливает

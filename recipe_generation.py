@@ -1266,6 +1266,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
 RECIPE_CUISINE_CODES = (
     "european", "international",
     "asian", "russian", "italian", "mediterranean", "mexican", "french",
+    "eastern_european",
     "japanese", "korean", "chinese", "thai", "vietnamese", "indian",
     "turkish", "greek", "spanish", "german", "american", "georgian",
 )

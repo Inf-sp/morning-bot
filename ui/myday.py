@@ -56,11 +56,9 @@ def day_summary(
         _compact_line(b, weather_icon, "Погода", weather_line)
 
     if word_line:
-        word_label = "Нидерландский" if word_lang == "nl" else "Английский"
-        word_flag = "🇳🇱" if word_lang == "nl" else "🇬🇧"
         term, translation = _split_word_translation(word_line)
-        b.text_line(f"{word_flag} ")
-        b.label(word_label)
+        b.text_line("🎯 ")
+        b.label("Тренажер")
         if term:
             b.text_line(f" {term}")
         if translation:

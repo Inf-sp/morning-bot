@@ -26,9 +26,10 @@ def test_restaurant_card_has_google_link_and_compact_details():
 
     assert message.text.startswith(
         "🍽️ Куда сходить · Alkmaar\n\n"
-        "De Eendracht — Современное городское кафе в историческом центре."
+        "De Eendracht (Hekelstraat 30 · нидерландская · €€) — "
+        "Современное городское кафе в историческом центре."
     )
-    assert "Что взять:\n- сате" in message.text
+    assert "Что взять:\n• сате" in message.text
     assert "€22,50" not in message.text
     assert "💡 Интересный факт: Ресторан находится в здании бывшей школы." in message.text
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
@@ -46,8 +47,22 @@ def test_restaurant_card_supports_two_signature_dishes():
         "fact": "Вино выдерживают в традиционных сосудах квеври.",
     })
 
-    assert "Что взять:\n- Аджарули хачапури\n- Хинкали" in message.text
+    assert "Что взять:\n• Аджарули хачапури\n• Хинкали" in message.text
     assert "💡 Интересный факт:" in message.text
+
+
+def test_restaurant_card_decodes_entities_and_supports_three_dishes():
+    message = restaurant_menu({
+        "city": "Alkmaar", "name": "Mada**&#x20;**- Smaak van Georgi&#xEB;",
+        "map_url": "https://maps.example/mada",
+        "cuisine": "грузинская", "price": "€€",
+        "signature_dishes": ["Хачапури", "Хинкали", "Лобио"],
+        "fact": "Квеври закапывают в землю.",
+    })
+
+    assert "Mada - Smaak van Georgië (грузинская · €€)" in message.text
+    assert "• Лобио" in message.text
+    assert "&#x" not in message.text
 
 
 def test_myday_restaurant_summary_reads_only_ready_cached_card(monkeypatch):

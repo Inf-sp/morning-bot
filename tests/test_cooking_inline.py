@@ -83,7 +83,10 @@ def test_inline_recipe_result_replaces_search_status(monkeypatch):
     monkeypatch.setattr(cooking, "_persist_current_queue_recipe", lambda *_args: None)
 
     asyncio.run(cooking._send_queue_card(
-        Bot(), "42", "dinner", {"name": "Паста", "steps": ["Свари пасту"]}, status=Status()))
+        Bot(), "42", "dinner", {
+            "name": "Паста", "steps": ["Свари пасту"],
+            "image": "https://images.example/pasta.jpg",
+        }, status=Status()))
 
     assert calls == [("replace", "Новый рецепт", {"entities": [], "reply_markup": "recipe-kb"})]
 

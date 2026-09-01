@@ -366,9 +366,18 @@ def _missing_purchase_candidates(cid, wardrobe, *, exclude_names=None):
         _clean_text(recommended.get("item")) and _clean_text(recommended.get("reason"))
         and recommended.get("version") == PURCHASE_RECOMMENDATION_VERSION
     ) else None
-    return _purchase_candidates(
+    candidates = _purchase_candidates(
         wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3,
         exclude_names=exclude_names,
+    )
+    enriched = [_purchase_card_details(candidate, wardrobe) for candidate in candidates]
+    return sorted(
+        enriched,
+        key=lambda candidate: (
+            int(candidate.get("priority") or 0),
+            int(candidate.get("combinations_count") or 0),
+        ),
+        reverse=True,
     )
 
 
@@ -390,6 +399,36 @@ def _purchase_photo_audience(cid):
         "pavel", "павел", "sergey", "сергей", "yuri", "юрий", "denis", "денис",
     }
     return "male" if name in male_names else "neutral"
+
+
+def _purchase_card_details(item, wardrobe):
+    """Дополняет GAP-рекомендацию реальными сочетаниями из шкафа."""
+    item = dict(item or {})
+    by_zone = {}
+    for zone, _subcategory, entry in _flat_wardrobe_items(wardrobe):
+        name = _clean_text(public_item_name(entry))
+        if name:
+            by_zone.setdefault(_clean_text(zone), []).append(name)
+
+    category = _clean_text(item.get("category")).casefold()
+    if category in {"низ", "брюки", "джинсы"}:
+        first, second = by_zone.get("Верх", []), by_zone.get("Обувь", [])
+        tip = "Выбирай посадку, которая не спорит с объёмом твоего верха."
+    elif category == "обувь":
+        first, second = by_zone.get("Верх", []), by_zone.get("Низ", [])
+        tip = "Проверь посадку и материал: пара должна подходить для твоей обычной погоды."
+    else:
+        first, second = by_zone.get("Верх", []), by_zone.get("Низ", [])
+        if not first:
+            first = by_zone.get("Платья", [])
+        tip = "Выбирай свободную посадку, чтобы вещь легко работала вторым слоем."
+
+    combinations = [(left, right) for left in first for right in second if left != right]
+    item["outfits"] = [f"{left} + {right}" for left, right in combinations[:3]]
+    item["combinations_count"] = len(combinations)
+    item["gap_reason"] = _clean_text(item.get("reason"))
+    item["choice_tip"] = tip
+    return item
 
 
 def _purchase_carousel_kb(page, count):
@@ -414,10 +453,27 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
             and isinstance(cached.get("items"), list) and cached["items"]):
         return [dict(item) for item in cached["items"] if isinstance(item, dict)]
     name_key = lambda value: _clean_text(value).casefold()
-    excluded = rotation.markers(exclude_names or [], key=name_key)
+    explicit_excluded = rotation.markers(exclude_names or [], key=name_key)
     rejected = profile.get("wardrobe_purchase_rejections") or {}
-    excluded.update(rotation.markers(rejected.get("items") or [], key=name_key))
+    rejected_names = rejected.get("items") or []
+    rejected_markers = rotation.markers(rejected_names, key=name_key)
+    shown = profile.get("wardrobe_purchase_seen") or {}
+    shown_names = shown.get("items") or []
+    excluded = set(explicit_excluded)
+    excluded.update(rejected_markers)
+    excluded.update(rotation.markers(shown_names, key=name_key))
     items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
+    cycle_reset = False
+    if not items and shown_names:
+        # После полного круга начинаем новый, но не возвращаем текущую карточку
+        # первой и никогда не оживляем явно отклонённые варианты.
+        cycle_excluded = set(explicit_excluded)
+        cycle_excluded.update(rejected_markers)
+        cycle_excluded.add(name_key(shown_names[-1]))
+        items = _missing_purchase_candidates(
+            cid, wardrobe, exclude_names=cycle_excluded,
+        )
+        cycle_reset = bool(items)
     if not items:
         reserves = [
             ("Универсальный верхний слой", "Верхняя одежда"),
@@ -427,21 +483,26 @@ def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=N
             ("Компактная сумка на каждый день", "Аксессуары"),
         ]
         reserve_key = lambda value: name_key(value[0] if isinstance(value, tuple) else value)
+        reserve_history = [*shown_names, *(exclude_names or [])]
         available = rotation.candidates_for_cycle(
-            reserves, excluded,
-            current=(exclude_names or [None])[-1], key=reserve_key,
+            [item for item in reserves if reserve_key(item) not in rejected_markers],
+            reserve_history,
+            current=(reserve_history or [None])[-1], key=reserve_key,
         )
-        name, category = available[0]
-        items = [{
-            "item": name,
-            "category": category,
-            "style": "Базовый",
-            "season": "Межсезонье",
-            "reason": "добавит шкафу новый слой и увеличит число сочетаний с уже имеющимися вещами",
-            "version": PURCHASE_RECOMMENDATION_VERSION,
-        }]
+        if available:
+            name, category = available[0]
+            items = [{
+                "item": name,
+                "category": category,
+                "style": "Базовый",
+                "season": "Межсезонье",
+                "reason": "добавит шкафу новый слой и увеличит число сочетаний с уже имеющимися вещами",
+                "version": PURCHASE_RECOMMENDATION_VERSION,
+            }]
 
     def change(current):
+        if cycle_reset:
+            current["wardrobe_purchase_seen"] = {"items": []}
         current["wardrobe_purchase_carousel"] = {
             "signature": signature,
             "items": [dict(item) for item in items],
@@ -459,6 +520,21 @@ async def show_purchase_page(
     candidates = _purchase_carousel_candidates(
         cid, wardrobe, reset=reset_candidates, exclude_names=exclude_names,
     )
+    if not candidates:
+        text_out = (
+            "💳 Что докупить · Гардероб\n\n"
+            "Свежие полезные варианты закончились. Вернись после обновления шкафа — "
+            "тогда я заново проверю пробелы и сочетания."
+        )
+        kb = _purchase_hub_kb()
+        if q is not None:
+            try:
+                await q.edit_message_text(text=text_out, reply_markup=kb)
+                return
+            except Exception:
+                pass
+        await bot.send_message(chat_id=cid, text=text_out, reply_markup=kb)
+        return
     page = max(0, min(int(page), len(candidates) - 1))
     item = candidates[page]
 
@@ -468,25 +544,17 @@ async def show_purchase_page(
             carousel = dict(carousel)
             carousel["page"] = page
             current["wardrobe_purchase_carousel"] = carousel
+        history = current.get("wardrobe_purchase_seen") or {}
+        current["wardrobe_purchase_seen"] = {
+            "items": rotation.remember(
+                history.get("items") or [], _clean_text(item.get("item")),
+                limit=50, key=lambda value: _clean_text(value).casefold(),
+            ),
+        }
         return current, None
 
     store.mutate_profile(cid, remember_page)
-    import asyncio
-    import wardrobe_photos
-
-    photo = await asyncio.to_thread(
-        wardrobe_photos.purchase_photo,
-        _clean_text(item.get("item")), _purchase_photo_audience(cid),
-    )
-    if photo and not wardrobe_photos._photo_matches_item(
-            _clean_text(item.get("item")), photo):
-        photo = None
-    card_item = dict(item)
-    if photo:
-        card_item.update({
-            "product_url": _clean_text(photo.get("page_url")),
-            "product_brand": _clean_text(photo.get("brand")),
-        })
+    card_item = _purchase_card_details(item, wardrobe)
     if not card_item.get("product_url"):
         query = quote_plus(_clean_text(item.get("item")))
         card_item["product_url"] = f"https://www.google.com/search?tbm=shop&q={query}"
@@ -494,22 +562,10 @@ async def show_purchase_page(
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = text_out
     kb = _purchase_carousel_kb(page, len(candidates))
-    if q is not None and photo and photo.get("url") and len(text_out) <= 1024:
+    if q is not None:
         try:
-            await q.edit_message_media(
-                media=InputMediaPhoto(
-                    media=photo["url"], caption=text_out, caption_entities=entities,
-                ),
-                reply_markup=kb,
-            )
-            return
-        except Exception:
-            pass
-    if photo and photo.get("url") and len(text_out) <= 1024:
-        try:
-            await bot.send_photo(
-                chat_id=cid, photo=photo["url"], caption=text_out,
-                caption_entities=entities, reply_markup=kb,
+            await q.edit_message_text(
+                text=text_out, entities=entities, reply_markup=kb,
             )
             return
         except Exception:
@@ -523,7 +579,7 @@ async def show_purchase_page(
 
 
 async def recommend_missing_purchase(bot, cid):
-    """Показывает первую из трёх персональных покупок в фотокарусели."""
+    """Показывает первую из трёх персональных покупок текстовой карточкой."""
     wardrobe = store.load_wardrobe(cid)
     if not has_wardrobe_items(cid):
         await bot.send_message(

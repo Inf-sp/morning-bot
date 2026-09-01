@@ -103,7 +103,7 @@ def test_day_summary_puts_cached_restaurant_immediately_after_outfit():
 def test_day_summary_word_keeps_capital_letter_after_label():
     message = day_summary("Пн, 20 июля", "Алкмар", word_line="tijd → время")
 
-    assert "Нидерландский: Tijd → Время" in message.text
+    assert "🎯 Тренажер: Tijd → Время" in message.text
 
 
 def test_free_text_formatter_applies_same_rule_to_plain_and_markdown_labels():

@@ -388,6 +388,24 @@ def test_purchase_card_hides_price_and_size_but_shows_popular_brand():
     assert "Размер" not in message.text
 
 
+def test_purchase_card_has_clean_gap_analysis_sections():
+    message = purchase_recommendation_card({
+        "item": "Оливковая куртка-рубашка",
+        "product_url": "https://www.google.com",
+        "reason": "закроет пробел в гардеробе для прохладных дней",
+        "outfits": ["Белая футболка + тёмно-синие джинсы"],
+        "combinations_count": 5,
+        "gap_reason": "нет лёгкого верхнего слоя",
+        "choice_tip": "Выбирай свободную посадку.",
+    })
+
+    assert message.text.startswith("💳 Что докупить · Гардероб")
+    assert "С чем носить из твоего гардероба:" in message.text
+    assert "Зачем добавить:" in message.text
+    assert "Даст до 5 новых сочетаний" in message.text
+    assert "&#x" not in message.text
+
+
 def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypatch):
     sent = []
     wardrobe_data = {
@@ -409,18 +427,18 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
 
     asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
 
-    assert sent[0]["text"].startswith("💳 Что докупить\n\nСерые широкие джинсы")
+    assert sent[0]["text"].startswith("💳 Что докупить · Гардероб\n\nСерые широкие джинсы")
     assert "Серые широкие джинсы" in sent[0]["text"]
     assert "Закроют пробел в шкафу" in sent[0]["text"]
     assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
     assert _labels(sent[0]["reply_markup"]) == [
-        ["✨ Подобрать другую вещь"],
+        ["✨ Обновить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     wardrobe.store.pending_input.pop("42", None)
 
 
-def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
+def test_purchase_menu_is_text_only_and_skips_photo_search(monkeypatch):
     import wardrobe_photos
 
     sent = []
@@ -431,9 +449,6 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
     }}
 
     class Bot:
-        async def send_photo(self, **kwargs):
-            sent.append(("photo", kwargs))
-
         async def send_message(self, **kwargs):
             sent.append(("message", kwargs))
 
@@ -459,21 +474,21 @@ def test_purchase_menu_uses_pexels_photo_with_text_fallback(monkeypatch):
 
     asyncio.run(wardrobe.recommend_missing_purchase(Bot(), "42"))
 
-    assert [kind for kind, _kwargs in sent] == ["photo"]
-    assert sent[0][1]["photo"] == "https://images.pexels.com/example.jpg"
-    assert sent[0][1]["caption"].startswith("💳 Что докупить")
-    assert "Где купить" in sent[0][1]["caption"]
-    assert photo_calls == [("Серые широкие джинсы", "male")]
+    assert [kind for kind, _kwargs in sent] == ["message"]
+    assert sent[0][1]["text"].startswith("💳 Что докупить")
+    assert any(entity.type == "text_link"
+               for entity in sent[0][1]["entities"])
+    assert photo_calls == []
 
 
-def test_purchase_carousel_edits_the_same_photo_card(monkeypatch):
+def test_purchase_carousel_edits_the_same_text_card(monkeypatch):
     import wardrobe_photos
 
     wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
     edited = []
 
     class Query:
-        async def edit_message_media(self, **kwargs):
+        async def edit_message_text(self, **kwargs):
             edited.append(kwargs)
 
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
@@ -492,8 +507,8 @@ def test_purchase_carousel_edits_the_same_photo_card(monkeypatch):
     asyncio.run(wardrobe.show_purchase_page(object(), "42", 1, q=Query()))
 
     assert len(edited) == 1
-    assert edited[0]["media"].caption.startswith("💳 Что докупить")
-    assert _labels(edited[0]["reply_markup"])[0] == ["✨ Подобрать другую вещь"]
+    assert edited[0]["text"].startswith("💳 Что докупить")
+    assert _labels(edited[0]["reply_markup"])[0] == ["✨ Обновить"]
 
 
 def test_purchase_photos_are_male_for_admin_even_without_profile_name(monkeypatch):
@@ -762,6 +777,31 @@ def test_recommend_another_purchase_replaces_the_current_batch(monkeypatch):
     assert "Серые широкие джинсы" not in second_text
 
 
+def test_reopening_purchase_section_rotates_the_shown_recommendation(monkeypatch):
+    sent = []
+    wardrobe_data = {"zones": {
+        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
+        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
+    }}
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    cid = "reopen-purchase-rotation"
+    wardrobe.store.set_profile(cid, {})
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
+    monkeypatch.setattr(wardrobe, "has_wardrobe_items", lambda _cid: True)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
+
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), cid))
+    asyncio.run(wardrobe.recommend_missing_purchase(Bot(), cid))
+
+    assert sent[0]["text"] != sent[1]["text"]
+
+
 def test_rejected_third_purchase_option_does_not_return_in_later_batches(monkeypatch):
     import wardrobe_photos
 
@@ -993,7 +1033,7 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     monkeypatch.setattr(wardrobe.util.StatusManager, "start", unexpected_start)
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {
         "item_ids": ["old-item"],
-        "look_data": {},
+        "look_data": {"main_accent": "Серебристый браслет завершает образ."},
     })
     monkeypatch.setattr(wardrobe, "send_looks", fake_send_looks)
 
@@ -1004,6 +1044,8 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
 
     assert calls[0][0] == "start_inline"
     assert calls[0][-1] is True
+    send_kwargs = next(call[3] for call in calls if call[0] == "send_looks")
+    assert send_kwargs["previous_main_accent"].startswith("Серебристый браслет")
     assert calls[-1] == ("stop", True)
 
 
