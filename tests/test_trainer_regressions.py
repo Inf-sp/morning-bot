@@ -158,7 +158,7 @@ def test_trainer_result_offers_remove_from_learning():
         for button in row
     ]
 
-    assert labels[:2] == ["✨ Другое задание", "❌ Удалить из обучения"]
+    assert labels[:2] == ["✨ Другое задание", "❌ Удалить"]
 
 
 def test_remove_from_training_deletes_dictionary_entry_and_future_queue_items(monkeypatch):
