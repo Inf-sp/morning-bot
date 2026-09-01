@@ -494,3 +494,22 @@ def test_music_legend_does_not_retry_an_empty_daily_cache(monkeypatch):
     monkeypatch.setattr(leisure_music.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError()))
 
     assert leisure_music._load_music_legend(today) == {}
+
+def test_music_home_limits_to_five_nearby_concerts_and_shows_artist_fact():
+    message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, [
+        {"artist": "Romy", "date": "21 августа", "place": "Алкмар", "artist_fact": "Британская певица и продюсер."},
+        {"artist": "FKA twigs", "date": "3 сентября", "place": "Амстердам"},
+        {"artist": "The National", "date": "14 сентября", "place": "Утрехт"},
+        {"artist": "Beyoncé", "date": "20 сентября", "place": "Роттердам"},
+        {"artist": "Arctic Monkeys", "date": "27 сентября", "place": "Гаага"},
+        {"artist": "Sixth", "date": "4 октября", "place": "Амстердам"},
+    ], day=date(2026, 8, 25))
+
+    assert "В ближайшее время:" in message.text
+    assert "• Romy (21 августа · Алкмар)" in message.text
+    assert "• FKA twigs (3 сентября · Амстердам)" in message.text
+    assert "• The National (14 сентября · Утрехт)" in message.text
+    assert "• Beyoncé (20 сентября · Роттердам)" in message.text
+    assert "• Arctic Monkeys (27 сентября · Гаага)" in message.text
+    assert "• Sixth (4 октября · Амстердам)" not in message.text
+    assert "💡 Интересно: Британская певица и продюсер." in message.text

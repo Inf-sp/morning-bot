@@ -1005,7 +1005,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "legend": {"name": "Луи Армстронг", "birth": "1901-08-04", "detail": "трубач и певец"},
     },
         [{"artist": "Romy", "date": "21 августа", "place": "Биддингхёйзен",
-          "url": "https://tickets.example/romy"}],
+          "url": "https://tickets.example/romy", "artist_fact": "Британская певица."}],
         day=date(2026, 8, 25),
     )
 
@@ -1445,7 +1445,7 @@ def test_daily_category_block_titles_are_bold():
     music = leisure_movies.leisure_ui.music_week_screen("Алкмар", {
         "rebus": {"emoji": "🎤", "answer": "Ответ", "fact": "Факт."},
         "legend": {"name": "Имя", "detail": "музыкант"},
-    }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар"}])
+    }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар", "artist_fact": "Интересный факт."}])
 
     assert {"Именинник дня:",
             "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))

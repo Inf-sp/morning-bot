@@ -1279,7 +1279,7 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
     b.newline()
 
     b.spacer()
-    events = [item for item in concerts or [] if _item_value(item, "artist")][:3]
+    events = [item for item in concerts or [] if _item_value(item, "artist")][:5]
     b.bold("В ближайшее время:")
     if events:
         b.newline()
@@ -1303,9 +1303,7 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 
-    fact = str(
-        daily_music.get("fact") or (daily_music.get("rebus") or {}).get("fact") or ""
-    ).strip()
+    fact = str((events[0].get("artist_fact") if events else "") or "").strip()
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")

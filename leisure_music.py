@@ -484,6 +484,62 @@ def _load_music_legend(day):
         _music_legend_cache_set(day, {})
         return {}
 
+# Artist vitrine fact helper
+_ARTIST_FACT_CACHE = {}
+_ARTIST_FACT_LOCK = threading.Lock()
+_ARTIST_FACT_WIKI_UA = {"User-Agent": "morning-bot/1.0"}
+
+
+def _clean_artist_fact(value):
+    text = " ".join(str(value or "").split()).strip()
+    if len(text) > 220:
+        text = text[:219].rstrip() + "..."
+    if text and text[-1] not in ".!?":
+        text += "."
+    return text
+
+
+def _local_artist_fact(name):
+    normalized = str(name or "").strip().casefold()
+    if not normalized:
+        return ""
+    for items in _LOCAL_ARTIST_FALLBACKS.values():
+        for item in items:
+            if str(item.get("artist") or "").strip().casefold() == normalized:
+                return _clean_artist_fact(item.get("fact"))
+    return ""
+
+
+def _artist_wiki_fact(name):
+    query = " ".join(str(name or "").split()).strip()
+    if not query:
+        return ""
+    for lang in ("ru", "en"):
+        try:
+            url = "https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + quote_plus(query)
+            response = requests.get(url, headers=_ARTIST_FACT_WIKI_UA, timeout=6)
+            if response.status_code != 200:
+                continue
+            data = response.json()
+            extract = " ".join(str(data.get("extract") or "").split()).strip()
+            if extract:
+                return _clean_artist_fact(extract.partition(". ")[0])
+        except Exception as error:
+            _log.info("artist wiki fact lookup unavailable for %r: %s", name, type(error).__name__)
+    return ""
+
+
+def _artist_fact(name):
+    normalized = str(name or "").strip().casefold()
+    if not normalized:
+        return ""
+    with _ARTIST_FACT_LOCK:
+        if normalized in _ARTIST_FACT_CACHE:
+            return _ARTIST_FACT_CACHE[normalized]
+        fact = _local_artist_fact(name) or _artist_wiki_fact(name)
+        _ARTIST_FACT_CACHE[normalized] = fact
+        return fact
+
 
 def _music_city(cid):
     settings_data = store.get_settings(cid)
@@ -661,8 +717,10 @@ async def _weekly_concerts(cid):
             "context": leisure_concerts._concert_context(event),
             "url": str(event.get("url") or "").strip(),
         })
-        if len(rows) >= 3:
+        if len(rows) >= 5:
             break
+    if rows:
+        rows[0]["artist_fact"] = _artist_fact(rows[0]["artist"])
     return rows
 
 
