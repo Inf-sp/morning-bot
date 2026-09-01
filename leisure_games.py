@@ -288,8 +288,9 @@ def _ensure_game_trailer_url(item):
     return prepared
 
 
-def _eligible_games(cid, genre=None):
-    platforms = {"board"} if genre == "board" else set(_effective_platforms(cid))
+def _eligible_games(cid, genre=None, board=False):
+    board_platform = board or genre == "board"
+    platforms = {"board"} if board_platform else set(_effective_platforms(cid))
     candidates = [
         item for item in _GAME_CATALOG
         if platforms.intersection(item["platforms"])
@@ -313,8 +314,9 @@ def _eligible_games(cid, genre=None):
     return filtered or candidates
 
 
-def _decorate_game(item, cid, *, genre=None):
-    platforms = {"board"} if genre == "board" else set(_effective_platforms(cid))
+def _decorate_game(item, cid, *, genre=None, board=False):
+    board_platform = board or genre == "board"
+    platforms = {"board"} if board_platform else set(_effective_platforms(cid))
     visible_platforms = [key for key in item["platforms"] if key in platforms]
     primary_genre = item["genres"][0] if item.get("genres") else ""
     return {
@@ -324,7 +326,7 @@ def _decorate_game(item, cid, *, genre=None):
     }
 
 
-def pick_game(cid, *, genre=None, refresh=False):
+def pick_game(cid, *, genre=None, refresh=False, board=False):
     """Локальный подбор без AI: платформы + жанр + защита от недавних повторов."""
     profile = store.get_profile(cid)
     today = datetime.now(config.TZ).date()
@@ -334,9 +336,9 @@ def pick_game(cid, *, genre=None, refresh=False):
     cached = profile.get("game_daily") or {}
     if (not refresh and not genre and cached.get("week") == week_key
             and cached.get("signature") == signature and isinstance(cached.get("item"), dict)):
-        return _decorate_game(cached["item"], cid, genre=genre)
+        return _decorate_game(cached["item"], cid, genre=genre, board=board)
 
-    pool = _eligible_games(cid, genre=genre)
+    pool = _eligible_games(cid, genre=genre, board=board)
     if not pool:
         return {}
     favorites = _favorite_games(cid)
@@ -378,7 +380,7 @@ def pick_game(cid, *, genre=None, refresh=False):
         return current, None
 
     store.mutate_profile(cid, save_selection)
-    return _decorate_game(item, cid, genre=genre)
+    return _decorate_game(item, cid, genre=genre, board=board)
 
 
 def _game_home_keyboard():
@@ -390,14 +392,14 @@ def _game_home_keyboard():
     ])
 
 
-def _game_keyboard(*, no_match=False, genre=None):
+def _game_keyboard(*, no_match=False, genre=None, board=False):
     rows = []
-    if genre != "board":
+    if board or genre == "board":
+        # Настолки: доступен подбор по жанру внутри настольного режима.
+        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres_board")])
+    else:
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
-    else:
-        # На настолках тоже доступен подбор по жанру.
-        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
     if no_match:
         rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
     rows.append([
@@ -727,8 +729,9 @@ async def handle_manual_game_add_callback(bot, cid, q, data):
     await send_favorite_games_added_card(bot, cid, [item])
 
 
-def _genre_keyboard():
-    buttons = [InlineKeyboardButton(label, callback_data=f"vg_g_{key}") for key, label in GAME_GENRES]
+def _genre_keyboard(board=False):
+    prefix = "vg_gb_" if board else "vg_g_"
+    buttons = [InlineKeyboardButton(label, callback_data=f"{prefix}{key}") for key, label in GAME_GENRES]
     rows = [[button] for button in buttons]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
@@ -801,17 +804,17 @@ async def warm_games_home_cache(cid):
 
 
 async def send_game_recommendation(
-    bot, cid, *, q=None, status=None, refresh=False, genre=None,
+    bot, cid, *, q=None, status=None, refresh=False, genre=None, board=False,
 ):
     item = None
     if inclusive_recommendations.is_due(cid, "game"):
         candidate = next((
-            value for value in _eligible_games(cid, genre=genre)
+            value for value in _eligible_games(cid, genre=genre, board=board)
             if inclusive_recommendations.is_inclusive("game", value.get("name"))
         ), None)
         if candidate:
-            item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre)
-    item = item or pick_game(cid, genre=genre, refresh=refresh)
+            item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre, board=board)
+    item = item or pick_game(cid, genre=genre, refresh=refresh, board=board)
     if item:
         item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
         item = _ensure_game_trailer_url(item)
@@ -821,7 +824,7 @@ async def send_game_recommendation(
         item["lgbt"] = inclusive
         inclusive_recommendations.record(cid, "game", inclusive)
     msg = leisure_ui.game_card(item)
-    markup = _game_keyboard(no_match=not item, genre=genre)
+    markup = _game_keyboard(no_match=not item, genre=genre, board=board)
     poster = str(item.get("poster") or "").strip() if item else ""
     if poster:
         try:
@@ -838,8 +841,8 @@ async def send_game_recommendation(
     await _deliver(bot, cid, msg, markup, q=q, status=status)
 
 
-async def send_game_genres(bot, cid, q=None):
-    await _deliver(bot, cid, leisure_ui.game_genres_screen(), _genre_keyboard(), q=q)
+async def send_game_genres(bot, cid, q=None, board=False):
+    await _deliver(bot, cid, leisure_ui.game_genres_screen(), _genre_keyboard(board=board), q=q)
 
 
 def _preferences_keyboard(cid):

@@ -609,6 +609,19 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await leisure_games.send_game_genres(bot, cid, q)
         return
+    if data == "vg_genres_board":
+        await _ack(q)
+        await leisure_games.send_game_genres(bot, cid, q, board=True)
+        return
+    if data.startswith("vg_gb_"):
+        await _inline_status(
+            lambda status: leisure_games.send_game_recommendation(
+                bot, cid, status=status, refresh=True,
+                genre=data[len("vg_gb_"):], board=True,
+            ),
+            preserve_message=True,
+        )
+        return
     if data.startswith("vg_g_"):
         await _inline_status(
             lambda status: leisure_games.send_game_recommendation(

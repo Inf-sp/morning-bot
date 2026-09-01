@@ -64,6 +64,56 @@ def test_board_games_open_separately_from_digital_platform_preferences(monkeypat
     assert item["platform_labels"] == ["🎲 Настолки"]
 
 
+def test_board_genre_pick_stays_in_board_and_keeps_chosen_genre(monkeypatch):
+    _profile_store(monkeypatch)
+    # Пользователь предпочитает цифровые платформы — но подбор внутри настолок
+    # по жанру обязан остаться на настольных играх.
+    monkeypatch.setattr(
+        leisure_games.settings, "get",
+        lambda _cid, key, default=None: ["ps5"] if key == "game_platforms" else default,
+    )
+
+    item = leisure_games.pick_game("42", genre="strategy", board=True, refresh=True)
+
+    assert item
+    assert item["platforms"] == ["board"]
+    assert item["platform_labels"] == ["🎲 Настолки"]
+    assert "strategy" in item["genres"]
+
+
+def test_board_genre_menu_uses_board_callbacks():
+    board_callbacks = [
+        button.callback_data
+        for row in leisure_games._genre_keyboard(board=True).inline_keyboard
+        for button in row
+    ]
+    digital_callbacks = [
+        button.callback_data
+        for row in leisure_games._genre_keyboard().inline_keyboard
+        for button in row
+    ]
+
+    assert any(data.startswith("vg_gb_") for data in board_callbacks)
+    assert any(data.startswith("vg_g_") and not data.startswith("vg_gb_") for data in digital_callbacks)
+    assert not any(data.startswith("vg_gb_") for data in digital_callbacks)
+
+
+def test_board_genre_card_keyboard_is_board_style_without_set_button():
+    labels = _labels(leisure_games._game_keyboard(genre="strategy", board=True))
+    callbacks = [
+        button.callback_data
+        for row in leisure_games._game_keyboard(genre="strategy", board=True).inline_keyboard
+        for button in row
+    ]
+
+    assert labels == [
+        ["🎭 По жанру"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
+    assert callbacks[0] == "vg_genres_board"
+    assert all("Мой набор игр" not in line for lines in labels for line in lines)
+
+
 def test_game_preferences_offer_popular_platforms_years_and_ratings(monkeypatch):
     monkeypatch.setattr(
         leisure_games.settings, "get",
