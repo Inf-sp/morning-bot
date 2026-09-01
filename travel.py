@@ -210,7 +210,7 @@ def _home_idea(cid, *, refresh=False):
 
 def _home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новое путешествие", callback_data="a_trav_go")],
+        [InlineKeyboardButton("🧳 Другая страна", callback_data="a_trav_no")],
         [InlineKeyboardButton("💡 Что интересного", callback_data="a_trav_interesting")],
         [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -905,7 +905,6 @@ async def send_plan(bot, cid, *, status=None):
         "plan_entities": util.entities_to_json(msg.entities), "details": plan,
     }
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🧳 Другая страна", callback_data="a_trav_no")],
         [InlineKeyboardButton("🧭 По направлению", callback_data="a_trav_regions")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

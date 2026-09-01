@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 def _movie_home_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую премьеру", callback_data="movie_premieres")],
         [InlineKeyboardButton("🍿 Что посмотреть", callback_data="movie_reco")],
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

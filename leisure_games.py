@@ -383,7 +383,6 @@ def pick_game(cid, *, genre=None, refresh=False):
 
 def _game_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую игру", callback_data="vg_premieres")],
         [InlineKeyboardButton("🎮 Во что поиграть", callback_data="vg_reco")],
         [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
         [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],

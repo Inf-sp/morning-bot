@@ -250,7 +250,6 @@ def _book_kb(i):
 
 def books_home_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Подобрать новую книгу", callback_data="book_premieres")],
         [InlineKeyboardButton("📖 Что почитать", callback_data="book_reco")],
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

@@ -138,7 +138,6 @@ def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatc
     assert "Угадай игру:" not in status.call[0]
     assert "💡 Интересно:" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
-        ["✨ Подобрать новую игру"],
         ["🎮 Во что поиграть"],
         ["🎲 Настолки"],
         ["🎚️ Мой набор игр"],

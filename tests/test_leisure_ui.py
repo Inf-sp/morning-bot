@@ -32,19 +32,16 @@ def _bold_values(message):
 
 def test_category_homes_keep_personal_lists_in_their_own_sections():
     assert _labels(leisure_movies._movie_home_kb()) == [
-        ["✨ Подобрать новую премьеру"],
         ["🍿 Что посмотреть"],
         ["🎚️ Моё кино"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_books.books_home_keyboard()) == [
-        ["✨ Подобрать новую книгу"],
         ["📖 Что почитать"],
         ["🎚️ Мои книги"],
         ["#️⃣ Главная"],
     ]
     assert _labels(leisure_music.music_home_keyboard()) == [
-        ["✨ Подобрать новый концерт"],
         ["🎸 Что послушать"],
         ["🎚️ Мои артисты"],
         ["#️⃣ Главная"],
@@ -1105,7 +1102,7 @@ def test_books_home_opens_daily_literary_screen_not_a_recommendation(monkeypatch
     today_label = leisure_movies.leisure_ui._format_date_label(datetime.now(config.TZ).date())
     assert f"📚 Литературный вайб · {today_label}" in sent[0]["text"]
     assert "Литературный ребус:" not in sent[0]["text"]
-    assert _labels(sent[0]["reply_markup"])[0] == ["✨ Подобрать новую книгу"]
+    assert _labels(sent[0]["reply_markup"])[0] == ["📖 Что почитать"]
 
 
 def test_books_home_does_not_wait_for_catalog_when_weekly_cache_is_empty(monkeypatch):

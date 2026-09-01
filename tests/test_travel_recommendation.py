@@ -75,6 +75,12 @@ def test_travel_plan_with_inline_status_keeps_country_photo(monkeypatch):
     assert bot.photos[0]["chat_id"] == "42"
     assert bot.photos[0]["photo"] == photo["url"]
     assert bot.photos[0]["caption"] == "🇮🇸 Исландия\n\nВулканы и горячие источники."
+    labels = [[button.text for button in row]
+              for row in bot.photos[0]["reply_markup"].inline_keyboard]
+    assert labels == [
+        ["🧭 По направлению"],
+        ["⬅️ Назад", "#️⃣ Главная"],
+    ]
     assert status.replaced == []
     assert status.stopped == [False]
 
@@ -83,7 +89,7 @@ def test_travel_home_keeps_preferences_inside_suitcase():
     labels = [[button.text for button in row] for row in travel._home_kb().inline_keyboard]
 
     assert labels == [
-        ["✨ Подобрать новое путешествие"],
+        ["🧳 Другая страна"],
         ["💡 Что интересного"],
         ["🎚️ Мой чемодан"],
         ["#️⃣ Главная"],
