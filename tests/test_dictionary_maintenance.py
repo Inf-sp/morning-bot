@@ -216,3 +216,89 @@ def test_manual_rebuild_updates_one_card_without_a_progress_message(monkeypatch)
 
     assert rebuilt == [{"force": True, "word_id": "word-1", "max_batches": 1}]
     assert sent == [{"text": "Benadering → Подход"}]
+
+
+def test_manual_rebuild_uses_gemini_then_openrouter_instead_of_paid_only(monkeypatch):
+    words = [{
+        "id": "tennissen-1", "lang": "nl", "term": "tennissen",
+        "raw_user_term": "tennissen",
+        "translation": "теннис", "article": "de", "pos": "существительное",
+        "breakdown": "существительное · de-слово", "examples": [],
+    }]
+    calls = []
+
+    async def forbidden_paid(*_args, **_kwargs):
+        raise AssertionError("manual refresh must not depend on OpenRouter-only route")
+
+    async def analyze(_prompt, _max_tokens, **kwargs):
+        calls.append(kwargs)
+        good = {"items": [{
+            "keep": True, "lang": "nl", "term": "tennissen",
+            "translation": "играть в теннис", "article": "", "pos": "глагол",
+            "breakdown": "глагол", "plural": "",
+            "forms": ["tenniste", "heeft getennist"],
+            "pronunciation": "[тэ́ниссэн]",
+            "essence": "Это глагол со значением играть в теннис.",
+            "insight": "Существительное — tennis, а действие — tennissen.",
+            "examples": [
+                {"text": "Wij tennissen zondag.", "translation": "Мы играем в теннис в воскресенье.", "context": "Спорт"},
+                {"text": "Zij tennist graag.", "translation": "Она любит играть в теннис.", "context": "Разговор"},
+            ],
+            "exercise_ru": "Мы играем в теннис.",
+            "exercise_answer": "Wij tennissen.", "topic": "спорт",
+            "difficulty": "A1", "construction": "", "situation_type": "",
+            "alt_translations": [],
+        }]}
+        bad = {"items": [{
+            **good["items"][0],
+            "translation": "теннис", "article": "de", "pos": "существительное",
+            "breakdown": "существительное · de-слово", "plural": "tennissen",
+            "forms": [],
+            "examples": [
+                {"text": "Ik speel graag tennis.", "translation": "Я люблю играть в теннис.", "context": "Спорт"},
+                {"text": "Tennis is leuk.", "translation": "Теннис — это весело.", "context": "Разговор"},
+            ],
+        }]}
+        assert not kwargs["result_validator"](bad)
+        assert kwargs["result_validator"](good)
+        return good
+
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(learning_dictionary.ai, "aopenrouter_paid_json", forbidden_paid)
+    monkeypatch.setattr(learning_dictionary.ai, "allm_json", analyze)
+
+    rebuilt = asyncio.run(learning_dictionary.rebuild_dictionary_entries(
+        "42", force=True, word_id="tennissen-1", max_batches=1,
+    ))
+
+    assert rebuilt[0]["pos"] == "глагол"
+    assert calls[0]["order"] == ("gemini", "openrouter")
+
+
+def test_manual_rebuild_keeps_showing_saved_card_when_all_ai_is_unavailable(monkeypatch):
+    old = {
+        "id": "tennissen-1", "lang": "nl", "term": "tennissen",
+        "translation": "теннис", "article": "de", "pos": "существительное",
+        "breakdown": "существительное · de-слово", "examples": [],
+    }
+    shown = []
+
+    async def unavailable(*_args, **_kwargs):
+        raise learning_dictionary.DictionaryRebuildDeferred()
+
+    async def show(_bot, _cid, _page, word_id, q=None):
+        shown.append((word_id, q))
+
+    monkeypatch.setattr(learning_dictionary, "_entry_by_id", lambda *_args: old)
+    monkeypatch.setattr(learning_dictionary, "normalize_user_dictionary", lambda _cid: [old])
+    monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", unavailable)
+    monkeypatch.setattr(learning_dictionary, "send_dict_entry_view_by_id", show)
+
+    query = object()
+    asyncio.run(learning_dictionary.check_dictionary_entry(
+        object(), "42", "tennissen-1", q=query,
+    ))
+
+    assert shown == [("tennissen-1", query)]

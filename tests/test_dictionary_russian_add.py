@@ -1021,7 +1021,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
     assert kwargs["fallback_allowed"] is True
     assert kwargs["privacy_level"] == "public"
     assert kwargs["budget_seconds"] == 15
-    assert kwargs["result_validator"]({
+    assert not kwargs["result_validator"]({
         "ok": True, "term": "tering", "translation": "ругательство",
         "breakdown": "существительное",
     })
@@ -1048,6 +1048,65 @@ def test_dictionary_analysis_uses_one_central_provider_chain(monkeypatch):
 
     assert entry["translation"] == "Особенный"
     assert calls == [dictionary_import._DICT_ANALYSIS_ORDER]
+
+
+def test_add_tennissen_rejects_plausible_but_wrong_noun_analysis(monkeypatch):
+    """Точный сценарий из чата: Gemini ошибся, OpenRouter должен перепроверить."""
+    bad_noun = {
+        "ok": True, "lang": "nl", "term": "tennissen", "article": "de",
+        "translation": "теннис", "breakdown": "существительное · de-слово",
+        "pronunciation": "[тэниссэн]",
+        "essence": "Так называют игру в теннис.",
+        "insight": "Связано со спортом.",
+        "examples": [
+            {"text": "Ik speel graag tennis.", "translation": "Я люблю играть в теннис.", "context": "Спорт"},
+            {"text": "Tennis is leuk.", "translation": "Теннис — это весело.", "context": "Разговор"},
+        ],
+        "exercise_ru": "Я люблю теннис.", "exercise_answer": "Ik hou van tennis.",
+        "pos": "существительное", "plural": "tennissen", "forms": [],
+        "topic": "спорт", "difficulty": "A1", "construction": "",
+        "situation_type": "", "alt_translations": [],
+        "verb": {"is_verb": False}, "needs_confirmation": False, "reason": "",
+    }
+    good_verb = {
+        **bad_noun,
+        "article": "", "translation": "играть в теннис", "breakdown": "глагол",
+        "pos": "глагол", "plural": "", "forms": ["tenniste", "heeft getennist"],
+        "examples": [
+            {"text": "Wij tennissen elke zondag.", "translation": "Мы играем в теннис каждое воскресенье.", "context": "Спорт"},
+            {"text": "Zij tennist graag.", "translation": "Она любит играть в теннис.", "context": "Разговор"},
+        ],
+        "verb": {
+            "is_verb": True, "infinitive": "tennissen",
+            "translations": ["играть в теннис"], "past_singular": "tenniste",
+            "past_participle": "getennist", "auxiliary": "hebben",
+            "perfect_form": "heeft getennist", "verb_type": "weak",
+            "example_nl": "Wij tennissen elke zondag.",
+            "example_ru": "Мы играем в теннис каждое воскресенье.",
+            "confidence": 0.99,
+        },
+    }
+    decisions = []
+
+    async def analyze(_prompt, _max_tokens, **kwargs):
+        validator = kwargs["result_validator"]
+        decisions.append(validator(bad_noun))
+        if decisions[-1]:
+            return bad_noun
+        assert validator(good_verb)
+        return good_verb
+
+    monkeypatch.setattr(dictionary_import.ai, "allm_json", analyze)
+
+    payload, lang = dictionary_import._extract_chat_dict_add("Add tennissen", "42")
+    assert (payload, lang) == ("tennissen", None)
+    entry = asyncio.run(dictionary_import._normalize_dict_entry_full(payload, lang))
+
+    assert decisions == [False]
+    assert entry["pos"] == "глагол"
+    assert entry["article"] == ""
+    assert entry["term"].casefold() == "tennissen"
+    assert entry["perfect_form"] == "heeft getennist"
 
 
 def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypatch):

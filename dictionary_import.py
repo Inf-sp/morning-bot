@@ -76,6 +76,71 @@ def _usable_analysis_result(value):
     )
 
 
+def _dictionary_analysis_result_is_usable(value, raw_user_term, lang_hint):
+    """Не принимает формально полный, но грамматически противоречивый разбор.
+
+    Невалидный ответ заставляет общий AI-маршрут перейти от Gemini к OpenRouter,
+    прежде чем ошибочная часть речи попадёт в пользовательский словарь.
+    """
+    if not _usable_analysis_result(value):
+        return False
+    lang = lang_hint if lang_hint in ("nl", "en") else str(value.get("lang") or "").casefold()
+    pos = canonical_part_of_speech(value)
+    if pos not in {
+        "прилагательное", "глагол", "существительное", "местоимение",
+        "наречие", "предлог", "числительное", "союз", "частица", "междометие",
+    }:
+        return False
+    article = str(value.get("article") or "").strip().casefold()
+    verb = value.get("verb") if isinstance(value.get("verb"), dict) else {}
+    model_says_verb = bool(verb.get("is_verb"))
+
+    if pos == "глагол":
+        if article or (verb and not model_says_verb):
+            return False
+        if lang == "nl":
+            if not model_says_verb:
+                return False
+            expected = re.sub(
+                r"^(?:de|het)\s+", "", str(value.get("term") or ""), flags=re.I,
+            ).strip().casefold()
+            analysis, _reason = _validate_verb_analysis(
+                verb, expected_infinitive=expected,
+            )
+            if analysis is None:
+                return False
+    elif model_says_verb:
+        return False
+
+    if lang == "nl" and pos == "существительное":
+        if article not in {"de", "het"}:
+            return False
+        raw = _clean_raw_user_term(raw_user_term)
+        explicit_article = bool(re.match(r"^(?:de|het)\s+", raw, flags=re.I))
+        term = _normalized_user_term(raw, "nl").casefold()
+        plural = str(value.get("plural") or "").strip().casefold()
+        # Голое окончание -en двусмысленно: это часто инфинитив, но модель может
+        # принять его за существительное во множественном числе. Словарная форма
+        # существительного не может одновременно быть собственным plural; без
+        # явно введённого артикля такой ответ должен проверить следующий провайдер.
+        if not explicit_article and term.endswith("en") and plural == term:
+            return False
+        if not explicit_article and term.endswith("en"):
+            example_words = {
+                token.casefold()
+                for example in (value.get("examples") or [])[:2]
+                if isinstance(example, dict)
+                for token in re.findall(
+                    r"[\wÀ-ÖØ-öø-ÿ'-]+", str(example.get("text") or ""), re.UNICODE,
+                )
+            }
+            if term not in example_words and (not plural or plural not in example_words):
+                return False
+    elif article:
+        return False
+    return True
+
+
 async def _dictionary_analysis_json(prompt, *, cache_context=None, result_validator=None):
     """Один общий маршрут пробует каждый AI-резерв ровно один раз."""
     validator = result_validator or _usable_analysis_result
@@ -1199,7 +1264,12 @@ INPUT_JSON: {input_payload}
                 ),
             )
         else:
-            d = await _dictionary_analysis_json(prompt)
+            d = await _dictionary_analysis_json(
+                prompt,
+                result_validator=lambda value: _dictionary_analysis_result_is_usable(
+                    value, raw_user_term, lang_hint,
+                ),
+            )
     except Exception as exc:
         # Не скрываем под общим «не получилось разобрать» факт, что исчерпались
         # именно AI-резервы. Вызывающий сценарий попросит перевод или контекст.

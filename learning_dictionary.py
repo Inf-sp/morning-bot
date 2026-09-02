@@ -466,6 +466,7 @@ def _dictionary_rebuild_prompt(entries):
             "term": _entry_term(entry), "translation": _entry_translation(entry),
             "article": entry.get("article", ""), "pos": entry.get("pos", ""),
             "breakdown": entry.get("breakdown", ""),
+            "raw_user_term": entry.get("raw_user_term", ""),
             "has_study_card": study_card_is_complete(entry),
         }
         for index, entry in enumerate(entries)
@@ -485,6 +486,8 @@ def _dictionary_rebuild_prompt(entries):
 - Не возвращай фразу, предложение, устойчивое выражение или конструкцию.
 - У нидерландского существительного отдели de/het в article; у всех остальных
   article пустой. Не превращай прилагательные и глаголы в существительные.
+- Нидерландское слово на -en без введённого пользователем артикля отдельно
+  проверь как возможный инфинитив; не принимай его автоматически за plural noun.
 - translation: 1–2 точных русских значения. pos и breakdown — по-русски.
 - pronunciation: русская транскрипция с ударением в квадратных скобках.
 - essence: два коротких русских предложения о смысле и ситуации употребления.
@@ -505,13 +508,44 @@ JSON: {{"items":[{{"keep":true,"lang":"nl|en","term":"...","translation":"...",
 """
 
 
-def _usable_dictionary_rebuild_response(value, expected_count):
+def _rebuild_item_grammar_is_usable(item, source):
+    lang = str(item.get("lang") or "").strip().casefold()
+    pos = canonical_part_of_speech(item)
+    article = str(item.get("article") or "").strip().casefold()
+    if pos != "существительное":
+        return not article
+    if lang != "nl":
+        return not article
+    if article not in {"de", "het"}:
+        return False
+
+    raw = " ".join(str(source.get("raw_user_term") or _entry_term(source)).split()).strip()
+    explicit_article = bool(re.match(r"^(?:de|het)\s+", raw, flags=re.I))
+    term = re.sub(r"^(?:de|het)\s+", "", str(item.get("term") or ""), flags=re.I)
+    term = normalize_key(term)
+    plural = normalize_key(item.get("plural") or "")
+    if explicit_article or not term.endswith("en"):
+        return True
+    if plural == term:
+        return False
+    example_words = {
+        token.casefold()
+        for example in (item.get("examples") or [])[:2]
+        if isinstance(example, dict)
+        for token in re.findall(
+            r"[\wÀ-ÖØ-öø-ÿ'-]+", str(example.get("text") or ""), re.UNICODE,
+        )
+    }
+    return term in example_words or bool(plural and plural in example_words)
+
+
+def _usable_dictionary_rebuild_response(value, expected_count, source_entries=None):
     items = value if isinstance(value, list) else (
         value.get("items", []) if isinstance(value, dict) else []
     )
     if len(items) != expected_count or not all(isinstance(item, dict) for item in items):
         return False
-    for item in items:
+    for index, item in enumerate(items):
         if item.get("keep") is False:
             continue
         lang = str(item.get("lang") or "").strip().casefold()
@@ -520,6 +554,9 @@ def _usable_dictionary_rebuild_response(value, expected_count):
             return False
         if (lang == "nl" and pos == "существительное"
                 and str(item.get("article") or "").strip().casefold() not in {"de", "het"}):
+            return False
+        if source_entries is not None and not _rebuild_item_grammar_is_usable(
+                item, source_entries[index]):
             return False
     return True
 
@@ -561,33 +598,26 @@ async def rebuild_dictionary_entries(
         batch_idx = pending_idx[batch_start:batch_start + _DICTIONARY_REBUILD_BATCH_SIZE]
         entries = [words[index] for index in batch_idx]
         try:
-            if word_id is not None:
-                response = await ai.aopenrouter_paid_json(
-                    _dictionary_rebuild_prompt(entries), 3000,
-                    result_validator=lambda value: _usable_dictionary_rebuild_response(
-                        value, len(entries),
+            response = await ai.allm_json(
+                _dictionary_rebuild_prompt(entries), 3000,
+                order=_DICTIONARY_REBUILD_ORDER,
+                module="learning_dictionary_rebuild", fallback_allowed=True,
+                privacy_level="public", budget_seconds=30,
+                cache_context={
+                    "version": _DICTIONARY_REBUILD_VERSION,
+                    "manual_recheck_at": (
+                        datetime.now(config.TZ).isoformat() if word_id is not None
+                        else datetime.now(config.TZ).date().isoformat() if force else ""
                     ),
-                )
-            else:
-                response = await ai.allm_json(
-                    _dictionary_rebuild_prompt(entries), 3000,
-                    order=_DICTIONARY_REBUILD_ORDER,
-                    module="learning_dictionary_rebuild", fallback_allowed=True,
-                    privacy_level="public", budget_seconds=30,
-                    cache_context={
-                        "version": _DICTIONARY_REBUILD_VERSION,
-                        "manual_recheck_date": (
-                            datetime.now(config.TZ).date().isoformat() if force else ""
-                        ),
-                        "entries": [
-                            (_dict_lang(entry), normalize_key(_entry_term(entry)), _entry_translation(entry))
-                            for entry in entries
-                        ],
-                    },
-                    result_validator=lambda value: _usable_dictionary_rebuild_response(
-                        value, len(entries),
-                    ),
-                )
+                    "entries": [
+                        (_dict_lang(entry), normalize_key(_entry_term(entry)), _entry_translation(entry))
+                        for entry in entries
+                    ],
+                },
+                result_validator=lambda value: _usable_dictionary_rebuild_response(
+                    value, len(entries), entries,
+                ),
+            )
             results = response if isinstance(response, list) else response.get("items", [])
         except Exception as error:
             _log.warning("dictionary rebuild paused after provider failure: %r", error)

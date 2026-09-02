@@ -299,7 +299,20 @@ def game_home_screen(city, items, daily, *, day=None, year=None, season="лет�
     else:
         b.line("Пока не удалось подтвердить ближайшие релизы.")
 
-    fact = str(daily.get("fact") or (daily.get("rebus") or {}).get("fact") or "").strip()
+    fact = ""
+    if rows:
+        source = next((item for item in rows if str(item.get("fact") or "").strip()), rows[0])
+        title = str(source.get("title") or "").strip()
+        note = str(
+            source.get("fact") or source.get("summary") or source.get("description") or ""
+        ).strip()
+        if note:
+            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
+        elif title:
+            genre = str(source.get("genre") or "").strip()
+            platforms = _plain_game_platforms(source.get("platform_label"))
+            detail = " · ".join(value for value in (genre, platforms) if value)
+            fact = f"«{title}» — {detail}." if detail else f"В витрине сегодня — «{title}»."
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -489,15 +502,27 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
             b.text_line(f" · {birth_date}")
         role = _clean_external_text(birthday.get("role")) or "кинематографист"
         b.text_line(f" — {role}.")
-        birthday_fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
-        if birthday_fact:
-            b.text_line(f" {birthday_fact}")
         b.newline()
 
-    fact = _strip_external_label(
-        cinema_day.get("fact") or (cinema_day.get("rebus") or {}).get("fact"),
-        "интересно", "факт",
-    )
+    fact = ""
+    birthday_fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
+    birthday_name = _clean_external_text(birthday.get("name"))
+    if birthday_name and birthday_fact:
+        fact = f"{birthday_name}: {birthday_fact}"
+    elif cinema:
+        source = next((
+            movie for movie in cinema
+            if _clean_external_text(_item_value(movie, "fact", ""))
+        ), cinema[0])
+        title = _clean_quoted_title(_item_value(source, "title", ""))
+        note = _strip_external_label(
+            _item_value(source, "fact", "") or _item_value(source, "overview", ""),
+            "интересно", "факт",
+        )
+        if title and note:
+            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
+        elif title:
+            fact = f"В сегодняшней киноафише — «{title}»."
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -981,10 +1006,26 @@ def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
         b.text_line(" ")
         b.line("Пока не удалось подтвердить заметные новинки.")
 
-    fact = str(
-        daily_book.get("fact") or (daily_book.get("rebus") or {}).get("fact")
-        or birthday.get("fact") or ""
-    ).strip()
+    fact = ""
+    if premieres:
+        source = next((
+            item for item in premieres if str(_item_value(item, "fact", "") or "").strip()
+        ), premieres[0])
+        title = str(_item_value(source, "title", "") or "").strip()
+        author = str(_item_value(source, "author", "") or "").strip()
+        note = str(_item_value(source, "fact", "") or "").strip()
+        if note:
+            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
+        elif title and author:
+            fact = f"Автор книги «{title}» — {author}."
+        else:
+            summary = str(
+                _item_value(source, "summary", "") or _item_value(source, "vibe", "") or ""
+            ).strip()
+            if title and summary:
+                fact = f"«{title}»: {summary}"
+            elif title:
+                fact = f"В свежей литературной витрине — «{title}»."
     if fact and premieres:
         b.spacer()
         b.bold("💡 Интересно:")
@@ -1304,6 +1345,16 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 
     fact = str((events[0].get("artist_fact") if events else "") or "").strip()
+    if events and not fact:
+        first = events[0]
+        artist = str(_item_value(first, "artist", "") or "").strip()
+        date = str(_item_value(first, "date", "") or "").strip()
+        place = str(_item_value(first, "place", "") or "").strip()
+        detail = " · ".join(value for value in (date, place) if value)
+        fact = (
+            f"{artist}: ближайшее подтверждённое выступление — {detail}."
+            if detail else f"{artist} входит в ближайшую концертную афишу."
+        )
     if fact:
         b.spacer()
         b.bold("💡 Интересно:")

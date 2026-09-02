@@ -169,7 +169,7 @@ def test_music_starts_a_new_local_cycle_when_ai_and_fresh_fallbacks_are_exhauste
     assert "Big Thief" in calls[0][0]
 
 
-def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
+def test_music_home_shows_concert_artist_fact_instead_of_unrelated_daily_rebus(monkeypatch):
     sent = []
 
     class Bot:
@@ -189,9 +189,11 @@ def test_music_home_shows_daily_rebus_and_concerts(monkeypatch):
 
     assert len(sent) == 1
     assert "🎧 Музыка рядом ·" in sent[0]["text"]
-    assert "Музыкальный ребус: 👑 🐝 🎤 → Beyoncé" in sent[0]["text"]
+    assert "Музыкальный ребус:" not in sent[0]["text"]
+    assert "Beyoncé" not in sent[0]["text"]
+    assert "💡 Интересно: Romy: ближайшее подтверждённое выступление" in sent[0]["text"]
     assert [row[0].text for row in sent[0]["reply_markup"].inline_keyboard[:2]] == [
-        "✨ Подобрать новую музыку", "🎫 Концерты",
+        "🎸 Что послушать", "🎚️ Мои артисты",
     ]
 
 
@@ -242,6 +244,21 @@ def test_music_home_shows_three_nearby_concerts_as_separate_items():
     assert "Тёплая электроника" not in message.text
     assert "• FKA twigs (3 сентября · Амстердам)" in message.text
     assert "• The National (14 сентября · Утрехт)" in message.text
+
+
+def test_music_home_shows_at_most_five_artists_and_fact_about_the_first_one():
+    events = [
+        {"artist": f"Артист {index}", "date": f"{index + 1} октября", "place": "Амстердам"}
+        for index in range(6)
+    ]
+    events[0]["artist_fact"] = "Артист 0 выпустил дебютный альбом в 2024 году."
+
+    message = leisure_music.leisure_ui.music_week_screen("Алкмар", {}, events)
+
+    assert message.text.count("\n• Артист ") == 5
+    assert "Артист 4" in message.text
+    assert "Артист 5" not in message.text
+    assert "💡 Интересно: Артист 0 выпустил дебютный альбом" in message.text
 
 
 def test_music_home_keeps_concert_type_in_compact_preview():

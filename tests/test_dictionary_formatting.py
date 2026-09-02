@@ -307,7 +307,7 @@ def test_dictionary_and_daily_word_use_the_same_saved_card_body():
 
 
 def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
-    async def analyze(_prompt):
+    async def analyze(_prompt, **_kwargs):
         return {
             "ok": True, "lang": "en", "term": "selfless", "article": "",
             "translation": "самоотверженный", "pronunciation": "[се́лфлэс]",

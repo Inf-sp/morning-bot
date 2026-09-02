@@ -166,7 +166,7 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
 
 
 async def check_dictionary_entry(bot, cid, word_id, q=None):
-    """Сразу обновляет одну карточку через платную модель OpenRouter."""
+    """Сразу перепроверяет одну карточку общей цепочкой Gemini → OpenRouter."""
     entry = _entry_by_id(cid, word_id)
     if not entry:
         await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
@@ -178,8 +178,16 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
             item["manual_rebuild_requested_at"] = datetime.now(config.TZ).isoformat()
             break
     store.set_list(config.DICT_KEY, cid, words)
-    await rebuild_dictionary_entries(cid, force=True, word_id=word_id, max_batches=1)
-    await send_dict_entry_view_by_id(bot, cid, 0, word_id)
+    try:
+        await rebuild_dictionary_entries(cid, force=True, word_id=word_id, max_batches=1)
+    except DictionaryRebuildDeferred:
+        answer = getattr(q, "answer", None)
+        if callable(answer):
+            try:
+                await answer("Сейчас не получилось обновить. Сохранил прежнюю карточку.")
+            except Exception:
+                pass
+    await send_dict_entry_view_by_id(bot, cid, 0, word_id, q=q)
 
 
 async def request_dictionary_recheck(bot, cid, lang, q=None):

@@ -1011,7 +1011,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
 
     assert "🎬 Кино на сегодня · Алкмар" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса. «Леди Бёрд» принесла ей две номинации на «Оскар»." in movie.text
+    assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса." in movie.text
     assert "Фильм под настроение:" not in movie.text
     assert (
         "Что в кино:\n• «Фильм» (драма, триллер) · "
@@ -1020,7 +1020,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
     assert "💡 Интересно: «Челюсти»" not in movie.text
-    assert "💡 Интересно: Стивен Спилберг" in movie.text
+    assert "💡 Интересно: Грета Гервиг: «Леди Бёрд»" in movie.text
     assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("💡 Интересно:")
     assert movie.rich_message is None
     assert not any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
@@ -1030,6 +1030,8 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "• Onyx Storm — Ребекка Яррос · Фэнтези · Вайолет ищет союзников" in books.text
     assert "Автор недели:" not in books.text
     assert "Книга под настроение:" not in books.text
+    assert "💡 Интересно: Автор книги «Onyx Storm» — Ребекка Яррос." in books.text
+    assert "💡 Интересно: Факт." not in books.text
     assert books.text.index("Свежие релизы:") < books.text.index("💡 Интересно:")
     assert not any(entity.type == MessageEntity.SPOILER for entity in books.entities)
     assert "🎧 Музыка рядом · 25 августа" in music.text
@@ -1062,7 +1064,8 @@ def test_movie_home_cleans_cached_markup_fragments():
 
     assert "• «Из любви» (драма)" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "💡 Интересно: Сёстры Вачовски отправили актёров на подготовку." in movie.text
+    assert "💡 Интересно: «Из любви»: История о чувствах" in movie.text
+    assert "Сёстры Вачовски" not in movie.text
     assert "**" not in movie.text
     assert "&#x20;" not in movie.text
     assert "�" not in movie.text
@@ -1792,7 +1795,8 @@ def test_literary_vibe_has_verified_reserve_on_first_day_of_autumn(monkeypatch):
 
     assert len(items) == 3
     assert "Пока не удалось подтвердить заметные новинки" not in message.text
-    assert "Толкин работал над «Властелином колец»" in message.text
+    assert "💡 Интересно: Автор книги «The Disappearers» — Marlon James." in message.text
+    assert "Толкин работал над «Властелином колец»" not in message.text
     assert "💡 Интересно:" not in empty_message.text
     assert all(item.get("summary") for item in items)
 
