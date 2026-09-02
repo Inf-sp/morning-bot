@@ -85,19 +85,24 @@ class _Bot:
         self.sent.append(kwargs)
 
 
-def test_system_screen_keeps_only_navigation(monkeypatch):
+def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch):
     monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
-    monkeypatch.setattr(admin.service_monitor, "last_check_time", lambda: "21:44")
+    monkeypatch.setattr(admin.provider_runtime, "states", lambda: [])
+    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5: [])
+    monkeypatch.setattr(admin, "_database_health", lambda: {"kind": "ok"})
+    monkeypatch.setattr(admin, "_notification_stats", lambda _cid: {"errors_today": 0})
+    monkeypatch.setattr(admin, "_new_log_errors", lambda _cid: {"critical": 0, "count": 0})
     bot = _Bot()
 
     asyncio.run(admin.send_api_ai(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [button.text for button in markup[-1]] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert all(button.text != "⚠️ Ошибки" for row in markup for button in row)
-    assert "Ответы · 95%" not in bot.sent[0]["text"]
-    assert "Автоматический резерв" not in bot.sent[0]["text"]
-    assert "Последняя ошибка" not in bot.sent[0]["text"]
+    assert bot.sent[0]["text"].startswith("🛠️ Админ")
+    assert "⚪ Gemini · Везде · лимит неизвестен" in bot.sent[0]["text"]
+    assert all(button.text != "🛠 Система" for row in markup for button in row)
+    assert [[button.text for button in row] for row in markup] == [
+        ["👥 Пользователи"], ["#️⃣ Главная"],
+    ]
 
 
 def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
@@ -330,12 +335,21 @@ def test_admin_home_ui_uses_compact_exact_lines_without_ok():
 def test_admin_home_ui_shows_current_errors_under_status():
     message = admin_ui.home(
         status_dot="🔴", status_text="API требуют внимания",
-        updated_at="15:15", error_rows=["21 августа, 15:14 · Обучение · не открылось задание"],
+        updated_at="15:15",
+        system_rows=[
+            "AI", "🟢 Gemini · Основной · доступен",
+            "Данные", "🟢 TMDB · Кино · доступен",
+        ],
+        error_rows=["21 августа, 15:14 · Обучение · не открылось задание"],
     )
 
     assert message.text == (
         "🛠️ Админ\n\n"
         "🔴 API требуют внимания · обновлено в 15:15\n\n"
+        "AI\n"
+        "🟢 Gemini · Основной · доступен\n\n"
+        "Данные\n"
+        "🟢 TMDB · Кино · доступен\n\n"
         "Ошибки:\n"
         "21 августа, 15:14 · Обучение · не открылось задание"
     )

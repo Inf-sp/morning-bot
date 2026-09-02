@@ -1134,7 +1134,7 @@ async def handle_callback(bot, cid, data, q=None):
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
     elif data in ("adm_system", "adm_api_ai"):
         import admin as _adm
-        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_ai(b, c, q))
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))

@@ -251,6 +251,7 @@ def _mark_logs_viewed(cid, errors):
 
 async def send_home(bot, cid, q=None):
     states = provider_runtime.states()
+    monitor_rows = service_monitor.rows()
     system = _system_summary(states)
     notif = _notification_stats(cid)
     database = _database_health()
@@ -279,13 +280,13 @@ async def send_home(bot, cid, q=None):
         dot, status_text = ui.OK, "API работают"
 
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🛠 Система", callback_data="adm_api_ai")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
         status_dot=dot, status_text=status_text,
         updated_at=_updated_at(latest_check or time.time()), stale=stale,
+        system_rows=monitor_rows,
         error_rows=_active_error_rows(limit=5),
     )
     await _show(bot, cid, msg, kb, q)
@@ -472,21 +473,8 @@ def _notification_stats(cid):
 # ================= API И AI (единый экран, § docs/admin.md) =================
 
 async def send_api_ai(bot, cid, q=None):
-    # This screen never calls providers. The independent monitor has already
-    # classified errors, selected real fallbacks and prepared display rows.
-    rows = service_monitor.rows()
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    latest_check = max(
-        (int(state.get("last_check") or 0) for state in provider_runtime.states()),
-        default=0,
-    )
-    msg = ui.api_ai(
-        rows, service_monitor.last_check_time(), latest_check or None,
-    )
-    await _show(bot, cid, msg, kb, q)
+    """Compat redirect for buttons in already-sent admin messages."""
+    await send_home(bot, cid, q)
 
 
 def _log_error_text(entry):
