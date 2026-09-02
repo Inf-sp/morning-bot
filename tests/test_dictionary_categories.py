@@ -232,6 +232,24 @@ def test_dictionary_migration_extracts_article_and_repairs_legacy_noun(monkeypat
     assert saved
 
 
+def test_dictionary_migration_repairs_tennissen_misclassified_as_noun(monkeypatch):
+    words = [{
+        "id": "tennissen-1", "lang": "nl", "term": "tennissen",
+        "translation": "теннис", "article": "de", "pos": "существительное",
+        "breakdown": "существительное · de-слово", "plural": "tennissen",
+    }]
+    monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
+    monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
+
+    result = learning_dictionary.normalize_user_dictionary("42")
+
+    assert result[0]["pos"] == "глагол"
+    assert result[0]["breakdown"] == "глагол"
+    assert result[0]["article"] == ""
+    assert result[0]["translation"] == "играть в теннис"
+    assert learning_dictionary._dictionary_category(result[0]) == "Глаголы"
+
+
 def test_dictionary_format_migration_reclassifies_all_legacy_cards(monkeypatch):
     words = [
         {

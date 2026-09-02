@@ -408,6 +408,10 @@ def _clock(value):
 
 
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None):
+    # Код погоды приходит суточным агрегатом и может означать дождь в другом
+    # периоде. При нулевой вероятности в этом периоде не показываем дождь.
+    if not float(rain or 0):
+        return "☁️"
     icon = weather_icon(code, temp, rain, wind_ms, rain_mm)
     return "🌙" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
 

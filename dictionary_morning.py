@@ -65,9 +65,12 @@ def build_daily_practice(cid, language, *, mark_shown=False):
             and _entry_term(word)
             and _entry_translation(word)
             and len(_entry_term(word).split()) == 1
-            and study_card_is_complete(word)
         )
     ]
+    ready = [word for word in eligible if study_card_is_complete(word)]
+    # Полная карточка остаётся предпочтительной, но сохранённое слово с
+    # переводом всё равно должно попасть в ежедневную рассылку.
+    eligible = ready or eligible
     pool = [word for word in eligible if not word.get("daily_word_shown_at")]
     if not pool and eligible:
         pool = [min(eligible, key=_shown_at_sort_key)]

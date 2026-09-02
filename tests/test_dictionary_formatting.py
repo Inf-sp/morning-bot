@@ -335,7 +335,7 @@ def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
     assert len(entry["examples"]) == 2
 
 
-def test_incomplete_daily_word_uses_learning_fallback_without_marking_it_shown(monkeypatch):
+def test_daily_word_uses_saved_dictionary_word_when_its_study_card_is_incomplete(monkeypatch):
     words = [{
         "term": "Ontwikkelen", "translation": "развивать", "lang": "nl",
         "breakdown": "глагол",
@@ -345,8 +345,9 @@ def test_incomplete_daily_word_uses_learning_fallback_without_marking_it_shown(m
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert "В словаре пока нет одиночных слов" in msg.text
-    assert "daily_word_shown_at" not in words[0]
+    assert "Ontwikkelen → Развивать" in msg.text
+    assert "В словаре пока нет одиночных слов" not in msg.text
+    assert words[0]["daily_word_shown_at"]
 
 
 def test_daily_word_starts_a_new_cycle_after_every_single_word_was_shown(monkeypatch):
@@ -398,7 +399,7 @@ def test_legacy_daily_word_deep_dive_migrates_into_dictionary_entry():
     assert study_card_is_complete(entry)
 
 
-def test_placeholder_daily_word_uses_safe_fallback_and_is_not_migrated(monkeypatch):
+def test_placeholder_daily_word_uses_compact_saved_word_and_is_not_migrated(monkeypatch):
     placeholder = {
         "pronunciation": "[русская транскрипция с ударением]",
         "translation": "1-2 значения",
@@ -421,7 +422,7 @@ def test_placeholder_daily_word_uses_safe_fallback_and_is_not_migrated(monkeypat
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert "В словаре пока нет одиночных слов" in msg.text
+    assert "Beperken → Ограничивать" in msg.text
     assert "русская транскрипция" not in msg.text
-    assert "daily_word_shown_at" not in words[0]
+    assert words[0]["daily_word_shown_at"]
     assert migrate_legacy_study_card(words[0]) is False

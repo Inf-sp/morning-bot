@@ -149,6 +149,9 @@ _INTENT_MAP = [
 _RECIPE_INGREDIENT_RE = re.compile(
     r"\bприготовить\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
 )
+_MEAL_WITH_INGREDIENT_RE = re.compile(
+    r"\b(завтрак|обед|ужин)\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
+)
 _GENERIC_RECIPE_INGREDIENTS = {"этого", "того", "них", "холодильника", "продуктов"}
 
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
@@ -330,6 +333,12 @@ def _detect_intent(text: str):
 
 def _recipe_ingredients_from_chat(text: str):
     """Return an explicitly named ingredient for a direct recipe card."""
+    meal_matched = _MEAL_WITH_INGREDIENT_RE.search(text or "")
+    if meal_matched:
+        meal = meal_matched.group(1).casefold()
+        ingredients = re.sub(r"\s+", " ", meal_matched.group(2)).strip(" ,;:—-.")
+        if ingredients and ingredients.casefold() not in _GENERIC_RECIPE_INGREDIENTS:
+            return f"{meal} с {ingredients}"[:160]
     matched = _RECIPE_INGREDIENT_RE.search(text or "")
     if not matched:
         return None
@@ -355,7 +364,11 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
     # пользователь не открывал раздел через меню, и вести её было бы некуда.
     no_kb_bot = settings._NoKbBot(bot)
     if action == "meal_recipe":
-        await cooking.send_recipe(bot, cid, f"блюдо из {recipe_ingredients}")
+        is_meal_request = str(recipe_ingredients or "").casefold().startswith(
+            ("завтрак ", "обед ", "ужин ")
+        )
+        constraint = recipe_ingredients if is_meal_request else f"блюдо из {recipe_ingredients}"
+        await cooking.send_recipe(bot, cid, constraint)
     elif action == "meal_picker":
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("🥐 Завтрак", callback_data="a_recipe_breakfast"),

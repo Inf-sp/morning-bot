@@ -148,6 +148,14 @@ def normalize_user_dictionary(cid):
         if migrate_legacy_study_card(item):
             item["dictionary_rebuild_version"] = DICTIONARY_REBUILD_VERSION
             changed = True
+        verb_repair = _LEGACY_DUTCH_VERB_REPAIRS.get(
+            normalize_key(entry_term(item))
+        ) if entry_language(item) == "nl" else None
+        if verb_repair:
+            for field, value in verb_repair.items():
+                if item.get(field) != value:
+                    item[field] = value
+                    changed = True
         canonical_pos = canonical_part_of_speech(item)
         if canonical_pos:
             item["pos"] = canonical_pos
@@ -416,6 +424,17 @@ def _ensure_dict(cid):
 
 
 _DICT_SEED_LIMIT = 30
+
+_LEGACY_DUTCH_VERB_REPAIRS = {
+    "tennissen": {
+        "translation": "играть в теннис",
+        "article": "",
+        "pos": "глагол",
+        "breakdown": "глагол",
+        "plural": "",
+        "infinitive": "tennissen",
+    },
+}
 
 
 def _dict_kind(w):

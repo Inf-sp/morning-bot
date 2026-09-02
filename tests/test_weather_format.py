@@ -85,8 +85,9 @@ def test_full_forecast_after_midnight_starts_with_the_coming_morning():
     ]
 
 
-def test_night_uses_moon_only_for_dry_clear_weather():
-    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌙"
+def test_period_with_zero_rain_probability_uses_cloud_without_rain():
+    assert weather._period_weather_icon("Днём", 61, 20, 0, 6, 0) == "☁️"
+    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "☁️"
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
 
 

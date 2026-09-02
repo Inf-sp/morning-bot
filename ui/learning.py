@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
-from dictionary_model import display_term
+from dictionary_model import display_term, study_card_is_complete
 from .builder import MessageBuilder
 from .constants import ui_label
 from .learning_entry import render_learning_entry, render_study_card
@@ -300,7 +300,10 @@ def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", r
         prepared = [{"term": word, "translation": ru} for word, ru in words]
     if prepared:
         entry = prepared[0]
-        render_study_card(b, entry)
+        if study_card_is_complete(entry):
+            render_study_card(b, entry)
+        else:
+            render_learning_entry(b, entry)
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
