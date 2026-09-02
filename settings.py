@@ -1135,6 +1135,13 @@ async def handle_callback(bot, cid, data, q=None):
     elif data in ("adm_system", "adm_api_ai"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
+    elif data == "adm_refresh_cards":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_card_refresh_menu(b, c, q))
+    elif data.startswith("adm_refresh_card_"):
+        import admin as _adm
+        card = data[len("adm_refresh_card_"):]
+        await _admin_guard(bot, cid, lambda b, c, key=card: _adm.refresh_card(b, c, key, q))
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))

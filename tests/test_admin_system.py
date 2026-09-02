@@ -99,10 +99,40 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert bot.sent[0]["text"].startswith("🛠️ Админ")
     assert "⚪ Gemini · Везде · лимит неизвестен" in bot.sent[0]["text"]
+    assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["👥 Пользователи"], ["#️⃣ Главная"],
+        ["🔄 Обновить карточки"], ["👥 Пользователи"], ["#️⃣ Главная"],
     ]
+
+
+def test_admin_card_refresh_menu_has_all_cards():
+    bot = _Bot()
+
+    asyncio.run(admin.send_card_refresh_menu(bot, "42"))
+
+    markup = bot.sent[0]["reply_markup"].inline_keyboard
+    assert [row[0].text for row in markup[:-1]] == [
+        "☀️ Мой день", "🧵 Гардероб", "🥣 Питание", "🧠 Обучение",
+        "✈️ Поездки", "🎬 Кино", "🎧 Музыка", "📚 Книги", "👾 Игры",
+    ]
+    assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
+
+
+def test_admin_refresh_card_reports_success(monkeypatch):
+    calls = []
+
+    async def refresh(cid, key):
+        calls.append((cid, key))
+        return True
+
+    monkeypatch.setattr(admin, "_refresh_card_cache", refresh)
+    bot = _Bot()
+
+    asyncio.run(admin.refresh_card(bot, "42", "games"))
+
+    assert calls == [("42", "games")]
+    assert "✅ 👾 Игры обновлена." in bot.sent[0]["text"]
 
 
 def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
@@ -345,10 +375,9 @@ def test_admin_home_ui_shows_current_errors_under_status():
 
     assert message.text == (
         "🛠️ Админ\n\n"
-        "🔴 API требуют внимания · обновлено в 15:15\n\n"
-        "AI\n"
+        "Мозг:\n"
         "🟢 Gemini · Основной · доступен\n\n"
-        "Данные\n"
+        "Данные:\n"
         "🟢 TMDB · Кино · доступен\n\n"
         "Ошибки:\n"
         "21 августа, 15:14 · Обучение · не открылось задание"

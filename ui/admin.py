@@ -73,6 +73,27 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
+    if system_rows is not None:
+        rows = [str(row or "").strip() for row in system_rows if str(row or "").strip()]
+        for row in rows:
+            if row in ("AI", "Данные"):
+                if row == "Данные":
+                    b.spacer()
+                b.bold("Мозг:" if row == "AI" else "Данные:")
+                b.newline()
+            else:
+                b.line(row)
+        errors = [
+            str(row or "").strip() for row in error_rows or []
+            if str(row or "").strip()
+        ]
+        if errors:
+            b.spacer()
+            b.bold("Ошибки:")
+            b.newline()
+            for row in errors:
+                b.line(row)
+        return b.build_stripped()
     if system_dot is not None or system_text is not None:
         dot = system_dot if system_dot is not None else status_dot
         text = system_text if system_text is not None else status_text
@@ -95,17 +116,6 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
         b.line(f"{status_dot} {stale_text} · данные от {updated_at}")
     else:
         b.line(f"{status_dot} {status_text} · обновлено в {updated_at}")
-    rows = [str(row or "").strip() for row in system_rows or [] if str(row or "").strip()]
-    if rows:
-        b.spacer()
-        for row in rows:
-            if row in ("AI", "Данные"):
-                if row == "Данные":
-                    b.spacer()
-                b.bold(row)
-                b.newline()
-            else:
-                b.line(row)
     rows = [str(row or "").strip() for row in error_rows or [] if str(row or "").strip()]
     if rows:
         b.spacer()
@@ -113,6 +123,18 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
         b.newline()
         for row in rows:
             b.line(row)
+    return b.build_stripped()
+
+
+def card_refresh_menu(status=""):
+    b = MessageBuilder()
+    b.bold("🔄 Обновить карточки")
+    b.newline()
+    b.spacer()
+    if status:
+        b.line(status)
+        b.spacer()
+    b.line("Выбери карточку для принудительного обновления кэша.")
     return b.build_stripped()
 
 

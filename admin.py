@@ -6,6 +6,7 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 Все функции — async send_*(bot, cid); гард на владельца — в settings._admin_guard.
 """
 import logging
+import asyncio
 import time
 from datetime import datetime
 
@@ -250,46 +251,104 @@ def _mark_logs_viewed(cid, errors):
 # ================= ДОМ =================
 
 async def send_home(bot, cid, q=None):
-    states = provider_runtime.states()
     monitor_rows = service_monitor.rows()
-    system = _system_summary(states)
-    notif = _notification_stats(cid)
-    database = _database_health()
-    logs = _new_log_errors(cid)
-    telegram = next((state for state in states if state.get("service") == "telegram"), {})
-    telegram_down = telegram.get("status") == provider_runtime.DOWN
-    latest_check = max((int(state.get("last_check") or 0) for state in states), default=0)
-    stale = not latest_check or time.time() - latest_check > STALE_AFTER
-
-    critical = any((
-        system["unavailable_functions"], system["fallback_unavailable"],
-        database["kind"] == "lost", telegram_down, notif["errors_today"], logs["critical"],
-    ))
-    limited = any((
-        system["restricted"], system["unknown"], database["kind"] in ("slow", "restored"),
-        telegram.get("status") in (provider_runtime.WARNING, provider_runtime.UNKNOWN),
-        logs["count"], stale,
-    ))
-    if stale:
-        dot, status_text = ui.UNKNOWN, "Состояние API неизвестно"
-    elif critical:
-        dot, status_text = ui.BAD, "API требуют внимания"
-    elif limited:
-        dot, status_text = ui.WARN, "API работают с ограничениями"
-    else:
-        dot, status_text = ui.OK, "API работают"
-
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
-        status_dot=dot, status_text=status_text,
-        updated_at=_updated_at(latest_check or time.time()), stale=stale,
         system_rows=monitor_rows,
         error_rows=_active_error_rows(limit=5),
     )
     await _show(bot, cid, msg, kb, q)
+
+
+_REFRESH_CARDS = (
+    ("myday", "☀️ Мой день"),
+    ("wardrobe", "🧵 Гардероб"),
+    ("cooking", "🥣 Питание"),
+    ("learning", "🧠 Обучение"),
+    ("travel", "✈️ Поездки"),
+    ("cinema", "🎬 Кино"),
+    ("music", "🎧 Музыка"),
+    ("books", "📚 Книги"),
+    ("games", "👾 Игры"),
+)
+
+
+async def send_card_refresh_menu(bot, cid, q=None, *, status=""):
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"adm_refresh_card_{key}")]
+        for key, label in _REFRESH_CARDS
+    ]
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ])
+    await _show(
+        bot, cid, ui.card_refresh_menu(status), InlineKeyboardMarkup(rows), q,
+    )
+
+
+async def _refresh_card_cache(cid, key):
+    if key == "wardrobe":
+        import wardrobe
+        store.clear_wardrobe_daylook(cid)
+        return await wardrobe.warm_home_cache(cid)
+    if key == "cooking":
+        import restaurant_discovery
+        return await asyncio.to_thread(restaurant_discovery.get_restaurant, cid, refresh=True)
+    if key == "learning":
+        import learning
+        learning.reset_daily_material_cache(cid)
+        return await asyncio.to_thread(learning.warm_home_cache, cid)
+    if key == "travel":
+        import travel
+        return await travel.warm_home_cache(cid, refresh=True)
+    if key == "cinema":
+        import leisure_movies
+        await leisure_movies.get_local_now_playing(cid, limit=20, refresh=True)
+        return await leisure_movies.warm_movie_premieres_cache(cid)
+    if key == "music":
+        import leisure_concerts
+        import leisure_music
+        leisure_concerts.invalidate_user_concerts_cache(cid)
+        store.mutate_kv(config.MUSIC_HOME_CACHE_KEY, lambda data: (
+            {k: v for k, v in (data or {}).items() if str(k) != str(cid)}, None,
+        ))
+        return await leisure_music.warm_music_home_cache(cid)
+    if key == "books":
+        import leisure_books
+        return await leisure_books.warm_books_home_cache(cid, refresh=True)
+    if key == "games":
+        import leisure_games
+        await leisure_games.get_game_premieres(cid, refresh=True, seasonal=True)
+        return await leisure_games.warm_games_home_cache(cid)
+    if key == "myday":
+        for dependency in ("wardrobe", "cooking", "learning", "travel", "cinema", "music", "books", "games"):
+            await _refresh_card_cache(cid, dependency)
+        import myday
+        myday.reset_day_cache(cid)
+        return await myday.warm_day_cache(cid)
+    raise ValueError("unknown admin card")
+
+
+async def refresh_card(bot, cid, key, q=None):
+    labels = dict(_REFRESH_CARDS)
+    label = labels.get(key)
+    if not label:
+        await send_card_refresh_menu(bot, cid, q, status="⚠️ Карточка не найдена.")
+        return
+    try:
+        result = await _refresh_card_cache(cid, key)
+        if result is False:
+            raise RuntimeError("card cache is incomplete")
+    except Exception:
+        _log.exception("admin card refresh failed cid=%s card=%s", cid, key)
+        await send_card_refresh_menu(bot, cid, q, status=f"⚠️ {label} не обновилась.")
+        return
+    await send_card_refresh_menu(bot, cid, q, status=f"✅ {label} обновлена.")
 
 
 # ================= ПОЛЬЗОВАТЕЛИ =================
