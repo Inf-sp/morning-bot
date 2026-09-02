@@ -74,17 +74,17 @@ def test_structured_cache_key_uses_scenario_not_prompt_text():
     assert direct != other_country
 
 
-def test_utility_routes_do_not_start_with_gemini():
+def test_utility_routes_start_with_gemini():
     for module in (
         "learning", "learning_trainer", "learning_dict_add", "trainer",
         "dictionary_import", "wardrobe_utility", "travel_utility",
     ):
-        assert "gemini" not in ai._resolve(None, None, module=module)
+        assert ai._resolve(None, None, module=module) == ("gemini", "openrouter")
 
 
-def test_wardrobe_item_parsing_uses_the_simple_groq_route():
-    assert ai._resolve(None, None, module="wardrobe_utility")[:2] == (
-        ai.GROQ_SIMPLE, "cf",
+def test_wardrobe_item_parsing_uses_the_common_gemini_route():
+    assert ai._resolve(None, None, module="wardrobe_utility") == (
+        "gemini", "openrouter",
     )
     assert ai._resolve(None, (ai.GROQ_SIMPLE, "cf")) == (ai.GROQ_SIMPLE, "cf")
 
@@ -210,10 +210,19 @@ def test_openrouter_uses_ordered_model_fallbacks(monkeypatch):
     }
 
 
-def test_all_central_routes_try_direct_mistral_before_openrouter():
+def test_all_central_routes_skip_direct_mistral():
     for order in {ai.SIMPLE_ORDER, ai.STANDARD_ORDER, ai.COMPLEX_ORDER}:
-        assert "mistral" in order
-        assert order.index("mistral") < order.index("openrouter")
+        assert order == ("gemini", "openrouter")
+
+
+def test_all_central_routes_use_gemini_then_openrouter_only():
+    assert ai.SIMPLE_ORDER == ("gemini", "openrouter")
+    assert ai.STANDARD_ORDER == ("gemini", "openrouter")
+    assert ai.COMPLEX_ORDER == ("gemini", "openrouter")
+    assert all(
+        ai._resolve(None, None, module=module) == ("gemini", "openrouter")
+        for module in ai.MODULE_POLICY
+    )
 
 
 def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
@@ -228,7 +237,7 @@ def test_every_central_text_ai_route_has_a_reserve_provider():
     ]
 
     for order, _unused in routes:
-        assert len([provider for provider in order if provider != "openrouter"]) >= 2
+        assert order == ("gemini", "openrouter")
 
 
 def test_all_premium_recommendations_have_a_cache_ttl():
@@ -358,7 +367,10 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
         raise ai.LLMProviderError("gemini", "temporary", status_code=503, temporary=True)
 
     monkeypatch.setattr(ai, "_gen_gemini", unavailable)
-    monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: calls.append("groq") or '{"ok":true}')
+    monkeypatch.setattr(
+        ai, "_openrouter_plain_text_fallback",
+        lambda *_args, **_kwargs: calls.append("openrouter") or '{"ok":true}',
+    )
 
     trace = tracking.start_action("42", "Поездка", "country", budget_seconds=10)
     try:
@@ -367,11 +379,11 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
         tracking.finish_action(trace)
 
     row = memory[tracking.config.ACTION_LATENCY_KEY]["log"][0]
-    assert calls == ["gemini", "groq"]
+    assert calls == ["gemini", "openrouter"]
     assert row["requested_tier"] == "complex"
     assert row["primary"] == "gemini"
     assert row["primary_status"] == "503"
-    assert row["served_by"] == "groq_complex"
+    assert row["served_by"] == "openrouter"
     assert row["gemini_calls"] == 1
 
 

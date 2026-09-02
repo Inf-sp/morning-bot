@@ -134,9 +134,8 @@ def _fallback_card(city, previous="", context_key="", history=None):
     }
 
 
-def _reserve(cid, cached, city, previous="", context_key=""):
-    if (_usable(cached, city) and cached.get("context_key") == context_key
-            and str(cached.get("name") or "").casefold() != str(previous or "").casefold()):
+def _reserve(cid, cached, city, previous="", context_key="", *, allow_cached=True):
+    if allow_cached and _usable(cached, city):
         return cached
     card = _fallback_card(city, previous, context_key, cached.get("history") or [])
     if card.get("name"):
@@ -240,7 +239,7 @@ def get_restaurant(cid, *, refresh=False):
         search_priority="tavily",
     )
     if not rows:
-        return _reserve(cid, cached, city, previous, context_key)
+        return _reserve(cid, cached, city, previous, context_key, allow_cached=not refresh)
     sources = _source_text(rows)
     prompt = f"""Выбери ОДИН реально существующий ресторан в городе {city} по источникам.
 Подбери его для контекста: {search_context}. Не используй место {previous or 'без исключений'}.
@@ -281,9 +280,9 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
                            "sources": sources},
         )
     except Exception:
-        return _reserve(cid, cached, city, previous, context_key)
+        return _reserve(cid, cached, city, previous, context_key, allow_cached=not refresh)
     if not isinstance(result, dict):
-        return _reserve(cid, cached, city, previous, context_key)
+        return _reserve(cid, cached, city, previous, context_key, allow_cached=not refresh)
     name = " ".join(str(result.get("name") or "").split()).strip()
     required = ("cuisine", "price", "signature_dish", "description", "fact")
     evidence_fields = ["name", *required]
@@ -297,7 +296,11 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
         or result.get("price") not in {"€", "€€", "€€€"}
         or not all(str(result.get(field) or "").strip() for field in required)
     ):
-        return _reserve(cid, cached, city, previous, context_key)
+        has_local_rotation = bool(_CITY_FALLBACKS.get(city.casefold()))
+        return _reserve(
+            cid, cached, city, previous, context_key,
+            allow_cached=not refresh and not has_local_rotation,
+        )
     card = {
         "city": city, "name": name,
         "address": " ".join(str(result.get("address") or "").split()),

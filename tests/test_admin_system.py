@@ -372,6 +372,17 @@ def test_system_summary_deduplicates_unavailable_functions():
     assert summary["fallback_unavailable"] is True
 
 
+def test_system_summary_ignores_ai_providers_outside_the_active_chain():
+    summary = admin._system_summary([
+        {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
+        {"service": "cloudflare", "status": "warning", "fallback": ""},
+        {"service": "mistral", "status": "down", "fallback": "", "error_type": "timeout"},
+    ])
+
+    assert summary["line"] == "без ограничений"
+    assert summary["unavailable_functions"] == 0
+
+
 def test_zero_user_metrics_are_hidden_from_home_line():
     assert admin._users_summary_line({"total": 4, "active_today": 0, "new_today": 0}) == "всего 4"
 

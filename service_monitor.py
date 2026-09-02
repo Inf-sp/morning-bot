@@ -29,7 +29,7 @@ _blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("groq", "gemini", "cloudflare", "mistral", "openrouter")
+_AI_SERVICES = ("gemini", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
@@ -49,10 +49,10 @@ _DATA_CATEGORIES = {
     "unsplash": "Фото",
 }
 _AI_ROLES = {
-    "gemini": "Сложные задачи",
-    "cloudflare": "Резерв",
-    "mistral": "Резерв",
-    "openrouter": "Последний резерв",
+    "gemini": "Основной",
+    "cloudflare": "Вне цепочки",
+    "mistral": "Вне цепочки",
+    "openrouter": "Резерв",
 }
 _GROQ_MODELS = (
     ("simple", config.GROQ_SIMPLE_MODEL, "Основной"),
@@ -175,7 +175,7 @@ def _format_groq_row(state: dict | None = None) -> str:
     """Одна пользовательская строка Groq без раскрытия внутренних моделей."""
     state = state or provider_runtime.get_state("groq")
     if not _configured("groq"):
-        return "🔴 Groq · Основной · API-ключ не настроен"
+        return "🔴 Groq · Вне цепочки · API-ключ не настроен"
     remaining, total = _confirmed_quota("groq", state)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if (status in (OK, UNKNOWN) and remaining is not None and total
@@ -191,7 +191,7 @@ def _format_groq_row(state: dict | None = None) -> str:
         detail = f"{_number(used)} сегодня"
     if status in (WARNING, DOWN) and state.get("error_type") not in ("", "quota", "unknown"):
         detail = str(state.get("last_error") or "сервис не ответил")
-    return f"{_DOT[status]} Groq · Основной · {detail}"
+    return f"{_DOT[status]} Groq · Вне цепочки · {detail}"
 
 
 def _format_ai_row(service: str, state: dict | None = None) -> str:
@@ -242,7 +242,7 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
 def rows() -> list[str]:
     current = _load().get("services") or {}
     out = ["AI"]
-    for service in ("groq", "gemini", "cloudflare", "mistral", "openrouter"):
+    for service in _AI_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
         if service == "groq":
             out.append(_format_groq_row(state))
@@ -403,6 +403,8 @@ def check_all(*, force=False) -> None:
     results = {}
     due = []
     for spec in SPECS:
+        if spec.key in provider_runtime.AI_PROVIDERS and spec.key not in _AI_SERVICES:
+            continue
         # YouTube search costs quota. Its status is updated by real lookups only,
         # never by a diagnostic request from the monitor.
         if spec.key == "youtube":

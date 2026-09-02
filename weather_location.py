@@ -17,7 +17,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             "Если это прозвище или сокращение (Питер, Нью-Йорк, Первопрестольная…), "
             "верни официальное название. Если уже официальное — верни как есть. "
             "Только название, без пояснений.",
-            40, 0.1, tier="cheap", route="cf",
+            40, 0.1, tier="cheap", route="gemini",
         )
         official = official.strip().strip("«»\"'.").split("\n")[0].strip()
         if official and official.lower() not in {value.lower() for value in variants}:
@@ -90,7 +90,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             translated = await ai.allm(
                 f"Как правильно пишется название города «{city_name}»{hint} на русском языке, "
                 "как в Википедии? Ответь ТОЛЬКО названием города, без пояснений.",
-                40, 0.1, tier="cheap", route="cf",
+                40, 0.1, tier="cheap", route="gemini",
             )
             translated = translated.strip().strip("«»\"'.").split("\n")[0].strip()
             if translated and len(translated) <= 80 and not any(char.isdigit() for char in translated):

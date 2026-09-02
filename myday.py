@@ -1048,6 +1048,26 @@ def _save_day_cache(cid, today, text, entities, ts):
     ))
     return cached
 
+
+def _ready_day_sections(cid):
+    """Готовые соседние карточки, которые сводка может показать без новой генерации."""
+    import wardrobe
+    import restaurant_discovery
+
+    return {
+        "outfit": bool(wardrobe.get_cached_outfit_summary(cid).get("items")),
+        "restaurant": bool(restaurant_discovery.cached_restaurant_preview(cid).get("name")),
+    }
+
+
+def _cache_misses_ready_sections(cache, cid):
+    text = str((cache or {}).get("text") or "")
+    ready = _ready_day_sections(cid)
+    return (
+        (ready["outfit"] and " Образ:" not in text)
+        or (ready["restaurant"] and "🍽️ Куда сходить:" not in text)
+    )
+
 def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
@@ -1181,6 +1201,8 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = None if force else _load_day_cache(cid, today)
+    if cache is not None and _cache_misses_ready_sections(cache, cid):
+        cache = None
     stale = cache is None
     if stale:
         if status is None:
@@ -1212,7 +1234,7 @@ async def warm_day_cache(cid):
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cached = _load_day_cache(cid, today)
-    if cached is not None:
+    if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True
     text, entities = await asyncio.to_thread(_build_day_text, cid)
     _save_day_cache(cid, today, text, entities, _time.time())

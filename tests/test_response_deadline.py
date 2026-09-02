@@ -101,27 +101,23 @@ def test_chain_preserves_time_for_the_next_ai_provider(monkeypatch):
     assert clock["now"] == 2.0
 
 
-def test_free_chat_reserves_time_for_mistral_and_openrouter(monkeypatch):
+def test_free_chat_reserves_time_for_openrouter(monkeypatch):
     clock = {"now": 0.0}
     calls = []
 
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
     monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
 
     def provider(provider, _history, _system, timeout_cap=None):
         calls.append((provider, timeout_cap))
-        if provider == "groq_standard":
-            clock["now"] = 2.5
-            raise ai.LLMProviderError(provider, "groq timeout", temporary=True)
-        if provider == "cf":
-            clock["now"] = 4.5
-            raise ai.LLMProviderError(provider, "cloudflare timeout", temporary=True)
-        if provider == "mistral":
-            clock["now"] = 6.0
-            raise ai.LLMProviderError(provider, "mistral timeout", temporary=True)
+        if provider == "gemini":
+            clock["now"] = 4.0
+            raise ai.LLMProviderError(provider, "gemini timeout", temporary=True)
         return "Ответ OpenRouter"
 
     monkeypatch.setattr(ai, "_chat", provider)
@@ -130,10 +126,8 @@ def test_free_chat_reserves_time_for_mistral_and_openrouter(monkeypatch):
 
     assert result == "Ответ OpenRouter"
     assert calls == [
-        ("groq_standard", 2.5),
-        ("cf", 2.0),
-        ("mistral", 1.5),
-        ("openrouter", 1.0),
+        ("gemini", 4.0),
+        ("openrouter", 2.5),
     ]
 
 
@@ -143,6 +137,8 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
 
     def slow_provider(provider, *_args, **_kwargs):
@@ -155,11 +151,11 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
     with pytest.raises(Exception, match="вовремя"):
         ai.chat_chain([{"role": "user", "content": "test"}])
 
-    assert calls == ["groq_standard"]
+    assert calls == ["gemini"]
 
 
 def test_free_chat_route_uses_the_standard_chain():
-    assert ai.CHAT_ORDER == ("groq_standard", "cf", "mistral", "openrouter")
+    assert ai.CHAT_ORDER == ("gemini", "openrouter")
     assert ai.FREE_CHAT_TIER == "smart"
 
 
@@ -190,7 +186,7 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     line = records[0]
     assert "scenario=assistant/free_chat" in line
     assert "tier=smart" in line
-    assert "provider_chain=groq_standard,cf,mistral,openrouter" in line
+    assert "provider_chain=gemini,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line
@@ -297,6 +293,115 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
         ("games", "00:35"),
         ("myday", "00:40"),
     )
+
+
+def test_cooking_home_warm_prepares_restaurant_for_myday(monkeypatch):
+    calls = []
+
+    class Job:
+        data = "cooking"
+
+    class Context:
+        job = Job()
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(
+        bot.restaurant_discovery,
+        "get_restaurant",
+        lambda cid: calls.append(cid) or {"name": "Roest Alkmaar"},
+    )
+
+    asyncio.run(bot.job_warm_home_pages(Context()))
+
+    assert calls == ["42"]
+
+
+def test_myday_final_warm_repairs_dependencies_in_order(monkeypatch):
+    calls = []
+
+    class Job:
+        data = "myday"
+
+    class Context:
+        job = Job()
+
+    def sync(name, result=True):
+        def call(_cid, **_kwargs):
+            calls.append(name)
+            return result
+        return call
+
+    def async_call(name, result=True):
+        async def call(_cid, **_kwargs):
+            calls.append(name)
+            return result
+        return call
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(bot.wardrobe, "warm_home_cache", async_call("wardrobe"))
+    monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", sync("cooking", {"name": "Roest"}))
+    monkeypatch.setattr(bot.learning, "warm_home_cache", sync("learning"))
+    monkeypatch.setattr(bot.travel, "warm_home_cache", async_call("travel"))
+    monkeypatch.setattr(bot.leisure_movies, "warm_movie_home_cache", async_call("cinema"))
+    monkeypatch.setattr(bot.leisure_music, "warm_music_home_cache", async_call("music"))
+    monkeypatch.setattr(bot.leisure_books, "warm_books_home_cache", async_call("books"))
+    monkeypatch.setattr(bot.leisure_games, "warm_games_home_cache", async_call("games"))
+    monkeypatch.setattr(bot.myday, "warm_day_cache", async_call("myday"))
+
+    asyncio.run(bot.job_warm_home_pages(Context()))
+
+    assert calls == [
+        "wardrobe", "cooking", "learning", "travel", "cinema",
+        "music", "books", "games", "myday",
+    ]
+
+
+def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
+    calls = []
+    retries = []
+
+    class Job:
+        data = "myday"
+
+    class JobQueue:
+        def run_once(self, callback, **kwargs):
+            retries.append((callback, kwargs))
+
+    class Context:
+        job = Job()
+        job_queue = JobQueue()
+
+    async def wardrobe(_cid):
+        calls.append("wardrobe")
+        return True
+
+    def cooking(_cid):
+        calls.append("cooking")
+        raise RuntimeError("temporary")
+
+    async def myday(_cid):
+        calls.append("myday")
+        return True
+
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
+    monkeypatch.setattr(bot.wardrobe, "warm_home_cache", wardrobe)
+    monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", cooking)
+    monkeypatch.setattr(bot.learning, "warm_home_cache", lambda _cid: True)
+    monkeypatch.setattr(bot.travel, "warm_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.leisure_movies, "warm_movie_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.leisure_music, "warm_music_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.leisure_books, "warm_books_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.leisure_games, "warm_games_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.myday, "warm_day_cache", myday)
+
+    asyncio.run(bot.job_warm_home_pages(Context()))
+
+    assert "myday" not in calls
+    assert len(retries) == 1
+    assert retries[0][1]["data"] == "myday"
 
 
 def test_nightly_premieres_warm_movies_books_and_games(monkeypatch):

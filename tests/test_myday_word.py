@@ -31,6 +31,42 @@ def test_myday_inline_open_builds_a_missing_daily_cache(monkeypatch):
     assert status.replaced[0] == "Сводка готова"
 
 
+def test_myday_rebuilds_cached_summary_when_ready_sections_are_missing(monkeypatch):
+    class Status:
+        replaced = None
+
+        async def replace(self, text, **kwargs):
+            self.replaced = (text, kwargs)
+
+    stale = {
+        "text": "Мой день\n\n🦉Лайфхак: Старая сводка.",
+        "entities": [],
+    }
+    rebuilt = (
+        "Мой день\n\n🧥 Образ: Серая рубашка.\n\n"
+        "🍽️ Куда сходить: Roest Alkmaar.",
+        [],
+    )
+    monkeypatch.setattr(myday, "_load_day_cache", lambda *_args: stale)
+    monkeypatch.setattr(
+        myday, "_ready_day_sections",
+        lambda _cid: {"outfit": True, "restaurant": True},
+        raising=False,
+    )
+    monkeypatch.setattr(myday, "_build_day_text", lambda *_args, **_kwargs: rebuilt)
+    monkeypatch.setattr(
+        myday,
+        "_save_day_cache",
+        lambda *_args: {"text": rebuilt[0], "entities": rebuilt[1]},
+    )
+    status = Status()
+
+    asyncio.run(myday.send_plany(object(), "42", status=status))
+
+    assert "🧥 Образ:" in status.replaced[0]
+    assert "🍽️ Куда сходить:" in status.replaced[0]
+
+
 def test_myday_menu_offers_detailed_day_and_week_weather():
     keyboard = myday._day_menu_kb().inline_keyboard
     callbacks = [button.callback_data for row in keyboard for button in row]

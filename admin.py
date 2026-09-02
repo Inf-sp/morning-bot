@@ -104,6 +104,9 @@ def _system_summary(states):
         service = state.get("service")
         if service in ("database", "telegram"):
             continue
+        spec = provider_runtime.SPEC_BY_KEY.get(service)
+        if spec and spec.role == "Вне цепочки":
+            continue
         status = state.get("status")
         fallback = str(state.get("fallback") or "")
         if fallback or status == provider_runtime.WARNING:
@@ -113,7 +116,6 @@ def _system_summary(states):
             unknown.append(service)
             continue
         if status == provider_runtime.DOWN:
-            spec = provider_runtime.SPEC_BY_KEY.get(service)
             if spec:
                 unavailable_functions.update(spec.sections)
             fallback_unavailable = fallback_unavailable or state.get("error_type") == "fallback"

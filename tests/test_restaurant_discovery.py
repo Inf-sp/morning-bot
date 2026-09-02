@@ -323,6 +323,36 @@ def test_alkmaar_keeps_a_useful_restaurant_when_live_search_is_unavailable(monke
     assert card["description"]
 
 
+def test_daily_warm_keeps_last_complete_city_card_when_search_is_unavailable(monkeypatch):
+    cached = {
+        "city": "Utrecht", "name": "De Zwarte Vosch",
+        "map_url": "https://maps.example/de-zwarte-vosch",
+        "description": "Tapasrestaurant in de binnenstad.",
+        "cuisine": "испанская", "price": "€€",
+        "context_key": "lunch", "cached_at": "2026-08-26T12:00:00+02:00",
+        "history": ["De Zwarte Vosch"],
+    }
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 27, 12, tzinfo=restaurant_discovery.config.TZ)
+
+    monkeypatch.setattr(restaurant_discovery, "datetime", Clock)
+    monkeypatch.setattr(restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Utrecht"})
+    monkeypatch.setattr(
+        restaurant_discovery.store, "get_profile",
+        lambda _cid: {"food_restaurant_recommendation": cached},
+    )
+    monkeypatch.setattr(restaurant_discovery.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(restaurant_discovery.research, "web_search", lambda *_args, **_kwargs: [])
+
+    card = restaurant_discovery.get_restaurant("42")
+
+    assert card["name"] == "De Zwarte Vosch"
+    assert card["map_url"] == cached["map_url"]
+
+
 def test_other_place_rotates_through_alkmaar_reserve(monkeypatch):
     cached = restaurant_discovery._fallback_card("Alkmaar")
     monkeypatch.setattr(

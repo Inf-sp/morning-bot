@@ -58,12 +58,10 @@ class DictionaryAnalysisUnavailable(RuntimeError):
     """Ни один AI-резерв не смог надёжно разобрать словарную запись."""
 
 
-# Разбор слова — короткая публичная учебная задача. Сначала используем Gemini,
-# затем два Groq-модельных класса и остальные резервы: сбой одного JSON-провайдера не
-# должен заставлять пользователя повторять тот же ввод.
+# Разбор слова — короткая публичная учебная задача. Gemini работает первым,
+# OpenRouter повторяет запрос при сбое или непригодном JSON.
 _DICT_ANALYSIS_ORDER = (
-    "gemini", ai.GROQ_STANDARD, ai.GROQ_SIMPLE,
-    "cf", "openrouter",
+    "gemini", "openrouter",
 )
 _DICT_ANALYSIS_DEADLINE_SECONDS = 15.0
 _DICT_PENDING_PROFILE_FIELD = "dictionary_pending_analysis"
@@ -862,7 +860,7 @@ async def _request_verb_analysis(word, fixed_preposition=""):
     prompt = _verb_analysis_prompt(word, fixed_preposition)
     return await asyncio.wait_for(
         ai.allm_json(
-            prompt, 700, order=("groq_standard", "cf", "openrouter"),
+            prompt, 700, order=("gemini", "openrouter"),
             module="learning_dict_add",
             fallback_allowed=True, privacy_level="public",
         ),

@@ -31,6 +31,7 @@ FREE_CHAT_ROUTE_VERSION = "free-chat-concise-v5"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
+    "gemini": 4.0,
     "groq_standard": 2.5,
     "cf": 2.0,
     "mistral": 2.5,
@@ -1313,11 +1314,12 @@ def _reserve_gemini_for_action() -> bool:
     except Exception:
         return True
 
-# Три понятных маршрута: простой, обычный и сложный. Прямой Mistral работает
-# общим резервом, OpenRouter остаётся последней разрешённой попыткой.
-SIMPLE_ORDER = (GROQ_SIMPLE, "cf", "mistral", "openrouter")
-STANDARD_ORDER = (GROQ_STANDARD, "cf", "mistral", "openrouter")
-COMPLEX_ORDER = ("gemini", GROQ_COMPLEX, "mistral", "openrouter")
+# Единая цепочка для всех текстовых AI-сценариев: Gemini отвечает первым,
+# OpenRouter остаётся единственным внешним резервом.
+AI_ORDER = ("gemini", "openrouter")
+SIMPLE_ORDER = AI_ORDER
+STANDARD_ORDER = AI_ORDER
+COMPLEX_ORDER = AI_ORDER
 UTILITY_ORDER = SIMPLE_ORDER
 DEFAULT_ORDER = STANDARD_ORDER
 CHAT_ORDER = STANDARD_ORDER
@@ -1327,10 +1329,10 @@ FOOD_ORDER = COMPLEX_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cf": ("cf", "mistral", "openrouter"),
-    "groq": STANDARD_ORDER,
-    "gemini": COMPLEX_ORDER,
-    "mistral": ("mistral", "openrouter"),
+    "cf": AI_ORDER,
+    "groq": AI_ORDER,
+    "gemini": AI_ORDER,
+    "mistral": AI_ORDER,
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -1424,16 +1426,12 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
               allow_personal_openrouter=False, cache_context=None, response_validator=None):
     if not module:
         module = _caller_module()
-    if (
-        fallback_policy is None
-        and not fallback_allowed
-        and module in _PUBLIC_AI_FALLBACK_MODULES
-    ):
-        # Учебные тексты не содержат профильных данных: для них последний
-        # OpenRouter-резерв включён централизованно, чтобы новый вызов не
-        # зависел от того, не забыл ли автор передать три флага вручную.
+    if fallback_policy is None and privacy_level != "sensitive":
+        # Резерв включён в одном месте для всех обычных текстовых и JSON-сценариев.
+        # Чувствительные данные по-прежнему не покидают основного провайдера.
         fallback_allowed = True
-        privacy_level = "public"
+        if privacy_level == "personal":
+            allow_personal_openrouter = True
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
