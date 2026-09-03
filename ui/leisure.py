@@ -9,17 +9,6 @@ from .constants import ui_label
 from .news import append_weekly_news
 
 
-def _birthday_date_label(value):
-    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", str(value or ""))
-    if not match:
-        return ""
-    try:
-        birthday = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    except ValueError:
-        return ""
-    return _format_date_label(birthday, include_year=True)
-
-
 def clip(text, limit=450):
     text = (text or "").strip()
     if len(text) <= limit:
@@ -452,20 +441,23 @@ def movie_home_screen(genre_labels, country_label=None, now_playing=None):
     return b.build_stripped()
 
 
-def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
-    """Ежедневная кино-витрина: лёгкая, короткая и без табличного вида."""
-    city = _clean_external_text(city) or "твоего города"
+def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=None, recommendation=None):
+    """Ежедневная кино-витрина: рекомендация дня, локальный прокат и кинофакт."""
     cinema_day = cinema_day or {}
-    rebus = cinema_day.get("rebus") or {}
     birthday = cinema_day.get("birthday") or {}
+    day = day if isinstance(day, date) else date.today()
     b = MessageBuilder()
     b.text_line("🎬 ")
-    b.bold(f"Кино на сегодня · {city}")
+    b.bold(f"Кино сегодня · {_format_today_label(day)}")
     b.newline()
 
+    # Основной фильм — та же рекомендация, что открывает «🍿 Что посмотреть».
+    if recommendation:
+        _format_featured_movie(b, recommendation)
+
     b.spacer()
-    b.bold("Что в кино:")
-    cinema = _movie_now_playing_lines(now_playing)
+    b.bold("Сейчас в кино:")
+    cinema = _movie_now_playing_lines(now_playing)[:3]
     if cinema:
         b.newline()
         for movie in cinema:
@@ -492,24 +484,61 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
         b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
 
-    if birthday.get("name"):
+    fact = _cinema_fact_text(birthday, cinema)
+    if fact:
         b.spacer()
-        b.bold("Именинник дня:")
+        b.bold("📰 Кинофакт:")
         b.text_line(" ")
-        b.bold(_clean_external_text(birthday["name"]))
-        birth_date = _birthday_date_label(birthday.get("birth"))
-        if birth_date:
-            b.text_line(f" · {birth_date}")
-        role = _clean_external_text(birthday.get("role")) or "кинематографист"
-        b.text_line(f" — {role}.")
-        b.newline()
+        b.line(fact)
+    append_weekly_news(b, news)
+    return b.build_stripped()
 
-    fact = ""
-    birthday_fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
-    birthday_name = _clean_external_text(birthday.get("name"))
-    if birthday_name and birthday_fact:
-        fact = f"{birthday_name}: {birthday_fact}"
-    elif cinema:
+
+def _format_featured_movie(b: MessageBuilder, recommendation) -> None:
+    """Компактная строка основной рекомендации: «Название» (тип · год · рейтинг) · завязка."""
+    recommendation = recommendation if isinstance(recommendation, dict) else {}
+    item = recommendation.get("item") or {}
+    tm = recommendation.get("tm") or {}
+    if not isinstance(tm, dict):
+        tm = {}
+    title = _clean_quoted_title(tm.get("name") or item.get("title") or "")
+    if not title:
+        return
+    kind = str(tm.get("kind") or "").lower()
+    type_label = "сериал" if kind == "tv" else ("фильм" if kind == "movie" else "")
+    year = str(tm.get("year") or "").strip()
+    meta = [part for part in (type_label, year, _featured_rating(tm)) if part]
+    b.text_line(f"«{title}»")
+    if meta:
+        b.text_line(f" ({' · '.join(meta)})")
+    overview = _movie_premiere_summary(
+        _clean_external_text(tm.get("overview") or ""), limit=200,
+    )
+    if overview:
+        if overview[-1] not in ".!?…":
+            overview += "."
+        b.text_line(f" · {overview}")
+
+
+def _featured_rating(tm) -> str | None:
+    try:
+        value = float(tm.get("rating"))
+    except (TypeError, ValueError):
+        return None
+    if value <= 0 or int(tm.get("vote_count") or 0) < 50:
+        return None
+    return f"⭐ {value:.1f}"
+
+
+def _cinema_fact_text(birthday, cinema) -> str:
+    """Кинофакт: сначала проверенный именинник дня, иначе короткое сведение об афише."""
+    name = _clean_external_text(birthday.get("name"))
+    fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
+    if name and fact:
+        return f"Сегодня — день рождения: {name}. {fact}"
+    if name:
+        return f"Сегодня — день рождения: {name}."
+    if cinema:
         source = next((
             movie for movie in cinema
             if _clean_external_text(_item_value(movie, "fact", ""))
@@ -520,16 +549,10 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None):
             "интересно", "факт",
         )
         if title and note:
-            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
-        elif title:
-            fact = f"В сегодняшней киноафише — «{title}»."
-    if fact:
-        b.spacer()
-        b.bold("💡 Интересно:")
-        b.text_line(" ")
-        b.line(fact)
-    append_weekly_news(b, news)
-    return b.build_stripped()
+            return note if title.casefold() in note.casefold() else f"«{title}»: {note}"
+        if title:
+            return f"В сегодняшней киноафише — «{title}»."
+    return ""
 
 
 def _movie_now_playing_lines(now_playing) -> list[dict]:
@@ -679,6 +702,7 @@ def movie_card(item, tm):
 
 _MONTHS_RU = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
               "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+_WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
 def _clip_title(s, limit=40):
@@ -1473,6 +1497,10 @@ def _format_date_label(day: date, *, include_year: bool = False) -> str:
     if include_year:
         text += f" {day.year}"
     return text
+
+
+def _format_today_label(day: date) -> str:
+    return f"{_WEEKDAY_SHORT[day.weekday()]}, {_format_date_label(day)}"
 
 
 def _join_with_and(parts) -> str:

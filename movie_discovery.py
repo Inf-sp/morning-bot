@@ -8,8 +8,8 @@ if TYPE_CHECKING:
         _BIRTHDAY_FALLBACKS, _CINEMA_BIRTHDAY_CACHE_VERSION,
         _CINEMA_BIRTHDAY_LOCK, _CINEMA_REBUSES, _MONTHS,
         _MOVIE_PREMIERES_CACHE_VERSION, _log, _movie_prefs,
-        asyncio, config, datetime, leisure_ui, local_cinema, quote_plus,
-        movie_title_for_lookup, requests, store, time, timedelta, tmdb,
+        asyncio, config, datetime, get_current_movie, leisure_ui, local_cinema,
+        movie_title_for_lookup, quote_plus, requests, store, time, timedelta, tmdb,
     )
 
 
@@ -344,13 +344,17 @@ async def _daily_cinema_content():
 async def send_movie_now_playing(bot, cid, q=None, status=None):
     import category_news
     city = _movie_city(cid)
+    now = datetime.now(config.TZ)
     local_movies = await get_local_now_playing(cid, limit=20)
     featured = _featured_now_playing(local_movies, require_overview=True)
     featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()
+    item, tm = await get_current_movie(cid)
+    recommendation = {"item": item, "tm": tm} if item else None
     msg = leisure_ui.movie_now_playing_screen(
         city, now_playing, cinema_day, news=category_news.cached_line("movie"),
+        day=now.date(), recommendation=recommendation,
     )
     kb = _movie_home_kb()
     if status is not None:
@@ -375,9 +379,10 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
 
 
 async def warm_movie_home_cache(cid):
-    """Готовит недельный прокат и дневные рубрики без сообщений пользователю."""
+    """Готовит недельный прокат, дневную рекомендацию и рубрики без сообщений."""
     await get_local_now_playing(cid, limit=20)
     await _daily_cinema_content()
+    await get_current_movie(cid)
     return True
 
 

@@ -990,6 +990,13 @@ def test_category_week_screens_are_compact_and_show_only_content():
             "name": "Грета Гервиг", "birth": "+1983-08-04T00:00:00Z", "role": "режиссёр и актриса",
             "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
         },
+    }, day=date(2026, 8, 25), recommendation={
+        "item": {"title": "Пространство"},
+        "tm": {
+            "name": "Пространство", "kind": "tv", "year": "2015", "rating": 8.1,
+            "vote_count": 1000,
+            "overview": "Детектив и капитан звездолёта расследуют исчезновение девушки",
+        },
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
@@ -1009,19 +1016,26 @@ def test_category_week_screens_are_compact_and_show_only_content():
         day=date(2026, 8, 25),
     )
 
-    assert "🎬 Кино на сегодня · Алкмар" in movie.text
+    assert "🎬 Кино сегодня · Вт, 25 августа" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "Именинник дня: Грета Гервиг · 4 августа 1983 — режиссёр и актриса." in movie.text
+    assert "Именинник дня:" not in movie.text
     assert "Фильм под настроение:" not in movie.text
     assert (
-        "Что в кино:\n• «Фильм» (драма, триллер) · "
+        "«Пространство» (сериал · 2015 · ⭐ 8.1) · "
+        "Детектив и капитан звездолёта расследуют исчезновение девушки."
+    ) in movie.text
+    assert (
+        "Сейчас в кино:\n• «Фильм» (драма, триллер) · "
         "Героиня возвращается домой и находит старую тайну."
     ) in movie.text
     movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
     assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
-    assert "💡 Интересно: «Челюсти»" not in movie.text
-    assert "💡 Интересно: Грета Гервиг: «Леди Бёрд»" in movie.text
-    assert movie.text.index("Что в кино:") < movie.text.index("Именинник дня:") < movie.text.index("💡 Интересно:")
+    assert "💡 Интересно:" not in movie.text
+    assert (
+        "📰 Кинофакт: Сегодня — день рождения: Грета Гервиг. "
+        "«Леди Бёрд» принесла ей две номинации на «Оскар»."
+    ) in movie.text
+    assert movie.text.index("«Пространство»") < movie.text.index("Сейчас в кино:") < movie.text.index("📰 Кинофакт:")
     assert movie.rich_message is None
     assert not any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · 25 августа" in books.text
@@ -1064,12 +1078,12 @@ def test_movie_home_cleans_cached_markup_fragments():
 
     assert "• «Из любви» (драма)" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "💡 Интересно: «Из любви»: История о чувствах" in movie.text
+    assert "📰 Кинофакт: «Из любви»: История о чувствах" in movie.text
     assert "Сёстры Вачовски" not in movie.text
     assert "**" not in movie.text
     assert "&#x20;" not in movie.text
     assert "�" not in movie.text
-    assert movie.text.count("Интересно:") == 1
+    assert "Интересно:" not in movie.text
 
 
 def test_rebus_fact_never_repeats_the_hidden_answer():
@@ -1451,8 +1465,8 @@ def test_daily_category_block_titles_are_bold():
         "legend": {"name": "Имя", "detail": "музыкант"},
     }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар", "artist_fact": "Интересный факт."}])
 
-    assert {"Именинник дня:",
-            "Что в кино:", "💡 Интересно:"}.issubset(_bold_values(movie))
+    assert {"Сейчас в кино:",
+            "📰 Кинофакт:"}.issubset(_bold_values(movie))
     assert {"Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
     assert {"В ближайшее время:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)
