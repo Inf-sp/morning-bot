@@ -1190,6 +1190,7 @@ def test_premiere_screens_are_compact_and_keep_book_links():
 
 def test_weekly_events_are_one_line_per_item_across_all_categories():
     items = range(4)
+    concerts = range(7)
     message = leisure_movies.leisure_ui.weekly_events_card(
         [{
             "id": index, "title": f"Фильм {index}", "genres": "Драма",
@@ -1200,7 +1201,7 @@ def test_weekly_events_are_one_line_per_item_across_all_categories():
         [{
             "title": f"Концерт {index}", "genre": "Рок", "date": "2026-08-21",
             "url": f"https://example.com/concert/{index}",
-        } for index in items],
+        } for index in concerts],
         [{
             "title": f"Книга {index}", "categories": ["Fantasy"],
             "rating": 4.4, "ratings_count": 15,
@@ -1217,7 +1218,7 @@ def test_weekly_events_are_one_line_per_item_across_all_categories():
 
     assert message.text.startswith("🎲 Ближайшие события\n\n🎬 Кино")
     assert message.text.count("• «Фильм") == 3
-    assert message.text.count("• Концерт") == 3
+    assert message.text.count("• Концерт") == 6
     assert message.text.count("• «Книга") == 3
     assert message.text.count("• Игра") == 3
     assert "«Фильм 0» · драма · ⭐ 7.5/10" in message.text
@@ -1226,7 +1227,7 @@ def test_weekly_events_are_one_line_per_item_across_all_categories():
     assert "https://www.youtube.com/watch?v=game0" in {
         entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK
     }
-    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 12
+    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 15
 
 
 def test_movie_premieres_fit_one_message_without_cutting_descriptions():

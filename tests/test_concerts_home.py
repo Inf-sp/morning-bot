@@ -254,6 +254,42 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
     assert "Lowlands 2026" in msg.text
 
 
+def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypatch):
+    from datetime import datetime, timedelta
+
+    today = datetime.now(leisure_concerts.config.TZ).date()
+
+    def event(name, artist, days):
+        return {
+            "name": name,
+            "dates": {"start": {"localDate": (today + timedelta(days=days)).isoformat()}},
+            "_embedded": {
+                "attractions": [{"name": artist}],
+                "venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}],
+            },
+        }
+
+    black_keys = [
+        event("The Black Keys | Premium Seats", "The Black Keys", 1),
+        event("The Black Keys: PEACHES 'N KREAM | VIP Packages", "The Black Keys", 1),
+        event("The Black Keys: PEACHES 'N KREAM", "The Black Keys", 1),
+    ]
+    other_events = [event(f"Artist {index}", f"Artist {index}", days)
+                    for index, days in enumerate((2, 3, 4, 5, 55), start=1)]
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: black_keys)
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: other_events)
+    monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
+    monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
+    monkeypatch.setattr(leisure_concerts.leisure_games, "get_game_premieres", lambda _cid: _async([]))
+
+    msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
+
+    assert msg.text.count("The Black Keys") == 1
+    assert msg.text.count("• ") == 6
+    assert "Artist 5" in msg.text
+
+
 def test_weekly_events_notification_has_category_buttons(monkeypatch):
     from ui.builder import MessageSpec
 

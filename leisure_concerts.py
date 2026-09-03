@@ -55,8 +55,10 @@ _ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 _POPULAR_EVENTS_CACHE_TTL = 31 * 86400
-_POPULAR_EVENTS_CACHE_VERSION = 2
+_POPULAR_EVENTS_CACHE_VERSION = 3
 _POPULAR_EVENTS_LIMIT = 12
+_WEEKLY_CONCERT_LIMIT = 6
+_WEEKLY_CONCERT_HORIZON_DAYS = 62
 
 
 class TicketmasterRateLimitError(RuntimeError):
@@ -283,10 +285,8 @@ async def get_popular_music_events(cc, period_start, period_end):
     if cached is not None:
         return [event for event in cached if period_start.isoformat() <=
                 event.get("dates", {}).get("start", {}).get("localDate", "") <= period_end.isoformat()]
-    from datetime import timedelta
-    refresh_end = period_start + timedelta(days=31)
     start_dt = f"{period_start.isoformat()}T00:00:00Z"
-    end_dt = f"{refresh_end.isoformat()}T23:59:59Z"
+    end_dt = f"{period_end.isoformat()}T23:59:59Z"
     try:
         events = await _ticketmaster_fetch_throttled(
             _ticketmaster_popular_music_events, cc, start_dt, end_dt)
@@ -667,6 +667,23 @@ def _clean_event_label(value):
     return re.sub(r"\s*[-–—]\s*(?:festival\s*)?ticket(?:s)?\s*$", "", label, flags=re.IGNORECASE).strip()
 
 
+def _concert_identity_text(value):
+    return re.sub(r"[^\w]+", "", str(value or "").casefold())
+
+
+def _weekly_concert_title(event):
+    """Имя исполнителя для афиши, без вариантов одного пакета билетов."""
+    artist = " ".join(str(event.get("_artist") or "").split()).strip()
+    if artist:
+        return artist
+    attractions = event.get("_embedded", {}).get("attractions") or []
+    if len(attractions) == 1:
+        name = " ".join(str(attractions[0].get("name") or "").split()).strip()
+        if name:
+            return name
+    return _clean_event_label(event.get("name"))
+
+
 def _concert_context(e):
     """Возвращает пользовательский формат события без догадок через AI."""
     explicit_type = str(e.get("_event_type") or "").strip().lower()
@@ -927,7 +944,7 @@ async def refresh_concerts_cache(cid):
     from datetime import datetime, timedelta
     period_start = datetime.now(config.TZ).date()
     popular_events = await get_popular_music_events(
-        cc, period_start, period_start + timedelta(days=31))
+        cc, period_start, period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS))
     artists = _ensure_artists(cid)
     if not artists:
         invalidate_user_concerts_cache(cid)
@@ -1313,7 +1330,7 @@ async def _build_weekly_events_msg(cid):
     s = store.get_settings(cid)
     cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
     period_start = datetime.now(config.TZ).date()
-    period_end = period_start + timedelta(days=31)
+    period_end = period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
     today_str = period_start.isoformat()
     date_to_str = period_end.isoformat()
 
@@ -1328,8 +1345,8 @@ async def _build_weekly_events_msg(cid):
             continue
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
         city = str((venue.get("city") or {}).get("name") or "").strip()
-        title = str(event.get("_artist") or event.get("name") or "").strip()
-        key = (title.casefold(), date_str, city.casefold())
+        title = _weekly_concert_title(event)
+        key = (_concert_identity_text(title), date_str, _concert_identity_text(city))
         if not title or key in existing:
             continue
         existing.add(key)
@@ -1340,6 +1357,7 @@ async def _build_weekly_events_msg(cid):
             "url": str(event.get("url") or "").strip(),
         })
     concert_items.sort(key=lambda item: item.get("date") or "9999-99-99")
+    concert_items = concert_items[:_WEEKLY_CONCERT_LIMIT]
 
     results = await asyncio.gather(
         leisure_movies.get_movie_premieres(cid),

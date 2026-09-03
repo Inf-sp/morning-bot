@@ -1635,7 +1635,7 @@ def _weekly_item(builder: MessageBuilder, title, url="", meta=()) -> None:
 
 
 def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
-    """Одна строка на событие, максимум три пункта в каждой категории."""
+    """Одна строка на событие; для концертов — до шести ближайших афиш."""
     b = MessageBuilder()
     b.title("🎲 Ближайшие события")
 
@@ -1655,7 +1655,7 @@ def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
             )
             _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url, (genres, rating))
 
-    concert_rows = [item for item in list(concerts or []) if item.get("title")][:3]
+    concert_rows = [item for item in list(concerts or []) if item.get("title")][:6]
     if concert_rows:
         b.section("🎫 Концерты")
         sections_added += 1
