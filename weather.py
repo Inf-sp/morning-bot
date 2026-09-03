@@ -417,7 +417,11 @@ def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None):
 
 
 def _full_forecast_parts(now):
-    """Возвращает только ещё актуальные дневные периоды без ночного блока."""
+    """Возвращает только ещё актуальные дневные периоды без ночного блока.
+
+    После 17:00 блок «Днём» не показывается — пользователь уже ориентируется
+    на погоду вечером.
+    """
     hour = int(now.hour)
     parts = [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
     if hour < 8:
@@ -425,7 +429,7 @@ def _full_forecast_parts(now):
     return [
         (label, max(start, hour), end)
         for label, start, end in parts
-        if hour < end
+        if hour < end and not (label == "Днём" and hour >= 17)
     ]
 
 

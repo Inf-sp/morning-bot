@@ -75,6 +75,12 @@ def test_full_forecast_at_23_keeps_only_weather_until_midnight():
     assert parts == [("Вечером", 23, 24)]
 
 
+def test_full_forecast_in_the_evening_skips_the_daytime_block():
+    parts = weather._full_forecast_parts(datetime(2026, 8, 25, 17, 43, tzinfo=weather.TZ))
+
+    assert parts == [("Вечером", 18, 24)]
+
+
 def test_full_forecast_after_midnight_starts_with_the_coming_morning():
     parts = weather._full_forecast_parts(datetime(2026, 8, 26, 0, 15, tzinfo=weather.TZ))
 
