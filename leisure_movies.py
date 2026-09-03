@@ -199,7 +199,7 @@ async def send_favorite_movies(bot, cid, q=None):
         [InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"mfg:{token}:{index}:0")]
         for index, (genre, items) in enumerate(view["genres"])
     ]
-    rows.append([InlineKeyboardButton("🆕 Добавить фильм", callback_data="as_loveadd_movies")])
+    rows.append([InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")])
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="movie_prefs",
     )])
@@ -234,7 +234,7 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
     rows.append([InlineKeyboardButton(
         "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    rows.append([InlineKeyboardButton("🆕 Добавить фильм", callback_data="as_loveadd_movies")])
+    rows.append([InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)

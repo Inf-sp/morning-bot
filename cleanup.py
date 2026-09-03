@@ -71,7 +71,7 @@ COLLECTIONS = {
         "cinema_favorites", "cinema", "🎚️ Моё кино", config.FAVORITE_MOVIES_KEY, "movie",
         "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить фильм", "as_loveadd_movies"),
+        add_button=("✅ Добавить фильм", "as_loveadd_movies"),
         menu_button=("🔣 Выбрать предпочтения", "movie_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
@@ -202,7 +202,7 @@ def _view_store_key(ctx):
 
 
 _VIEW_ADD_LABEL = {
-    "movies": "🆕 Добавить фильм",
+    "movies": "✅ Добавить фильм",
     "countries": "🆕 Добавить страну",
     "artists": "🆕 Добавить артиста",
     "books": "🆕 Добавить книгу",
@@ -409,11 +409,11 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
     lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
-        "lv_movies": "🆕 Добавить фильм",
+        "lv_movies": "✅ Добавить фильм",
         "lv_countries": "🆕 Добавить страну",
         "lv_artists": "🆕 Добавить артиста",
         "lv_books": "🆕 Добавить книгу",
-        "lvls_movies": "🆕 Добавить фильм",
+        "lvls_movies": "✅ Добавить фильм",
         "lvls_countries": "🆕 Добавить страну",
         "lvls_artists": "🆕 Добавить артиста",
         "lvls_books": "🆕 Добавить книгу",
