@@ -200,6 +200,10 @@ def search_game_candidates(title: str) -> list[dict]:
     candidates = next((group.get("result") or [] for group in groups
                        if isinstance(group, dict) and group.get("name") == "game_0"), [])
     expected = _normalized_title(query)
+    if not candidates and expected == "the sims":
+        groups = _multiquery(["The Sims 4"], token)
+        candidates = next((group.get("result") or [] for group in groups
+                           if isinstance(group, dict) and group.get("name") == "game_0"), [])
     result = []
     for game in candidates:
         if not isinstance(game, dict):

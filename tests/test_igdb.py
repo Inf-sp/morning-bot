@@ -142,3 +142,31 @@ def test_search_game_candidates_returns_the_sims_card_first(monkeypatch):
     assert result[0]["franchise"] is True
     assert result[0]["poster"].endswith("/sims-cover.jpg")
     assert result[0]["genres"] == ["simulator"]
+
+
+def test_search_game_candidates_retries_the_sims_with_latest_installment(monkeypatch):
+    calls = []
+
+    def multiquery(titles, _token):
+        calls.append(titles[0])
+        if len(calls) == 1:
+            return [{"name": "game_0", "result": []}]
+        return [{
+            "name": "game_0",
+            "result": [{
+                "id": 4, "name": "The Sims 4", "slug": "the-sims-4",
+                "cover": {"image_id": "sims4-cover"},
+                "platforms": [{"id": 6}],
+                "genres": [{"name": "Simulator"}],
+                "first_release_date": 1409616000,
+            }],
+        }]
+
+    monkeypatch.setattr(igdb, "_access_token", lambda: "token")
+    monkeypatch.setattr(igdb, "_multiquery", multiquery)
+
+    result = igdb.search_game_candidates("The Sims")
+
+    assert calls == ["The Sims", "The Sims 4"]
+    assert result[0]["name"] == "The Sims 4"
+    assert result[0]["poster"].endswith("/sims4-cover.jpg")

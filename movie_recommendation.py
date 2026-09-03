@@ -378,7 +378,7 @@ def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
 
 
 async def movie_love(bot, cid, i, q=None):
-    """Добавляет фильм в любимые без дублей и отражает состояние на карточке."""
+    """Добавляет фильм в любимые без дублей."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
@@ -396,5 +396,3 @@ async def movie_love(bot, cid, i, q=None):
         }
         if movie_title_for_lookup(title).casefold() not in existing:
             store.add_to_list(config.FAVORITE_MOVIES_KEY, cid, title)
-        if q is not None:
-            await q.message.edit_reply_markup(reply_markup=_movie_kb(i))

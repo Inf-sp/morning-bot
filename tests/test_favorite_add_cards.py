@@ -62,6 +62,32 @@ def test_movie_add_prompt_names_movie_collection():
     personal_collections.store.pending_input.pop("42", None)
 
 
+def test_movie_recommendation_add_does_not_fail_when_markup_is_unchanged(monkeypatch):
+    class Query:
+        class Message:
+            async def edit_reply_markup(self, **_kwargs):
+                raise RuntimeError("message is not modified")
+
+        message = Message()
+
+    monkeypatch.setattr(leisure_movies.store, "last_recos", {
+        "42": {"kind": "movie", "items": ["Патерсон (фильм, 2016)"]},
+    })
+    monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
+    added = []
+    monkeypatch.setattr(
+        leisure_movies.store, "add_to_list", lambda *args: added.append(args),
+    )
+    monkeypatch.setattr(
+        leisure_movies, "normalize_movie_items",
+        lambda items: list(items),
+    )
+
+    asyncio.run(leisure_movies.movie_love(object(), "42", 0, Query()))
+
+    assert added == [(config.FAVORITE_MOVIES_KEY, "42", "Патерсон (фильм, 2016)")]
+
+
 def test_artist_and_game_add_prompts_name_their_collections():
     for key, expected in (
         ("artists", "Напиши артиста — добавлю в 🎚️ Мои артисты."),
