@@ -211,7 +211,6 @@ def _home_idea(cid, *, refresh=False):
 def _home_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🧳 Другая страна", callback_data="a_trav_no")],
-        [InlineKeyboardButton("💡 Что интересного", callback_data="a_trav_interesting")],
         [InlineKeyboardButton("🎚️ Мой чемодан", callback_data="a_trav_countries_0")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -242,59 +241,6 @@ def _country_in_region(country, region_key):
         return True
     return bool(wanted and row.get("region") == wanted[1]
                 and (not wanted[2] or row.get("subregion") == wanted[2]))
-
-
-async def send_visited_interesting(bot, cid):
-    codes = _visited_codes(cid)[:5]
-    countries = [_country_name(code) for code in codes]
-    live = {}
-    if countries:
-        try:
-            rows = await asyncio.to_thread(
-                research.web_search,
-                "2026 latest openings new attractions planned projects " + " ".join(countries),
-                max_results=10, scenario="travel_visited_updates", allow_tavily=True,
-                search_priority="tavily",
-            )
-            source_text = "\n".join(
-                f"{row.get('title', '')}: {row.get('content', '')} ({row.get('url', '')})"
-                for row in rows
-            )
-            if source_text:
-                payload = await ai.allm_json(
-                    f"""По источникам ниже дай максимум по одному актуальному обновлению для каждой страны: {', '.join(countries)}.
-Это может быть новое место, открытие, транспортный маршрут или подтверждённый будущий проект.
-Не додумывай. Если для страны нет факта, пропусти её. Пиши по-русски, названия сохраняй оригинальными.
-Верни JSON: {{"items":[{{"country":"...","fact":"одно предложение","place":"название","details":["до двух коротких деталей"]}}]}}.
-Источники:\n{source_text}""",
-                    900, tier="leisure", module="travel",
-                    cache_context={"scenario": "visited_country_updates", "countries": countries,
-                                   "date": datetime.now(config.TZ).date().isoformat()},
-                )
-                live = {str(item.get("country") or "").casefold(): item
-                        for item in payload.get("items") or [] if isinstance(item, dict)}
-        except Exception as exc:
-            _log.warning("visited travel updates failed, using saved cards: %r", exc)
-    items = []
-    for code, country in zip(codes, countries):
-        card = (_card_cache().get(code) or _stub_card(
-            code, country, util.flag_from_cc(code),
-        ))
-        spots = list(card.get("spots") or [])
-        update = live.get(country.casefold()) or {}
-        items.append({
-            "flag": util.flag_from_cc(code), "country": country,
-            "fact": update.get("fact") or card.get("fact") or card.get("highlight") or card.get("description")
-                    or "Здесь всегда можно найти новый маршрут для следующего визита.",
-            "place": update.get("place") or (spots[0] if spots else ""),
-            "details": update.get("details") or spots[1:3],
-        })
-    msg = travel_ui.visited_news_screen(items)
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def send_home(bot, cid, q=None, status=None):

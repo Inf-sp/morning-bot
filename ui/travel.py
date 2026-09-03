@@ -58,24 +58,6 @@ def home_screen(idea, rebus=None, *, news=None):
     return b.build_stripped()
 
 
-def visited_news_screen(items):
-    b = MessageBuilder()
-    b.title("💡 Что интересного")
-    if not items:
-        b.line("Добавь посещённые страны в «Мой чемодан» — здесь появятся интересные обновления.")
-        return b.build_stripped()
-    for item in items[:5]:
-        b.spacer()
-        b.bold(f"{item.get('flag', '')} {item.get('country', '')}".strip())
-        b.newline()
-        b.line(str(item.get("fact") or ""))
-        if item.get("place"):
-            b.bold(str(item["place"]))
-            b.newline()
-        for detail in item.get("details") or []:
-            b.line(str(detail))
-    return b.build_stripped()
-
 
 def countries_screen(count, page, pages):
     b = MessageBuilder()
