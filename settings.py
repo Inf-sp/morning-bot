@@ -235,7 +235,7 @@ async def send_lifehacks(bot, cid, q=None):
     chunk = records[page * 5:page * 5 + 5]
     msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
     rows = [
-        [InlineKeyboardButton("🆕 Добавить", callback_data="set_lh_add")],
+        [InlineKeyboardButton("✅ Добавить", callback_data="set_lh_add")],
         [InlineKeyboardButton("❌ Удалить", callback_data="set_lh_delete")],
     ]
     if total_pages > 1:
@@ -267,7 +267,7 @@ async def send_lifehack_page(bot, cid, page, q=None):
     chunk = records[page * 5:page * 5 + 5]
     msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
     rows = [
-        [InlineKeyboardButton("🆕 Добавить", callback_data="set_lh_add")],
+        [InlineKeyboardButton("✅ Добавить", callback_data="set_lh_add")],
         [InlineKeyboardButton("❌ Удалить", callback_data=f"set_lh_delete_page_{page}")],
     ]
     if total_pages > 1:

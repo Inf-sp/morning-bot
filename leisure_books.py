@@ -916,7 +916,7 @@ async def send_favorite_books(bot, cid, q=None):
     rows = [[InlineKeyboardButton(
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])]
-    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
+    rows.append([InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")])
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="book_prefs",
     )])
@@ -952,7 +952,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
     rows.append([InlineKeyboardButton(
         "❌ Удалить", callback_data=f"bfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    rows.append([InlineKeyboardButton("🆕 Добавить книгу", callback_data="as_loveadd_books")])
+    rows.append([InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)

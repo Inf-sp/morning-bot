@@ -2204,7 +2204,7 @@ async def _extract_study_word(text, lang="nl"):
 
 def _dict_batch_preview_kb(lang=None):
     rows = [
-        [InlineKeyboardButton("🆕 Добавить всё", callback_data="a_dictbatch_add")],
+        [InlineKeyboardButton("✅ Добавить всё", callback_data="a_dictbatch_add")],
         [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
     ]
     if lang is not None:
@@ -2216,7 +2216,7 @@ def _dict_batch_preview_kb(lang=None):
 def _dict_word_suggestion_kb(lang, term):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(
-            f"🆕 Добавить {_cap(term)}", callback_data="a_dictbatch_add",
+            f"✅ Добавить {_cap(term)}", callback_data="a_dictbatch_add",
         )],
         [InlineKeyboardButton("❌ Не добавлять", callback_data="a_dictbatch_cancel")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),

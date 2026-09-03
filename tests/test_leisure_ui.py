@@ -350,7 +350,7 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-3:] == [["🆕 Добавить артиста"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[-3:] == [["✅ Добавить артиста"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -681,7 +681,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-3:] == [["🆕 Добавить книгу"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[-3:] == [["✅ Добавить книгу"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert all("✏️ Изменить" not in row for row in rows)
 
 

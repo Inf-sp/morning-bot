@@ -127,7 +127,7 @@ async def offer_seed_for_level_change(bot, cid, language, level):
         "Я покажу список, а вы отметите те, которые хотите добавить."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🆕 Добавить выбранные ({level_label})", callback_data=f"a_dictseed_start_{code}")],
+        [InlineKeyboardButton(f"✅ Добавить выбранные ({level_label})", callback_data=f"a_dictseed_start_{code}")],
         [InlineKeyboardButton("Позже", callback_data="a_dictseed_later")],
     ])
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)

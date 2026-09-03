@@ -1282,7 +1282,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     labels = _labels(bot.message["reply_markup"])
     assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
     assert "Выбери категорию" not in bot.message["text"]
-    assert labels[-3:-1] == [["🆕 Добавить вещь"], ["🔣 Выбрать предпочтения"]]
+    assert labels[-3:-1] == [["✅ Добавить вещь"], ["🔣 Выбрать предпочтения"]]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)
@@ -1353,7 +1353,7 @@ def test_closet_category_has_add_item_button_above_navigation(monkeypatch):
     asyncio.run(wardrobe.send_category(bot, "closet-test", "top"))
 
     labels = _labels(bot.message["reply_markup"])
-    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert labels[-2] == ["✅ Добавить вещь"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
@@ -1378,5 +1378,5 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
     labels = _labels(bot.message["reply_markup"])
     assert labels[:2] == [["Вещь 9"], ["Вещь 10"]]
     assert labels[-3] == ["◀️", "2/2", "▶️"]
-    assert labels[-2] == ["🆕 Добавить вещь"]
+    assert labels[-2] == ["✅ Добавить вещь"]
     assert bot.message["text"].startswith("👕 Верх · 10 вещей")

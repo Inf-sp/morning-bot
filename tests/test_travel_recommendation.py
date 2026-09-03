@@ -201,7 +201,7 @@ def test_suitcase_keeps_only_saved_countries(monkeypatch):
     labels = [[button.text for button in row] for row in keyboard.inline_keyboard]
 
     assert "📝 Предпочтения" not in [label for row in labels for label in row]
-    assert labels[-2] == ["🆕 Добавить страну"]
+    assert labels[-2] == ["✅ Добавить страну"]
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 

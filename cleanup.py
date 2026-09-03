@@ -86,7 +86,7 @@ COLLECTIONS = {
         "books_favorites", "books", "🎚️ Мои книги", config.FAVORITE_BOOKS_KEY, "book",
         "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить книгу", "as_loveadd_books"),
+        add_button=("✅ Добавить книгу", "as_loveadd_books"),
         menu_button=("🔣 Выбрать предпочтения", "book_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
@@ -101,7 +101,7 @@ COLLECTIONS = {
         "music_favorite_artists", "music", "🎚️ Мои артисты", config.FAVORITE_ARTISTS_KEY, "artist",
         "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить артиста", "as_loveadd_artists"),
+        add_button=("✅ Добавить артиста", "as_loveadd_artists"),
         menu_button=("🔣 Выбрать предпочтения", "music_prefs"),
         add_button_at_bottom=True,
         allow_edit=False),
@@ -116,7 +116,7 @@ COLLECTIONS = {
         "travel_saved_countries", "travel", "🎚️ Мой чемодан", config.SAVED_COUNTRIES_KEY, "country",
         "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("🆕 Добавить страну", "as_loveadd_countries")),
+        add_button=("✅ Добавить страну", "as_loveadd_countries")),
     "travel_hidden_countries": _collection(
         "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
         "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
@@ -203,9 +203,9 @@ def _view_store_key(ctx):
 
 _VIEW_ADD_LABEL = {
     "movies": "✅ Добавить фильм",
-    "countries": "🆕 Добавить страну",
-    "artists": "🆕 Добавить артиста",
-    "books": "🆕 Добавить книгу",
+    "countries": "✅ Добавить страну",
+    "artists": "✅ Добавить артиста",
+    "books": "✅ Добавить книгу",
 }
 
 
@@ -410,13 +410,13 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "✅ Добавить фильм",
-        "lv_countries": "🆕 Добавить страну",
-        "lv_artists": "🆕 Добавить артиста",
-        "lv_books": "🆕 Добавить книгу",
+        "lv_countries": "✅ Добавить страну",
+        "lv_artists": "✅ Добавить артиста",
+        "lv_books": "✅ Добавить книгу",
         "lvls_movies": "✅ Добавить фильм",
-        "lvls_countries": "🆕 Добавить страну",
-        "lvls_artists": "🆕 Добавить артиста",
-        "lvls_books": "🆕 Добавить книгу",
+        "lvls_countries": "✅ Добавить страну",
+        "lvls_artists": "✅ Добавить артиста",
+        "lvls_books": "✅ Добавить книгу",
     }
     rows = []
     if ctx in _lv_add_label:

@@ -433,7 +433,7 @@ def test_game_set_groups_games_like_my_cinema(monkeypatch):
         "Экшен:\nHades"
     )
     assert _labels(bot.message["reply_markup"])[-3:] == [
-        ["🆕 Добавить игру"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["✅ Добавить игру"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 

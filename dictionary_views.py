@@ -63,7 +63,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
-    rows.append([InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
+    rows.append([InlineKeyboardButton("✅ Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
@@ -461,7 +461,7 @@ async def send_dict_add_prompt(bot, cid, lang):
 
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✅ Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

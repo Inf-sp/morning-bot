@@ -395,7 +395,7 @@ def _countries_kb(cid, page):
         InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
         InlineKeyboardButton("▶️", callback_data=next_callback),
     ])
-    rows.append([InlineKeyboardButton("🆕 Добавить страну", callback_data="a_trav_country_add")])
+    rows.append([InlineKeyboardButton("✅ Добавить страну", callback_data="a_trav_country_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows), page, pages
 

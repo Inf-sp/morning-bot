@@ -682,7 +682,7 @@ def test_add_dutch_phrase_offers_one_study_word_instead_of_saving_phrase(monkeyp
     buttons = [
         button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row
     ]
-    assert buttons[0] == "🆕 Добавить Kiezen"
+    assert buttons[0] == "✅ Добавить Kiezen"
 
 
 def test_study_word_suggestion_rejects_multiword_ai_result(monkeypatch):

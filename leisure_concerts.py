@@ -1196,7 +1196,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
 
     rows = []
     if not artists:
-        rows.append([InlineKeyboardButton("🆕 Добавить артиста", callback_data="as_loveadd_artists")])
+        rows.append([InlineKeyboardButton("✅ Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(_concert_country_label(cc, cname), callback_data="a_concerts_pick")])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),

@@ -29,7 +29,7 @@ def _assert_add_menu(rows, expected_add):
 
 def test_wardrobe_add_action_is_above_navigation_and_separate():
     rows = _labels(wardrobe.closet_kb())
-    assert rows[0] == ["🆕 Добавить вещь"]
+    assert rows[0] == ["✅ Добавить вещь"]
     assert all("Провер" not in label and "Оцен" not in label for row in rows for label in row)
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
@@ -42,10 +42,10 @@ def test_fridge_has_categories_and_a_separate_add_action(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["Мясо и рыба · 0"]
-    assert rows[-3:-1] == [["🆕 Добавить продукт"], ["🔣 Выбрать предпочтения"]]
+    assert rows[-3:-1] == [["✅ Добавить продукт"], ["🔣 Выбрать предпочтения"]]
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 def test_dictionary_batch_keeps_add_action_on_own_first_row():
     rows = _labels(dictionary_import._dict_batch_preview_kb())
 
-    assert rows == [["🆕 Добавить всё"], ["❌ Не добавлять"]]
+    assert rows == [["✅ Добавить всё"], ["❌ Не добавлять"]]

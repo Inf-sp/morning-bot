@@ -493,7 +493,7 @@ async def send_game_set(bot, cid, q=None):
     ])
     rows = [[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
             for index, (genre, items) in enumerate(view["genres"])]
-    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
+    rows.append([InlineKeyboardButton("✅ Добавить игру", callback_data="as_loveadd_games")])
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="game_prefs",
     )])
@@ -527,7 +527,7 @@ async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
     rows.append([InlineKeyboardButton(
         "❌ Удалить", callback_data=f"vg_setd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    rows.append([InlineKeyboardButton("🆕 Добавить игру", callback_data="as_loveadd_games")])
+    rows.append([InlineKeyboardButton("✅ Добавить игру", callback_data="as_loveadd_games")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)

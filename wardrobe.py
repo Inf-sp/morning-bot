@@ -103,7 +103,7 @@ def _kb(rows):
 
 def closet_kb():
     return _kb([
-        [("🆕 Добавить вещь", "w_add")],
+        [("✅ Добавить вещь", "w_add")],
         [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -817,7 +817,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
             public_zone_name(zone),
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
+    rows.append([InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="set_pref_style",
     )])
@@ -852,7 +852,7 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"w_cat_{zone_slug}_{(page + 1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("🆕 Добавить вещь", callback_data="w_add")])
+    rows.append([InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:

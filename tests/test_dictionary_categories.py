@@ -488,8 +488,8 @@ def test_dictionary_category_card_and_language_home_expose_list_view(monkeypatch
 
     assert "🔢 Показать списком" not in language_labels
     assert "🔢 Показать списком" in category_labels
-    assert "🆕 Добавить слово" in language_labels
-    assert "🆕 Добавить слово" not in category_labels
+    assert "✅ Добавить слово" in language_labels
+    assert "✅ Добавить слово" not in category_labels
 
 
 def test_dictionary_category_list_uses_two_columns(monkeypatch):

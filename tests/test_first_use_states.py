@@ -37,7 +37,7 @@ def test_learning_empty_state_has_one_clear_next_step():
         "Я буду использовать их в практике и повторении."
     )
     assert _labels(message.reply_markup) == [
-        ["🆕 Добавить слова"],
+        ["✅ Добавить слова"],
         ["✨ Подобрать новые слова"],
     ]
 
@@ -72,7 +72,7 @@ def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
 
     assert Query.message.updated["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["🆕 Добавить слова"], ["✨ Подобрать новые слова"],
+        ["✅ Добавить слова"], ["✨ Подобрать новые слова"],
     ]
 
 
@@ -158,7 +158,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     assert "📝 Предпочтения" not in [label for row in rows for label in row]
     assert rows[-3:] == [
         ["✨ Подобрать новые слова"],
-        ["🆕 Добавить слово"],
+        ["✅ Добавить слово"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -411,7 +411,7 @@ def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
 
     assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(sent[0]["reply_markup"]) == [
-        ["🆕 Добавить слова"], ["✨ Подобрать новые слова"],
+        ["✅ Добавить слова"], ["✨ Подобрать новые слова"],
     ]
 
 
