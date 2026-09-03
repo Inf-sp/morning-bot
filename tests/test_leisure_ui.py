@@ -996,6 +996,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
             "name": "Пространство", "kind": "tv", "year": "2015", "rating": 8.1,
             "vote_count": 1000,
             "overview": "Детектив и капитан звездолёта расследуют исчезновение девушки",
+            "trailer_url": "https://www.youtube.com/watch?v=space-trailer",
         },
     })
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
@@ -1028,8 +1029,13 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "Сейчас в кино:\n• «Фильм» (драма, триллер) · "
         "Героиня возвращается домой и находит старую тайну."
     ) in movie.text
-    movie_link = next(entity for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK)
-    assert movie_link.url == "https://www.youtube.com/watch?v=trailer123"
+    encoded = movie.text.encode("utf-16-le")
+    movie_links = {
+        entity.url: encoded[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
+        for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK
+    }
+    assert movie_links["https://www.youtube.com/watch?v=space-trailer"] == "Пространство"
+    assert movie_links["https://www.youtube.com/watch?v=trailer123"] == "«Фильм»"
     assert "💡 Интересно:" not in movie.text
     assert (
         "📰 Кинофакт: Сегодня — день рождения: Грета Гервиг. "
@@ -1078,8 +1084,7 @@ def test_movie_home_cleans_cached_markup_fragments():
 
     assert "• «Из любви» (драма)" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "📰 Кинофакт: «Из любви»: История о чувствах" in movie.text
-    assert "Сёстры Вачовски" not in movie.text
+    assert "📰 Кинофакт: Сёстры Вачовски отправили актёров на подготовку." in movie.text
     assert "**" not in movie.text
     assert "&#x20;" not in movie.text
     assert "�" not in movie.text

@@ -445,6 +445,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=No
     """Ежедневная кино-витрина: рекомендация дня, локальный прокат и кинофакт."""
     cinema_day = cinema_day or {}
     birthday = cinema_day.get("birthday") or {}
+    rebus = cinema_day.get("rebus") or {}
     day = day if isinstance(day, date) else date.today()
     b = MessageBuilder()
     b.text_line("🎬 ")
@@ -484,7 +485,7 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=No
         b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
 
-    fact = _cinema_fact_text(birthday, cinema)
+    fact = _cinema_fact_text(birthday, rebus)
     if fact:
         b.spacer()
         b.bold("📰 Кинофакт:")
@@ -508,7 +509,13 @@ def _format_featured_movie(b: MessageBuilder, recommendation) -> None:
     type_label = "сериал" if kind == "tv" else ("фильм" if kind == "movie" else "")
     year = str(tm.get("year") or "").strip()
     meta = [part for part in (type_label, year, _featured_rating(tm)) if part]
-    b.text_line(f"«{title}»")
+    b.text_line("«")
+    trailer_url = str(tm.get("trailer_url") or "").strip()
+    if trailer_url:
+        b.link(title, trailer_url)
+    else:
+        b.text_line(title)
+    b.text_line("»")
     if meta:
         b.text_line(f" ({' · '.join(meta)})")
     overview = _movie_premiere_summary(
@@ -530,29 +537,15 @@ def _featured_rating(tm) -> str | None:
     return f"⭐ {value:.1f}"
 
 
-def _cinema_fact_text(birthday, cinema) -> str:
-    """Кинофакт: сначала проверенный именинник дня, иначе короткое сведение об афише."""
+def _cinema_fact_text(birthday, rebus) -> str:
+    """Кинофакт: проверенный именинник дня, иначе интересный факт о кино — не описание премьеры."""
     name = _clean_external_text(birthday.get("name"))
     fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
     if name and fact:
         return f"Сегодня — день рождения: {name}. {fact}"
     if name:
         return f"Сегодня — день рождения: {name}."
-    if cinema:
-        source = next((
-            movie for movie in cinema
-            if _clean_external_text(_item_value(movie, "fact", ""))
-        ), cinema[0])
-        title = _clean_quoted_title(_item_value(source, "title", ""))
-        note = _strip_external_label(
-            _item_value(source, "fact", "") or _item_value(source, "overview", ""),
-            "интересно", "факт",
-        )
-        if title and note:
-            return note if title.casefold() in note.casefold() else f"«{title}»: {note}"
-        if title:
-            return f"В сегодняшней киноафише — «{title}»."
-    return ""
+    return _strip_external_label((rebus or {}).get("fact"), "интересно", "факт")
 
 
 def _movie_now_playing_lines(now_playing) -> list[dict]:

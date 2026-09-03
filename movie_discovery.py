@@ -234,6 +234,32 @@ async def _with_trailer_urls(items):
     return enriched
 
 
+async def _recommendation_with_trailer(tm):
+    """Дополняет основную рекомендацию проверенным трейлером для ссылки с названия."""
+    if not isinstance(tm, dict):
+        return tm
+    enriched = dict(tm)
+    if str(enriched.get("trailer_url") or "").strip():
+        return enriched
+    trailer = ""
+    tm_id = enriched.get("id")
+    kind = enriched.get("kind")
+    if tm_id and kind in ("movie", "tv"):
+        try:
+            trailer = await asyncio.to_thread(tmdb.trailer_url, tm_id, kind)
+        except Exception:
+            trailer = ""
+    if not trailer:
+        trailer = _youtube_trailer_search_url({
+            "title": enriched.get("name"),
+            "name_en": enriched.get("name_en"),
+            "year": enriched.get("year"),
+        })
+    if trailer:
+        enriched["trailer_url"] = trailer
+    return enriched
+
+
 def _daily_rebus(day):
     """Один ребус и связанный факт на календарную дату, без случайных повторов в течение дня."""
     return monthly_rebuses.cached_for_day("movies", day, _CINEMA_REBUSES)
@@ -351,6 +377,8 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     now_playing = await _with_trailer_urls(featured)
     cinema_day = await _daily_cinema_content()
     item, tm = await get_current_movie(cid)
+    if tm:
+        tm = await _recommendation_with_trailer(tm)
     recommendation = {"item": item, "tm": tm} if item else None
     msg = leisure_ui.movie_now_playing_screen(
         city, now_playing, cinema_day, news=category_news.cached_line("movie"),
