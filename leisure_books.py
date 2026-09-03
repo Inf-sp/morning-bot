@@ -2212,10 +2212,8 @@ async def _advance_book(bot, cid):
     _cache_book(cid, prepared)
 
 async def book_love(bot, cid, i, q=None):
-    """Добавляет книгу в любимые без дублей и отражает состояние на карточке."""
+    """Добавляет книгу в любимые без дублей."""
     rec = store.last_recos.get(str(cid))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.FAVORITE_BOOKS_KEY, cid, title)
-        if q is not None:
-            await q.message.edit_reply_markup(reply_markup=_book_kb(i))

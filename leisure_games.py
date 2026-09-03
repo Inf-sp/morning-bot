@@ -422,8 +422,6 @@ async def game_love(bot, cid, q=None):
     if item["name"].casefold() not in existing:
         store.add_to_list(config.FAVORITE_GAMES_KEY, cid, item)
         _reset_game_daily(cid)
-    if q is not None:
-        await q.message.edit_reply_markup(reply_markup=_game_keyboard())
 
 
 def _game_genre_title(value):

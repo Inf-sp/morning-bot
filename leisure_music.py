@@ -296,15 +296,13 @@ def _kick_off_new_artist_concert_check(cid, artist_names):
 
 
 async def listen_love(bot, cid, q=None):
-    """Добавляет артиста в любимые без дублей и отражает состояние на карточке."""
+    """Добавляет артиста в любимые без дублей."""
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
         _add_unique(config.FAVORITE_ARTISTS_KEY, cid, artist)
         _invalidate_artist(cid)
         _kick_off_new_artist_concert_check(cid, [artist])
-        if q is not None:
-            await q.message.edit_reply_markup(reply_markup=_listen_kb())
 
 
 def _favorite_artist_style_labels(cid):
