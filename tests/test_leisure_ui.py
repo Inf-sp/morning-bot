@@ -54,6 +54,12 @@ def test_recommendation_cards_have_no_refresh_label():
     assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
     assert _labels(leisure_books._book_kb(0))[0] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[0] == ["🎭 По жанру"]
+    movie_button = leisure_movies._movie_kb(3).inline_keyboard[1][0]
+    assert movie_button.text == "✅ Добавить в Моё кино"
+    assert movie_button.callback_data == "movie_love_3"
+    assert _labels(leisure_music._listen_kb())[1] == ["✅ Добавить в Мои артисты"]
+    assert _labels(leisure_books._book_kb(3))[1] == ["✅ Добавить в Мои книги"]
+    assert _labels(leisure_games._game_keyboard())[1] == ["✅ Добавить в Мой набор игр"]
     assert _labels(leisure_music._listen_kb())[0] == ["🎭 По жанру"]
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 

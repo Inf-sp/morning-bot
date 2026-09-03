@@ -770,6 +770,9 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("book_love_"):
         await leisure_books.book_love(bot, cid, int(data.split("_")[-1]), q)
         return
+    if data == "game_love":
+        await leisure_games.game_love(bot, cid, q)
+        return
     if data == "listen_love":
         await leisure_music.listen_love(bot, cid, q)
         return

@@ -399,6 +399,8 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres_board")])
     else:
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
+        if not no_match:
+            rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
         rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
     if no_match:
         rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
@@ -407,6 +409,21 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)
+
+
+async def game_love(bot, cid, q=None):
+    """Добавляет текущую рекомендацию игры в набор без дублей."""
+    profile = store.get_profile(cid)
+    daily = profile.get("game_daily") if isinstance(profile, dict) else None
+    item = daily.get("item") if isinstance(daily, dict) else None
+    if not isinstance(item, dict) or not item.get("name"):
+        return
+    existing = {_favorite_game_name(value).casefold() for value in _favorite_games(cid)}
+    if item["name"].casefold() not in existing:
+        store.add_to_list(config.FAVORITE_GAMES_KEY, cid, item)
+        _reset_game_daily(cid)
+    if q is not None:
+        await q.message.edit_reply_markup(reply_markup=_game_keyboard())
 
 
 def _game_genre_title(value):

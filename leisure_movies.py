@@ -344,6 +344,7 @@ def _movie_kb(i, category=None):
     """
     rows = [
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("✅ Добавить в Моё кино", callback_data=f"movie_love_{i}")],
     ]
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
