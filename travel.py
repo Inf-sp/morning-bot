@@ -217,9 +217,8 @@ def _home_kb():
 
 
 def _region_kb():
-    rows = [[InlineKeyboardButton("🌍 Любое направление", callback_data="a_trav_region_any")]]
-    rows.extend([[InlineKeyboardButton(label, callback_data=f"a_trav_region_{key}")]
-                 for key, (label, _region, _subregion) in _TRAVEL_REGIONS.items()])
+    rows = [[InlineKeyboardButton(label, callback_data=f"a_trav_region_{key}")]
+            for key, (label, _region, _subregion) in _TRAVEL_REGIONS.items()]
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_travel"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)

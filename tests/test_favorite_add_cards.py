@@ -47,10 +47,30 @@ def test_book_add_prompt_says_author_and_year_are_optional():
     asyncio.run(personal_collections.love_add_start(bot, "42", "books"))
 
     assert bot.messages[0]["text"] == (
-        "Напиши название книги. Автора и год можно не указывать — покажу варианты.\n\n"
-        "Например: Марсианин"
+        "Напиши название книги — добавлю в 🎚️ Мои книги. Автора и год можно не "
+        "указывать — покажу варианты.\n\nНапример: Марсианин"
     )
     personal_collections.store.pending_input.pop("42", None)
+
+
+def test_movie_add_prompt_names_movie_collection():
+    bot = _Bot()
+
+    asyncio.run(personal_collections.love_add_start(bot, "42", "movies"))
+
+    assert bot.messages[0]["text"] == "Напиши фильм или сериал — добавлю в 🎚️ Моё кино."
+    personal_collections.store.pending_input.pop("42", None)
+
+
+def test_artist_and_game_add_prompts_name_their_collections():
+    for key, expected in (
+        ("artists", "Напиши артиста — добавлю в 🎚️ Мои артисты."),
+        ("games", "Напиши игру — добавлю в 🎚️ Мой набор игр."),
+    ):
+        bot = _Bot()
+        asyncio.run(personal_collections.love_add_start(bot, "42", key))
+        assert bot.messages[0]["text"] == expected
+        personal_collections.store.pending_input.pop("42", None)
 
 
 def test_manual_artist_add_shows_a_card_and_collection_link(monkeypatch):

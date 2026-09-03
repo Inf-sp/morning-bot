@@ -95,6 +95,12 @@ def test_travel_home_keeps_preferences_inside_suitcase():
     ]
 
 
+def test_region_menu_does_not_offer_any_direction():
+    labels = [[button.text for button in row] for row in travel._region_kb().inline_keyboard]
+
+    assert "🌍 Любое направление" not in sum(labels, [])
+
+
 def test_today_trip_scope_is_limited_to_home_country_and_neighbours(monkeypatch):
     monkeypatch.setattr(travel.store, "get_settings", lambda _cid: {"cc": "NL"})
     monkeypatch.setattr(travel, "_country_label", lambda code: code)
