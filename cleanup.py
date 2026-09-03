@@ -73,7 +73,7 @@ COLLECTIONS = {
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить фильм", "as_loveadd_movies"),
         menu_button=("🔣 Выбрать предпочтения", "movie_prefs"),
-        add_button_at_bottom=True,
+        add_button_at_bottom=False,
         allow_edit=False),
     "cinema_watched": _collection(
         "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
@@ -88,7 +88,7 @@ COLLECTIONS = {
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить книгу", "as_loveadd_books"),
         menu_button=("🔣 Выбрать предпочтения", "book_prefs"),
-        add_button_at_bottom=True,
+        add_button_at_bottom=False,
         allow_edit=False),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
@@ -103,7 +103,7 @@ COLLECTIONS = {
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить артиста", "as_loveadd_artists"),
         menu_button=("🔣 Выбрать предпочтения", "music_prefs"),
-        add_button_at_bottom=True,
+        add_button_at_bottom=False,
         allow_edit=False),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
@@ -727,11 +727,11 @@ async def _render_view(bot, cid, view_id, q=None):
     add_button = cfg.get("add_button") if cfg else _view_add_button(ctx)
     add_button_at_bottom = bool(cfg and cfg.get("add_button_at_bottom"))
     menu_button = cfg.get("menu_button") if cfg else None
-    if menu_button and not add_button_at_bottom:
-        label, callback_data = menu_button
-        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     if add_button and not add_button_at_bottom:
         label, callback_data = add_button
+        rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
+    if menu_button and not add_button_at_bottom:
+        label, callback_data = menu_button
         rows.append([InlineKeyboardButton(label, callback_data=callback_data)])
     previous_group = None
     for full_id, lbl in chunk:

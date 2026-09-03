@@ -491,9 +491,9 @@ async def send_game_set(bot, cid, q=None):
         {"genre": genre, "names": [item["name"] for item in items]}
         for genre, items in view["genres"]
     ])
-    rows = [[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
-            for index, (genre, items) in enumerate(view["genres"])]
-    rows.append([InlineKeyboardButton("✅ Добавить игру", callback_data="as_loveadd_games")])
+    rows = [[InlineKeyboardButton("✅ Добавить игру", callback_data="as_loveadd_games")],
+            *[[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
+              for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="game_prefs",
     )])

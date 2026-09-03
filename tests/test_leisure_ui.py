@@ -67,15 +67,15 @@ def test_recommendation_cards_have_no_refresh_label():
 def test_preferences_are_available_in_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "movie_prefs")
-    assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "book_prefs")
-    assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("🔣 Выбрать предпочтения", "music_prefs")
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is True
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
 
 
@@ -350,7 +350,8 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-3:] == [["✅ Добавить артиста"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[0] == ["✅ Добавить артиста"]
+    assert ["🔣 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -384,7 +385,8 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-3:] == [["✅ Добавить фильм"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[0] == ["✅ Добавить фильм"]
+    assert ["🔣 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -435,7 +437,8 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
         "Комедия:\nАмели\n\n"
         "Драма:\nПатерсон"
     )
-    assert labels[-3:] == [["✅ Добавить фильм"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert labels[0] == ["✅ Добавить фильм"]
+    assert ["🔣 Выбрать предпочтения"] in labels
     genre_callback = next(
         row[0].callback_data
         for row in bot.messages[0]["reply_markup"].inline_keyboard
@@ -681,7 +684,8 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         cleanup._views.pop(view_id, None)
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[-3:] == [["✅ Добавить книгу"], ["🔣 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert rows[0] == ["✅ Добавить книгу"]
+    assert ["🔣 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 

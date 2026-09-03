@@ -913,10 +913,10 @@ async def send_favorite_books(bot, cid, q=None):
         {"genre": genre, "titles": [item["title"] for item in items]}
         for genre, items in view["genres"]
     ])
-    rows = [[InlineKeyboardButton(
+    rows = [[InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")],
+            *[[InlineKeyboardButton(
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
-    )] for index, (genre, items) in enumerate(view["genres"])]
-    rows.append([InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")])
+    )] for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="book_prefs",
     )])

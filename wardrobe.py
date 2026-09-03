@@ -811,13 +811,12 @@ async def send_wardrobe_zones(bot, cid, q=None):
         for zone in CLOSET_ZONE_ORDER
         if counts.get(zone) or (zone == "Аксессуары" and counts.get("Другое"))
     ]
-    rows = []
+    rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")]]
     for zone in CLOSET_ZONE_ORDER:
         rows.append([InlineKeyboardButton(
             public_zone_name(zone),
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    rows.append([InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton(
         "🔣 Выбрать предпочтения", callback_data="set_pref_style",
     )])
@@ -844,15 +843,15 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
         page * WARDROBE_CATEGORY_PAGE_SIZE:(page + 1) * WARDROBE_CATEGORY_PAGE_SIZE
     ]
     msg = wardrobe_ui.category_screen(public_zone_name(zone), chunk, total=total)
-    rows = [[InlineKeyboardButton(str(item.get("name") or "Вещь")[:48], callback_data=f"w_item_{item.get('id')}")]
-            for item in chunk]
+    rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")]]
+    rows.extend([[InlineKeyboardButton(str(item.get("name") or "Вещь")[:48], callback_data=f"w_item_{item.get('id')}")]
+                 for item in chunk])
     if pages > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"w_cat_{zone_slug}_{(page - 1) % pages}"),
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"w_cat_{zone_slug}_{(page + 1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
