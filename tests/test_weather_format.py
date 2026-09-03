@@ -69,10 +69,22 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "💡 Полезно: Завтра будет часто идти дождь" in message.text
 
 
-def test_full_forecast_at_23_keeps_only_weather_until_midnight():
+def test_full_forecast_at_23_has_no_remaining_daytime_parts():
     parts = weather._full_forecast_parts(datetime(2026, 8, 25, 23, 0, tzinfo=weather.TZ))
 
-    assert parts == [("Вечером", 23, 24)]
+    assert parts == []
+
+
+def test_full_forecast_in_the_morning_starts_with_the_daytime_block():
+    parts = weather._full_forecast_parts(datetime(2026, 8, 25, 9, 0, tzinfo=weather.TZ))
+
+    assert parts == [("Днём", 12, 18), ("Вечером", 18, 24)]
+
+
+def test_full_forecast_at_noon_starts_with_the_evening_block():
+    parts = weather._full_forecast_parts(datetime(2026, 8, 25, 12, 0, tzinfo=weather.TZ))
+
+    assert parts == [("Вечером", 18, 24)]
 
 
 def test_full_forecast_in_the_evening_skips_the_daytime_block():
