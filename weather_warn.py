@@ -224,7 +224,7 @@ def collect_context(data, cid) -> WarnContext:
         has_plan_today=False,
     )
     # интервалы «когда» из hourly в дневном окне
-    ctx.when_rain = _hourly_when(data, day_str, "precipitation_probability", RAIN_PROB_WARN)
+    ctx.when_rain = _rain_when(data, day_str)
     ctx.when_wind = _hourly_when(data, day_str, "windgusts_10m", STORM_GUST_MS)
     ctx.when_uv = _hourly_when(data, day_str, "uv_index", UV_WARN)
     ctx.when_heat = _hourly_when(data, day_str, "temperature_2m", HEAT_TMAX)
@@ -261,6 +261,43 @@ def _hourly_when(data, day_str, key, threshold):
     if lo == hi:
         return f"{lo:02d}:00"
     return f"{lo:02d}:00–{hi + 1:02d}:00"
+
+
+def _rain_when(data, day_str):
+    """Периоды дождя с вероятностью по каждому непрерывному окну."""
+    try:
+        hours = data["hourly"]["time"]
+        probabilities = data["hourly"]["precipitation_probability"]
+    except (KeyError, TypeError):
+        return ""
+    active = [
+        (int(timestamp[11:13]), round(float(probability)))
+        for timestamp, probability in zip(hours, probabilities)
+        if (
+            day_str and timestamp.startswith(day_str)
+            and weather.DAYTIME_START_H <= int(timestamp[11:13]) < weather.DAYTIME_END_H
+            and probability is not None and float(probability) >= RAIN_PROB_WARN
+        )
+    ]
+    if not active:
+        return ""
+
+    periods = []
+    start_hour, last_hour, values = active[0][0], active[0][0], [active[0][1]]
+    for hour, probability in active[1:]:
+        if hour != last_hour + 1:
+            periods.append((start_hour, last_hour + 1, values))
+            start_hour, values = hour, []
+        last_hour = hour
+        values.append(probability)
+    periods.append((start_hour, last_hour + 1, values))
+
+    lines = []
+    for start, end, values in periods:
+        low, high = min(values), max(values)
+        probability = f"{low}%" if low == high else f"{low}–{high}%"
+        lines.append(f"{start:02d}:00–{end:02d}:00 · дождь {probability}")
+    return "\n".join(lines)
 
 
 def _raincoat_present(cid) -> bool:

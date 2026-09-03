@@ -91,6 +91,23 @@ def test_period_with_zero_rain_probability_uses_cloud_without_rain():
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
 
 
+def test_weather_warning_lists_rain_periods_with_probabilities():
+    data = {
+        "hourly": {
+            "time": [
+                "2026-08-14T07:00", "2026-08-14T08:00", "2026-08-14T09:00",
+                "2026-08-14T10:00", "2026-08-14T11:00", "2026-08-14T12:00",
+                "2026-08-14T13:00",
+            ],
+            "precipitation_probability": [0, 60, 75, 0, 70, 70, 0],
+        },
+    }
+
+    assert weather_warn._rain_when(data, "2026-08-14") == (
+        "08:00–10:00 · дождь 60–75%\n11:00–13:00 · дождь 70%"
+    )
+
+
 def test_weather_adapter_keeps_sunset_from_current_conditions():
     payload = weather_provider._adapt_openweather(
         {"data": [{"dt": 1787284800, "sunrise": 1787276700, "sunset": 1787338920}]},
