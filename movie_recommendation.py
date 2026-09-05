@@ -396,3 +396,4 @@ async def movie_love(bot, cid, i, q=None):
         }
         if movie_title_for_lookup(title).casefold() not in existing:
             store.add_to_list(config.FAVORITE_MOVIES_KEY, cid, title)
+        await _advance_movie(bot, cid)

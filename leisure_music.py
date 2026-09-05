@@ -300,9 +300,11 @@ async def listen_love(bot, cid, q=None):
     rec = store.last_recos.get(str(cid))
     if rec and rec.get("kind") == "listen" and rec["items"]:
         artist = rec["items"][0]
+        category = rec.get("category") if isinstance(rec.get("category"), dict) else None
         _add_unique(config.FAVORITE_ARTISTS_KEY, cid, artist)
         _invalidate_artist(cid)
         _kick_off_new_artist_concert_check(cid, [artist])
+        await send_listen(bot, cid, category=category, force=True)
 
 
 def _favorite_artist_style_labels(cid):

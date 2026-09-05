@@ -401,7 +401,6 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         if not no_match:
             rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
-        rows.append([InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")])
     if no_match:
         rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
     rows.append([
@@ -422,6 +421,7 @@ async def game_love(bot, cid, q=None):
     if item["name"].casefold() not in existing:
         store.add_to_list(config.FAVORITE_GAMES_KEY, cid, item)
         _reset_game_daily(cid)
+    await send_game_recommendation(bot, cid, q=q, refresh=True)
 
 
 def _game_genre_title(value):

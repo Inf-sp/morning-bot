@@ -82,10 +82,17 @@ def test_movie_recommendation_add_does_not_fail_when_markup_is_unchanged(monkeyp
         leisure_movies, "normalize_movie_items",
         lambda items: list(items),
     )
+    advanced = []
+
+    async def advance(bot, cid):
+        advanced.append((bot, cid))
+
+    monkeypatch.setattr(leisure_movies, "_advance_movie", advance)
 
     asyncio.run(leisure_movies.movie_love(object(), "42", 0, Query()))
 
     assert added == [(config.FAVORITE_MOVIES_KEY, "42", "Патерсон (фильм, 2016)")]
+    assert advanced and advanced[0][1] == "42"
 
 
 def test_artist_and_game_add_prompts_name_their_collections():

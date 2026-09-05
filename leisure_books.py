@@ -2217,3 +2217,4 @@ async def book_love(bot, cid, i, q=None):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         _add_unique(config.FAVORITE_BOOKS_KEY, cid, title)
+        await _advance_book(bot, cid)

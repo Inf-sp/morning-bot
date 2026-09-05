@@ -326,7 +326,6 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     assert _labels(status.call[1]["reply_markup"]) == [
         ["🎭 По жанру"],
         ["✅ Добавить в Мой набор игр"],
-        ["🎚️ Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
