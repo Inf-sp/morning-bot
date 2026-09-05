@@ -45,6 +45,7 @@ _CITY_FALLBACKS = {
         },
     ),
 }
+_HISTORY_LIMIT = 100
 
 
 def _cache(cid):
@@ -129,7 +130,7 @@ def _fallback_card(city, previous="", context_key="", history=None):
         "city": city, **picked,
         "map_url": f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{name}, {city}')}",
         "context_key": context_key,
-        "history": [*(history or []), name][-20:],
+        "history": rotation.remember(history or [], name, limit=_HISTORY_LIMIT),
         "cached_at": datetime.now(config.TZ).isoformat(),
     }
 
@@ -140,7 +141,10 @@ def _reserve(cid, cached, city, previous="", context_key="", *, allow_cached=Tru
     card = _fallback_card(city, previous, context_key, cached.get("history") or [])
     if card.get("name"):
         _save(cid, card)
-    return card
+        return card
+    # В городе без проверенного локального пула нельзя выдумывать новое место.
+    # В этом единственном случае безопаснее оставить последнюю полную карточку.
+    return cached if _usable(cached, city) else card
 
 
 def _source_text(rows):
@@ -226,7 +230,7 @@ def get_restaurant(cid, *, refresh=False):
         return cached
     previous = str(cached.get("name") or "") if _usable(cached, city) else ""
     used_names = rotation.recent(
-        [*(cached.get("history") or []), previous], limit=20,
+        [*(cached.get("history") or []), previous], limit=_HISTORY_LIMIT,
     )
     exclusions = rotation.search_exclusions(used_names, limit=10)
     search_query = " ".join(part for part in (
@@ -276,7 +280,7 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
             prompt, 900, module="food_restaurant", fallback_allowed=True,
             cache_context={"city": city.casefold(), "context": context_key,
                            "previous": previous.casefold(),
-                           "history": rotation.cache_history(used_names, limit=20),
+                           "history": rotation.cache_history(used_names, limit=_HISTORY_LIMIT),
                            "sources": sources},
         )
     except Exception:
@@ -317,7 +321,7 @@ evidence с source_id и короткой ДОСЛОВНОЙ цитатой из
         "source_url": source_url,
         "map_url": f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{name}, {city}')}",
         "context_key": context_key,
-        "history": [*(cached.get("history") or []), name][-20:],
+        "history": rotation.remember(cached.get("history") or [], name, limit=_HISTORY_LIMIT),
         "cached_at": datetime.now(config.TZ).isoformat(),
     }
     _save(cid, card)

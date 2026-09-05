@@ -32,6 +32,7 @@ FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "gemini": 4.0,
+    "groq": 2.5,
     "groq_standard": 2.5,
     "cf": 2.0,
     "mistral": 2.5,
@@ -1288,6 +1289,11 @@ def _reorder_for_monitor(order):
 
 
 def _provider_is_unavailable(name):
+    service = _monitor_name(name)
+    # Не тратим дедлайн на провайдера, чей ключ не задан: необязательный
+    # резерв должен немедленно уступить место следующему в цепочке.
+    if service in provider_runtime.AI_PROVIDERS and not provider_runtime.is_configured(service):
+        return LLMProviderError(name, f"{name} is not configured", error_type="credentials")
     if _monitor_name(name) == "gemini":
         rate_limit = _gemini_cooldown_error()
         if rate_limit is not None:
@@ -1314,9 +1320,9 @@ def _reserve_gemini_for_action() -> bool:
     except Exception:
         return True
 
-# Единая цепочка для всех текстовых AI-сценариев: Gemini отвечает первым,
-# OpenRouter остаётся единственным внешним резервом.
-AI_ORDER = ("gemini", "openrouter")
+# Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
+# попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
+AI_ORDER = ("gemini", "groq", "mistral", "cf", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
@@ -1997,8 +2003,9 @@ def _chat_chain_impl(history, cid=None):
             continue
         try:
             attempt_started = time.time()
-            later_reserve = (
-                len(CHAT_ORDER[provider_index + 1:]) * _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS
+            later_reserve = _reserve_for_later_providers(
+                CHAT_ORDER, provider_index,
+                FallbackPolicy(fallback_allowed=True, privacy_level="personal"),
             )
             usable = (
                 max(_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS, remaining - later_reserve)
@@ -2089,8 +2096,9 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
 
         try:
             attempt_started = time.time()
-            later_reserve = (
-                len(CHAT_ORDER[provider_index + 1:]) * _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS
+            later_reserve = _reserve_for_later_providers(
+                CHAT_ORDER, provider_index,
+                FallbackPolicy(fallback_allowed=True, privacy_level="personal"),
             )
             usable = (
                 max(_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS, remaining - later_reserve)

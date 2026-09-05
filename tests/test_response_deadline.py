@@ -101,7 +101,7 @@ def test_chain_preserves_time_for_the_next_ai_provider(monkeypatch):
     assert clock["now"] == 2.0
 
 
-def test_free_chat_reserves_time_for_openrouter(monkeypatch):
+def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     clock = {"now": 0.0}
     calls = []
 
@@ -118,17 +118,14 @@ def test_free_chat_reserves_time_for_openrouter(monkeypatch):
         if provider == "gemini":
             clock["now"] = 4.0
             raise ai.LLMProviderError(provider, "gemini timeout", temporary=True)
-        return "Ответ OpenRouter"
+        return "Ответ Groq"
 
     monkeypatch.setattr(ai, "_chat", provider)
 
     result = ai.chat_chain([{"role": "user", "content": "test"}])
 
-    assert result == "Ответ OpenRouter"
-    assert calls == [
-        ("gemini", 4.0),
-        ("openrouter", 2.5),
-    ]
+    assert result == "Ответ Groq"
+    assert calls[:2] == [("gemini", 4.0), ("groq", 1.0)]
 
 
 def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
@@ -155,7 +152,7 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
 
 def test_free_chat_route_uses_the_standard_chain():
-    assert ai.CHAT_ORDER == ("gemini", "openrouter")
+    assert ai.CHAT_ORDER == ("gemini", "groq", "mistral", "cf", "openrouter")
     assert ai.FREE_CHAT_TIER == "smart"
 
 
@@ -186,7 +183,7 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     line = records[0]
     assert "scenario=assistant/free_chat" in line
     assert "tier=smart" in line
-    assert "provider_chain=gemini,openrouter" in line
+    assert "provider_chain=gemini,groq,mistral,cf,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line

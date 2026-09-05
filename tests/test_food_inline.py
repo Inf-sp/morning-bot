@@ -135,6 +135,34 @@ def test_food_home_uses_cached_restaurant_without_recipe_generation(monkeypatch)
     assert shown == ["De Eendracht"]
 
 
+def test_opening_food_rotates_the_restaurant_recommendation(monkeypatch):
+    """Обычное открытие «Питания» не должно повторять дневную карточку."""
+    calls = []
+
+    class Status:
+        async def stop(self, delete=True):
+            return None
+
+    async def start_inline(*_args, **_kwargs):
+        return Status()
+
+    async def send_food_menu(_bot, _cid, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+    monkeypatch.setattr(bot_callbacks.menu, "send_food_menu", send_food_menu)
+    query = SimpleNamespace(
+        data="m_food", message=SimpleNamespace(chat_id="42", message_id=1),
+    )
+    update = SimpleNamespace(callback_query=query)
+    context = SimpleNamespace(bot=object())
+
+    asyncio.run(bot_callbacks.handle(update, context, lambda *_args: None))
+
+    assert calls[0]["refresh"] is True
+
+
 def test_dinner_button_uses_dinner_cache_without_forced_refresh(monkeypatch):
     calls = []
 

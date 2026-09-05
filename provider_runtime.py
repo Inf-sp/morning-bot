@@ -56,14 +56,14 @@ class ProviderSpec:
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
     ProviderSpec("gemini", "Gemini", ("Питание", "Обучение", "Ассистент"),
-                 ("openrouter",), 3600, role="Основной"),
+                 ("groq", "mistral", "cloudflare", "openrouter"), 3600, role="Основной"),
     ProviderSpec("groq", "Groq", ("Питание", "Обучение", "Ассистент"),
-                 ("openrouter",), 3600, role="Вне цепочки"),
+                 ("mistral", "cloudflare", "openrouter"), 3600, role="Резерв 1"),
     ProviderSpec("mistral", "Mistral", ("Питание", "Обучение", "Ассистент"),
-                 ("openrouter",), 3600, role="Вне цепочки"),
+                 ("cloudflare", "openrouter"), 3600, role="Резерв 2"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
-                 ("openrouter",), 3600, role="Вне цепочки"),
+                 ("openrouter",), 3600, role="Резерв 3"),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),

@@ -36,7 +36,7 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
 
 def test_ai_provider_catalog_uses_roles_not_sections():
     assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Основной"
-    assert provider_runtime.SPEC_BY_KEY["mistral"].category == "Вне цепочки"
+    assert provider_runtime.SPEC_BY_KEY["mistral"].category == "Резерв 2"
     assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Питание"
 
 
@@ -45,7 +45,7 @@ def test_mistral_is_a_configured_ai_reserve(monkeypatch):
 
     assert "mistral" in provider_runtime.AI_PROVIDERS
     assert provider_runtime.is_configured("mistral")
-    assert provider_runtime.SPEC_BY_KEY["mistral"].fallbacks == ("openrouter",)
+    assert provider_runtime.SPEC_BY_KEY["mistral"].fallbacks == ("cloudflare", "openrouter")
 
 
 def test_cloudflare_probe_uses_real_workers_ai_route(monkeypatch):
@@ -129,7 +129,7 @@ def test_unclassified_openrouter_monitor_result_is_neutral(monkeypatch):
     )
 
     assert service_monitor.format_row("openrouter") == (
-        "⚪ OpenRouter · Резерв · 0 сегодня"
+        "⚪ OpenRouter · Резерв 4 · 0 сегодня"
     )
 
 
@@ -159,7 +159,7 @@ def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
         )
 
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Вне цепочки · 5 сегодня"
+        "🟢 Groq · Резерв 1 · 5 сегодня"
     )
 
 
@@ -169,12 +169,12 @@ def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
 
     provider_runtime.record_result("groq", True, quota_remaining=998, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Вне цепочки · 998/1 000 осталось"
+        "🟢 Groq · Резерв 1 · 998/1 000 осталось"
     )
 
     provider_runtime.record_result("groq", True, quota_remaining=499, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟡 Groq · Вне цепочки · 499/1 000 осталось"
+        "🟡 Groq · Резерв 1 · 499/1 000 осталось"
     )
 
 
@@ -190,7 +190,7 @@ def test_groq_error_is_not_hidden_by_stale_full_quota(monkeypatch):
     })
 
     assert service_monitor.format_row("groq", state) == (
-        "🔴 Groq · Вне цепочки · неверный API-ключ"
+        "🔴 Groq · Резерв 1 · неверный API-ключ"
     )
 
 
@@ -229,7 +229,7 @@ def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
     )
 
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Вне цепочки · 1 000/1 000 осталось"
+        "🟢 Groq · Резерв 1 · 1 000/1 000 осталось"
     )
 
 
@@ -244,7 +244,7 @@ def test_openrouter_balance_is_shown_as_money_not_requests(monkeypatch):
     state.update({"status": provider_runtime.OK, "quota_remaining": 1, "quota_total": 1})
 
     assert service_monitor.format_row("openrouter", state) == (
-        "🟢 OpenRouter · Резерв · $1.00 осталось"
+        "🟢 OpenRouter · Резерв 4 · $1.00 осталось"
     )
 
 
@@ -274,7 +274,7 @@ def test_system_rows_use_roles_and_hide_healthy_infrastructure(monkeypatch):
     assert not any(row.startswith("🟢 TheMealDB") for row in rows)
 
 
-def test_inactive_ai_providers_are_hidden_from_main_rows(monkeypatch):
+def test_active_ai_reserves_are_shown_in_main_rows(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
     model = "openai/gpt-oss-20b"
@@ -288,10 +288,10 @@ def test_inactive_ai_providers_are_hidden_from_main_rows(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert service_monitor._AI_SERVICES == ("gemini", "openrouter")
-    assert not any("Groq" in row for row in rows)
+    assert service_monitor._AI_SERVICES == ("gemini", "groq", "mistral", "cloudflare", "openrouter")
+    assert any("Groq" in row for row in rows)
     assert not any("gpt-oss" in row or "qwen" in row for row in rows)
-    assert not any("Cloudflare AI" in row for row in rows)
+    assert any("Cloudflare AI" in row for row in rows)
 
 
 def test_themealdb_is_shown_only_after_real_spoonacular_fallback(monkeypatch):

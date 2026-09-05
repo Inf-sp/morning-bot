@@ -283,7 +283,7 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data == "m_food":
         await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status),
+            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
             preserve_message=False,
         )
         return
