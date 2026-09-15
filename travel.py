@@ -102,12 +102,6 @@ def _daily_travel_rebus(day=None):
     return monthly_rebuses.cached_for_day("travel", day, _TRAVEL_REBUSES)
 
 
-def _travel_week_start(day=None):
-    """Понедельник текущей локальной недели — стабильный ключ кэша поездки."""
-    day = day or datetime.now(config.TZ).date()
-    return (day - timedelta(days=day.weekday())).isoformat()
-
-
 def _editorial_line(value, *, allow_empty=True):
     text = _card_text(value)
     if any(marker in text.casefold() for marker in _CARD_CLICHES):
@@ -185,23 +179,23 @@ def _idea_lock(cid):
 
 
 def _home_idea(cid, *, refresh=False):
-    """Одна идея на локальную неделю; страна профиля задаёт допустимый радиус."""
+    """Одна идея на день; страна профиля задаёт допустимый радиус."""
     key = str(cid)
-    week = _travel_week_start()
+    day = datetime.now(config.TZ).date().isoformat()
     profile = store.get_settings(cid)
     city = profile.get("city") or "Алкмар"
     home_cc = str(profile.get("cc") or "NL").upper()
     with _idea_lock(cid):
         state = store._load(config.TRAVEL_IDEA_KEY) or {}
         cached = state.get(key) or {}
-        if (not refresh and cached.get("version") == 3 and cached.get("week") == week and cached.get("city") == city
+        if (not refresh and cached.get("version") == 3 and cached.get("day") == day and cached.get("city") == city
                 and cached.get("cc") == home_cc
                 and cached.get("idea")):
             return cached["idea"]
         idea = _generate_home_idea(cid)
 
         def change(data):
-            data[key] = {"version": 3, "week": week, "city": city, "cc": home_cc, "idea": idea}
+            data[key] = {"version": 3, "day": day, "city": city, "cc": home_cc, "idea": idea}
             return data, None
 
         store.mutate_kv(config.TRAVEL_IDEA_KEY, change)

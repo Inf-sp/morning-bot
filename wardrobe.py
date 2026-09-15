@@ -623,10 +623,12 @@ def _no_outfit_screen(result_kb, alternative=False):
 
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
-                     previous_style=None, previous_main_accent=None, q=None):
+                     previous_style=None, previous_main_accent=None, q=None, silent=False):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
+        if silent:
+            return
         cached_names = [_item_name(it) for it in (cached.get("look_data") or {}).get("items", [])]
         store.last_source[str(cid)] = "Гардероб · Образ"
         store.last_answer[str(cid)] = cached.get("text", "")
@@ -667,6 +669,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         return
     w = store.load_wardrobe(cid)
     if not store.wardrobe_to_text(w).strip():
+        if silent:
+            return
         empty_text, empty_kb = _empty_wardrobe_screen()
         if status is not None:
             await status.replace(empty_text, parse_mode="HTML", reply_markup=empty_kb)
@@ -679,7 +683,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             await bot.send_message(chat_id=cid, text=empty_text, parse_mode="HTML", reply_markup=empty_kb)
         return
     s = store.get_settings(cid)
-    if status is None:
+    if status is None and not silent:
         if q is not None:
             status = await util.StatusManager.start_inline(
                 q,
@@ -727,6 +731,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         selected_styles=selected_styles,
     )
     if not best:
+        if silent:
+            return
         no_text, no_kb = _no_outfit_screen(result_kb, alternative=bool(previous_item_ids))
         if status is not None:
             await status.replace(no_text, parse_mode="HTML", reply_markup=no_kb)
@@ -778,10 +784,18 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     store.last_look[str(cid)] = ", ".join(it.get("name", "") for it in best_sorted)[:120]
     store.last_source[str(cid)] = "Гардероб · Образ"
     store.last_answer[str(cid)] = text
-    await status.replace(
-        text, entities=entities, reply_markup=result_kb,
-        disable_web_page_preview=True,
-    )
+    if silent:
+        return
+    if status:
+        await status.replace(
+            text, entities=entities, reply_markup=result_kb,
+            disable_web_page_preview=True,
+        )
+    else:
+        await bot.send_message(
+            chat_id=cid, text=text, entities=entities, reply_markup=result_kb,
+            disable_web_page_preview=True,
+        )
 # Extracted to wardrobe_management.py: def get_wardrobe_gaps.
 
 _ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.items())

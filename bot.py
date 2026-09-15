@@ -400,7 +400,7 @@ async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
             ("music", lambda: leisure_music.warm_music_home_cache(cid)),
             ("books", lambda: leisure_books.warm_books_home_cache(cid)),
             ("games", lambda: leisure_games.warm_games_home_cache(cid)),
-            ("myday", lambda: myday.warm_day_cache(cid)),
+            ("myday", lambda: myday.warm_day_cache(cid, bot=context.bot)),
         )
         if scheduled_section and not finalizing_myday:
             steps = tuple(step for step in steps if step[0] == scheduled_section)

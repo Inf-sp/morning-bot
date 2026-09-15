@@ -156,9 +156,9 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert "📝 Предпочтения" not in [label for row in rows for label in row]
-    assert rows[-3:] == [
-        ["✨ Подобрать новые слова"],
+    assert rows == [
         ["✅ Добавить слово"],
+        ["✨ Подобрать новые слова"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -185,7 +185,8 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[:6] == [
+    assert rows[0] == ["✅ Добавить слово"]
+    assert rows[1:7] == [
         [f"{category} · 1"]
         for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER[:6]
     ]

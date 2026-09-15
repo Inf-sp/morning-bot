@@ -32,10 +32,7 @@ class FakeInlineStatus:
         self.stopped.append(delete)
 
 
-def test_travel_cache_week_starts_on_monday():
-    assert travel._travel_week_start(date(2026, 8, 17)) == "2026-08-17"
-    assert travel._travel_week_start(date(2026, 8, 23)) == "2026-08-17"
-    assert travel._travel_week_start(date(2026, 8, 24)) == "2026-08-24"
+
 
 
 def test_travel_plan_with_inline_status_keeps_country_photo(monkeypatch):

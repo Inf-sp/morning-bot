@@ -1211,6 +1211,9 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
             except Exception:
                 pass
         try:
+            import wardrobe
+            if not wardrobe.get_cached_outfit_summary(cid).get("items"):
+                await wardrobe.send_looks(bot, cid, silent=True)
             text, entities = await asyncio.to_thread(
                 _build_day_text, cid, refresh_current=force,
             )
@@ -1229,13 +1232,19 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
     )
 
 
-async def warm_day_cache(cid):
+async def warm_day_cache(cid, bot=None):
     """Фоново собирает «Мой день» один раз и сохраняет переживающий рестарт кэш."""
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cached = _load_day_cache(cid, today)
     if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True
+    import wardrobe
+    if bot and not wardrobe.get_cached_outfit_summary(cid).get("items"):
+        try:
+            await wardrobe.send_looks(bot, cid, silent=True)
+        except Exception as e:
+            _log.warning("warm_day_cache outfit prep failed: %s", e)
     text, entities = await asyncio.to_thread(_build_day_text, cid)
     _save_day_cache(cid, today, text, entities, _time.time())
     return True
