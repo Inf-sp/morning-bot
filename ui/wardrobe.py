@@ -364,30 +364,34 @@ def purchase_recommendation_card(item):
         b.link(name, product_url)
     else:
         b.bold(name)
+    # Причина рекомендации
     reason = _finish_dot(item.get("reason"))
     if reason:
-        b.text_line(" — ")
-        b.text_line(_lower_first(reason))
+        b.labeled_line("Причина", reason, lowercase=False)
     b.newline()
+    # С чем носить
     outfits = [_finish_dot(value) for value in (item.get("outfits") or []) if _clean_text(value)]
     if outfits:
         b.spacer()
         b.section("С чем носить из твоего гардероба:")
         for outfit in outfits[:3]:
             b.line(f"• {outfit}")
+    # Зачем добавить
     count = int(item.get("combinations_count") or 0)
     gap_reason = _finish_dot(item.get("gap_reason"))
     if count or gap_reason:
         b.spacer()
         b.section("Зачем добавить:")
         if count:
-            b.line(f"• Даст до {count} новых сочетаний с твоими вещами.")
+            b.labeled_line("Новые сочетания", f"до {count}")
         if gap_reason:
-            b.line(f"• {_upper_first(gap_reason)}")
+            b.labeled_line("Закрывает пробел", _upper_first(gap_reason))
+    # Совет по выбору
     choice_tip = _finish_dot(item.get("choice_tip"))
     if choice_tip:
         b.spacer()
         b.labeled_line("💡 Совет по выбору", choice_tip, lowercase=False)
+    # Бренд
     product_brand = _clean_text(item.get("product_brand"))
     if product_brand:
         b.spacer()
