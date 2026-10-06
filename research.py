@@ -559,7 +559,5 @@ def web_search(query: str, max_results: int = 5, include_domains=None, *, scenar
             if len(out) >= max_results:
                 return out
         if out:
-            if provider is tavily_search:
-                provider_runtime.activate_fallback("firecrawl", "tavily", reason="request")
             return out
     return out

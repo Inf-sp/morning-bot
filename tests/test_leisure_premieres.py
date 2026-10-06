@@ -407,3 +407,28 @@ def test_book_premieres_use_verified_current_month_reserve_with_summaries(monkey
     assert all(leisure_books._released_this_month(item["published_date"]) for item in items)
     assert all(item.get("summary") for item in items)
     assert saved["items"] == items
+
+
+def test_book_premieres_fall_back_to_recent_verified_reserve_with_honest_label(monkeypatch):
+    # В октябре 2026 проверенных релизов месяца нет: показываем недавние,
+    # а заголовок не выдаёт их за премьеры текущего месяца.
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 6, 12, 0, tzinfo=tz)
+
+    monkeypatch.setattr(leisure_books, "datetime", FrozenDatetime)
+    saved = {}
+    monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(leisure_books.google_books, "search_new_releases", lambda _limit: [])
+
+    items = asyncio.run(leisure_books.get_book_premieres(refresh=True))
+
+    assert len(items) >= 3
+    assert all(item["published_date"] >= "2026-07-06" for item in items)
+    assert not any(leisure_books._released_this_month(item["published_date"]) for item in items)
+    assert all(item.get("summary") for item in items)
+    msg, _kb, _page = leisure_books._book_premieres_view(items)
+    assert "Свежие новинки" in msg.text
+    assert "Октября" not in msg.text

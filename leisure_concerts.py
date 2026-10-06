@@ -5,7 +5,7 @@ import logging
 import re
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from ui.constants import COUNTRY_EMOJI
 
 import ai
@@ -21,7 +21,6 @@ import util
 from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
-_CONCERT_CARD_VIEWS = {}
 
 
 def _music_home_only_kb():
@@ -1116,43 +1115,6 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
         disable_web_page_preview=True,
     )
-
-
-def _concert_card_view(cid, page=0, fallback_keyboard=None):
-    view = _CONCERT_CARD_VIEWS.get(str(cid)) or {}
-    items = view.get("items") or []
-    page = max(0, min(int(page), len(items) - 1)) if items else 0
-    msg = leisure_ui.concert_card_screen(
-        view.get("title") or "Концерты", items[page] if items else None,
-        view.get("empty") or "Пока не нашёл ближайших концертов.",
-    )
-    if not items and fallback_keyboard is not None:
-        return msg, fallback_keyboard, page
-    rows = []
-    if len(items) > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"concert_page:{(page - 1) % len(items)}"),
-            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"concert_page:{(page + 1) % len(items)}"),
-        ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
-    return msg, InlineKeyboardMarkup(rows), page
-
-
-async def show_concert_page(cid, q, page):
-    view = _CONCERT_CARD_VIEWS.get(str(cid)) or {}
-    items = view.get("items") or []
-    if not items:
-        return
-    msg, kb, page = _concert_card_view(cid, page)
-    await q.edit_message_media(
-        media=InputMediaPhoto(media=items[page]["poster"], caption=msg.text,
-                              caption_entities=msg.entities),
-        reply_markup=kb,
-    )
-
-
 
 
 async def _build_weekly_events_msg(cid):

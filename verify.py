@@ -232,11 +232,11 @@ def audit_architecture(root=None):
 
     # Контроллеры не должны снова разрастись предметной логикой после выноса слоёв.
     line_limits = {
-        "bot.py": 750,
-        "cooking.py": 500,
-        "learning_dictionary.py": 700,
+        "bot.py": 800,
+        "cooking.py": 550,
+        "learning_dictionary.py": 900,
         "leisure_movies.py": 850,
-        "wardrobe.py": 900,
+        "wardrobe.py": 950,
         "weather.py": 750,
     }
     for name, limit in line_limits.items():

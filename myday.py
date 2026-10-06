@@ -20,6 +20,7 @@ import learning_dictionary as dictionary
 import research
 import secure
 import util
+from leisure_collection import item_text
 from util import esc, _WEEKDAY_SHORT, _MONTHS
 import verify
 from ui import myday as myday_ui
@@ -470,9 +471,9 @@ def _generate_lifehack_pool(cid):
     movies = store.get_list(config.FAVORITE_MOVIES_KEY, cid)[:4]
     books = store.get_list(config.FAVORITE_BOOKS_KEY, cid)[:4]
     if movies:
-        interests.append(f"любит фильмы/сериалы: {', '.join(str(m) for m in movies if m)}")
+        interests.append(f"любит фильмы/сериалы: {', '.join(item_text(m) for m in movies if m)}")
     if books:
-        interests.append(f"любит книги: {', '.join(str(b) for b in books if b)}")
+        interests.append(f"любит книги: {', '.join(item_text(b) for b in books if b)}")
     interest_block = ("Интересы пользователя: " + "; ".join(interests) + ".\n") if interests else ""
     cats_str = ", ".join(_LIFEHACK_CATEGORIES)
     nl_snippet = research.firecrawl_snippet("жизнь в Нидерландах советы быт бюрократия велосипед", 900)

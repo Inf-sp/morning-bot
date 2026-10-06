@@ -66,15 +66,15 @@ def test_recommendation_cards_have_no_refresh_label():
 
 def test_preferences_are_available_in_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "movie_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📝 Предпочтения", "movie_prefs")
     assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("🔣 Выбрать предпочтения", "book_prefs")
+    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📝 Предпочтения", "book_prefs")
     assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("🔣 Выбрать предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📝 Предпочтения", "music_prefs")
     assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
 
@@ -351,7 +351,7 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить артиста"]
-    assert ["🔣 Выбрать предпочтения"] in rows
+    assert ["📝 Предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -386,7 +386,7 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить фильм"]
-    assert ["🔣 Выбрать предпочтения"] in rows
+    assert ["📝 Предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -438,7 +438,7 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
         "Драма:\nПатерсон"
     )
     assert labels[0] == ["✅ Добавить фильм"]
-    assert ["🔣 Выбрать предпочтения"] in labels
+    assert ["📝 Предпочтения"] in labels
     genre_callback = next(
         row[0].callback_data
         for row in bot.messages[0]["reply_markup"].inline_keyboard
@@ -685,7 +685,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить книгу"]
-    assert ["🔣 Выбрать предпочтения"] in rows
+    assert ["📝 Предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -2103,3 +2103,15 @@ def test_book_showcase_falls_back_to_google_books_search_link():
     }])[0]
 
     assert item["url"] == "https://books.google.com/books?q=%D0%9D%D0%B5%D0%B4%D0%B0%D0%B2%D0%BD%D0%B8%D0%B9+%D0%B1%D0%B5%D1%81%D1%82%D1%81%D0%B5%D0%BB%D0%BB%D0%B5%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%80"
+
+
+def test_tv_detail_line_uses_russian_plurals():
+    from ui.leisure import _detail_line
+
+    expected = {
+        1: ("1 сезон", "1 серия"), 2: ("2 сезона", "2 серии"), 5: ("5 сезонов", "5 серий"),
+        11: ("11 сезонов", "11 серий"), 21: ("21 сезон", "21 серия"), 22: ("22 сезона", "22 серии"),
+    }
+    for n, (seasons, episodes) in expected.items():
+        line = _detail_line({"kind": "tv", "seasons": n, "episodes": n})
+        assert line == f"{seasons} • {episodes}"

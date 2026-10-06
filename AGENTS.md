@@ -34,12 +34,17 @@ python -m pytest -q path::test    # только целевые тесты
 
 Прод — GCE VM `morning-bot` (`us-east1-b`): systemd-сервис `morning-bot` запускает
 `python bot.py` из `/opt/morning-bot`, env — `/etc/morning-bot.env`. PostgreSQL остаётся
-на Railway (публичный URL). Обновление на VM:
+на Railway (публичный URL). Код обновляется сам: таймер `morning-bot-update.timer`
+раз в 5 минут запускает `deploy/gce/update.sh` (установлен копией в
+`/usr/local/sbin/morning-bot-update`): fetch → pip при изменении `requirements.txt` →
+fast-forward → restart. Обновить сразу: `sudo systemctl start morning-bot-update`,
+лог: `journalctl -u morning-bot-update`. После изменения `deploy/gce/*` переустанови:
 
 ```bash
-sudo -u bot git -C /opt/morning-bot pull --ff-only \
-  && sudo -u bot /opt/morning-bot-venv/bin/pip install -q -r /opt/morning-bot/requirements.txt \
-  && sudo systemctl restart morning-bot
+sudo install -m 755 /opt/morning-bot/deploy/gce/update.sh /usr/local/sbin/morning-bot-update
+sudo install -m 644 /opt/morning-bot/deploy/gce/morning-bot-update.service \
+  /opt/morning-bot/deploy/gce/morning-bot-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now morning-bot-update.timer
 ```
 
 Не деплой и не меняй VM и Railway без прямой просьбы.

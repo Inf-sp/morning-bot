@@ -33,7 +33,7 @@ def test_empty_wardrobe_explains_how_to_fill_it():
     )
     assert bot.message["reply_markup"] is not None
     assert _labels(bot.message["reply_markup"]) == [
-        ["🆕 Заполнить шкаф"],
+        ["✅ Добавить вещи"],
         ["#️⃣ Главная"],
     ]
 
@@ -1259,7 +1259,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
-    assert ["🔣 Выбрать предпочтения"] in labels
+    assert ["📝 Предпочтения"] in labels
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)

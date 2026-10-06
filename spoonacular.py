@@ -114,7 +114,7 @@ def _request(path: str, params=None, *, ttl=_SEARCH_TTL):
 def _ingredient_name(value: str) -> str:
     clean = " ".join(str(value or "").lower().split()).strip()
     for pattern, english in _INGREDIENT_ALIASES:
-        if re.search(pattern, clean, re.IGNORECASE):
+        if re.search(rf"\b(?:{pattern})", clean, re.IGNORECASE):
             return english
     return clean
 

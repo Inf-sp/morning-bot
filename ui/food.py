@@ -3,13 +3,6 @@ import re
 from .builder import MessageBuilder
 from .constants import ui_label
 
-MEAL_LABEL = {
-    "breakfast": "Завтрак",
-    "lunch": "Обед",
-    "dinner": "Ужин",
-    "fridge": "Из холодильника",
-}
-
 DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
 # Русское название кухни по машиночитаемому коду (settings.CUISINE_OPTIONS) —
@@ -126,15 +119,11 @@ def compact_step_lines(steps) -> list[str]:
     return lines
 
 
-def food_card(
-    data, label="Рецепт дня", meal=None, cuisine_emoji_fallback=None,
-    show_leading_emoji=True, show_cuisine_emoji=True,
-):
+def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
     """Карточка рецепта. Живёт в store.last_recipe/last_answer только до рестарта;
     MessageBuilder сохраняет разметку без промежуточного HTML.
 
-    label/meal/show_leading_emoji сохранены для совместимости вызовов: заголовок
-    всегда «🍳 Что приготовить • Кухня» (docs/food.md).
+    Заголовок всегда «🍳 Что приготовить • Кухня» (docs/food.md).
     cuisine_emoji_fallback — словарь {cuisine_code: emoji} для случая, когда модель не
     вернула cuisine_emoji (§7 — обязателен fallback на случай пустого/нераспознанного значения)."""
     name = str(data.get("name", "")).strip()

@@ -309,6 +309,8 @@ _COUNTRY_CC = {
     "турция": "TR", "turkey": "TR", "türkiye": "TR", "оаэ": "AE",
     "uae": "AE", "эмираты": "AE", "united arab emirates": "AE",
     "египет": "EG", "egypt": "EG", "марокко": "MA", "morocco": "MA",
+    "юар": "ZA", "южная африка": "ZA", "южно-африканская республика": "ZA",
+    "south africa": "ZA", "кения": "KE", "kenya": "KE",
     "израиль": "IL", "israel": "IL", "грузия": "GE", "georgia": "GE",
     "австралия": "AU", "australia": "AU", "новая зеландия": "NZ", "new zealand": "NZ",
     "кипр": "CY", "cyprus": "CY", "мальта": "MT", "malta": "MT",
@@ -322,7 +324,7 @@ def cc_of(name):
 def country_name_from_cc(cc):
     """Русское название страны по ISO-2 без сетевого запроса."""
     code = str(cc or "").strip().upper()
-    special = {"AE": "ОАЭ", "US": "США"}
+    special = {"AE": "ОАЭ", "US": "США", "ZA": "ЮАР"}
     if code in special:
         return special[code]
     for name, value in _COUNTRY_CC.items():

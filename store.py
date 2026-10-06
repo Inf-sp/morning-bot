@@ -297,14 +297,14 @@ def _all_item_ids(w) -> set:
 def _migrate_legacy_wardrobe(old: dict) -> dict:
     """Старый плоский формат {категория_строка: [вещь_строка,...]} -> новая схема
     с zone/subcategory/id. Без LLM-вызова: zone/subcategory угадываются эвристикой
-    (локальный импорт wardrobe — избегаем цикла store<->wardrobe на уровне модуля)."""
+    (локальный импорт wardrobe_model — избегаем цикла store<->wardrobe на уровне модуля)."""
     import uuid
-    import wardrobe as _wardrobe_mod
+    import wardrobe_model as _wardrobe_mod
     new = {"_v": 0, "zones": {}}
     for cat, items in (old or {}).items():
         if cat == "_v" or not isinstance(items, list):
             continue
-        zone = _wardrobe_mod._zone_of(str(cat))
+        zone = _wardrobe_mod.zone_of(str(cat))
         for raw_name in items:
             name = str(raw_name).strip()
             if not name:
@@ -312,7 +312,7 @@ def _migrate_legacy_wardrobe(old: dict) -> dict:
             # Название вещи не всегда содержит тип (может быть просто "белая") —
             # старая категория (например "футболки") часто несёт этот смысл, поэтому
             # угадываем сначала по названию вещи, а если не нашлось — по категории.
-            subcat = _wardrobe_mod._guess_subcategory(zone, name, fallback_text=str(cat))
+            subcat = _wardrobe_mod.guess_subcategory(zone, name, fallback_text=str(cat))
             bucket = new["zones"].setdefault(zone, {}).setdefault(subcat, [])
             if any(x["name"].lower() == name.lower() for x in bucket):
                 continue
@@ -356,13 +356,21 @@ def save_wardrobe(w, cid=None):
 def mutate_wardrobe(cid, mutator_fn):
     """Единственный легитимный способ изменить гардероб. mutator_fn(w) мутирует w
     на месте. Всегда: инкремент версии, сохранение, инвалидация зависимых кэшей."""
-    w = load_wardrobe(cid)
-    before_ids = _all_item_ids(w)
-    result = mutator_fn(w)
-    if result is not None:
-        w = result
-    w["_v"] = int(w.get("_v", 0)) + 1
-    save_wardrobe(w, cid)
+    # Миграции (легаси-формат, глобальный шкаф владельца) — до атомарной секции:
+    # внутри mutate_kv нельзя читать другие ключи.
+    seed = load_wardrobe(cid)
+    key = f"wardrobe_user_{cid}" if cid is not None else config.WARDROBE_FILE
+
+    def change(data):
+        w = data if isinstance(data, dict) and "zones" in data else copy.deepcopy(seed)
+        before = _all_item_ids(w)
+        result = mutator_fn(w)
+        if result is not None:
+            w = result
+        w["_v"] = int(w.get("_v", 0)) + 1
+        return w, (w, before)
+
+    w, before_ids = mutate_kv(key, change)
     after_ids = _all_item_ids(w)
     _invalidate_dependents(cid, removed_ids=before_ids - after_ids,
                            added_ids=after_ids - before_ids)

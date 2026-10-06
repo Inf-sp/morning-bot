@@ -573,27 +573,6 @@ def _default_language_reason(report) -> str:
     return "Эту формулировку лучше исправить."
 
 
-async def _grade_context(data, text):
-    local = trainer_grading.grade_free_text(data, text)
-    if local.correct:
-        return local
-    language = "нидерландский" if data["lang"] == "nl" else "английский"
-    prompt = (
-        f"Ученик переводит на {language}: {secure.wrap_untrusted(data['ru'], 'фраза для перевода')}\n"
-        f"Ответ ученика: {secure.wrap_untrusted(text, 'ответ ученика')}\n"
-        f"Эталон: {data['correct']}\n"
-        'Верни JSON: {"ok": true/false} — true, если смысл и грамматика приемлемы.'
-    )
-    try:
-        result = await ai.allm_json(prompt, 300, tier="cheap", module="learning_trainer")
-        correct = bool(result.get("ok"))
-    except Exception:
-        correct = False
-    quality = (trainer_grading.AnswerQuality.RECALLED_FREE if correct
-               else trainer_grading.AnswerQuality.NOT_REMEMBERED)
-    return trainer_grading.GradeResult(correct, quality)
-
-
 async def pick_token(bot, cid, index, *, task_id=""):
     state = trainer_session.get(cid)
     if not state or not state.get("current"):

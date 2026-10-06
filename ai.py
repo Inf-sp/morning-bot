@@ -56,11 +56,9 @@ _ROUTE_PROVIDER_BASE = {
     GROQ_COMPLEX: "groq",
 }
 
-# ---------- Cost logger ----------
-_COST_MAX = 500  # максимум записей в rolling-буфере
+# ---------- AI traffic log ----------
 _AI_TRAFFIC_MAX = 1000
 _AI_TRAFFIC_TTL = 48 * 3600
-OPENROUTER_FALLBACK_STATS_KEY = "openrouter_fallback_stats.json"
 LOCAL_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
 
 PrivacyLevel = Literal["public", "personal", "sensitive"]
@@ -228,30 +226,6 @@ def _timeout_cap(name: str):
     return _TIMEOUT_CAPS.get(name)
 
 
-def _log_cost(provider: str, model: str, prompt: str, result: str, module: str = "", ms: int = 0, ok: bool = True):
-    """Добавить запись о LLM-вызове в rolling-буфер (хранится в store).
-
-    ms  — latency вызова в миллисекундах (для «ср. ответ» в админке);
-    ok  — успешность (для «ошибок сегодня»)."""
-    try:
-        tokens = (len(prompt) + len(result or "")) // 4
-        entry = {
-            "ts": int(time.time()),
-            "provider": provider,
-            "model": model or "",
-            "tokens": tokens,
-            "module": module or "",
-            "ms": int(ms),
-            "ok": bool(ok),
-        }
-        # AI-вызовы идут из нескольких потоков: атомарная запись не теряет строки.
-        store.mutate_kv(config.COST_LOG_KEY, lambda data: (
-            {"log": [*(data.get("log") or []), entry][-_COST_MAX:]}, None,
-        ))
-    except Exception:
-        pass  # логирование не должно ломать основной поток
-
-
 def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
                        latency_ms: int = 0, failure: str = "", cache_hit: bool = False) -> None:
     """Короткий технический след AI-попытки без текста запроса или ответа."""
@@ -279,10 +253,14 @@ def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
             "failure": str(failure or "")[:120],
         }
         cutoff = entry["ts"] - _AI_TRAFFIC_TTL
-        data = store._load(config.AI_TRAFFIC_LOG_KEY) or {}
-        rows = [row for row in data.get("log", []) if int(row.get("ts") or 0) >= cutoff]
-        rows.append(entry)
-        store._save(config.AI_TRAFFIC_LOG_KEY, {"log": rows[-_AI_TRAFFIC_MAX:]})
+
+        def change(data):
+            rows = [row for row in data.get("log") or [] if int(row.get("ts") or 0) >= cutoff]
+            rows.append(entry)
+            return {"log": rows[-_AI_TRAFFIC_MAX:]}, None
+
+        # AI-вызовы идут из нескольких потоков: атомарная запись не теряет строки.
+        store.mutate_kv(config.AI_TRAFFIC_LOG_KEY, change)
     except Exception:
         pass
 
@@ -327,51 +305,6 @@ def ai_traffic_summary(period_seconds=24 * 3600, limit=5) -> dict:
         "sources": sources[:max(1, int(limit or 1))],
         "peak": peak,
     }
-
-
-def _log_openrouter_fallback(origin_provider: str, reason: str, ok: bool,
-                             status_code: int | None = None, latency_ms: int = 0,
-                             fallback_used: bool = True):
-    """Telemetry без prompt/response/API key."""
-    try:
-        entry = {
-            "ts": int(time.time()),
-            "provider": "openrouter",
-            "model": config.OPENROUTER_MODEL,
-            "origin_provider": origin_provider or "",
-            "reason": reason or "",
-            "status_code": status_code,
-            "latency_ms": int(latency_ms or 0),
-            "fallback_used": bool(fallback_used),
-            "ok": bool(ok),
-        }
-        store.mutate_kv(OPENROUTER_FALLBACK_STATS_KEY, lambda data: (
-            {**data, "log": [*(data.get("log") or []), entry][-_COST_MAX:]}, None,
-        ))
-    except Exception:
-        pass
-
-
-def get_openrouter_fallback_stats(period_days=1) -> dict:
-    try:
-        cutoff = time.time() - period_days * 86400
-        rows = [e for e in store._load(OPENROUTER_FALLBACK_STATS_KEY).get("log", [])
-                if e.get("ts", 0) >= cutoff]
-    except Exception:
-        rows = []
-    return {
-        "attempts": len(rows),
-        "success": sum(1 for e in rows if e.get("ok")),
-        "errors": sum(1 for e in rows if not e.get("ok")),
-    }
-
-
-def get_cost_log() -> list:
-    """Вернуть список всех сохранённых записей расходов."""
-    try:
-        return store._load(config.COST_LOG_KEY).get("log", [])
-    except Exception:
-        return []
 
 
 _AI_CACHE_MAX = 300
@@ -965,8 +898,8 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
             time.sleep(wait)
         t0 = time.time()
         r = _post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model or _provider_model_name(provider)}:generateContent?key={config.GEMINI_API_KEY}",
-            {}, payload, 30, provider, timeout_cap=5)
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model or _provider_model_name(provider)}:generateContent",
+            {"x-goog-api-key": config.GEMINI_API_KEY}, payload, 30, provider, timeout_cap=5)
     data = r.json()
     usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
     input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
@@ -1012,8 +945,8 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
         },
     }
     r = _post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
-        {}, payload, 40, "gemini", timeout_cap=40,
+        f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent",
+        {"x-goog-api-key": config.GEMINI_API_KEY}, payload, 40, "gemini", timeout_cap=40,
     )
     data = r.json()
     usage = data.get("usageMetadata") or {}
@@ -1071,8 +1004,6 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
         timeout = _bounded_timeout(30 if response_mode == "json" else 12)
     except LLMProviderError:
         return None
-    t0 = time.time()
-    status_code = None
     try:
         payload = {
             **_openrouter_routing_payload(models_override),
@@ -1089,7 +1020,6 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
             json=payload,
             timeout=timeout,
         )
-        status_code = r.status_code
         if r.status_code != 200:
             api_usage.record_request(
                 "openrouter", ok=False, status_code=r.status_code,
@@ -1101,8 +1031,6 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                     prompt, max_tokens, temperature, origin_provider, reason,
                     response_mode=response_mode, _retry=True, models_override=models_override,
                 )
-            _log_openrouter_fallback(origin_provider, reason, False, status_code,
-                                     int((time.time() - t0) * 1000))
             return None
         text = _as_text(r.json()["choices"][0]["message"]["content"])
         if not text or _looks_bad_fallback_text(text, response_mode=response_mode):
@@ -1113,12 +1041,8 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                     prompt, max_tokens, temperature, origin_provider, reason,
                     response_mode=response_mode, _retry=True, models_override=models_override,
                 )
-            _log_openrouter_fallback(origin_provider, "bad_output", False, status_code,
-                                     int((time.time() - t0) * 1000))
             return None
         api_usage.record_request("openrouter", ok=True, headers=r.headers)
-        _log_openrouter_fallback(origin_provider, reason, True, status_code,
-                                 int((time.time() - t0) * 1000))
         return text.strip()
     except Exception as e:
         err_type = type(e).__name__
@@ -1131,8 +1055,6 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                 prompt, max_tokens, temperature, origin_provider, reason,
                 response_mode=response_mode, _retry=True, models_override=models_override,
             )
-        _log_openrouter_fallback(origin_provider, err_type, False, status_code,
-                                 int((time.time() - t0) * 1000))
         return None
 
 
@@ -1518,10 +1440,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             # зарезервированы для последнего общего AI-fallback.
             errs.append("chain:openrouter-reserved")
             break
-        if _monitor_name(name) == "gemini":
-            if not _reserve_gemini_for_action():
-                errs.append("gemini: action budget exhausted")
-                continue
         unavailable = _provider_is_unavailable(name)
         if unavailable is not None:
             _record_ai_attempt(
@@ -1541,6 +1459,11 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 temporary_errs.append((name, unavailable))
             if _monitor_name(name) == "gemini" and getattr(unavailable, "error_type", "") == "rate_limit":
                 gemini_rate_limit_err = unavailable
+            continue
+        # Бюджет Gemini тратим только когда попытка реально состоится
+        # (ключ задан, нет cooldown/rate-limit).
+        if _monitor_name(name) == "gemini" and not _reserve_gemini_for_action():
+            errs.append("gemini: action budget exhausted")
             continue
         t0 = time.time()
         try:
@@ -1582,7 +1505,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                     api_usage.record_gemini_fallback(target=name, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                     rate_limit_logged = True
-                _log_cost(name, _provider_model_name(name), prompt, out, module, ms=ms, ok=True)
                 if _is_cacheable_response(out, response_mode):
                     _cache_set(cache_key, out)
                 try:
@@ -1643,7 +1565,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 api_usage.record_gemini_fallback(target="openrouter", reason=reason)
                 _log_gemini_limit("gemini_rate_limit", err, fallback=True)
                 rate_limit_logged = True
-            _log_cost("openrouter_fallback", config.OPENROUTER_MODEL, "", out, module, ok=True)
             if _is_cacheable_response(out, response_mode):
                 _cache_set(cache_key, out)
             try:
@@ -1835,14 +1756,14 @@ def _chat(provider, history, system, timeout_cap=None):
         return min(float(default), float(timeout_cap))
 
     if _monitor_name(provider) == "gemini":
-        if not _reserve_gemini_for_action():
-            raise LLMProviderError("gemini", "gemini action budget exhausted", error_type="action_budget")
         cooling = _gemini_cooldown_error()
         if cooling is not None:
             raise cooling
+        if not _reserve_gemini_for_action():
+            raise LLMProviderError("gemini", "gemini action budget exhausted", error_type="action_budget")
         contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history]
-        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name(provider)}:generateContent?key={config.GEMINI_API_KEY}",
-            {}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
+        r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name(provider)}:generateContent",
+            {"x-goog-api-key": config.GEMINI_API_KEY}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8,
                                       "thinkingConfig": {"thinkingBudget": 0}}},
             40, provider, timeout_cap=bounded_cap(6))
@@ -1981,7 +1902,6 @@ def _log_free_chat_route(*, served_by="", outcome=""):
 def _chat_chain_impl(history, cid=None):
     system = _chat_system(cid)
     errs = []
-    prompt_len = sum(len(m.get("content", "")) for m in history)
     failed_providers = []
     try:
         import tracking
@@ -2021,7 +1941,6 @@ def _chat_chain_impl(history, cid=None):
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                _log_cost(p, _provider_model_name(p), "c" * prompt_len, out, "assistant")
                 try:
                     import tracking
                     tracking.annotate_action(
@@ -2062,7 +1981,6 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
     system = _chat_system(cid)
     emit = emit or (lambda _delta: None)
     errs = []
-    prompt_len = sum(len(m.get("content", "")) for m in history)
     failed_providers = []
     try:
         import tracking
@@ -2114,7 +2032,6 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                _log_cost(p, _provider_model_name(p), "c" * prompt_len, out, "assistant")
                 try:
                     import tracking
                     tracking.annotate_action(

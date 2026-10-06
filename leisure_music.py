@@ -812,7 +812,7 @@ async def send_music_preferences(bot, cid, q=None):
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="music_prefs")],
+        [InlineKeyboardButton("📝 Предпочтения", callback_data="music_prefs")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -939,7 +939,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 '"why": ["пункт 1 - на кого из его любимых похоже и чем", "пункт 2"], '
                 '"tracks": ["трек 1 - короткая пометка", "трек 2 - короткая пометка", "трек 3 - короткая пометка"], '
                 '"fact": "1 интересный факт об исполнителе"}]}',
-                1500, tier="leisure", route="gemini", module="leisure")
+                1500, tier="leisure", module="leisure")
     except Exception as e:
         _log.warning("send_listen: allm_json failed cid=%s: %r", cid, e, exc_info=True)
         generated = {}

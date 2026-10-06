@@ -48,9 +48,9 @@ from recipe_generation import (
 from fridge_model import _fridge_available
 
 
-def _food_card(d, label="Рецепт дня"):
+def _food_card(d):
     """Единый формат карточки рецепта для радара и нового рецепта."""
-    return food_ui.food_card(d, label=label)
+    return food_ui.food_card(d)
 
 def _finish_dot(value):
     return text_ui.finish_dot(value)
@@ -78,10 +78,6 @@ def _fridge_recipe_kb():
 
 # ---------- Кулинарный радар ----------
 
-def _recipe_card(d):
-    return _food_card(d, label="Рецепт дня")
-
-
 
 async def send_recipe(bot, cid, constraint="обычное блюдо", status=None):
     status = status or await util.StatusManager.start(bot, cid)
@@ -92,7 +88,7 @@ async def send_recipe(bot, cid, constraint="обычное блюдо", status=N
         await verify.safe_error(bot, cid, e, back="m_food"); return
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("recipe", constraint)
-    card = _recipe_card(d)
+    card = _food_card(d)
     store.last_source[str(cid)] = "Питание · Рецепт"
     store.last_answer[str(cid)] = card.text
     await status.replace(card.text, entities=card.entities, reply_markup=_recipe_kb(cid, d))
@@ -127,8 +123,6 @@ async def _send_queue_card(bot, cid, meal, d, status=None):
     store.last_source[str(cid)] = "Питание · Рецепт"
     card = food_ui.food_card(
         d,
-        label=food_ui.MEAL_LABEL.get(meal, "Рецепт"),
-        meal=meal,
         cuisine_emoji_fallback=RECIPE_CUISINE_EMOJI_FALLBACK,
         show_cuisine_emoji=meal == "fridge",
     )
@@ -361,7 +355,7 @@ async def send_leftovers(bot, cid, ingredients, status=None):
     store.last_recipe[str(cid)] = d
     store.last_action[str(cid)] = ("leftovers", ingredients)
     _leftover_remember(cid, d.get("name", ""))
-    card = _food_card(d, label="Рецепт из холодильника")
+    card = _food_card(d)
     store.last_source[str(cid)] = "Питание · Остатки"
     store.last_answer[str(cid)] = card.text
     await status.replace(card.text, entities=card.entities, reply_markup=_fridge_recipe_kb())

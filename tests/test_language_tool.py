@@ -6,7 +6,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import language_tool
 import trainer
-import trainer_grading
 from ui.learning import exercise_result
 
 
@@ -201,15 +200,9 @@ def test_english_written_answer_does_not_use_language_tool(monkeypatch):
         lambda *_args: (_ for _ in ()).throw(AssertionError("English must not use LanguageTool")),
     )
 
-    async def fake_grade(_data, _text):
-        return trainer_grading.GradeResult(
-            True, trainer_grading.AnswerQuality.RECALLED_FREE,
-        )
-
     async def fake_apply(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(trainer, "_grade_context", fake_grade)
     monkeypatch.setattr(trainer, "_apply_result", fake_apply)
 
     assert asyncio.run(trainer.handle_text(object(), "english-user", "I am going home.")) is True

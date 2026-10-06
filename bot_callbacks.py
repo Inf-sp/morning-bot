@@ -723,9 +723,6 @@ async def handle(update, context, remove_reply_keyboard):
     if data.startswith("combined_premiere_page:"):
         await leisure_movies.show_combined_premiere_page(cid, q, int(data.split(":", 1)[1]))
         return
-    if data.startswith("concert_page:"):
-        await leisure_concerts.show_concert_page(cid, q, int(data.split(":", 1)[1]))
-        return
     if data.startswith("movie_premiere_page:"):
         await _ack(q)
         await leisure_movies.show_movie_premiere_page(

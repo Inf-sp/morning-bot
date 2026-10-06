@@ -206,11 +206,42 @@ _DUTCH_SEPARABLE_PREFIXES = (
 )
 
 
+_DUTCH_UNSTRESSED_PREFIXES = ("ver", "her", "ont", "be", "ge", "er")
+_DUTCH_LONG_VOWELS = ("aa", "ee", "oo", "uu", "ei", "ij", "ui", "oe", "ou", "au", "eu", "ie")
+# ponytail: эвристика ударения по написанию; редкие исключения — списками ниже.
+_DUTCH_STRESSED_EREN = ("sseren",)  # passeren -> passeer
+_DUTCH_UNSTRESSED_EREN = ("beteren", "leveren", "veroveren")
+
+
+def _dutch_unstressed_ending(word):
+    """-eren/-elen/-enen с безударным e: veranderen, wandelen, rekenen."""
+    if not word.endswith(("eren", "elen", "enen")):
+        return False
+    root = word[:-4]
+    prefix = next((p for p in _DUTCH_UNSTRESSED_PREFIXES
+                   if root.startswith(p) and len(root) > len(p)), "")
+    root = root[len(prefix):]
+    if not any(char in "aeiou" for char in root):
+        return False  # leren, spelen, beheren: ударный корень -> leer, speel
+    if not word.endswith("eren"):
+        return True
+    if word.endswith(_DUTCH_STRESSED_EREN):
+        return False
+    if word.endswith(_DUTCH_UNSTRESSED_EREN):
+        return True
+    # luisteren, veranderen (стечение согласных) и weigeren (долгий гласный)
+    # безударны; studeren, regeren — заимствования с ударным -eren.
+    return (len(root) >= 2 and root[-1] not in "aeiou" and root[-2] not in "aeiou") \
+        or root[-3:-1] in _DUTCH_LONG_VOWELS
+
+
 def _dutch_present_stem(infinitive):
     word = str(infinitive or "").casefold()
     if not word.endswith("en") or len(word) < 4:
         return ""
     stem = word[:-2]
+    if _dutch_unstressed_ending(word):
+        return stem
     if len(stem) >= 2 and stem[-1] == stem[-2]:
         stem = stem[:-1]
     elif (len(stem) >= 3 and stem[-1] not in "aeiou"
@@ -269,6 +300,42 @@ def present_conjugation(entry):
     return [
         f"ik {first}", f"jij/u/hij {second}", f"wij/jullie/zij {infinitive}",
     ]
+
+
+SRS_FIELDS = (
+    "srs_level", "srs_easiness", "srs_interval_days", "srs_due_at",
+    "srs_history", "srs_last_exercise_type",
+)
+
+
+def _srs_progress_rank(entry):
+    def number(field):
+        try:
+            return int(entry.get(field) or 0)
+        except (TypeError, ValueError):
+            return 0
+    history = entry.get("srs_history")
+    history = [item for item in history if isinstance(item, dict)] if isinstance(history, list) else []
+    last_ts = max((str(item.get("ts") or "") for item in history), default="")
+    return number("srs_level"), number("srs_interval_days"), len(history), last_ts
+
+
+def merged_srs_block(existing, duplicate):
+    """SRS-поля самой продвинутой из двух копий одного слова.
+
+    Блок берётся целиком у одной копии (уровень, интервал, due, история
+    согласованы между собой), поэтому прогресс при схлопывании дублей не
+    теряется и не смешивается. Ранг: уровень → интервал → число ответов →
+    время последнего ответа; при равенстве остаётся существующая копия.
+    """
+    best = max((existing, duplicate), key=_srs_progress_rank)
+    return {field: best[field] for field in SRS_FIELDS if field in best}
+
+
+def apply_srs_block(entry, block):
+    for field in SRS_FIELDS:
+        entry.pop(field, None)
+    entry.update(block)
 
 
 def normalize_key(text):

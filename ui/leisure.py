@@ -5,6 +5,7 @@ from datetime import date, datetime
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 from .news import append_weekly_news
+from .text import ru_plural
 
 
 def clip(text, limit=450):
@@ -51,12 +52,7 @@ def _clean_quoted_title(value):
 
 
 def _pluralize_titles(n):
-    n = abs(int(n))
-    if n % 10 == 1 and n % 100 != 11:
-        return "фильм/сериал"
-    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
-        return "фильма/сериала"
-    return "фильмов/сериалов"
+    return ru_plural(n, "фильм/сериал", "фильма/сериала", "фильмов/сериалов")
 
 
 def favorite_movies_home(total, genres):
@@ -92,12 +88,7 @@ def favorite_books_home(total, genres):
 
 
 def _pluralize_books(n):
-    n = abs(int(n))
-    if n % 10 == 1 and n % 100 != 11:
-        return "книга"
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return "книги"
-    return "книг"
+    return ru_plural(n, "книга", "книги", "книг")
 
 
 def favorite_book_delete_confirmation(title):
@@ -123,12 +114,7 @@ def game_set_home(total, genres):
 
 
 def _pluralize_games(n):
-    n = abs(int(n))
-    if n % 10 == 1 and n % 100 != 11:
-        return "игра"
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return "игры"
-    return "игр"
+    return ru_plural(n, "игра", "игры", "игр")
 
 
 def game_set_card(data):
@@ -660,10 +646,9 @@ def _detail_line(tm):
             parts.append("Завершено")
         seasons, eps = tm.get("seasons"), tm.get("episodes")
         if seasons:
-            plural_s = "сезон" if seasons == 1 else ("сезона" if 2 <= seasons <= 4 else "сезонов")
-            vol = f"{seasons} {plural_s}"
+            vol = f"{seasons} {ru_plural(seasons, 'сезон', 'сезона', 'сезонов')}"
             if eps:
-                vol += f" • {eps} серий"
+                vol += f" • {eps} {ru_plural(eps, 'серия', 'серии', 'серий')}"
             parts.append(vol)
         return " · ".join(parts)
     if kind == "movie":
@@ -1339,36 +1324,6 @@ def concerts_list(place_label, events, empty_hint=""):
                 b.line(f"Концерт: {date_place}")
             if ev.get("price"):
                 b.line(ev["price"])
-    return b.build_stripped()
-
-
-def concert_card_screen(title, event, empty_hint=""):
-    b = MessageBuilder()
-    b.section(f"✨ {title}")
-    if not event:
-        b.spacer()
-        b.line(empty_hint or "Пока не нашёл ближайших концертов.")
-        return b.build_stripped()
-    artist = str(_item_value(event, "artist", "") or "Концерт").strip()
-    b.spacer()
-    b.bold(artist)
-    b.newline()
-    details = " · ".join(value for value in (
-        str(_item_value(event, "date", "") or "").strip(),
-        str(_item_value(event, "place", "") or "").strip(),
-        str(_item_value(event, "context", "") or "").strip(),
-    ) if value)
-    if details:
-        b.line(details)
-    description = clip(str(_item_value(event, "description", "") or ""), 240)
-    if description:
-        b.spacer()
-        b.line(description if description[-1] in ".!?…" else description + ".")
-    url = str(_item_value(event, "url", "") or "").strip()
-    if url:
-        b.spacer()
-        b.link("Билеты и подробности", url)
-        b.newline()
     return b.build_stripped()
 
 

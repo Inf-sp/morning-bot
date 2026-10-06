@@ -24,7 +24,7 @@ UI_EMOJI = {
     "breakfast": "🥐",
     "lunch": "🥗",
     "dinner": "🍲",
-    "add": "🆕",
+    "add": "✅",
     "delete": "❌",
     "find": "🔍",
     "seen": "✅",
@@ -95,7 +95,7 @@ UI_EMOJI = {
 # локальных вариантов, чтобы подписи не расходились между разделами.
 HOME_LABEL = "#️⃣ Главная"
 BACK_LABEL = "⬅️ Назад"
-PREFERENCES_LABEL = "🔣 Выбрать предпочтения"
+PREFERENCES_LABEL = "📝 Предпочтения"
 SETTINGS_LABEL = "🎚️ Настройки"
 
 CUISINE_EMOJI = {

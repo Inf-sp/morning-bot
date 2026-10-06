@@ -605,8 +605,7 @@ def test_parsed_item_keeps_fit_season_and_occasions():
 
 def test_style_summary_shows_only_selected_styles():
     # Экран стиля упрощён (3435405): посадка, цвета и ограничения в сводке не выводятся.
-    message = wardrobe_style(
-        ["минимализм", "скандинавский"], "свободная", ["тёмные", "светлые"], ["узкий крой"])
+    message = wardrobe_style(["минимализм", "скандинавский"])
 
     assert "Стиль: минимализм · скандинавский" in message.text
     assert "Не предлагать" not in message.text

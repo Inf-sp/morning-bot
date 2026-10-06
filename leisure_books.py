@@ -85,6 +85,8 @@ _PREMIERE_SUMMARIES = {
 # Проверенный сезонный резерв на случай, когда Google Books,
 # Tavily/LLM и Open Library одновременно не дали выдачу. Даты, ISBN и
 # авторы взяты с официальных страниц издателей.
+# Окно резерва премьер, когда в текущем месяце нет проверенных релизов.
+_RESERVE_RECENT_DAYS = 92
 _VERIFIED_SEASON_RELEASES = (
     {
         "title": "The Disappearers", "author": "Marlon James",
@@ -888,7 +890,7 @@ async def send_favorite_books(bot, cid, q=None):
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
-        "🔣 Выбрать предпочтения", callback_data="book_prefs",
+        "📝 Предпочтения", callback_data="book_prefs",
     )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
@@ -1505,6 +1507,19 @@ def _book_premiere_genre(item):
     return categories[0].casefold() if categories else ""
 
 
+def _verified_premiere_reserve(today):
+    """Проверенные релизы месяца, иначе последних трёх месяцев — без выдуманных новинок.
+
+    Витрина сама помечает не-текущий месяц как «Свежие новинки».
+    """
+    month = [item for item in _verified_season_releases(today)
+             if _released_this_month(item.get("published_date"))]
+    if not month:
+        month = [dict(item) for item in _VERIFIED_SEASON_RELEASES
+                 if _released_recently(item.get("published_date"), days=_RESERVE_RECENT_DAYS)]
+    return [_with_book_url({**item, "summary": _premiere_summary(item)}) for item in month]
+
+
 async def get_book_premieres(*, refresh=False):
     """Свежие книги из Google Books; днём используется готовый недельный кэш."""
     today = datetime.now(config.TZ).date()
@@ -1534,12 +1549,7 @@ async def get_book_premieres(*, refresh=False):
         seen.add(title.casefold())
     fresh = month_items or recent_items
     if not fresh:
-        reserve = [
-            _with_book_url({**item, "summary": _premiere_summary(item)})
-            for item in _verified_season_releases(today)
-            if _released_this_month(item.get("published_date"))
-        ]
-        fresh = reserve
+        fresh = _verified_premiere_reserve(today)
     fresh.sort(key=lambda item: (
         str(item.get("published_date") or ""),
         float(item.get("rating") or 0),

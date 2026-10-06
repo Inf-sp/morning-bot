@@ -38,7 +38,7 @@ def wardrobe_item_input():
     return b.build()
 
 
-def wardrobe_style(styles, fit, palette, avoid):
+def wardrobe_style(styles):
     b = MessageBuilder()
     b.section("🧵 Стиль")
     b.spacer()
@@ -47,7 +47,7 @@ def wardrobe_style(styles, fit, palette, avoid):
     return b.build_stripped()
 
 
-def settings_home(city="", notifications_on=True, learning_language="Не изучаю"):
+def settings_home(city="", notifications_on=True):
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()

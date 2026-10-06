@@ -201,7 +201,7 @@ async def send_favorite_movies(bot, cid, q=None):
         for index, (genre, items) in enumerate(view["genres"])
     ])
     rows.append([InlineKeyboardButton(
-        "🔣 Выбрать предпочтения", callback_data="movie_prefs",
+        "📝 Предпочтения", callback_data="movie_prefs",
     )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])

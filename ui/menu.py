@@ -48,7 +48,7 @@ def ikb(rows):
 def main_menu_rows():
     return [
         [(ui_label("myday", "Мой день"), "m_myday")],
-        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Питание"), "m_food")],
+        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("travel", "Поездки"), "m_travel")],
         [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("music", "Музыка"), "m_music")],
         [(ui_label("books", "Книги"), "m_books"), ("👾 Игры", "m_games")],
@@ -104,7 +104,7 @@ _SCREENS = {
     ),
     "m_food": (
         UI_FOOD,
-        "Питание",
+        "Готовка",
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
             [("🍳 Что приготовить", "m_food_gen")],
@@ -167,7 +167,7 @@ def learning_menu(home: dict):
         b.spacer()
         b.line("Выбери нидерландский или английский в предпочтениях, когда захочешь вернуться к практике.")
         return b.build_stripped(reply_markup=ikb([
-            [("📌 Язык обучения", "set_learning")],
+            [("🎚️ Язык обучения", "set_learning")],
             [("#️⃣ Главная", "m_menu")],
         ]))
     code = home.get("lang_code", "nl")
@@ -373,12 +373,12 @@ def restaurant_menu(card=None, *, news=None):
 
 def food_empty_menu():
     b = MessageBuilder()
-    b.section("🥣 Питание")
+    b.section("🥣 Готовка")
     b.spacer()
     b.line("Добавь продукты, которые обычно есть дома.")
     b.spacer()
     b.line("Я буду подбирать простые рецепты из них и показывать, чего не хватает.")
     return b.build_stripped(reply_markup=ikb([
-        [("🧊 Заполнить холодильник", "as_fridge_add")],
+        [("✅ Добавить продукт", "as_fridge_add")],
         [("#️⃣ Главная", "m_menu")],
     ]))

@@ -586,7 +586,7 @@ async def recommend_missing_purchase(bot, cid):
         await bot.send_message(
             chat_id=cid,
             text="Сначала заполни шкаф — тогда я смогу понять, каких вещей не хватает именно тебе.",
-            reply_markup=_kb([[("🆕 Заполнить шкаф", "w_fill")],
+            reply_markup=_kb([[("✅ Добавить вещи", "w_fill")],
                               [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
@@ -705,7 +705,7 @@ async def recommend_purchase(bot, cid, item):
         await bot.send_message(
             chat_id=cid,
             text="Сначала заполни шкаф — тогда я смогу подобрать цвет и сочетания именно к твоим вещам.",
-            reply_markup=_kb([[("🆕 Заполнить шкаф", "w_fill")],
+            reply_markup=_kb([[("✅ Добавить вещи", "w_fill")],
                               [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return

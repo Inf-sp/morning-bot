@@ -33,6 +33,8 @@ from dictionary_model import (
     normalize_term_case,
     migrate_legacy_study_card,
     study_card_is_complete,
+    apply_srs_block,
+    merged_srs_block,
 )
 from dictionary_management import (
     confirm_delete_dict_entry,
@@ -182,6 +184,7 @@ def normalize_user_dictionary(cid):
         key = (lang, normalize_key(entry_term(item)))
         if key in seen:
             existing = result[seen[key]]
+            srs_block = merged_srs_block(existing, item)
             if study_card_is_complete(item) and not study_card_is_complete(existing):
                 for field in (
                     "pronunciation", "essence", "insight", "examples",
@@ -205,6 +208,7 @@ def normalize_user_dictionary(cid):
             for field, value in item.items():
                 if field not in existing or existing[field] in (None, "", []):
                     existing[field] = value
+            apply_srs_block(existing, srs_block)
             changed = True
             continue
         seen[key] = len(result)
@@ -585,8 +589,12 @@ def _usable_dictionary_rebuild_response(value, expected_count, source_entries=No
 
 
 async def rebuild_dictionary_entries(
-        cid, *, force=False, lang=None, max_batches=None, word_id=None):
-    """Один раз пересобирает все старые карточки, сохраняя id и SRS-прогресс."""
+        cid, *, force=False, lang=None, max_batches=None, word_id=None, offset=0):
+    """Один раз пересобирает все старые карточки, сохраняя id и SRS-прогресс.
+
+    ``offset`` сдвигает очередь на столько пакетов: фоновая миграция после
+    неудачной попытки пробует следующие карточки, а не те же самые.
+    """
     words = store.get_list(config.DICT_KEY, cid)
     pending_idx = [
         index for index, entry in enumerate(words)
@@ -606,6 +614,8 @@ async def rebuild_dictionary_entries(
     )
     if not pending_idx:
         return words
+    shift = (offset * _DICTIONARY_REBUILD_BATCH_SIZE) % len(pending_idx)
+    pending_idx = pending_idx[shift:] + pending_idx[:shift]
     remove_idx = set()
     changed = False
 

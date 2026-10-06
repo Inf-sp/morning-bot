@@ -65,6 +65,8 @@ _DICT_ANALYSIS_ORDER = (
 )
 _DICT_ANALYSIS_DEADLINE_SECONDS = 15.0
 _DICT_PENDING_PROFILE_FIELD = "dictionary_pending_analysis"
+# После стольких однозначных отказов AI запрос убирается из очереди (~30 мин).
+_DICT_PENDING_MAX_REJECTIONS = 6
 
 
 def _usable_analysis_result(value):
@@ -1916,18 +1918,42 @@ def _remove_queued_dictionary_analysis(cid, queue_id):
     store.mutate_profile(cid, change)
 
 
-def _defer_queued_dictionary_analysis(cid, queue_id):
-    """Переносит неудавшийся запрос в конец очереди, чтобы он не блокировал остальные."""
+def _defer_queued_dictionary_analysis(cid, queue_id, *, rejected=False):
+    """Переносит неудавшийся запрос в конец очереди, чтобы он не блокировал остальные.
+
+    ``rejected`` — AI однозначно не смог разобрать запрос (не сбой провайдера);
+    такие попытки считаются в ``attempts``. Возвращает новое число попыток.
+    """
     def change(profile):
         queue = [item for item in (profile.get(_DICT_PENDING_PROFILE_FIELD) or [])
                  if isinstance(item, dict)]
         failed = [item for item in queue if item.get("id") == queue_id]
+        if rejected:
+            failed = [{**item, "attempts": _queued_attempts(item) + 1} for item in failed]
         profile[_DICT_PENDING_PROFILE_FIELD] = [
             item for item in queue if item.get("id") != queue_id
         ] + failed
-        return profile, None
+        return profile, (_queued_attempts(failed[0]) if failed else 0)
 
-    store.mutate_profile(cid, change)
+    return store.mutate_profile(cid, change)
+
+
+def _queued_attempts(item):
+    try:
+        return max(0, int(item.get("attempts") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _drop_rejected_queued_add(bot, cid, item):
+    """Убирает безнадёжный запрос из очереди и честно говорит об этом пользователю."""
+    _remove_queued_dictionary_analysis(cid, item.get("id"))
+    code = item.get("lang") if item.get("lang") in ("nl", "en") else _active_language_code(cid)
+    await bot.send_message(
+        chat_id=cid,
+        text=f"Не удалось добавить «{item.get('term', '')}». Попробуй написать слово иначе.",
+        reply_markup=_dictionary_nav(cid, code),
+    )
 
 
 async def process_queued_dictionary_adds(bot, cids, limit=10):
@@ -1946,7 +1972,11 @@ async def process_queued_dictionary_adds(bot, cids, limit=10):
                     item.get("term", ""), item.get("lang"), source_text=item.get("term", ""),
                 )
                 if not entry or entry.get("needs_confirmation"):
-                    _defer_queued_dictionary_analysis(cid, item.get("id"))
+                    attempts = _defer_queued_dictionary_analysis(
+                        cid, item.get("id"), rejected=True,
+                    )
+                    if attempts >= _DICT_PENDING_MAX_REJECTIONS:
+                        await _drop_rejected_queued_add(bot, cid, item)
                     continue
                 entry = await _enrich_dutch_verb(entry, cid)
                 entry = await learning_data_quality.check_new_entry(entry)

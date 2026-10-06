@@ -113,6 +113,7 @@ def test_successful_spoonacular_probe_with_remaining_quota_removes_stale_fallbac
 
 def test_exhausted_quota_is_yellow(monkeypatch):
     _memory_store(monkeypatch)
+    monkeypatch.setattr(provider_runtime.config, "GEMINI_API_KEY", "test-key")
     provider_runtime.record_result("gemini", True, quota_remaining=0, quota_total=20)
 
     assert service_monitor.format_row("gemini") == (

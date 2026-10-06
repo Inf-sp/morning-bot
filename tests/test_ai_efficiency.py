@@ -1,3 +1,4 @@
+import copy
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -298,7 +299,6 @@ def test_one_action_can_use_gemini_only_once(monkeypatch):
     calls = []
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
@@ -313,6 +313,55 @@ def test_one_action_can_use_gemini_only_once(monkeypatch):
         tracking.finish_action(trace)
 
     assert calls == ["gemini", "groq"]
+
+
+def test_unavailable_gemini_does_not_consume_action_budget(monkeypatch):
+    calls = []
+    unavailable = {"gemini": True}
+    monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda name: (
+        ai.LLMProviderError(name, "cooldown", temporary=True, error_type="cooldown")
+        if unavailable.get(name) else None
+    ))
+    monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or "g")
+    monkeypatch.setattr(ai, "_gen_groq", lambda *_args: calls.append("groq") or "q")
+
+    trace = tracking.start_action("42", "Поездка", "travel", budget_seconds=10)
+    try:
+        assert ai.llm("one", order=("gemini", "groq")) == "q"
+        unavailable["gemini"] = False
+        assert ai.llm("two", order=("gemini", "groq")) == "g"
+    finally:
+        tracking.finish_action(trace)
+
+    assert calls == ["groq", "gemini"]
+
+
+def test_gemini_key_is_sent_in_header_not_url(monkeypatch):
+    seen = {}
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+
+    def fake_post(url, headers, *_args, **_kwargs):
+        seen.update(url=url, headers=headers)
+        return Response()
+
+    monkeypatch.setattr(ai.config, "GEMINI_API_KEY", "secret-gemini")
+    monkeypatch.setattr(ai, "_gemini_cooldown_error", lambda: None)
+    monkeypatch.setattr(ai.api_usage, "seconds_until_gemini_slot", lambda **_kw: 0)
+    monkeypatch.setattr(ai, "_post", fake_post)
+
+    assert ai._gen_gemini("hi", 10, 0.1) == "ok"
+    assert "secret-gemini" not in seen["url"]
+    assert seen["headers"] == {"x-goog-api-key": "secret-gemini"}
 
 
 def test_parallel_calls_reserve_one_gemini_slot_atomically():
@@ -352,13 +401,13 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
     calls = []
     monkeypatch.setattr(tracking.store, "_load", lambda key: memory.get(key, {}))
     monkeypatch.setattr(tracking.store, "_save", lambda key, value: memory.__setitem__(key, value))
+    _patch_mutate_kv(monkeypatch, tracking.store)
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
 
     def unavailable(*_args, **_kwargs):
         calls.append("gemini")
@@ -400,7 +449,6 @@ def test_second_action_uses_cached_premium_answer_without_gemini(monkeypatch):
     monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
-    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or '{"ok":true}')
 
     first = tracking.start_action("42", "Поездка", "first", budget_seconds=10)
@@ -418,3 +466,13 @@ def test_second_action_uses_cached_premium_answer_without_gemini(monkeypatch):
     rows = memory[tracking.config.ACTION_LATENCY_KEY]["log"]
     assert rows[-1]["cache_hit"] is True
     assert rows[-1]["gemini_calls"] == 0
+
+
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)

@@ -259,24 +259,25 @@ def _persistent_cache_load(cache_key):
 
 
 def _persistent_cache_save(cache_key, data):
-    cache = store._load(config.WEATHER_CACHE_KEY)
-    if not isinstance(cache, dict):
-        cache = {}
     now = time.time()
-    # Держим только свежую историю, чтобы KV не разрастался без пользы.
-    clean = {}
-    for k, v in cache.items():
-        if not isinstance(v, dict):
-            continue
-        try:
-            ts = float(v.get("ts") or 0)
-        except (TypeError, ValueError):
-            continue
-        if now - ts <= (_WX_STALE_TTL * 2):
-            clean[k] = v
-    cache = clean
-    cache[cache_key] = {"ts": now, "data": deepcopy(data)}
-    store._save(config.WEATHER_CACHE_KEY, cache)
+    entry = {"ts": now, "data": deepcopy(data)}
+
+    def change(cache):
+        # Держим только свежую историю, чтобы KV не разрастался без пользы.
+        clean = {}
+        for k, v in cache.items():
+            if not isinstance(v, dict):
+                continue
+            try:
+                ts = float(v.get("ts") or 0)
+            except (TypeError, ValueError):
+                continue
+            if now - ts <= (_WX_STALE_TTL * 2):
+                clean[k] = v
+        clean[cache_key] = entry
+        return clean, None
+
+    store.mutate_kv(config.WEATHER_CACHE_KEY, change)
 
 
 def invalidate_weather_cache(lat, lon, days=2):

@@ -401,7 +401,7 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
         if not no_match:
             rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
     if no_match:
-        rows.append([InlineKeyboardButton("🔣 Выбрать предпочтения", callback_data="game_prefs")])
+        rows.append([InlineKeyboardButton("📝 Предпочтения", callback_data="game_prefs")])
     rows.append([
         InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -492,7 +492,7 @@ async def send_game_set(bot, cid, q=None):
             *[[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
               for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
-        "🔣 Выбрать предпочтения", callback_data="game_prefs",
+        "📝 Предпочтения", callback_data="game_prefs",
     )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])

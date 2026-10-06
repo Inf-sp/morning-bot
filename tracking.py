@@ -170,10 +170,12 @@ def finish_action(trace=None, *, ok=True) -> None:
             "fallback": trace.fallback,
             "ok": bool(ok),
         }
-        data = store._load(config.ACTION_LATENCY_KEY) or {}
-        log = data.get("log", [])
-        log.append(entry)
-        store._save(config.ACTION_LATENCY_KEY, {"log": log[-_LATENCY_MAX:]})
+        def change(data):
+            log = list(data.get("log") or [])
+            log.append(entry)
+            return {"log": log[-_LATENCY_MAX:]}, None
+
+        store.mutate_kv(config.ACTION_LATENCY_KEY, change)
     except Exception:
         pass
     finally:
@@ -340,10 +342,14 @@ def log_error(source: str, msg: str, kind: str = "", *, section: str = "",
             "version": _safe_text(getattr(config, "APP_VERSION", ""), 40),
         }
         cutoff = int(time.time()) - ERROR_TTL_SECONDS
-        buf = [item for item in store._load(config.ERROR_LOG_KEY).get("log", [])
-               if int(item.get("ts") or 0) >= cutoff]
-        buf.append(entry)
-        store._save(config.ERROR_LOG_KEY, {"log": buf[-_ERR_MAX:]})
+
+        def change(data):
+            buf = [item for item in data.get("log") or []
+                   if int(item.get("ts") or 0) >= cutoff]
+            buf.append(entry)
+            return {"log": buf[-_ERR_MAX:]}, None
+
+        store.mutate_kv(config.ERROR_LOG_KEY, change)
     except Exception:
         pass
 
@@ -404,21 +410,24 @@ def touch(cid) -> None:
             if len(_last_touch) > 2048:
                 for key, _ in sorted(_last_touch.items(), key=lambda item: item[1])[:256]:
                     _last_touch.pop(key, None)
-        data = store._load(config.ACTIVITY_KEY)
-        rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(now)}
-        rec["last_ts"] = int(now)
-        rec["inactivity_since_ts"] = int(now)
-        rec.pop("inactivity_reminded_for_ts", None)
-        rec.pop("inactivity_reminder_sent_ts", None)
-        rec["count"] = rec.get("count", 0) + 1
-        rec.setdefault("first_ts", rec["last_ts"])
         today = _today()
-        days = rec.get("days", [])
-        if not days or days[-1] != today:
-            days.append(today)
-            rec["days"] = days[-_ACT_DAYS_MAX:]
-        data[cid] = rec
-        store._save(config.ACTIVITY_KEY, data)
+
+        def change(data):
+            rec = data.get(cid) or {"last_ts": 0, "count": 0, "days": [], "first_ts": int(now)}
+            rec["last_ts"] = int(now)
+            rec["inactivity_since_ts"] = int(now)
+            rec.pop("inactivity_reminded_for_ts", None)
+            rec.pop("inactivity_reminder_sent_ts", None)
+            rec["count"] = rec.get("count", 0) + 1
+            rec.setdefault("first_ts", rec["last_ts"])
+            days = rec.get("days", [])
+            if not days or days[-1] != today:
+                days.append(today)
+                rec["days"] = days[-_ACT_DAYS_MAX:]
+            data[cid] = rec
+            return data, None
+
+        store.mutate_kv(config.ACTIVITY_KEY, change)
     except Exception:
         pass
 
@@ -443,18 +452,19 @@ def initialize_inactivity_tracking(cids, now=None) -> int:
     """
     try:
         now = int(time.time() if now is None else now)
-        data = store._load(config.ACTIVITY_KEY) or {}
-        changed = 0
-        for cid in (str(value) for value in (cids or [])):
-            rec = data.get(cid)
-            if not rec or rec.get("inactivity_since_ts"):
-                continue
-            rec["inactivity_since_ts"] = int(rec.get("last_ts") or now)
-            data[cid] = rec
-            changed += 1
-        if changed:
-            store._save(config.ACTIVITY_KEY, data)
-        return changed
+
+        def change(data):
+            changed = 0
+            for cid in (str(value) for value in (cids or [])):
+                rec = data.get(cid)
+                if not rec or rec.get("inactivity_since_ts"):
+                    continue
+                rec["inactivity_since_ts"] = int(rec.get("last_ts") or now)
+                data[cid] = rec
+                changed += 1
+            return data, changed
+
+        return store.mutate_kv(config.ACTIVITY_KEY, change)
     except Exception:
         return 0
 
@@ -480,15 +490,18 @@ def mark_inactivity_reminded(cid, since_ts, sent_ts=None) -> bool:
     """Помечает цикл отправленным, только если с проверки не было активности."""
     try:
         cid = str(cid)
-        data = store._load(config.ACTIVITY_KEY) or {}
-        rec = data.get(cid) or {}
-        if int(rec.get("inactivity_since_ts") or 0) != int(since_ts):
-            return False
-        rec["inactivity_reminded_for_ts"] = int(since_ts)
-        rec["inactivity_reminder_sent_ts"] = int(time.time() if sent_ts is None else sent_ts)
-        data[cid] = rec
-        store._save(config.ACTIVITY_KEY, data)
-        return True
+        sent = int(time.time() if sent_ts is None else sent_ts)
+
+        def change(data):
+            rec = data.get(cid) or {}
+            if int(rec.get("inactivity_since_ts") or 0) != int(since_ts):
+                return data, False
+            rec["inactivity_reminded_for_ts"] = int(since_ts)
+            rec["inactivity_reminder_sent_ts"] = sent
+            data[cid] = rec
+            return data, True
+
+        return bool(store.mutate_kv(config.ACTIVITY_KEY, change))
     except Exception:
         return False
 

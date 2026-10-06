@@ -1,7 +1,6 @@
 import os
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
-os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import ai
 import tracking
@@ -9,8 +8,14 @@ import tracking
 
 def test_ai_traffic_groups_attempts_by_actor_and_source(monkeypatch):
     state = {"log": []}
+
+    def mutate(_key, change):
+        value, result = change(dict(state))
+        state.update(value)
+        return result
+
     monkeypatch.setattr(ai.store, "_load", lambda _key: state)
-    monkeypatch.setattr(ai.store, "_save", lambda _key, value: state.update(value))
+    monkeypatch.setattr(ai.store, "mutate_kv", mutate)
     monkeypatch.setattr(tracking, "current_action", lambda: type("Trace", (), {
         "cid": "42", "section": "Обучение", "action": "a_train_nl",
     })())

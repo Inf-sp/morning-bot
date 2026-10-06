@@ -82,9 +82,11 @@ def get(cid, key, default=None):
     return _all().get(str(cid), {}).get(key, default)
 
 def set_(cid, key, value):
-    d = _all()
-    d.setdefault(str(cid), {})[key] = value
-    store._save(SETTINGS_KEY, d)
+    def change(d):
+        d.setdefault(str(cid), {})[key] = value
+        return d, None
+
+    store.mutate_kv(SETTINGS_KEY, change)
 
 _LEGACY_NOTIF_KINDS = {
     "daily_words": ("daily_words_nl", "daily_words_en", "grammar_nl", "grammar_en"),
@@ -187,10 +189,7 @@ async def send_home(bot, cid, q=None):
     city = store.get_settings(cid).get("city") or ""
     notification_kinds = [item.key for item in get_notification_options()]
     notifications_on = any(notif_on(cid, kind) for kind in notification_kinds)
-    language = "Не изучаю"
-    if store.learning_is_enabled(cid):
-        language = "Английский" if store.get_learning_language(cid) == "en" else "Нидерландский"
-    msg = settings_ui.settings_home(city, notifications_on, language)
+    msg = settings_ui.settings_home(city, notifications_on)
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -932,7 +931,7 @@ async def send_wardrobe_style(bot, cid, q=None):
     """Стиль гардероба — один экран, все переключатели нажимаются сразу (стиль и
     посадка — toggle с галочкой на месте, без перехода на отдельный подэкран)."""
     state = _wardrobe_style_state(cid)
-    msg = settings_ui.wardrobe_style(state["styles"], "", [], [])
+    msg = settings_ui.wardrobe_style(state["styles"])
     kb = _wardrobe_style_kb(cid, state)
     if q is not None:
         try:

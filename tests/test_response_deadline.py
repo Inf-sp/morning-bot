@@ -1,3 +1,4 @@
+import copy
 import asyncio
 import os
 
@@ -78,7 +79,6 @@ def test_chain_preserves_time_for_the_next_ai_provider(monkeypatch):
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
-    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
 
     def primary(*_args, **_kwargs):
         calls.append("gemini")
@@ -110,7 +110,6 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
-    monkeypatch.setattr(ai, "_log_cost", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
 
     def provider(provider, _history, _system, timeout_cap=None):
@@ -198,6 +197,7 @@ def test_action_latency_keeps_only_technical_metadata(monkeypatch):
     monkeypatch.setattr(
         tracking.store, "_save", lambda key, value: memory.__setitem__(key, value),
     )
+    _patch_mutate_kv(monkeypatch, tracking.store)
 
     trace = tracking.start_action("42", "Ассистент", "text", budget_seconds=10)
     clock["now"] = 10.2
@@ -452,3 +452,13 @@ def test_nightly_game_premieres_warm_without_weekend_notification(monkeypatch):
     asyncio.run(bot.job_warm_game_premieres_cache(object()))
 
     assert calls == ["42"]
+
+
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)

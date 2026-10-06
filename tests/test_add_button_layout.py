@@ -44,7 +44,7 @@ def test_fridge_has_categories_and_a_separate_add_action(monkeypatch):
     assert rows[0] == ["✅ Добавить продукт"]
     assert rows[1] == ["Мясо и рыба · 0"]
     assert rows[0] == ["✅ Добавить продукт"]
-    assert ["🔣 Выбрать предпочтения"] in rows
+    assert ["📝 Предпочтения"] in rows
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 def test_dictionary_batch_keeps_add_action_on_own_first_row():

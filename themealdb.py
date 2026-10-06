@@ -130,7 +130,7 @@ def _ingredient_keys(values: str) -> list[str]:
     text = str(values or "").lower().replace("ё", "е")
     result = []
     for pattern, key in _INGREDIENT_ALIASES:
-        if re.search(pattern, text, re.I) and key not in result:
+        if re.search(rf"\b(?:{pattern})", text, re.I) and key not in result:
             result.append(key)
     return result[:3]
 

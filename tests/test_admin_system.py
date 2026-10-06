@@ -1,3 +1,4 @@
+import copy
 import asyncio
 import os
 from datetime import datetime
@@ -51,6 +52,7 @@ def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     state = {"log": []}
     monkeypatch.setattr(tracking.store, "_load", lambda _key: state)
     monkeypatch.setattr(tracking.store, "_save", lambda _key, value: state.update(value))
+    _patch_mutate_kv(monkeypatch, tracking.store)
     monkeypatch.setattr(tracking.config, "APP_VERSION", "1.2.3")
     monkeypatch.setattr(tracking.config, "GEMINI_API_KEY", "secret-key-123456")
 
@@ -113,7 +115,7 @@ def test_admin_card_refresh_menu_has_all_cards():
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [row[0].text for row in markup[:-1]] == [
-        "☀️ Мой день", "🧵 Гардероб", "🥣 Питание", "🧠 Обучение",
+        "☀️ Мой день", "🧵 Гардероб", "🥣 Готовка", "🧠 Обучение",
         "✈️ Поездки", "🎬 Кино", "🎧 Музыка", "📚 Книги", "👾 Игры",
     ]
     assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
@@ -477,3 +479,13 @@ def test_notification_tracking_records_failed_delivery(monkeypatch):
     assert requests[0][1]["units"] == {"requests": 0, "failures": 1}
     assert errors[0][0][0] == "broadcast"
     assert errors[0][1]["kind"] == "notif:daily_words"
+
+
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)

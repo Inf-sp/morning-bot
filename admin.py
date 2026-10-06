@@ -15,6 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import access
 import api_usage
 import config
+import deploy_report
 import provider_runtime
 import rich_delivery
 import service_monitor
@@ -258,6 +259,7 @@ async def send_home(bot, cid, q=None):
     msg = ui.home(
         system_rows=monitor_rows,
         error_rows=_active_error_rows(limit=5),
+        version_line=deploy_report.version_line(),
     )
     await _show(bot, cid, msg, kb, q)
 
@@ -265,7 +267,7 @@ async def send_home(bot, cid, q=None):
 _REFRESH_CARDS = (
     ("myday", "☀️ Мой день"),
     ("wardrobe", "🧵 Гардероб"),
-    ("cooking", "🥣 Питание"),
+    ("cooking", "🥣 Готовка"),
     ("learning", "🧠 Обучение"),
     ("travel", "✈️ Поездки"),
     ("cinema", "🎬 Кино"),

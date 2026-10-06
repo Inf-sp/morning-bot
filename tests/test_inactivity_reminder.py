@@ -26,7 +26,7 @@ def test_inactivity_reminder_has_exact_copy_and_main_menu():
     )
     assert _labels(message.reply_markup) == [
         ["☀️ Мой день"],
-        ["🧵 Гардероб", "🥣 Питание"],
+        ["🧵 Гардероб", "🥣 Готовка"],
         ["🧠 Обучение", "✈️ Поездки"],
         ["🎬 Кино", "🎧 Музыка"],
         ["📚 Книги", "👾 Игры"],
@@ -157,6 +157,7 @@ def test_reminder_is_due_once_and_activity_starts_new_cycle(monkeypatch):
         state.update(copy.deepcopy(data))
 
     monkeypatch.setattr(tracking.store, "_save", save)
+    _patch_mutate_kv(monkeypatch, tracking.store)
     tracking._last_touch.pop("user-1", None)
 
     tracking.touch("user-1")
@@ -188,6 +189,7 @@ def test_existing_activity_keeps_historical_baseline_for_first_send(monkeypatch)
         state.update(copy.deepcopy(data))
 
     monkeypatch.setattr(tracking.store, "_save", save)
+    _patch_mutate_kv(monkeypatch, tracking.store)
 
     assert tracking.initialize_inactivity_tracking(["user-1"], now=1_000) == 1
     assert state["user-1"]["inactivity_since_ts"] == 100
@@ -239,3 +241,13 @@ def test_job_sends_reminder_and_marks_cycle(monkeypatch):
     assert sent[0]["transient"] is True
     assert sent[0]["text"].startswith("🫪 Давно не виделись")
     assert marked == [("user-1", 123)]
+
+
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)

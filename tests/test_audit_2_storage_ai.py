@@ -163,3 +163,14 @@ def test_country_facts_without_currencies(monkeypatch):
     })
 
     assert research.country_facts("X")["currency"] == ""
+
+
+def test_legacy_flat_wardrobe_is_migrated_without_crashing():
+    """Старый плоский шкаф {категория: [вещи]} мигрирует в zones без AttributeError."""
+    import store
+
+    migrated = store._migrate_legacy_wardrobe({"_v": 3, "футболки": ["белая", "Белая"], "джинсы": ["синие"]})
+
+    items = [item for zone in migrated["zones"].values() for bucket in zone.values() for item in bucket]
+    assert sorted(item["name"] for item in items) == ["белая", "синие"]
+    assert all(item["id"] and item["zone"] and item["subcategory"] for item in items)

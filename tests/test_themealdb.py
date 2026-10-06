@@ -178,3 +178,14 @@ def test_recipe_generation_continues_without_themealdb(monkeypatch):
     )
 
     assert recipe_generation._themealdb_sources("ужин") == []
+
+
+def test_ingredient_aliases_match_word_start_not_substring():
+    import spoonacular
+
+    for word in ("рис", "риса", "рисом"):
+        assert themealdb._ingredient_keys(word) == ["rice"]
+        assert spoonacular._ingredient_name(word) == "rice"
+    for word in ("редис", "редиска"):
+        assert themealdb._ingredient_keys(word) == []
+        assert spoonacular._ingredient_name(word) == word

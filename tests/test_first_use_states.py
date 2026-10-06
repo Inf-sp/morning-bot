@@ -324,7 +324,7 @@ def test_dictionary_overview_has_learning_language_preferences(monkeypatch):
     assert _labels(bot.message["reply_markup"]) == [
         ["🇳🇱 Нидерландский (12)"],
         ["🇬🇧 Английский (8)"],
-        ["📝 Выбрать предпочтения"],
+        ["📝 Предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert bot.message["reply_markup"].inline_keyboard[2][0].callback_data == "set_learning_dictionary"

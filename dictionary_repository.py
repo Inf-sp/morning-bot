@@ -4,6 +4,8 @@ import config
 import srs
 from dictionary_model import (
     PHRASE_CORRECTIONS,
+    apply_srs_block,
+    merged_srs_block,
     entry_language,
     entry_term,
     entry_translation,
@@ -31,6 +33,7 @@ class DictionaryRepository:
             key = (lang, normalize_key(entry_term(item)))
             if key in seen:
                 existing = normalized[seen[key]]
+                apply_srs_block(existing, merged_srs_block(existing, item))
                 values = [
                     part.strip()
                     for part in str(existing.get("translation") or "").split(";")

@@ -77,8 +77,19 @@ def canonical_movie_label(value, metadata=None):
     return f"{title} ({', '.join(details)})" if title and details else title
 
 
+def _with_label(item, label):
+    """Чистый label в форме исходного элемента: строка или dict с тем же id."""
+    if not isinstance(item, dict):
+        return label
+    field = next((name for name in ("name", "value", "title") if item.get(name)), "value")
+    return {**item, field: label}
+
+
 def normalize_movie_items(items):
-    """Нормализует кино и объединяет одинаковые старые и новые записи."""
+    """Нормализует кино и объединяет одинаковые старые и новые записи.
+
+    Элементы ``{"id", "value"}`` остаются dict с прежним id, строки — строками.
+    """
     result = []
     seen = set()
     for item in items or []:
@@ -90,7 +101,7 @@ def normalize_movie_items(items):
         normalized = movie_title_for_lookup(label).casefold()
         if normalized and normalized not in seen:
             seen.add(normalized)
-            result.append(label)
+            result.append(_with_label(item, label))
     return result
 
 
@@ -120,7 +131,7 @@ def normalize_favorite_collections(resolve_movies=False):
                     dedupe_key = (movie_title_for_lookup(label) if key == config.FAVORITE_MOVIES_KEY else label).casefold()
                     if label and dedupe_key not in seen:
                         seen.add(dedupe_key)
-                        normalized.append(label)
+                        normalized.append(_with_label(item, label))
             if normalized != items:
                 data[cid] = normalized
                 changed = True

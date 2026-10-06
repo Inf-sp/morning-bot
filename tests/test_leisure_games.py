@@ -433,7 +433,7 @@ def test_game_set_groups_games_like_my_cinema(monkeypatch):
     )
     labels = _labels(bot.message["reply_markup"])
     assert labels[0] == ["✅ Добавить игру"]
-    assert ["🔣 Выбрать предпочтения"] in labels
+    assert ["📝 Предпочтения"] in labels
 
 
 def test_game_set_uses_one_primary_genre_and_keeps_board_games_separate(monkeypatch):

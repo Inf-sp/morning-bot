@@ -1,3 +1,4 @@
+import copy
 import asyncio
 import os
 
@@ -104,6 +105,7 @@ def test_activity_tracking_is_throttled(monkeypatch):
     calls = {"load": 0, "save": 0}
     monkeypatch.setattr(tracking.store, "_load", lambda _key: calls.__setitem__("load", calls["load"] + 1) or {})
     monkeypatch.setattr(tracking.store, "_save", lambda _key, _data: calls.__setitem__("save", calls["save"] + 1))
+    _patch_mutate_kv(monkeypatch, tracking.store)
     tracking._last_touch.pop("fast-user", None)
 
     tracking.touch("fast-user")
@@ -205,3 +207,13 @@ def test_telegram_connect_timeout_is_retried_once(monkeypatch):
 
     assert asyncio.run(run()) == (200, b"{}")
     assert calls["count"] == 2
+
+
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)

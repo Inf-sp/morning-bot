@@ -587,7 +587,7 @@ def _build_weather_rules(cid, w, flags):
 # ---------- генерация лука по погоде ----------
 def _empty_wardrobe_screen():
     kb = _kb([
-        [("🆕 Заполнить шкаф", "w_fill")],
+        [("✅ Добавить вещи", "w_fill")],
         [("#️⃣ Главная", "m_menu")],
     ])
     return wardrobe_ui.empty_wardrobe().text, kb
@@ -821,7 +821,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
     rows.append([InlineKeyboardButton(
-        "🔣 Выбрать предпочтения", callback_data="set_pref_style",
+        "📝 Предпочтения", callback_data="set_pref_style",
     )])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)

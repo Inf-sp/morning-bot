@@ -1,7 +1,9 @@
 """Сборка и однократная отправка отчёта о новой версии."""
 
 import logging
+import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 import config
 import store
@@ -21,6 +23,37 @@ def _normalize_app_version(version: str) -> str:
 
 def get_app_version() -> str:
     return _normalize_app_version(config.APP_VERSION or config._read_text_file("VERSION"))
+
+
+def _read_commit() -> dict:
+    """Коммит, из которого запущен процесс. Без git (локально, в тестах) — пустой dict."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent), "log", "-1", "--format=%h%x1f%cI%x1f%s"],
+            capture_output=True, text=True, timeout=5, check=True,
+        ).stdout.strip()
+        sha, committed, subject = out.split("\x1f", 2)
+        return {
+            "sha": sha,
+            "committed_at": datetime.fromisoformat(committed).astimezone(config.TZ),
+            "subject": subject.strip(),
+        }
+    except Exception:
+        return {}
+
+
+# Читаются при импорте: git pull без рестарта не должен менять то, что показывает процесс.
+_COMMIT = _read_commit()
+_STARTED_AT = datetime.now(config.TZ)
+
+
+def version_line() -> str:
+    """🚀 v1.16.243 · a1b2c3d · коммит 06.10 15:42 · запущен 06.10 15:45"""
+    parts = [f"v{version}"] if (version := get_app_version()) else []
+    if _COMMIT:
+        parts += [_COMMIT["sha"], f"коммит {_COMMIT['committed_at']:%d.%m %H:%M}"]
+    parts.append(f"запущен {_STARTED_AT:%d.%m %H:%M}")
+    return "🚀 " + " · ".join(parts)
 
 
 def _clean_release_note_line(line: str) -> str:
@@ -86,19 +119,25 @@ async def maybe_send_admin_deploy_notification(bot):
             *log_data,
         )
         return
-    if not version:
+    # Отчёт уходит на каждый новый коммит, а не только при смене VERSION.
+    deploy_key = f"{version}+{_COMMIT['sha']}" if _COMMIT else version
+    if not deploy_key:
         logging.warning("Deploy report skipped: APP_VERSION is not configured")
         return
-    if store.get_last_admin_deploy_notified_version() == version:
-        logging.info("Deploy report skipped: already sent for app_version=%s", version)
+    if store.get_last_admin_deploy_notified_version() == deploy_key:
+        logging.info("Deploy report skipped: already sent for deploy_key=%s", deploy_key)
         return
 
-    msg = build_deploy_report_message(version, release_notes)
+    label = version
+    if _COMMIT:
+        label = f"{version} · {_COMMIT['sha']} · {_COMMIT['committed_at']:%d.%m %H:%M}"
+        release_notes = [_COMMIT["subject"]] if _COMMIT["subject"] else release_notes
+    msg = build_deploy_report_message(label, release_notes)
     try:
         await bot.send_message(
             chat_id=config.ADMIN_CHAT_ID, text=msg.text, entities=msg.entities)
-        store.set_last_admin_deploy_notified_version(version, sent_at)
-        logging.info("Deploy report sent: version=%s result=sent", version)
+        store.set_last_admin_deploy_notified_version(deploy_key, sent_at)
+        logging.info("Deploy report sent: deploy_key=%s result=sent", deploy_key)
     except Exception:
         logging.exception(
             "Deploy report failed: version=%s admin_chat_id=%s result=failed",

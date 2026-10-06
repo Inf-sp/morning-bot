@@ -42,7 +42,7 @@ async def send_dict(bot, cid, back="m_learn", q=None):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
-        [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="set_learning_dictionary")],
+        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_learning_dictionary")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
@@ -282,9 +282,14 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
                 return profile, None
             store.mutate_profile(cid, clear_empty)
             continue
-        lang = _dict_lang(pending_before[0])
+        # После неудачных попыток пакет сдвигается, чтобы безнадёжные первые
+        # карточки не мешали пересобрать остальные до остановки миграции.
+        offset = int(state.get("attempts") or 0)
+        lang = _dict_lang(pending_before[
+            (offset * _DICTIONARY_REBUILD_BATCH_SIZE) % len(pending_before)
+        ])
         attempted += 1
-        await rebuild_dictionary_entries(cid, lang=lang, max_batches=1)
+        await rebuild_dictionary_entries(cid, lang=lang, max_batches=1, offset=offset)
         pending_after = _pending_dictionary_rebuilds(cid)
         progress = len(pending_before) - len(pending_after)
         if progress <= 0:
