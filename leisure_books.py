@@ -52,7 +52,6 @@ _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
 _WEEKLY_SHOWCASE_VERSION = 7
 _BOOK_PREMIERES_CACHE_VERSION = 2
-_FAVORITE_BOOK_PAGE_SIZE = 8
 _FAVORITE_BOOK_VIEW_TTL = 24 * 3600
 _favorite_book_views = {}
 _MANUAL_BOOK_CHOICE_TTL = 15 * 60
@@ -737,37 +736,6 @@ async def handle_manual_book_add_callback(bot, cid, q, data):
     await _show_manual_book_candidate(bot, cid, token, next_index, q=q)
 
 
-async def resolve_manual_favorite_book(value):
-    """Возвращает проверенную карточку или причину для короткого уточнения."""
-    title, author, year = _manual_book_parts(value)
-    if not title or not (author or year):
-        return None, "clarify"
-    try:
-        volume = await asyncio.wait_for(
-            asyncio.to_thread(google_books.find_volume, title, author=author),
-            timeout=5.0,
-        )
-    except Exception:
-        volume = None
-    if not isinstance(volume, dict):
-        return None, "not_found"
-    if year and str(volume.get("year") or "") != year:
-        return None, "not_found"
-    if author:
-        expected = _book_identity(author)
-        actual = _book_identity(volume.get("author"))
-        if not actual or (expected not in actual and actual not in expected):
-            return None, "not_found"
-    item = dict(volume)
-    item["title"] = str(item.get("title") or title).strip()
-    item["value"] = item["title"]
-    item["author"] = str(item.get("author") or author).strip()
-    item["year"] = str(item.get("year") or year).strip()
-    item = _with_book_url(item)
-    item["genre_label"] = _favorite_book_genre(item)
-    return item, ""
-
-
 def _favorite_book_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
@@ -860,9 +828,11 @@ async def _favorite_book_records(cid):
                 "description": description,
             }
     if updates:
+        # Перечитываем список: пока шли сетевые запросы, пользователь мог
+        # добавить или удалить книгу, и старый снимок затёр бы это изменение.
         updated = [
             {**record, **updates.get(str(record.get("id") or ""), {})}
-            for record in records
+            for record in store.ensure_list_ids(config.FAVORITE_BOOKS_KEY, cid)
         ]
         store.set_list(config.FAVORITE_BOOKS_KEY, cid, updated)
     return enriched
@@ -1052,10 +1022,6 @@ async def warm_book_premieres_cache():
     """Обновляет общую книжную витрину только из ночного расписания."""
     await get_book_premieres(refresh=True)
     return True
-
-
-def _daily_book_rebus(day):
-    return monthly_rebuses.cached_for_day("books", day, _BOOK_REBUSES)
 
 
 def _book_birthday_cache_get(day):
@@ -1285,16 +1251,6 @@ def _weekly_book_cache_set(items):
     })
 
 
-def _released_this_week(value: str) -> bool:
-    try:
-        released = date.fromisoformat(str(value or "")[:10])
-    except ValueError:
-        return False
-    today = datetime.now(config.TZ).date()
-    week_start = today - timedelta(days=today.weekday())
-    return week_start <= released <= week_start + timedelta(days=6)
-
-
 def _release_date(value: str) -> date | None:
     raw = str(value or "").strip()[:10]
     if re.fullmatch(r"\d{4}-\d{2}", raw):
@@ -1368,39 +1324,6 @@ def _weekly_book_score(item, *, today=None):
     if item.get("publisher_date_confirmed"):
         score += 20
     return score
-
-
-def _monthly_book_score(item):
-    """У свежей премьеры может быть мало оценок, но она всё равно нужна витрине."""
-    try:
-        rating = float(item.get("rating") or 0)
-        ratings_count = int(item.get("ratings_count") or 0)
-    except (TypeError, ValueError):
-        return None
-    if rating < 3.8 or ratings_count < 1:
-        return None
-    return rating * 100 + min(ratings_count, 5000) ** 0.5
-
-
-def _showcase_items(rows, showcase):
-    return [{**dict(item), "_showcase": showcase} for _score, item in rows[:4]]
-
-
-def _fallback_book_showcase(candidates):
-    seasonal = []
-    season_start, season_end, _season = _book_season()
-    for item in candidates:
-        if not isinstance(item, dict) or not str(item.get("title") or "").strip():
-            continue
-        released = _release_date(item.get("published_date"))
-        if not released or not season_start <= released <= season_end:
-            continue
-        score = _monthly_book_score(item) or 0
-        seasonal.append((score, item))
-    seasonal.sort(key=lambda row: (
-        row[0], str(row[1].get("published_date") or ""),
-    ), reverse=True)
-    return _showcase_items(seasonal, "season")[:3]
 
 
 def _verified_season_releases(today=None):
@@ -1513,7 +1436,7 @@ async def _publisher_book_candidates():
     except Exception:
         return []
     verified = []
-    for extracted in (payload or {}).get("books") or []:
+    for extracted in (payload.get("books") if isinstance(payload, dict) else None) or []:
         if not isinstance(extracted, dict):
             continue
         title = str(extracted.get("title") or "").strip()
@@ -2165,27 +2088,7 @@ async def book_dislike(bot, cid, i):
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         recommendation_stoplist.add(cid, "book", title, "hidden")
-    rec = store.last_recos.get(str(cid), {"kind": "book", "items": []})
-    category = rec.get("category")
-    items = await _book_candidates(cid, category)
-    it = _pick_good_book(
-        items, cid, extra_skip=rec.get("items", []), fallback=not category,
-    )
-    if not it:
-        await bot.send_message(
-            chat_id=cid,
-            text="В этом жанре пока не нашёл другой книги.",
-            reply_markup=_book_genre_menu_kb(),
-        )
-        return
-    if not category and inclusive_recommendations.is_due(cid, "book"):
-        it = await _inclusive_book_pick(cid, rec.get("items", [])) or it
-    _record_book_recommendation(cid, it)
-    rec["items"].append(it.get("title", ""))
-    store.last_recos[str(cid)] = rec
-    ni = len(rec["items"]) - 1
-    prepared = await _send_book_card(bot, cid, it, ni, enrich=False)
-    _cache_book(cid, prepared)
+    await _advance_book(bot, cid)
 
 async def _advance_book(bot, cid):
     """Загрузить следующую рекомендацию книги и показать карточку."""
@@ -2195,6 +2098,9 @@ async def _advance_book(bot, cid):
     it = _pick_good_book(
         items, cid, extra_skip=rec.get("items", []), fallback=not category,
     )
+    if not it and category:
+        # Как и первый подбор по жанру: после каталога идёт проверенный резерв жанра.
+        it = _genre_fallback_book(cid, category.get("value"), rec.get("items", []))
     if not it:
         await bot.send_message(
             chat_id=cid,

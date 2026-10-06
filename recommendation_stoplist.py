@@ -121,8 +121,11 @@ def migrate_legacy(cid, *, clear_legacy: bool = True) -> int:
     current = entries(cid)
     seen = {_identity(item["type"], item["value"]) for item in current}
     added = 0
+    legacy_keys = []
     for key, kind, reason in _LEGACY_SOURCES:
         legacy = store.get_list(key, cid)
+        if legacy:
+            legacy_keys.append(key)
         for value in legacy:
             entry = _normalized_entry(kind, value, reason)
             if not entry:
@@ -133,9 +136,12 @@ def migrate_legacy(cid, *, clear_legacy: bool = True) -> int:
             seen.add(identity)
             current.append(entry)
             added += 1
-        if clear_legacy and legacy:
-            store.set_list(key, cid, [])
     normalized = sorted(current, key=lambda item: (item["type"], item["value"].casefold()))
     if normalized != store.get_list(config.RECOMMENDATION_STOPLIST_KEY, cid):
         store.set_list(config.RECOMMENDATION_STOPLIST_KEY, cid, normalized)
+    # Старые списки чистим только после сохранения объединённого стоп-листа,
+    # чтобы сбой записи не потерял пользовательские данные.
+    if clear_legacy:
+        for key in legacy_keys:
+            store.set_list(key, cid, [])
     return added

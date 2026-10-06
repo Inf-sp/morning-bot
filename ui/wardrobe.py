@@ -1,5 +1,4 @@
 from .builder import MessageBuilder
-from .constants import ui_label
 from .news import append_weekly_news
 from wardrobe_model import public_zone_name, zone_of
 
@@ -14,50 +13,6 @@ def _upper_first(text):
         if char.isalpha():
             return text[:index] + char.upper() + text[index + 1:]
     return text
-
-
-def improve_card(data):
-    """Разбор шкафа — капсульный аудит всего гардероба сразу: что уже работает,
-    что выбивается, что менять первым, что пока не покупать и как выглядит
-    капсула после следующей замены. Без повтора погоды, образа дня и статистики,
-    которые уже есть на главном экране раздела (см. render_wardrobe_message).
-
-    data: {headline, works[], clashes[], fix_first[], skip_buying, next_capsule}
-    """
-    b = MessageBuilder()
-    b.section("✂️ Разбор шкафа")
-    b.spacer()
-
-    headline = _clean_text(data.get("headline"))
-    if headline:
-        b.labeled_line("Главный вывод", _finish_dot(headline))
-
-    works = [_finish_dot(x) for x in (data.get("works") or []) if _clean_text(x)]
-    if works:
-        b.section("Что работает")
-        b.line("\n".join(f"- {x}" for x in works[:5]))
-
-    clashes = [_finish_dot(x) for x in (data.get("clashes") or []) if _clean_text(x)]
-    if clashes:
-        b.section("Что выбивается")
-        b.line("\n".join(f"- {x}" for x in clashes[:5]))
-
-    fix_first = [_finish_dot(x) for x in (data.get("fix_first") or []) if _clean_text(x)]
-    if fix_first:
-        b.section("Что менять первым")
-        b.line("\n".join(f"{i}. {x}" for i, x in enumerate(fix_first[:3], 1)))
-
-    skip_buying = _finish_dot(data.get("skip_buying"))
-    if skip_buying:
-        b.spacer()
-        b.labeled_line("Пока не покупать", skip_buying)
-
-    next_capsule = _clean_text(data.get("next_capsule"))
-    if next_capsule:
-        b.spacer()
-        b.labeled_line("После следующей замены", _finish_dot(next_capsule))
-
-    return b.build_stripped()
 
 
 def _clean_text(value):
@@ -158,10 +113,6 @@ def render_wardrobe_message(look_data, *, news=None):
     append_weekly_news(b, news)
 
     return b.build_stripped()
-
-
-# Старое имя — на случай, если что-то ещё зовёт карточку образа по прежней сигнатуре.
-look_message = render_wardrobe_message
 
 
 def _item_display(it):
@@ -364,11 +315,11 @@ def purchase_recommendation_card(item):
         b.link(name, product_url)
     else:
         b.bold(name)
+    b.newline()
     # Причина рекомендации
     reason = _finish_dot(item.get("reason"))
     if reason:
         b.labeled_line("Причина", reason, lowercase=False)
-    b.newline()
     # С чем носить
     outfits = [_finish_dot(value) for value in (item.get("outfits") or []) if _clean_text(value)]
     if outfits:
@@ -406,13 +357,6 @@ def _pluralize_dative_items(n):
     return "вещам"
 
 
-def zone_picker_screen():
-    b = MessageBuilder()
-    b.section(ui_label("delete", "Что удалить"))
-    b.line("Выбери категорию.")
-    return b.build_stripped()
-
-
 def wardrobe_home_screen(total, categories=None):
     b = MessageBuilder()
     b.title(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
@@ -431,20 +375,13 @@ def wardrobe_home_screen(total, categories=None):
     return b.build_stripped()
 
 
-def subcat_picker_screen(zone):
-    b = MessageBuilder()
-    b.section(_clean_text(zone))
-    b.line("Выбери подкатегорию.")
-    return b.build_stripped()
-
-
 def category_screen(zone, items, total=None):
     b = MessageBuilder()
     count = len(items) if total is None else total
     b.section(f"👕 {_clean_text(zone)} · {count} {_pluralize_items(count)}")
     if items:
         b.spacer()
-        for index, item in enumerate(items, 1):
+        for item in items:
             b.line(f"• {_clean_text(_item_display(item))}")
     return b.build_stripped()
 
@@ -466,31 +403,6 @@ def item_card(item):
         b.labeled_line("Посадка", item["fit"])
     if item.get("style"):
         b.labeled_line("Стиль", str(item["style"]).replace("/", " · "))
-    return b.build_stripped()
-
-
-def add_preview(item, remaining=0):
-    item = item or {}
-    b = MessageBuilder()
-    b.section("Добавить вещь?")
-    b.spacer()
-    b.bold(_clean_text(item.get("name")) or "Вещь")
-    b.newline()
-    b.spacer()
-    b.labeled_line("Категория", _lower_first(public_zone_name(item.get("zone"))))
-    if item.get("color"):
-        b.labeled_line("Цвет", item["color"])
-    b.labeled_line("Тепло", item.get("warmth") or "обычные")
-    if item.get("material"):
-        b.labeled_line("Материал", item["material"])
-    if item.get("length"):
-        b.labeled_line("Длина", item["length"])
-    if item.get("rain_ok"):
-        b.labeled_line("Дождь", "подходит")
-    if item.get("wind_ok"):
-        b.labeled_line("Ветер", "защищает")
-    if remaining:
-        b.line(f"После этой останется: {remaining}.")
     return b.build_stripped()
 
 
@@ -590,20 +502,6 @@ def add_batch_success(items):
         if details:
             b.text_line(" · " + " · ".join(details))
         _success_item_metadata(b, item)
-    return b.build_stripped()
-
-
-def add_batch_preview(items):
-    b = MessageBuilder().section("Добавлены вещи")
-    for item in items or []:
-        b.spacer()
-        b.bold(_clean_text(item.get("name")) or "Вещь")
-        b.newline()
-        details = [_lower_first(public_zone_name(item.get("zone")))]
-        if item.get("color"):
-            details.append(str(item["color"]))
-        details.append(str(item.get("warmth") or "обычные"))
-        b.line(" · ".join(details))
     return b.build_stripped()
 
 

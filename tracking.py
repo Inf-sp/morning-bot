@@ -230,7 +230,7 @@ _FALLBACK_BY_SERVICE = {
     "gTTS": "текстовая карточка", "TMDB": "Gemini",
     "Google Books": "Open Library", "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
-    "Gemini": "Groq", "Groq": "Cloudflare AI",
+    "Gemini": "Groq", "Groq": "Mistral",
 }
 
 
@@ -290,8 +290,6 @@ def _service_for(text, file_name=""):
                 .replace("Themealdb", "TheMealDB")
                 .replace("Openweather", "OpenWeather")
                 .replace("Openrouter", "OpenRouter")
-                .replace("Firecrawl", "Firecrawl")
-                .replace("Zeroentropy", "ZeroEntropy")
             )
     module = os.path.basename(str(file_name or "")).removesuffix(".py")
     return _SERVICE_BY_MODULE.get(module, "")

@@ -183,7 +183,8 @@ async def _generate_and_store_queue(cid, meal, ingredients=None, cuisine=""):
             _gen_leftovers_recipe_batch, ingredients or "", cid,
             cuisine_weights, recent_history, season_hint)
         if cuisine:
-            items = [item for item in items if str(item.get("cuisine") or "") == cuisine]
+            # Локальный резерв без AI не знает кухню: лучше показать его, чем ошибку.
+            items = [item for item in items if str(item.get("cuisine") or "") == cuisine] or items
     else:
         constraint = _MEAL_CONSTRAINT.get(meal, "обычное блюдо")
         meal_guard = _MEAL_GUARD.get(meal, "")

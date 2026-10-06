@@ -4,7 +4,6 @@
 словарные записи и возвращает план тренировки.
 """
 
-from datetime import date
 import random
 
 import srs
@@ -74,11 +73,13 @@ def select_exercise_type(entry, avoid="", rng=random):
 
 
 def build_training_queue(entries, today=None, queue_size=QUEUE_BATCH_SIZE, rng=random):
-    """Собирает очередь: повторение, сложные места и новый материал."""
+    """Собирает очередь: повторение, сложные места и новый материал.
+
+    Без явного ``today`` срок повторения считается в часовом поясе бота (srs.is_due).
+    """
     entries = [{**entry, **_srs_state(entry)} for entry in (entries or []) if isinstance(entry, dict)]
     if not entries:
         return []
-    today = today or date.today()
 
     due = [entry for entry in entries if srs.is_due(_srs_state(entry), today)]
     mistakes = [entry for entry in due if int(entry.get("srs_level") or 0) <= 1]

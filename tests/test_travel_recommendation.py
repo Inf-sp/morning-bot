@@ -205,7 +205,7 @@ def test_suitcase_keeps_only_saved_countries(monkeypatch):
 def test_rejected_visited_country_changes_next_generation_request(monkeypatch):
     attempts = []
 
-    def suggest(_cid, excluded=None):
+    def suggest(_cid, excluded=None, _region_key=""):
         attempts.append(list(excluded or []))
         country = "Чили" if not excluded else "Япония"
         return {"country": country}

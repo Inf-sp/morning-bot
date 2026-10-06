@@ -48,7 +48,6 @@ _GENRE_LABEL = dict(GAME_GENRES)
 _GENRE_LABEL["board"] = "Настолки"
 _GENRE_LABEL["simulator"] = "Симулятор"
 _GAME_PREMIERES_VERSION = 3
-_GAME_SET_PAGE_SIZE = 8
 _GAME_SET_VIEW_TTL = 24 * 3600
 _game_set_views = {}
 _manual_game_choices = {}

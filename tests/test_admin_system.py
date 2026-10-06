@@ -415,15 +415,17 @@ def test_system_summary_deduplicates_unavailable_functions():
     assert summary["fallback_unavailable"] is True
 
 
-def test_system_summary_ignores_ai_providers_outside_the_active_chain():
+def test_system_summary_counts_ai_reserves_of_the_active_chain():
+    # Groq, Mistral и Cloudflare AI — резервы основной цепочки (a7556ea), их статус учитывается.
     summary = admin._system_summary([
         {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
         {"service": "cloudflare", "status": "warning", "fallback": ""},
         {"service": "mistral", "status": "down", "fallback": "", "error_type": "timeout"},
     ])
 
-    assert summary["line"] == "без ограничений"
-    assert summary["unavailable_functions"] == 0
+    assert summary["line"] == "3 функции недоступны"
+    assert summary["unavailable_functions"] == 3
+    assert summary["restricted"] == 1
 
 
 def test_zero_user_metrics_are_hidden_from_home_line():

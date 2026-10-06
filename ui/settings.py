@@ -27,45 +27,6 @@ def cuisines(current):
     return b.build_stripped()
 
 
-def constraints_input(current):
-    b = MessageBuilder()
-    b.section("Ограничения")
-    b.line(
-        "Практические правила для подбора образа — не сами данные о теле, а что "
-        "с ними делать."
-    )
-    b.section("Сейчас сохранено:")
-    b.line(current or "не задано")
-    b.section("Напиши одним сообщением:")
-    b.line("что учитывать при подборе.")
-    b.spacer()
-    b.italic("Пример: не предлагать облегающий верх, визуально вытягивать силуэт, не использовать укороченные вещи.")
-    return b.build_stripped()
-
-
-def fit_pick():
-    b = MessageBuilder()
-    b.section("Посадка")
-    b.line("Какая посадка одежды удобнее — учту при подборе образа:")
-    return b.build_stripped()
-
-
-def layers_pick():
-    b = MessageBuilder()
-    b.section("Слои")
-    b.line("Сколько слоёв одежды комфортно — учту при подборе образа:")
-    return b.build_stripped()
-
-
-def colors_input(title, current):
-    b = MessageBuilder()
-    b.section(title)
-    b.line("Перечисли цвета через запятую.")
-    b.section("Сейчас сохранено:")
-    b.line(current or "не задано")
-    return b.build_stripped()
-
-
 def city_input():
     return MessageSpec(text="📍 Напиши город — переключу.")
 
@@ -75,21 +36,6 @@ def wardrobe_item_input():
     b.text_line("Напиши вещь: тип + цвет + детали/бренд.\n")
     b.italic("Напр.: «Футболка белая Uniqlo» или «Шорты серые тонкие». Можно списком.")
     return b.build()
-
-
-def style_custom_input():
-    b = MessageBuilder()
-    b.text_line("Опиши свой стиль — как хочешь выглядеть, что нравится, что нет.")
-    b.blank()
-    b.italic("Например: «Люблю тёмные оттенки, оверсайз-силуэты, минимум принтов. Стараюсь избегать костюмов.»")
-    return b.build()
-
-
-def style_pick():
-    b = MessageBuilder()
-    b.section(PREFERENCES_LABEL)
-    b.line("Выбери из предложенных или опиши своими словами — бот учтёт при подборе образа:")
-    return b.build_stripped()
 
 
 def wardrobe_style(styles, fit, palette, avoid):
@@ -172,10 +118,6 @@ def mydata_section(title, hint=""):
     if hint:
         b.line(hint)
     return b.build_stripped()
-
-
-def favorite_add_prompt(name):
-    return MessageSpec(text=f"Напиши {name} — добавлю в любимые.")
 
 
 def admin_only():

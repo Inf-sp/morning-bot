@@ -242,7 +242,28 @@ def _count(svc: dict, period: str, unit: str, dt=None) -> int:
     return int((svc.get("counts") or {}).get(key) or 0)
 
 
+# Счётчики читаются только за текущие минуту/час/день/месяц: без чистки
+# минутные и часовые бакеты копились бы бесконечно и раздували общий KV-ключ.
+_COUNT_RETENTION = {
+    "minute": timedelta(hours=2),
+    "hour": timedelta(days=2),
+    "day": timedelta(days=40),
+    "month": timedelta(days=400),
+}
+
+
+def _count_is_fresh(key: str, now) -> bool:
+    period, _unit, bucket = (str(key).split(":", 2) + ["", ""])[:3]
+    retention = _COUNT_RETENTION.get(period)
+    return retention is None or bucket >= _bucket(period, now - retention)
+
+
 def _prune(svc: dict, now_ts: int) -> None:
+    now = datetime.fromtimestamp(now_ts, config.TZ)
+    svc["counts"] = {
+        key: value for key, value in (svc.get("counts") or {}).items()
+        if _count_is_fresh(key, now)
+    }
     cutoff = now_ts - 40 * 86400
     svc["errors"] = [e for e in (svc.get("errors") or [])[-20:] if int(e.get("ts") or 0) >= cutoff]
     svc["events"] = [e for e in (svc.get("events") or [])[-100:] if int(e.get("ts") or 0) >= cutoff]

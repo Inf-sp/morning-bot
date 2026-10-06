@@ -573,7 +573,6 @@ async def show_purchase_page(
             return
         except Exception:
             pass
-    if q is not None:
         try:
             await q.delete_message()
         except Exception:
@@ -583,7 +582,6 @@ async def show_purchase_page(
 
 async def recommend_missing_purchase(bot, cid):
     """Показывает первую из трёх персональных покупок текстовой карточкой."""
-    wardrobe = store.load_wardrobe(cid)
     if not has_wardrobe_items(cid):
         await bot.send_message(
             chat_id=cid,

@@ -123,9 +123,10 @@ def test_disputed_dutch_error_uses_standard_learning_fallback(monkeypatch):
     }, "Ik gaat naar huis."))
 
     assert grade.correct is False
-    assert captured["kwargs"]["order"] == (
-        "groq_standard", "cf", "openrouter",
-    )
+    # Спорная грамматика идёт через общий AI-маршрут раздела со всеми резервами.
+    kwargs = captured["kwargs"]
+    assert kwargs["module"] == "learning_trainer"
+    assert trainer.ai._resolve(None, kwargs.get("order"), module=kwargs["module"]) == trainer.ai.AI_ORDER
     assert report["explanation"] == "После ik нужна форма ga, а не gaat."
 
 

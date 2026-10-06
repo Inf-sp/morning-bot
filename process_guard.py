@@ -35,6 +35,21 @@ class PollingLease:
         self._connection = None
         self._local_file = None
         self.backend = ""
+        self.lost = False
+
+    def is_held(self):
+        """Advisory lock lives with its session: a dead connection means the lease is gone."""
+        if self._connection is None:
+            return self.backend == "local-file"
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            return True
+        except Exception as error:
+            _log.error("Polling lease lost: %s", error)
+            self.lost = True
+            return False
 
     def acquire(self, wait_seconds=60, retry_seconds=1):
         deadline = time.monotonic() + max(0, wait_seconds)

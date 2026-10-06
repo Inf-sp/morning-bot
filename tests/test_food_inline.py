@@ -23,24 +23,26 @@ def test_home_meal_time_windows():
     assert recipe_generation._home_meal_for_hour(21) == "dinner"
 
 
-def test_pick_recipe_uses_meal_for_current_time(monkeypatch):
+def test_pick_recipe_uses_available_fridge_products(monkeypatch):
+    # docs/food.md: «Что приготовить» берёт только доступные продукты холодильника,
+    # автоматический выбор приёма пищи по времени больше не применяется.
     calls = []
 
-    class LunchTime:
-        @classmethod
-        def now(cls, _tz):
-            return SimpleNamespace(hour=13)
+    async def enter_meal(_bot, _cid, meal, ingredients=None, status=None, cuisine=""):
+        calls.append((meal, ingredients, status))
 
-    async def enter_meal(_bot, _cid, meal, status=None):
-        calls.append((meal, status))
-
-    monkeypatch.setattr(cooking, "datetime", LunchTime)
+    monkeypatch.setattr(cooking.store, "get_list", lambda *_args: [
+        {"name": "яйца", "cat": "молочное и напитки", "on": True},
+        {"name": "сыр", "cat": "молочное и напитки", "on": False},
+    ])
+    monkeypatch.setattr(cooking, "_set_selected_recipe_cuisine", lambda *_args: None)
+    monkeypatch.setattr(cooking, "clear_recipe_queue", lambda *_args: None)
     monkeypatch.setattr(cooking, "enter_meal", enter_meal)
     status = object()
 
     asyncio.run(cooking.send_recipe_featured(object(), "42", status=status))
 
-    assert calls == [("lunch", status)]
+    assert calls == [("fridge", "яйца", status)]
 
 
 def test_month_recipe_pool_only_uses_current_profile_and_month():

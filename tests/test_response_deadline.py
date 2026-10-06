@@ -322,6 +322,7 @@ def test_myday_final_warm_repairs_dependencies_in_order(monkeypatch):
 
     class Context:
         job = Job()
+        bot = None
 
     def sync(name, result=True):
         def call(_cid, **_kwargs):

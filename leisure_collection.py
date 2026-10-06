@@ -168,7 +168,7 @@ def content_recommend(kind, cid):
         loved = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
         blocked = recommendation_stoplist.values(cid, "movie")
         what = "фильмов или сериалов"
-        loved_titles = [s if isinstance(s, str) else str(s) for s in loved]
+        loved_titles = [title for title in map(item_text, loved) if title]
         skip = loved_titles + blocked
         avoid = (
             "\nНЕ рекомендуй то, что уже отмечено или не понравилось: "
@@ -197,7 +197,7 @@ JSON: {{"items": [{{"title": "название (год)", "title_en": "ориг�
 
     # Книги: референсы вкуса берём только из личного списка пользователя.
     my_books = _ensure_books(cid)
-    my_books_titles = [b if isinstance(b, str) else str(b) for b in my_books]
+    my_books_titles = [title for title in map(item_text, my_books) if title]
     blocked = recommendation_stoplist.values(cid, "book")
     refs = my_books_titles
     anchors = ", ".join(refs[:25])

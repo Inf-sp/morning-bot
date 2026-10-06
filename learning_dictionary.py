@@ -80,7 +80,7 @@ def migrate_dict_caps():
     """Совместимая миграция регистра и известных канонических записей."""
     data = store._load(config.DICT_KEY)
     changed = False
-    for cid, words in (data or {}).items():
+    for words in (data or {}).values():
         if not isinstance(words, list):
             continue
         for index, w in enumerate(words):
@@ -466,6 +466,10 @@ _DICTIONARY_REBUILD_ORDER = (
     "gemini", "openrouter",
 )
 _DICTIONARY_REBUILD_RETRY_SECONDS = 3600
+_DICTIONARY_MIGRATION_RETRY_SECONDS = 300
+# Подряд неудачных проходов фоновой миграции, после которых она останавливается
+# до появления новых карточек или явного запроса пользователя.
+_DICTIONARY_MIGRATION_MAX_ATTEMPTS = 6
 
 
 class DictionaryRebuildDeferred(Exception):
@@ -589,7 +593,13 @@ async def rebuild_dictionary_entries(
         if (lang not in ("nl", "en") or _dict_lang(entry) == lang)
         and (word_id is None or str(entry.get("id") or "") == str(word_id))
         and entry_is_dictionary_word(entry)
-        and (force or int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION)
+        and (
+            force
+            or int(entry.get("dictionary_rebuild_version") or 0) < _DICTIONARY_REBUILD_VERSION
+            # Совпадает с _pending_dictionary_rebuilds: иначе неполные карточки
+            # текущей версии навсегда остаются в очереди фоновой миграции.
+            or not study_card_is_complete(entry)
+        )
     ]
     pending_idx.sort(
         key=lambda index: (not bool(words[index].get("manual_rebuild_requested_at")), index),

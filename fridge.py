@@ -295,10 +295,17 @@ async def try_add_fridge_from_chat(bot, cid, text) -> bool:
     return True
 
 
+def _index_in_category(items, idx, cat_idx):
+    """Индекс из старой кнопки мог сдвинуться: не трогаем продукт чужой категории."""
+    # ponytail: индексный callback_data; полностью защитит только стабильный id продукта.
+    return (0 <= idx < len(items) and 0 <= cat_idx < len(_CAT_ORDER)
+            and items[idx].get("cat") == _CAT_ORDER[cat_idx])
+
+
 async def fridge_toggle(bot, cid, idx: int, cat_idx: int, page: int, q=None):
     cid_s = str(cid)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if 0 <= idx < len(items):
+    if _index_in_category(items, idx, cat_idx):
         items[idx]["on"] = not items[idx].get("on", True)
         store.set_list(config.FRIDGE_KEY, cid_s, items)
     await send_fridge_cat(bot, cid, cat_idx, page, q)
@@ -307,7 +314,7 @@ async def fridge_toggle(bot, cid, idx: int, cat_idx: int, page: int, q=None):
 async def fridge_del(bot, cid, idx: int, cat_idx: int, page: int, q=None):
     cid_s = str(cid)
     items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if 0 <= idx < len(items):
+    if _index_in_category(items, idx, cat_idx):
         items.pop(idx)
         store.set_list(config.FRIDGE_KEY, cid_s, items)
     await send_fridge_cat(bot, cid, cat_idx, page, q)

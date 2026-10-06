@@ -144,7 +144,7 @@ HAZARDS = [
     WeatherHazard(
         key="cold", priority=8,
         triggers=lambda c: c.tmax is not None and c.tmax <= COLD_TMAX,
-        event=lambda c: f"🥶 Мороз, днём около {_f(c.tmax):+}°C.",
+        event=lambda c: f"🥶 Мороз, днём около {c.tmax:+.0f}°C.",
         advice=lambda c: [
             "Одевайся теплее.",
             "На дорогах возможен гололёд.",

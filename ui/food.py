@@ -3,13 +3,6 @@ import re
 from .builder import MessageBuilder
 from .constants import ui_label
 
-# Эмодзи категории приёма пищи (§7 спеки) — используется в заголовке карточки.
-MEAL_EMOJI = {
-    "breakfast": ui_label("breakfast", "").strip(),
-    "lunch": ui_label("lunch", "").strip(),
-    "dinner": ui_label("dinner", "").strip(),
-    "fridge": ui_label("cook_from", "").strip(),
-}
 MEAL_LABEL = {
     "breakfast": "Завтрак",
     "lunch": "Обед",
@@ -140,8 +133,8 @@ def food_card(
     """Карточка рецепта. Живёт в store.last_recipe/last_answer только до рестарта;
     MessageBuilder сохраняет разметку без промежуточного HTML.
 
-    meal — код категории ("breakfast"/"lunch"/"dinner"/"fridge") для эмодзи в заголовке
-    (§7); если не передан, используется общий 🥣 + label, как раньше.
+    label/meal/show_leading_emoji сохранены для совместимости вызовов: заголовок
+    всегда «🍳 Что приготовить • Кухня» (docs/food.md).
     cuisine_emoji_fallback — словарь {cuisine_code: emoji} для случая, когда модель не
     вернула cuisine_emoji (§7 — обязателен fallback на случай пустого/нераспознанного значения)."""
     name = str(data.get("name", "")).strip()
@@ -165,10 +158,6 @@ def food_card(
         chef_tip += "."
 
     b = MessageBuilder()
-    meal_emoji = (
-        MEAL_EMOJI.get(meal, ui_label("food", "").strip())
-        if show_leading_emoji else ""
-    )
     header = "🍳 Что приготовить"
     if cuisine_label:
         cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label

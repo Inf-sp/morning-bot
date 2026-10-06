@@ -1,6 +1,5 @@
 from .builder import MessageBuilder
 from .news import append_weekly_news
-from telegram import MessageEntity
 
 
 def plural_countries(n):
@@ -10,11 +9,6 @@ def plural_countries(n):
     if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
         return "страны"
     return "стран"
-
-
-def visited_summary(n):
-    verb = "Посещена" if abs(int(n)) % 10 == 1 and abs(int(n)) % 100 != 11 else "Посещено"
-    return f"{verb} {n} {plural_countries(n)}"
 
 
 def home_screen(idea, rebus=None, *, news=None):
@@ -56,7 +50,6 @@ def home_screen(idea, rebus=None, *, news=None):
         b.spacer()
         append_weekly_news(b, news)
     return b.build_stripped()
-
 
 
 def countries_screen(count, page, pages):

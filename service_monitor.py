@@ -14,7 +14,6 @@ import api_usage
 import config
 import provider_runtime
 import storage_driver
-import store
 
 ServiceSpec = provider_runtime.ProviderSpec
 SPECS = provider_runtime.SPECS
@@ -159,7 +158,6 @@ def format_row(service: str, state: dict | None = None) -> str:
                 f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
             ])
         return f"🟢 Google Books · Книги · {_number(remaining)}/1 000 осталось"
-    remaining, total = _confirmed_quota(service, state)
     parts = [f"{_DOT[status]} {spec.label}"]
     category = _DATA_CATEGORIES.get(service, spec.category)
     if category:
@@ -400,7 +398,6 @@ def probe(service: str) -> bool:
 def check_all(*, force=False) -> None:
     now = int(time.time())
     current = _load().get("services") or {}
-    results = {}
     due = []
     for spec in SPECS:
         # Проверка Groq, Mistral и Cloudflare может расходовать лимит. Их
@@ -433,13 +430,12 @@ def check_all(*, force=False) -> None:
             for future in as_completed(futures):
                 service = futures[future]
                 try:
-                    results[service] = bool(future.result())
+                    future.result()
                 except Exception as exc:
                     provider_runtime.record_result(
                         service, False, error=type(exc).__name__,
                         record_history=False,
                     )
-                    results[service] = False
     # Probe results are diagnostic only. A reserve becomes selected only after
     # it has answered a real feature request in the AI router.
 

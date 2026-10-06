@@ -106,8 +106,6 @@ def _system_summary(states):
         if service in ("database", "telegram"):
             continue
         spec = provider_runtime.SPEC_BY_KEY.get(service)
-        if spec and spec.role == "Вне цепочки":
-            continue
         status = state.get("status")
         fallback = str(state.get("fallback") or "")
         if fallback or status == provider_runtime.WARNING:
@@ -580,7 +578,7 @@ def _llm_failure_reason(entry):
     raw_values.append(str(entry.get("error") or entry.get("msg") or ""))
     raw = " ; ".join(raw_values).casefold()
     providers = (
-        ("groq", "Groq"), ("gemini", "Gemini"),
+        ("groq", "Groq"), ("gemini", "Gemini"), ("mistral", "Mistral"),
         ("cloudflare", "Cloudflare AI"), ("cf:", "Cloudflare AI"),
         ("openrouter", "OpenRouter"),
     )
@@ -683,10 +681,11 @@ async def clear_logs(bot, cid, q=None):
     await send_logs(bot, cid, q)
 
 
-def _active_error_rows(*, limit=40, include_hidden=True):
-    cutoff = time.time() - DAY
-    errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
-    monitor_errors = [
+def _active_monitor_errors(cutoff):
+    # A recovered provider incident or a request completed by a reserve did not
+    # break the user-facing feature. It remains in the runtime history for
+    # diagnosis, but must not spam Errors.
+    return [
         entry for entry in provider_runtime.history(limit=200)
         if (
             entry.get("ts", 0) >= cutoff
@@ -695,6 +694,12 @@ def _active_error_rows(*, limit=40, include_hidden=True):
             and not entry.get("fallback_target")
         )
     ]
+
+
+def _active_error_rows(*, limit=40, include_hidden=True):
+    cutoff = time.time() - DAY
+    errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
+    monitor_errors = _active_monitor_errors(cutoff)
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
         for entry, count in _collapse_app_errors(errors)
@@ -713,18 +718,7 @@ def _active_error_rows(*, limit=40, include_hidden=True):
 async def send_logs(bot, cid, q=None):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
-    monitor_errors = [
-        entry for entry in provider_runtime.history(limit=200)
-        if (
-            entry.get("ts", 0) >= cutoff
-            and entry.get("event_type") == "error"
-            # A recovered provider incident or a request completed by a
-            # reserve did not break the user-facing feature. It remains in
-            # the runtime history for diagnosis, but must not spam Errors.
-            and not entry.get("recovered_at")
-            and not entry.get("fallback_target")
-        )
-    ]
+    monitor_errors = _active_monitor_errors(cutoff)
     combined_count = len(_collapse_app_errors(errors)) + len(_collapse_monitor_errors(monitor_errors))
     rows = _active_error_rows(limit=40, include_hidden=False)
     text_size = 0

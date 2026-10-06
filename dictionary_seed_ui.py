@@ -53,6 +53,7 @@ def render_keyboard(state):
     selected = set(state.get("selected") or [])
     page = int(state.get("page") or 0)
     total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
     start = page * PAGE_SIZE
     rows = []
     for offset, item in enumerate(items[start:start + PAGE_SIZE]):

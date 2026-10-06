@@ -244,9 +244,10 @@ def _log_cost(provider: str, model: str, prompt: str, result: str, module: str =
             "ms": int(ms),
             "ok": bool(ok),
         }
-        buf = store._load(config.COST_LOG_KEY).get("log", [])
-        buf.append(entry)
-        store._save(config.COST_LOG_KEY, {"log": buf[-_COST_MAX:]})
+        # AI-вызовы идут из нескольких потоков: атомарная запись не теряет строки.
+        store.mutate_kv(config.COST_LOG_KEY, lambda data: (
+            {"log": [*(data.get("log") or []), entry][-_COST_MAX:]}, None,
+        ))
     except Exception:
         pass  # логирование не должно ломать основной поток
 
@@ -344,11 +345,9 @@ def _log_openrouter_fallback(origin_provider: str, reason: str, ok: bool,
             "fallback_used": bool(fallback_used),
             "ok": bool(ok),
         }
-        data = store._load(OPENROUTER_FALLBACK_STATS_KEY)
-        log = data.get("log", [])
-        log.append(entry)
-        data["log"] = log[-_COST_MAX:]
-        store._save(OPENROUTER_FALLBACK_STATS_KEY, data)
+        store.mutate_kv(OPENROUTER_FALLBACK_STATS_KEY, lambda data: (
+            {**data, "log": [*(data.get("log") or []), entry][-_COST_MAX:]}, None,
+        ))
     except Exception:
         pass
 

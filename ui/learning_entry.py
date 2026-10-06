@@ -4,9 +4,8 @@ import re
 
 from telegram import MessageEntity
 
-from dictionary_model import example_matches_term, present_conjugation, study_card_data
+from dictionary_model import display_term, example_matches_term, present_conjugation, study_card_data
 
-from dictionary_model import display_term
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
@@ -166,7 +165,8 @@ def render_learning_entry(
     if _mixed_script(plural):
         plural = ""
     if plural and breakdown.startswith("существительное"):
-        if not plural.casefold().startswith("de "):
+        is_english = str(entry.get("lang") or entry.get("language") or "").casefold() == "en"
+        if not is_english and not plural.casefold().startswith("de "):
             plural = f"de {plural}"
         builder.labeled_line("Множественное число", plural, lowercase=False)
     forms = _verified_forms(entry)

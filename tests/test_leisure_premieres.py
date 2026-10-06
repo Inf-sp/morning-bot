@@ -388,6 +388,14 @@ def test_book_premieres_refresh_bypasses_empty_cache(monkeypatch):
 
 
 def test_book_premieres_use_verified_current_month_reserve_with_summaries(monkeypatch):
+    # Ручной резерв привязан к конкретным датам релизов: фиксируем месяц,
+    # в котором он заведомо есть, чтобы тест не зависел от текущей даты.
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 15, 12, 0, tzinfo=tz)
+
+    monkeypatch.setattr(leisure_books, "datetime", FrozenDatetime)
     saved = {}
     monkeypatch.setattr(leisure_books.store, "_load", lambda _key: saved)
     monkeypatch.setattr(leisure_books.store, "_save", lambda _key, value: saved.update(value))

@@ -3,7 +3,6 @@ import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
-from .text import finish_dot
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
@@ -12,7 +11,6 @@ from .news import append_weekly_news
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
 UI_FOOD = ui_label("food", "").strip()
-UI_LEARNING = ui_label("learning", "").strip()
 UI_TRAVEL = ui_label("travel", "").strip()
 UI_SETTINGS = ui_label("settings", "").strip()
 

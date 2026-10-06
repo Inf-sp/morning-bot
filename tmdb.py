@@ -87,7 +87,9 @@ def _get(path, params, timeout=12, language=None):
             error="" if ok else f"HTTP {response.status_code}",
             headers=response.headers,
         )
-        return response.json()
+        # Тело ошибки TMDb (401/404/429) — не данные: иначе оно кэшируется
+        # как пустой/битый результат на сутки.
+        return response.json() if ok else None
     except Exception as exc:
         api_usage.record_request("tmdb", ok=False, error=type(exc).__name__)
         return None

@@ -105,11 +105,6 @@ def _recipe_source_prompt_block(sources) -> str:
     )
 
 
-def _themealdb_prompt_block(sources) -> str:
-    """Compatibility wrapper for older callers and tests."""
-    return _recipe_source_prompt_block(sources)
-
-
 def _with_recipe_source(item, sources, index=0):
     result = dict(item or {})
     sources = [source for source in (sources or []) if source.get("id")]
@@ -138,11 +133,6 @@ def _with_recipe_source(item, sources, index=0):
         result["themealdb_id"] = str(source["id"])
         result["themealdb_source_name"] = str(source.get("name") or "")
     return result
-
-
-def _with_themealdb_source(item, sources, index=0):
-    """Compatibility wrapper for older callers and tests."""
-    return _with_recipe_source(item, sources, index=index)
 
 
 def _source_amount(value) -> str:
@@ -726,7 +716,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     restrictions = context.get("diet_prefs") or "не указаны"
     memory_prefs = "; ".join(context.get("memory_prefs") or []) or "не указаны"
     cuisines = context.get("cuisines") or "не указаны"
-    source_block = _themealdb_prompt_block(sources)
+    source_block = _recipe_source_prompt_block(sources)
     return (
         f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"
         f"{fridge_context}"
@@ -988,7 +978,7 @@ def _gen_recipe(constraint, cid=None):
     avoid = _leftover_recent(cid) if cid else []
     avoid_line = f"Не предлагай эти блюда (уже были из холодильника): {', '.join(avoid)}.\n" if avoid else ""
     sources = _recipe_sources(constraint, limit=10, avoid=avoid)
-    source_block = _themealdb_prompt_block(sources)
+    source_block = _recipe_source_prompt_block(sources)
     try:
         result = ai.llm_json(
             f"{cz}{avoid_line}Ты — шеф-повар с идеальной логикой. "
@@ -1056,7 +1046,7 @@ def _gen_leftovers_recipe(ingredients, cid=None):
     sources = _recipe_sources(
         "рецепт из холодильника", ingredients=ingredients, limit=10, avoid=avoid,
     )
-    source_block = _themealdb_prompt_block(sources)
+    source_block = _recipe_source_prompt_block(sources)
     try:
         result = ai.llm_json(
             f"{avoid_line}{cz}Есть продукты: {secure.wrap_untrusted(ingredients, 'продукты')}. "
@@ -1326,7 +1316,7 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     avoid_line = f"Не предлагай эти блюда (уже показывались недавно): {', '.join(avoid)}.\n" if avoid else ""
     cuisine_codes_line = "Коды кухонь (машиночитаемые, используй один из них или ближайший по стране): " + ", ".join(RECIPE_CUISINE_CODES) + ".\n"
     guard_line = f"{meal_guard}\n" if meal_guard else ""
-    source_block = _themealdb_prompt_block(sources)
+    source_block = _recipe_source_prompt_block(sources)
     return (
         f"{cz}{weights_line}{season_line}{avoid_line}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "
@@ -1502,11 +1492,7 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
         )
     except Exception as error:
         _log.warning("recipe batch LLM chain unavailable, using safe fallback: %s", type(error).__name__)
-        source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
-        meal = "dinner" if "ужин" in str(constraint).casefold() else ("lunch" if "обед" in str(constraint).casefold() else "breakfast")
-        source_cards = [card for card in source_cards
-                        if _queue_recipe_presentable(card) and _recipe_matches_meal(card, meal)]
-        return source_cards or _meal_fallback_batch(constraint, n, recent_history)
+        return _batch_fallback(constraint, n, recent_history, sources, source_ingredients)
     items = result.get("recipes") if isinstance(result, dict) else None
     if not isinstance(items, list):
         # модель могла вернуть один рецепт плоским объектом вместо {"recipes":[...]}"
@@ -1517,15 +1503,23 @@ def _gen_recipe_batch(constraint, cid=None, cuisine_weights=None, recent_history
     items = [_with_recipe_source(item, sources, index) for index, item in enumerate(items)]
     presentable = [item for item in items if _queue_recipe_presentable(item)][:n]
     items = presentable
-    if not items and sources:
-        source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
-        meal = "dinner" if "ужин" in str(constraint).casefold() else ("lunch" if "обед" in str(constraint).casefold() else "breakfast")
-        source_cards = [card for card in source_cards
-                        if _queue_recipe_presentable(card) and _recipe_matches_meal(card, meal)]
-        return source_cards or _meal_fallback_batch(constraint, n, recent_history)
-    if not items:
-        return _meal_fallback_batch(constraint, n, recent_history)
-    return items
+    return items or _batch_fallback(constraint, n, recent_history, sources, source_ingredients)
+
+
+def _batch_fallback(constraint, n, recent_history, sources, source_ingredients=""):
+    """Очередь без AI: карточки источника, затем локальный запас."""
+    normalized = str(constraint).casefold()
+    meal = "dinner" if "ужин" in normalized else ("lunch" if "обед" in normalized else "breakfast")
+    source_cards = [_normalize_queue_recipe(_source_recipe_card(source)) for source in sources[:n]]
+    source_cards = [card for card in source_cards
+                    if _queue_recipe_presentable(card) and _recipe_matches_meal(card, meal)]
+    if source_cards:
+        return source_cards
+    if source_ingredients:
+        # Холодильник: только из тех же продуктов, а не общий омлет из _meal_fallback_batch.
+        local = _fallback_leftovers_recipe(source_ingredients)
+        return [local] if local else []
+    return _meal_fallback_batch(constraint, n, recent_history)
 
 
 def _gen_leftovers_recipe_batch(ingredients, cid=None, cuisine_weights=None, recent_history=None,

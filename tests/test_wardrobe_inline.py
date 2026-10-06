@@ -402,7 +402,7 @@ def test_purchase_card_has_clean_gap_analysis_sections():
     assert message.text.startswith("💳 Что докупить · Гардероб")
     assert "С чем носить из твоего гардероба:" in message.text
     assert "Зачем добавить:" in message.text
-    assert "Даст до 5 новых сочетаний" in message.text
+    assert "Новые сочетания: до 5" in message.text
     assert "&#x" not in message.text
 
 
@@ -429,7 +429,7 @@ def test_purchase_menu_recommends_three_gaps_and_waits_for_chat_request(monkeypa
 
     assert sent[0]["text"].startswith("💳 Что докупить · Гардероб\n\nСерые широкие джинсы")
     assert "Серые широкие джинсы" in sent[0]["text"]
-    assert "Закроют пробел в шкафу" in sent[0]["text"]
+    assert "Причина: закроют пробел в шкафу" in sent[0]["text"]
     assert wardrobe.store.pending_input["42"] == "wardrobe_buy"
     assert _labels(sent[0]["reply_markup"]) == [
         ["✨ Обновить"],
@@ -573,7 +573,8 @@ def test_purchase_photo_supports_neutral_straight_trousers(monkeypatch):
     assert calls[0][1]["result_validator"](photo) is True
 
 
-def test_neutral_straight_trousers_card_is_sent_with_photo(monkeypatch):
+def test_neutral_straight_trousers_card_is_sent_as_text_without_photo_search(monkeypatch):
+    # docs/wardrobe.md: карточка «Что докупить» всегда отправляется текстом.
     import wardrobe_photos
 
     sent = []
@@ -592,27 +593,21 @@ def test_neutral_straight_trousers_card_is_sent_with_photo(monkeypatch):
         "category": "Низ", "style": "Базовый", "season": "Межсезонье",
         "reason": "Добавит шкафу новый слой.",
     }
-
-    def pexels(_query, **kwargs):
-        photo = {
-            "url": "https://images.pexels.com/neutral-trousers.jpg",
-            "alt": "Man wearing beige straight leg trousers",
-        }
-        return photo if kwargs["result_validator"](photo) else None
-
-    wardrobe_photos.purchase_photo.cache_clear()
-    monkeypatch.setattr(wardrobe_photos.config, "SERP_API_KEY", "")
-    monkeypatch.setattr(wardrobe_photos, "pexels_photo", pexels)
+    photo_calls = []
+    monkeypatch.setattr(
+        wardrobe_photos, "pexels_photo",
+        lambda *args, **kwargs: photo_calls.append(args) or None,
+    )
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {})
     monkeypatch.setattr(
         wardrobe, "_purchase_carousel_candidates", lambda *_args, **_kwargs: [candidate],
     )
-    monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
 
     asyncio.run(wardrobe.show_purchase_page(Bot(), cid))
 
-    assert [kind for kind, _kwargs in sent] == ["photo"]
-    assert sent[0][1]["photo"] == "https://images.pexels.com/neutral-trousers.jpg"
+    assert [kind for kind, _kwargs in sent] == ["message"]
+    assert "Прямые брюки нейтрального цвета" in sent[0][1]["text"]
+    assert photo_calls == []
 
 
 def test_purchase_photo_rejects_an_image_that_describes_another_item():
@@ -919,35 +914,20 @@ def test_purchase_refresh_never_returns_the_just_rejected_item(monkeypatch):
 
 
 def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):
-    import wardrobe_photos
-
     wardrobe_data = {"zones": {"Верх": {"Рубашки": [{"name": "Рубашка"}]}}}
-    calls, edited = [], []
+    edited = []
     variants = [
         {"item": "Молочная оверсайз-рубашка", "reason": "добавит второй слой"},
         {"item": "Серые широкие джинсы", "reason": "закроют пробел"},
     ]
 
     class Query:
-        async def edit_message_media(self, **kwargs):
+        async def edit_message_text(self, **kwargs):
             edited.append(kwargs)
 
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
     monkeypatch.setattr(
         wardrobe, "_missing_purchase_candidates", lambda *_args, **_kwargs: variants,
-    )
-    monkeypatch.setattr(wardrobe, "_purchase_photo_audience", lambda _cid: "male")
-    monkeypatch.setattr(
-        wardrobe_photos, "purchase_photo",
-        lambda item, audience, variant=0: calls.append((item, audience, variant))
-        or {
-            "url": f"https://images.pexels.com/{variant}.jpg",
-            "alt": (
-                "Man wearing cream oversized shirt"
-                if "рубаш" in item.casefold()
-                else "Man wearing gray wide leg jeans"
-            ),
-        },
     )
     wardrobe.store.set_profile("same-purchase-photo", {})
 
@@ -956,11 +936,7 @@ def test_other_purchase_variant_requests_a_fresh_recommendation(monkeypatch):
         object(), "same-purchase-photo", 1, q=Query(),
     ))
 
-    assert calls == [
-        ("Молочная оверсайз-рубашка", "male", 0),
-        ("Серые широкие джинсы", "male", 0),
-    ]
-    assert "Серые широкие джинсы" in edited[1]["media"].caption
+    assert "Серые широкие джинсы" in edited[1]["text"]
     assert edited[0]["reply_markup"].inline_keyboard[0][0].callback_data == "w_buy_new:0"
 
     refreshed = []
@@ -1309,7 +1285,8 @@ def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypat
 
     asyncio.run(wardrobe.send_category(bot, "closet-test", "acc"))
     category_labels = _labels(bot.messages[-1]["reply_markup"])
-    assert category_labels[0] == ["Старинная брошь"]
+    assert category_labels[0] == ["✅ Добавить вещь"]
+    assert category_labels[1] == ["Старинная брошь"]
 
 
 def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
@@ -1377,7 +1354,7 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
     asyncio.run(wardrobe.send_category(bot, "closet-test", "top", page=1))
 
     labels = _labels(bot.message["reply_markup"])
-    assert labels[:2] == [["Вещь 9"], ["Вещь 10"]]
-    assert labels[-3] == ["◀️", "2/2", "▶️"]
+    assert labels[1:3] == [["Вещь 9"], ["Вещь 10"]]
+    assert labels[-2] == ["◀️", "2/2", "▶️"]
     assert labels[0] == ["✅ Добавить вещь"]
     assert bot.message["text"].startswith("👕 Верх · 10 вещей")

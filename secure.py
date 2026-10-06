@@ -10,7 +10,7 @@ MAX_TEXT = 4000          # лимит длины пользовательско�
 MAX_DOC_BYTES = 100_000  # лимит размера загружаемого документа
 
 # zero-width / невидимые / управляющие (кроме \n, \t)
-_INVISIBLE = re.compile(r"[​-‏‪-‮⁠-⁯﻿­]")
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\xad]")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
@@ -60,7 +60,7 @@ def _env_secret_values():
                  "TMDB_API_KEY", "GOOGLE_BOOKS_API_KEY", "YOUTUBE_API_KEY", "SPOONACULAR_API_KEY", "THEMEALDB_API_KEY",
                  "DATABASE_URL",
                  "PEXELS_API_KEY", "UNSPLASH_ACCESS_KEY", "SERP_API_KEY", "CF_ACCOUNT_ID", "TAVILY_API_KEY", "FIRECRAWL_API_KEY",
-                 "WEATHER_API_KEY")
+                 "WEATHER_API_KEY", "MISTRAL_API_KEY", "IGDB_CLIENT_SECRET")
         return [getattr(config, n, "") for n in names]
     except Exception:
         return []

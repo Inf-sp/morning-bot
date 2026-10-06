@@ -1,6 +1,5 @@
 """Предметные репозитории поверх KV-драйвера."""
 
-import config
 import storage_driver
 
 
@@ -33,27 +32,3 @@ class UserListRepository:
             return data, result
         return storage_driver.mutate(self.key, change)
 
-
-class ProfileRepository:
-    def __init__(self, cid):
-        self.cid = str(cid)
-
-    def get(self):
-        return dict(storage_driver.load(config.PROFILE_KEY).get(self.cid, {}))
-
-    def save(self, profile):
-        profile = dict(profile)
-
-        def change(data):
-            data[self.cid] = profile
-            return data, None
-        storage_driver.mutate(config.PROFILE_KEY, change)
-
-    def mutate(self, function):
-        def change(data):
-            current = dict(data.get(self.cid, {}))
-            updated, result = function(current)
-            data[self.cid] = dict(updated or {})
-            return data, result
-
-        return storage_driver.mutate(config.PROFILE_KEY, change)

@@ -1,11 +1,13 @@
 """Языковая игра-детектив: состояние, генерация, ответы и подсказки."""
 
+import asyncio
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import store
+import trainer_grading
 import verify
 from ui import learning as learning_ui
 
@@ -557,7 +559,8 @@ async def send_game(bot, cid, status=None):
     try:
         d = {}
         for attempt in range(5):
-            cand = game_data(lang, attempted, attempt=attempt)
+            # game_data вызывает синхронный ai.llm: не блокируем event loop.
+            cand = await asyncio.to_thread(game_data, lang, attempted, attempt=attempt)
             if (cand.get("answer") and _description_is_guessable(cand, lang)
                     and not _game_is_recent(cand, recent)):
                 d = cand
@@ -637,7 +640,7 @@ async def _send_game_result(bot, cid, st, ui, kb):
     photo = None
     if query:
         try:
-            photo = travel_photos.find_illustration(query)
+            photo = await asyncio.to_thread(travel_photos.find_illustration, query)
         except Exception:
             pass
     if (_is_landscape_photo(photo)):
@@ -672,19 +675,31 @@ async def _finish_game_round(bot, cid, st, ui):
     await _send_game_result(bot, cid, st, ui, _game_result_kb(ui))
 
 
+_GAME_ARTICLES = {"de", "het", "een", "the", "a", "an"}
+
+
+def _game_guess_correct(text, names):
+    """Ответ засчитывается по названию или отдельному слову, но не по артиклю.
+
+    Порог опечаток берётся из тренажёра: прежний ``_fuzzy`` принимал любые
+    два трёхбуквенных слова (dog/cat) и любую догадку с подстрокой «de».
+    """
+    def parts(value):
+        value = str(value or "").lower().strip()
+        return [value] + [token for token in value.split() if token not in _GAME_ARTICLES]
+
+    guesses = [part for part in parts(text) if part]
+    pool = [part for name in names for part in parts(name) if part]
+    return any(trainer_grading.fuzzy_match(guess, target) for guess in guesses for target in pool)
+
+
 async def game_answer(bot, cid, text):
     st = store.game_state.get(str(cid))
     if not st:
         return False
     cfg = store.game_config.get(str(cid), {"lang": "русский"})
     ui = _game_ui(cfg["lang"])
-    guess = text.lower().strip()
-    names = [st["answer"]] + st.get("aliases", [])
-    pool = []
-    for n in names:
-        n = (n or "").lower().strip()
-        pool += [n] + n.split()
-    correct = any(_fuzzy(guess, p) for p in pool if p)
+    correct = _game_guess_correct(text, [st["answer"]] + st.get("aliases", []))
     if correct:
         await _finish_game_round(bot, cid, st, ui)
         return True

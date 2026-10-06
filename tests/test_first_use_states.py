@@ -92,7 +92,6 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         },
     })
 
-    assert "Laat maar — Ладно, забудь." in message.text
     assert "Inmiddels" not in message.text
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
@@ -109,13 +108,13 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Прогресс:" not in message.text
     assert "Фраза дня" not in message.text
     assert "Слово дня" not in message.text
-    assert "Laat maar — Ладно, забудь. Когда решаешь не продолжать тему." in message.text
+    assert "Laat maar → Ладно, забудь (Когда решаешь не продолжать тему)" in message.text
     spoiler_texts = [
         message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
         for entity in message.entities
         if entity.type == "spoiler"
     ]
-    assert spoiler_texts == []
+    assert spoiler_texts == ["Laat maar"]
 
 
 def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary(monkeypatch):
@@ -441,7 +440,6 @@ def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
 
     assert Query.message.updated["text"].startswith("🍽️ Куда сходить · Alkmaar")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["✨ Подобрать новое место"],
         ["🍳 Что приготовить"],
         ["🎚️ Мой холодильник"],
         ["#️⃣ Главная"],

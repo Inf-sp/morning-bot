@@ -337,9 +337,6 @@ def _dict_lang_hint_from_payload(text):
         words = {word.casefold() for word in re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", payload)}
         if words & _DUTCH_WORD_HINTS:
             return "nl"
-        if re.search(r"\b(?:de|het|een|the|a|an)\b", payload, re.I):
-            return None
-        return None
     return None
 
 
@@ -1650,7 +1647,11 @@ async def _refresh_dict_entry(cid, item, force=False):
         if entry:
             entry = (await _enrich_dutch_verb(entry, cid, force=True)
                      if force else await _enrich_dutch_verb(entry, cid))
-    except Exception:
+    except Exception as exc:
+        _log.info(
+            "dictionary entry refresh skipped user_id=%s error_type=%s",
+            str(cid), type(exc).__name__,
+        )
         return item
     if not entry or entry.get("needs_confirmation"):
         return item
@@ -1915,6 +1916,20 @@ def _remove_queued_dictionary_analysis(cid, queue_id):
     store.mutate_profile(cid, change)
 
 
+def _defer_queued_dictionary_analysis(cid, queue_id):
+    """Переносит неудавшийся запрос в конец очереди, чтобы он не блокировал остальные."""
+    def change(profile):
+        queue = [item for item in (profile.get(_DICT_PENDING_PROFILE_FIELD) or [])
+                 if isinstance(item, dict)]
+        failed = [item for item in queue if item.get("id") == queue_id]
+        profile[_DICT_PENDING_PROFILE_FIELD] = [
+            item for item in queue if item.get("id") != queue_id
+        ] + failed
+        return profile, None
+
+    store.mutate_profile(cid, change)
+
+
 async def process_queued_dictionary_adds(bot, cids, limit=10):
     """Доготавливает сохранённые Add-запросы и присылает карточку после успеха."""
     processed = 0
@@ -1931,6 +1946,7 @@ async def process_queued_dictionary_adds(bot, cids, limit=10):
                     item.get("term", ""), item.get("lang"), source_text=item.get("term", ""),
                 )
                 if not entry or entry.get("needs_confirmation"):
+                    _defer_queued_dictionary_analysis(cid, item.get("id"))
                     continue
                 entry = await _enrich_dutch_verb(entry, cid)
                 entry = await learning_data_quality.check_new_entry(entry)
@@ -1940,6 +1956,7 @@ async def process_queued_dictionary_adds(bot, cids, limit=10):
                     "queued dictionary analysis remains pending: user_id=%s error_type=%s",
                     str(cid), type(exc).__name__,
                 )
+                _defer_queued_dictionary_analysis(cid, item.get("id"))
                 continue
             _remove_queued_dictionary_analysis(cid, item.get("id"))
             msg = _dict_entry_message(saved, status=status)

@@ -3,7 +3,7 @@
 import hashlib
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup
 
 import config
 import store
@@ -17,7 +17,6 @@ from dictionary_model import (
     study_card_is_complete,
 )
 from ui import learning as learning_ui
-from ui.constants import delete_label
 
 _code = dictionary._code
 

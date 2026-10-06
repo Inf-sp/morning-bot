@@ -27,6 +27,7 @@ from ui import leisure as leisure_ui
 from leisure_collection import (
     canonical_movie_label,
     content_recommend,
+    item_text,
     movie_title_for_lookup,
     normalize_movie_items,
 )
@@ -44,7 +45,6 @@ _DISCOVERY_DEPENDENCIES = (
 _CINEMA_BIRTHDAY_LOCK = threading.Lock()
 _CINEMA_BIRTHDAY_CACHE_VERSION = 3
 _MOVIE_PREMIERES_CACHE_VERSION = 5
-_FAVORITE_MOVIE_PAGE_SIZE = 8
 _FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
 _favorite_movie_views = {}
 _FAVORITE_MOVIE_GENRES = (
@@ -384,10 +384,13 @@ def _movie_used(cid):
     """Множество названий, которые нельзя повторять: любимые и чёрный список."""
     wl = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
     blocked = recommendation_stoplist.values(cid, "movie")
-    used = set()
-    for x in list(wl) + blocked:
-        used.add((x if isinstance(x, str) else str(x)).lower())
-    return used
+    # Полная запись и чистое название: элементы бывают и {"id", "value"}.
+    return {
+        value.lower()
+        for x in list(wl) + blocked
+        for value in (item_text(x), movie_title_for_lookup(x))
+        if value
+    }
 
 def _fallback_movie_items(cid):
     used = _movie_used(cid)

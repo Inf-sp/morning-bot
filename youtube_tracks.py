@@ -182,13 +182,13 @@ def find_track_url(track: str, artist: str) -> str:
                 },
                 timeout=_timeout(),
             )
-        except requests.exceptions.Timeout as error:
+        except requests.exceptions.Timeout:
             api_usage.record_request(
                 "youtube", False, error="timeout",
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
             return ""
-        except requests.exceptions.RequestException as error:
+        except requests.exceptions.RequestException:
             api_usage.record_request(
                 "youtube", False, error="network_error",
                 latency_ms=int((time.monotonic() - started) * 1000),

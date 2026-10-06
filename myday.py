@@ -109,25 +109,6 @@ def _pool_get(store_key: str, cid: str, pool_id: str) -> dict:
     return (data.get(str(cid)) or {}).get(pool_id) or {}
 
 
-def _pool_next_unshown(store_key: str, cid: str, pool_id: str) -> dict | None:
-    """Помечает первый непоказанный item как shown и возвращает его (атомарно)."""
-    cid = str(cid)
-    result = {"item": None}
-
-    def mut(data):
-        bucket = data.setdefault(cid, {}).setdefault(pool_id, {})
-        items = bucket.get("items") or []
-        for item in items:
-            if not item.get("shown_at"):
-                item["shown_at"] = int(datetime.now(TZ).timestamp())
-                result["item"] = dict(item)
-                break
-        return data, True
-
-    store.mutate_kv(store_key, mut)
-    return result["item"]
-
-
 def _pool_save(store_key: str, cid: str, pool_id: str, items: list) -> None:
     cid = str(cid)
 
@@ -1195,6 +1176,16 @@ def _build_day_text(cid, *, refresh_current=False):
         _log.warning("[verify] weather: %s", w)
     return text, msg.entities
 
+async def _prepare_outfit(bot, cid):
+    """Молча собирает образ дня для сводки; ошибка гардероба не блокирует «Мой день»."""
+    import wardrobe
+    try:
+        if not wardrobe.get_cached_outfit_summary(cid).get("items"):
+            await wardrobe.send_looks(bot, cid, silent=True)
+    except Exception as e:
+        _log.warning("myday: outfit prep failed: %s", e)
+
+
 async def send_plany(bot, cid, force=False, show_loading=True, status=None):
     """Собирает и отправляет сводку «Мой день». При inline-действии статус
     остаётся кнопкой под исходным экраном, а готовая сводка приходит отдельно."""
@@ -1210,10 +1201,9 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
                 await bot.send_chat_action(chat_id=cid, action="typing")
             except Exception:
                 pass
+        # Сбой подготовки образа не должен ронять всю сводку дня.
+        await _prepare_outfit(bot, cid)
         try:
-            import wardrobe
-            if not wardrobe.get_cached_outfit_summary(cid).get("items"):
-                await wardrobe.send_looks(bot, cid, silent=True)
             text, entities = await asyncio.to_thread(
                 _build_day_text, cid, refresh_current=force,
             )
@@ -1239,12 +1229,8 @@ async def warm_day_cache(cid, bot=None):
     cached = _load_day_cache(cid, today)
     if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True
-    import wardrobe
-    if bot and not wardrobe.get_cached_outfit_summary(cid).get("items"):
-        try:
-            await wardrobe.send_looks(bot, cid, silent=True)
-        except Exception as e:
-            _log.warning("warm_day_cache outfit prep failed: %s", e)
+    if bot:
+        await _prepare_outfit(bot, cid)
     text, entities = await asyncio.to_thread(_build_day_text, cid)
     _save_day_cache(cid, today, text, entities, _time.time())
     return True

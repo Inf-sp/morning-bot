@@ -3,10 +3,9 @@
 import asyncio
 from copy import deepcopy
 import logging
-import re
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import quote_plus
 
 import requests
@@ -29,6 +28,7 @@ _MUSIC_DAILY_LOCK = threading.Lock()
 _MUSIC_LEGEND_CACHE_VERSION = 2
 _MUSIC_HOME_CACHE_VERSION = 1
 _MUSIC_HOME_LOCKS = {}
+_BACKGROUND_TASKS = set()
 
 
 def _music_home_only_kb():
@@ -292,7 +292,10 @@ def _kick_off_new_artist_concert_check(cid, artist_names):
             except Exception as e:
                 _log.warning("new artist concert check failed for %r: %r", name, e)
 
-    asyncio.create_task(_run())
+    # Держим ссылку: иначе event loop хранит только weakref и задача может быть собрана GC.
+    task = asyncio.create_task(_run())
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 async def listen_love(bot, cid, q=None):
@@ -352,10 +355,6 @@ def music_home_keyboard():
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
-
-
-def _daily_music_rebus(day):
-    return monthly_rebuses.cached_for_day("music", day, _MUSIC_REBUSES)
 
 
 def _track_parts(track):
@@ -887,8 +886,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             await _deliver_artist_card(
                 bot, cid, msg, _listen_kb(), status=status)
             return
-    arts_raw = _ensure_artists(cid)
-    arts = [_item_text(a) for a in arts_raw if _item_text(a)]
+    arts = _ensure_artists(cid)
     anchors = ", ".join(arts[:25])
     if category:
         genre_context = (

@@ -116,11 +116,7 @@ def _reason_text(tm):
 
 
 def _reason_label(reason):
-    kind = reason.get("kind")
-    label = reason.get("label", "")
-    if kind == "genre":
-        # Подборку по жанру отдельной строкой на карточке не подписываем.
-        return ""
+    # Подборку по жанру (единственный явный reason) на карточке не подписываем.
     return ""
 
 
@@ -151,7 +147,7 @@ async def _llm_movie_pick(cid, used):
     if picked[0] is not None:
         return picked
     fallbacks = _fallback_movie_items(cid)
-    if fallbacks != items:
+    if fallbacks and fallbacks != items:
         remaining = tracking.remaining_action_seconds()
         timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
         if timeout <= 0.2:

@@ -45,10 +45,6 @@ def inactivity_reminder():
     return menu_ui.inactivity_reminder()
 
 
-def _back(parent="m_close"):
-    return [("⬅️ Назад", parent), ("#️⃣ Главная", "m_menu")]
-
-
 def menu_screen(key, cid=None):
     if key == "m_learn":
         import learning
@@ -67,6 +63,22 @@ def has_available_fridge(cid) -> bool:
 _FOOD_MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
 
 
+async def _deliver(bot, cid, msg, status=None, q=None, **extra):
+    """Статус -> правка карточки -> новое сообщение."""
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
+        return
+    if q is not None:
+        try:
+            await q.message.edit_text(
+                msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
+            return
+        except Exception:
+            pass
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
+
+
 async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None):
     import asyncio
     import recipe_generation
@@ -79,44 +91,11 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
             restaurant_discovery.get_restaurant, cid, refresh=refresh,
         )
         msg = menu_ui.restaurant_menu(card, news=category_news.cached_line("food"))
-        if status is not None:
-            await status.replace(
-                msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-                disable_web_page_preview=True,
-            )
-        elif q is not None:
-            try:
-                await q.message.edit_text(
-                    msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-                    disable_web_page_preview=True,
-                )
-            except Exception:
-                await bot.send_message(
-                    chat_id=cid, text=msg.text, entities=msg.entities,
-                    reply_markup=msg.reply_markup, disable_web_page_preview=True,
-                )
-        else:
-            await bot.send_message(
-                chat_id=cid, text=msg.text, entities=msg.entities,
-                reply_markup=msg.reply_markup, disable_web_page_preview=True,
-            )
+        await _deliver(bot, cid, msg, status, q, disable_web_page_preview=True)
         return
 
     if not has_available_fridge(cid):
-        msg = menu_ui.food_empty_menu()
-        if status is not None:
-            await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-        elif q is not None:
-            try:
-                await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-            except Exception:
-                await bot.send_message(
-                    chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-                )
-        else:
-            await bot.send_message(
-                chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-            )
+        await _deliver(bot, cid, menu_ui.food_empty_menu(), status, q)
         return
 
     current_now = datetime.now(config.TZ)
@@ -127,18 +106,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         )
     if not refresh:
         ready = recipe_generation.get_fast_cooking_home_idea(cid, now=recipe_now)
-        msg = menu_ui.food_menu(ready)
-        if status is not None:
-            await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-        elif q is not None:
-            try:
-                await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-            except Exception:
-                await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                                       reply_markup=msg.reply_markup)
-        else:
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                                   reply_markup=msg.reply_markup)
+        await _deliver(bot, cid, menu_ui.food_menu(ready), status, q)
         return
 
     owns_status = status is None

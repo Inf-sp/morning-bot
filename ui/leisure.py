@@ -2,8 +2,6 @@ import html
 import re
 from datetime import date, datetime
 
-from telegram import MessageEntity
-
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 from .news import append_weekly_news
@@ -77,12 +75,6 @@ def favorite_movies_home(total, genres):
     return b.build_stripped()
 
 
-def favorite_movie_genre(genre, total):
-    b = MessageBuilder()
-    b.section(f"🎬 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_titles(total)}")
-    return b.build_stripped()
-
-
 def favorite_books_home(total, genres):
     b = MessageBuilder()
     b.title(f"🎚️ Мои книги · {total} {_pluralize_books(total)}")
@@ -106,12 +98,6 @@ def _pluralize_books(n):
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
         return "книги"
     return "книг"
-
-
-def favorite_book_genre(genre, total):
-    b = MessageBuilder()
-    b.section(f"📚 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_books(total)}")
-    return b.build_stripped()
 
 
 def favorite_book_delete_confirmation(title):
@@ -143,12 +129,6 @@ def _pluralize_games(n):
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
         return "игры"
     return "игр"
-
-
-def game_set_genre(genre, total):
-    b = MessageBuilder()
-    b.section(f"👾 {str(genre or 'Без жанра').strip()} · {total} {_pluralize_games(total)}")
-    return b.build_stripped()
 
 
 def game_set_card(data):
@@ -414,33 +394,6 @@ def yearly_top_screen(kind, year, item):
     return b.build_stripped()
 
 
-def movie_home_screen(genre_labels, country_label=None, now_playing=None):
-    """Главный экран раздела «Кино»: как искать и что сейчас в прокате. Тот же
-    визуальный паттерн, что у Гардероба (home_screen)."""
-    b = MessageBuilder()
-    b.text_line("🎬 ")
-    b.bold("Кино")
-    b.newline()
-    b.spacer()
-    if now_playing:
-        b.spacer()
-        b.text_line("🎟️ ")
-        b.bold(f"Сейчас в кино · {country_label}")
-        b.newline()
-        for item in now_playing[:5]:
-            _format_movie_row(b, item)
-        if len(now_playing) > 5:
-            b.line(f"Ещё {len(now_playing) - 5} фильма в прокате")
-    elif country_label:
-        b.spacer()
-        b.text_line("🎟️ ")
-        b.bold(f"Сейчас в кино · {country_label}")
-        b.newline()
-        b.line("Пока не удалось подтвердить актуальные кинотеатральные показы.")
-
-    return b.build_stripped()
-
-
 def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=None, recommendation=None):
     """Ежедневная кино-витрина: рекомендация дня, локальный прокат и кинофакт."""
     cinema_day = cinema_day or {}
@@ -582,53 +535,6 @@ def _item_value(item, key, default=None):
     if isinstance(item, dict):
         return item.get(key, default)
     return getattr(item, key, default)
-
-
-def _primary_genre(movie) -> str | None:
-    genres = _item_value(movie, "genres")
-    if isinstance(genres, list):
-        if not genres:
-            return None
-        value = _movie_genre_text(genres[0])
-        return value[:1].upper() + value[1:] if value else None
-    genre = _item_value(movie, "genre")
-    value = _movie_genre_text(genre) if genre else None
-    return value[:1].upper() + value[1:] if value else None
-
-
-def _format_rating(rating: float | None) -> str | None:
-    try:
-        value = float(rating)
-    except (TypeError, ValueError):
-        return None
-    if value <= 0:
-        return None
-    return f"⭐ {value:.1f}"
-
-
-def has_visible_movie_rating(movie) -> bool:
-    """Рейтинг можно показать, только если он не основан на нескольких голосах."""
-    vote_count = int(_item_value(movie, "vote_count", 0) or 0)
-    return bool(_format_rating(_item_value(movie, "rating"))) and vote_count >= 25
-
-
-def _format_movie_row(b: MessageBuilder, movie, *, with_description=False) -> None:
-    title = str(_item_value(movie, "title", "") or "").strip()
-    if not title:
-        return
-    b.text_line("• ")
-    b.bold(title)
-    genre = _primary_genre(movie)
-    if genre:
-        b.text_line(f" · {genre}")
-    if with_description:
-        overview = clip(str(_item_value(movie, "overview", "") or ""), limit=110)
-        if overview:
-            if overview[-1] not in ".!?…":
-                overview += "."
-        if overview:
-            b.text_line(f" · {overview}")
-    b.newline()
 
 
 def movie_card(item, tm):
@@ -1004,9 +910,6 @@ def favorite_movies_added_card(titles):
 def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
     """Недельная литературная витрина без рейтингов и служебных подписей."""
     day = day if isinstance(day, date) else date.today()
-    daily_book = daily_book or {}
-    rebus = daily_book.get("rebus") or {}
-    birthday = daily_book.get("birthday") or {}
     b = MessageBuilder()
     b.text_line("📚 ")
     b.bold(f"Литературный вайб · {_format_date_label(day)}")
@@ -1329,8 +1232,6 @@ def _book_premiere_date(item):
 def music_week_screen(_city, daily_music, concerts, *, day=None):
     """Короткая витрина Музыки с ближайшими концертами и ребусом."""
     day = day or datetime.now().date()
-    daily_music = daily_music or {}
-    rebus = daily_music.get("rebus") or {}
     b = MessageBuilder()
     b.text_line("🎧 ")
     b.bold(f"Музыка рядом · {_format_date_label(day)}")
@@ -1361,7 +1262,7 @@ def music_week_screen(_city, daily_music, concerts, *, day=None):
     else:
         b.line(" Пока нет подтверждённых ближайших выступлений.")
 
-    fact = str((events[0].get("artist_fact") if events else "") or "").strip()
+    fact = str((_item_value(events[0], "artist_fact", "") if events else "") or "").strip()
     if events and not fact:
         first = events[0]
         artist = str(_item_value(first, "artist", "") or "").strip()
@@ -1494,139 +1395,6 @@ def _format_date_label(day: date, *, include_year: bool = False) -> str:
 
 def _format_today_label(day: date) -> str:
     return f"{_WEEKDAY_SHORT[day.weekday()]}, {_format_date_label(day)}"
-
-
-def _join_with_and(parts) -> str:
-    parts = [str(p) for p in parts if str(p).strip()]
-    if not parts:
-        return ""
-    if len(parts) == 1:
-        return parts[0]
-    if len(parts) == 2:
-        return f"{parts[0]} и {parts[1]}"
-    return f"{', '.join(parts[:-1])} и {parts[-1]}"
-
-
-def _format_event_period(start_date: date, end_date: date) -> str:
-    if start_date > end_date:
-        start_date, end_date = end_date, start_date
-    if start_date == end_date:
-        return _format_date_label(start_date, include_year=True)
-    if start_date.year != end_date.year:
-        return (
-            f"{_format_date_label(start_date, include_year=True)}"
-            f" – {_format_date_label(end_date, include_year=True)}"
-        )
-    if start_date.month == end_date.month:
-        return f"{start_date.day}–{end_date.day} {_MONTHS_RU[start_date.month]}"
-    return f"{_format_date_label(start_date)} – {_format_date_label(end_date)}"
-
-
-def _format_dates(dates: list[date]) -> str:
-    unique_dates = sorted(set(dates))
-    if not unique_dates:
-        return ""
-
-    current_year = date.today().year
-    same_month = all(d.year == unique_dates[0].year and d.month == unique_dates[0].month for d in unique_dates)
-    if same_month:
-        days = [str(d.day) for d in unique_dates]
-        include_year = unique_dates[0].year != current_year
-        if len(unique_dates) >= 3 and all(
-            (unique_dates[idx] - unique_dates[idx - 1]).days == 1 for idx in range(1, len(unique_dates))
-        ):
-            text = f"{unique_dates[0].day}–{unique_dates[-1].day} {_MONTHS_RU[unique_dates[0].month]}"
-        else:
-            text = f"{_join_with_and(days)} {_MONTHS_RU[unique_dates[0].month]}"
-        if include_year:
-            text += f" {unique_dates[0].year}"
-        return text
-
-    if len(unique_dates) >= 3 and all(
-        (unique_dates[idx] - unique_dates[idx - 1]).days == 1 for idx in range(1, len(unique_dates))
-    ):
-        return (
-            f"{_format_date_label(unique_dates[0], include_year=unique_dates[0].year != current_year)}"
-            f" – {_format_date_label(unique_dates[-1], include_year=unique_dates[-1].year != current_year)}"
-        )
-
-    return _join_with_and(
-        _format_date_label(day, include_year=day.year != current_year) for day in unique_dates
-    )
-
-
-def _group_concerts(events) -> list[dict]:
-    groups = {}
-    order = []
-    for event in events or []:
-        title = str(event.get("title", "")).strip()
-        place = str(event.get("place", "")).strip()
-        day = _parse_event_date(event.get("date"))
-        context = str(event.get("context", "")).strip()
-        key = (title, place, context)
-        if key not in groups:
-            groups[key] = {"title": title, "place": place, "context": context, "dates": []}
-            order.append(key)
-        if day:
-            groups[key]["dates"].append(day)
-    return [groups[key] for key in order if groups[key].get("title")]
-
-
-def _group_movies_by_date(events) -> list[tuple[date, list[dict]]]:
-    groups = {}
-    order = []
-    for event in events or []:
-        day = _parse_event_date(_item_value(event, "release_date") or _item_value(event, "date"))
-        if not day:
-            continue
-        if day not in groups:
-            groups[day] = []
-            order.append(day)
-        groups[day].append(event)
-    return [(day, groups[day]) for day in order]
-
-
-def _movie_genre_text(genre: str | None) -> str:
-    raw = str(genre or "").strip()
-    mapping = {
-        "Семейный": "семейный фильм",
-        "семейный": "семейный фильм",
-        "История": "исторический фильм",
-        "история": "исторический фильм",
-        "Документальный": "документальный фильм",
-        "документальный": "документальный фильм",
-        "Мультфильм": "мультфильм",
-        "мультфильм": "мультфильм",
-        "Премьера": "премьера",
-        "премьера": "премьера",
-    }
-    if raw in mapping:
-        return mapping[raw]
-    return raw.lower()
-
-
-def _concert_card(b: MessageBuilder, event: dict) -> None:
-    b.bold(event.get("title", ""))
-    b.newline()
-    if event.get("context"):
-        b.labeled_line("Формат", event["context"], lowercase=False)
-    if event.get("place"):
-        b.labeled_line("Место", event["place"], lowercase=False)
-    date_text = _format_dates([d for d in event.get("dates", []) if isinstance(d, date)])
-    if date_text:
-        b.labeled_line("Дата", date_text, lowercase=False)
-
-
-def _movie_item(b: MessageBuilder, event: dict) -> None:
-    title = str(_item_value(event, "title", "") or "").strip()
-    if not title:
-        return
-    b.text_line("• ")
-    b.bold(title)
-    genre = _primary_genre(event)
-    if genre:
-        b.text_line(f" · {genre}")
-    b.newline()
 
 
 def _weekly_rating(value, count, scale) -> str:

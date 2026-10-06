@@ -26,8 +26,6 @@ class RetryingHTTPXRequest(HTTPXRequest):
     def _request_label(url: str, request_data=None):
         path = urlparse(url).path.rstrip("/")
         endpoint = path.rsplit("/", 1)[-1] if path else ""
-        if endpoint.startswith("bot") and "/" in path:
-            endpoint = path.rsplit("/", 1)[-1]
         operation = endpoint or "telegram_api"
         chat_id = None
         update_type = ""

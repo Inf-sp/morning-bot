@@ -5,7 +5,6 @@ import config
 import live_language
 import srs
 import store
-import trainer_engine
 from dictionary_repository import DictionaryRepository
 from learning_dictionary import entry_language, entry_term, entry_translation
 from dictionary_model import entry_is_dictionary_word, normalize_term_case
@@ -172,21 +171,6 @@ def select_daily_material(cid):
     return _save_daily_material(cid, today, lang, entry)
 
 
-def _daily_focus_text(entry, kind):
-    """Для слова сначала предлагает вспомнить перевод; для остальных типов
-    использует уже посчитанный SRS-уровень без AI-вызова."""
-    if kind == "word":
-        return "сначала вспомни перевод, потом проверь себя."
-    level = srs.normalize_state(entry)["srs_level"]
-    if level <= 1:
-        return "вспомнить перевод до открытия спойлера."
-    if kind == "rule":
-        return "применить правило в одном своём предложении."
-    if kind == "phrase":
-        return "вспомнить фразу без подсказки."
-    return "вспомнить конструкцию без подсказки."
-
-
 def build_learning_home(cid):
     """Данные для главного экрана раздела 'Обучение': материал дня + короткий
     фокус тренировки. UI (ui/menu.py) только рендерит эти поля, не читает
@@ -265,19 +249,6 @@ def reset_daily_material_cache(cid):
 # Один режим "Тренажёр": сам выбирает материал, формат задания и сложность
 # (см. docs/word-trainer.md, spec-learning-rework). Прогресс/уровни/интервалы
 # считает srs.py — этот модуль только оркестрирует UI и очередь.
-
-_ALL_EXERCISES = trainer_engine.ALL_EXERCISES
-
-_TRAINER_PHRASE_CORRECTIONS = {
-    "waar wacht je op": {
-        "term": "Waar wacht je op?",
-        "translation": "Что ты ждёшь?",
-        "english": "What are you waiting for?",
-        "bad_translation": "На что ты ждешь",
-        "unneeded_preposition": "на",
-    },
-}
-
 
 def _train_full_entries(cid, language):
     """Полные записи словаря нужного языка с переводом — материал для тренировки."""

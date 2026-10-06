@@ -145,14 +145,7 @@ class StatusManager:
         if self.mode == "inline" and self._inline_cleared:
             return False
         try:
-            if self.mode == "inline":
-                # Обычный inline-сценарий временно заменяет текущую карточку статусом.
-                # В preserve_message статус меняет только клавиатуру — текст карточки
-                # остаётся видимым до готового результата.
-                await self.message.edit_text(text, **kwargs)
-                return True
-            else:
-                await self.message.edit_text(text, **kwargs)
+            await self.message.edit_text(text, **kwargs)
             return True
         except Exception:
             return False
@@ -538,6 +531,9 @@ def chunk_text_with_entities(text: str, entities, limit: int = 4000):
     start = 0
     while start < total:
         end = min(start + limit, total)
+        # Не разрезаем суррогатную пару (эмодзи) на границе чанка.
+        if end < total and 0xD800 <= int.from_bytes(u16[end * 2 - 2:end * 2], "little") <= 0xDBFF:
+            end -= 1
         chunk_text = u16[start * 2:end * 2].decode("utf-16-le")
         chunk_entities = []
         for e in entities:

@@ -397,7 +397,7 @@ def _classify_external_source(url: str, artist: str) -> str:
 async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     """Tavily ищет упоминания, Firecrawl достаёт содержимое найденных страниц,
     AI извлекает из каждой структурированные события. Только будущие концерты
-    в cc и его соседях (см. _neighbor_ccs)."""
+    в выбранной стране cc."""
     import secure
     from datetime import datetime
     import research
@@ -616,12 +616,6 @@ def merge_concert_events(tm_events: list, external_events: list) -> list:
     return sorted(best.values(), key=lambda e: e.get("dates", {}).get("start", {}).get("localDate") or "9999-99-99")
 
 
-async def refresh_artist_external_events(artist: str, cc: str, cname: str = ""):
-    """Запускает проверку внешних источников сразу для одного артиста — вызывается
-    при добавлении нового артиста в любимые, не дожидаясь недельного цикла."""
-    return await get_external_events_for_artist(artist, cc, cname, force=True)
-
-
 _GENRE_TRANSLATIONS = {
     "rock": "Рок", "pop": "Поп", "hip-hop/rap": "Хип-хоп", "hip hop": "Хип-хоп",
     "electronic": "Электроника", "dance/electronic": "Электроника", "jazz": "Джаз",
@@ -706,30 +700,6 @@ def _concert_context(e):
         return f"Фестиваль · {event_name}"
     return "Сольный концерт"
 
-def _concert_place_name(name, cc=""):
-    cc = (cc or "").upper()
-    by_cc = {
-        "NL": "Нидерландах",
-        "BE": "Бельгии",
-        "DE": "Германии",
-        "FR": "Франции",
-        "GB": "Великобритании",
-        "ES": "Испании",
-        "IT": "Италии",
-        "AT": "Австрии",
-        "CH": "Швейцарии",
-        "PL": "Польше",
-        "SE": "Швеции",
-        "DK": "Дании",
-        "PT": "Португалии",
-    }
-    if cc in by_cc:
-        return by_cc[cc]
-    low = str(name or "").strip().lower()
-    if low in ("нидерланды", "netherlands", "nl"):
-        return "Нидерландах"
-    return str(name or "твоей стране").strip()
-
 _CONCERTS_CACHE_TTL = 31 * 86400
 _CONCERTS_CACHE_VERSION = 6
 _ARTIST_CONCERT_CHECKS_VERSION = 2
@@ -754,11 +724,6 @@ def _concerts_cache_get(cid, cc):
            for event in entry.get("events", []) if isinstance(event, dict)):
         return None
     return filter_concert_events(entry.get("events", []), cc)
-
-
-def cached_concerts(cid, cc):
-    """Подтверждённая недельная афиша из кэша без обращения к внешним сервисам."""
-    return _concerts_cache_get(cid, str(cc or "").upper()) or []
 
 
 def _concerts_cache_set(cid, cc, events):
@@ -979,20 +944,6 @@ async def refresh_new_artist_concerts(cid, artist, cc=None, cname=None):
     return events
 
 
-_SEEN_CONCERTS_LIMIT = 300  # ограничение размера истории «виденных» concert ID на пользователя
-
-
-def _concert_event_id(e):
-    """Стабильный ID концерта для сравнения «уже видел / новый»: нативный id источника,
-    иначе (артист, дата, город) — тот же ключ, которым события дедуплицируются в _ticketmaster_events_many."""
-    if e.get("id"):
-        return str(e["id"])
-    artist = e.get("_artist", "")
-    date = e.get("dates", {}).get("start", {}).get("localDate", "")
-    city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
-    return f"{artist.lower()}:{date}:{city.lower()}"
-
-
 def _concert_date_unix(local_date):
     """Return local noon for an ISO event date, or ``None`` when it is invalid.
 
@@ -1010,98 +961,6 @@ def _concert_date_unix(local_date):
         )
     except (TypeError, ValueError, OverflowError, OSError):
         return None
-
-
-def _seen_concerts_has_history(cid):
-    return str(cid) in store._load(config.SEEN_CONCERTS_KEY)
-
-
-def _seen_concerts_get(cid):
-    return set(store._load(config.SEEN_CONCERTS_KEY).get(str(cid), []))
-
-
-def _seen_concerts_add(cid, ids):
-    d = store._load(config.SEEN_CONCERTS_KEY)
-    merged = list(dict.fromkeys([*d.get(str(cid), []), *ids]))
-    d[str(cid)] = merged[-_SEEN_CONCERTS_LIMIT:]
-    store._save(config.SEEN_CONCERTS_KEY, d)
-
-
-async def _fetch_favorite_events(cid):
-    """Концерты избранных артистов пользователя в его стране: сперва недельный кэш (его прогревает
-    job_refresh_concerts_cache по вс перед этой же проверкой), иначе живой запрос. [] если артистов/ключа нет."""
-    artists = _ensure_artists(cid)
-    if not artists or not config.TICKETMASTER_API_KEY:
-        return []
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or "NL").upper()
-    cname = s.get("country") or "твоя страна"
-    cached = _concerts_cache_get(cid, cc)
-    events = cached if cached is not None else await _fetch_concerts(artists, cc, cname, cid=cid)
-
-    from datetime import datetime
-    today_str = _today().isoformat()
-    return [e for e in events
-            if e.get("dates", {}).get("start", {}).get("localDate", "9999") >= today_str]
-
-
-async def find_new_favorite_concerts(cid):
-    """Сравнивает свежие концерты избранных артистов с уже виденными и возвращает только новые
-    (без побочных эффектов — запись в seen делает вызывающий код после успешной отправки)."""
-    events = await _fetch_favorite_events(cid)
-    seen = _seen_concerts_get(cid)
-    return [e for e in events if _concert_event_id(e) not in seen]
-
-
-async def _build_new_concerts_msg(cid):
-    """Новые концерты любимых артистов -> MessageSpec, либо None если показывать нечего.
-    Молчит, если ничего нового не появилось с прошлой проверки. При первом включении
-    (нет истории seen) тихо запоминает текущие концерты, ничего не шлёт — иначе первый
-    запуск продублировал бы всю афишу как «новое»."""
-    if not _seen_concerts_has_history(cid):
-        events = await _fetch_favorite_events(cid)
-        _seen_concerts_add(cid, [_concert_event_id(e) for e in events])
-        return None
-
-    new_events = await find_new_favorite_concerts(cid)
-    if not new_events:
-        return None
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or "NL").upper()
-    flag = util.flag_from_cc(cc)
-
-    from util import _MONTHS
-
-    def _fmt_date(ds):
-        try:
-            y, m, dd = ds.split("-")
-            return f"{int(dd)} {_MONTHS[int(m)-1]} {y}"
-        except Exception:
-            return ds
-
-    rows_data = []
-    for e in sorted(new_events, key=lambda event: _event_date(event) or "9999-99-99"):
-        date = e.get("dates", {}).get("start", {}).get("localDate", "")
-        city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
-        rows_data.append({
-            "artist": e.get("_artist", ""),
-            "context": _concert_context(e),
-            "flag": flag,
-            "place": city,
-            "genre": _concert_genre(e),
-            "price": _concert_min_price(e),
-            "date": _fmt_date(date) if date else "",
-            "date_unix": _concert_date_unix(date),
-            "url": e.get("url", ""),
-            "poster": str(max(
-                (e.get("images") or [{}]), key=lambda image: int(image.get("width") or 0),
-            ).get("url") or ""),
-            "description": str(e.get("info") or e.get("pleaseNote") or "").strip(),
-        })
-
-    msg = leisure_ui.concerts_list("Новые концерты твоих артистов", rows_data)
-    _seen_concerts_add(cid, [_concert_event_id(e) for e in new_events])
-    return msg
 
 
 _CONCERT_CC_MAP = {
@@ -1134,31 +993,6 @@ def _concert_country_label(cc: str, fallback: str = "") -> str:
     name = _concert_country_name(cc, fallback)
     flag = util.flag_from_cc(str(cc or "").upper())
     return f"{flag} {name}".strip()
-
-# Реальные географические соседи (сухопутная граница/ближайший регион), ограничены
-# набором стран выше — используется для "соседние регионы" в поиске концертов
-# (§ внешний поиск по артисту), не для смены страны кнопкой.
-_NEIGHBOR_CC = {
-    "NL": ["BE", "DE"],
-    "BE": ["NL", "FR", "DE"],
-    "DE": ["NL", "BE", "FR", "CH", "AT", "PL", "DK"],
-    "FR": ["BE", "DE", "CH", "IT", "ES", "GB"],
-    "GB": ["FR"],
-    "ES": ["FR", "PT"],
-    "IT": ["FR", "CH", "AT"],
-    "AT": ["DE", "CH", "IT"],
-    "CH": ["DE", "FR", "IT", "AT"],
-    "PL": ["DE"],
-    "SE": ["DK"],
-    "DK": ["DE", "SE"],
-    "PT": ["ES"],
-}
-
-
-def _neighbor_ccs(cc: str) -> list:
-    """Соседние страны для cc из _CONCERT_CC_MAP; [] если cc вне этого набора."""
-    return list(_NEIGHBOR_CC.get((cc or "").upper(), []))
-
 
 async def send_concerts_home(bot, cid, q=None):
     """Open the actual nearest-events result, not a second introductory screen."""
@@ -1272,18 +1106,16 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         if artists_override else
         "Пока не нашёл ближайших концертов любимых артистов.\n\nМожно поискать другого исполнителя или сменить страну."
     )
-    rows_data = [item for item in rows_data if item.get("poster")]
-    _CONCERT_CARD_VIEWS[str(cid)] = {"title": place_label, "items": rows_data, "empty": empty_hint}
-    msg, card_kb, page = _concert_card_view(cid, fallback_keyboard=kb)
+    # Классический список: все найденные выступления года, ссылка в имени артиста
+    # (docs/music.md). Ticketmaster/внешние события часто без постера, поэтому
+    # карточки с обязательным фото прятали всю афишу.
+    msg = leisure_ui.concerts_list(place_label, rows_data, empty_hint=empty_hint)
     store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
-    if rows_data:
-        await bot.send_photo(
-            chat_id=cid, photo=rows_data[page]["poster"], caption=msg.text,
-            caption_entities=msg.entities, reply_markup=card_kb,
-        )
-    else:
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=card_kb)
+    await bot.send_message(
+        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
+        disable_web_page_preview=True,
+    )
 
 
 def _concert_card_view(cid, page=0, fallback_keyboard=None):

@@ -284,10 +284,14 @@ async def _offer_collection_choices(bot, cid, key, text, origin):
     choices = [item for item in choices if item["value"]]
     if not choices:
         return False
+    now = time.time()
+    for stale in [key_ for key_, value in _add_choices.items()
+                  if now - float(value.get("created_at") or 0) > _ADD_CHOICE_TTL]:
+        _add_choices.pop(stale, None)
     token = secrets.token_hex(4)
     _add_choices[token] = {
         "cid": str(cid), "key": key, "origin": origin,
-        "created_at": time.time(), "choices": choices,
+        "created_at": now, "choices": choices,
     }
     names = {"books": "книгу", "movies": "фильм или сериал",
              "games": "игру", "artists": "артиста"}
@@ -445,7 +449,7 @@ async def _open_legacy_collection(bot, cid, key):
         return
     import cleanup
 
-    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music"}[key]
+    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music", "games": "m_games"}[key]
     await cleanup.open_collection(bot, cid, collection[1], back=back)
 
 

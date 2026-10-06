@@ -193,13 +193,7 @@ async def handle(update, context, remove_reply_keyboard):
         except Exception as e:
             await verify.safe_error(bot, cid, e)
         return
-    if data.startswith("set_learning_language_"):
-        try:
-            await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if data.startswith("set_learning_level_"):
+    if data.startswith(("set_learning_language_", "set_learning_level_")):
         try:
             await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
         except Exception as e:

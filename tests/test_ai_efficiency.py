@@ -79,13 +79,11 @@ def test_utility_routes_start_with_gemini():
         "learning", "learning_trainer", "learning_dict_add", "trainer",
         "dictionary_import", "wardrobe_utility", "travel_utility",
     ):
-        assert ai._resolve(None, None, module=module) == ("gemini", "openrouter")
+        assert ai._resolve(None, None, module=module) == ai.AI_ORDER
 
 
 def test_wardrobe_item_parsing_uses_the_common_gemini_route():
-    assert ai._resolve(None, None, module="wardrobe_utility") == (
-        "gemini", "openrouter",
-    )
+    assert ai._resolve(None, None, module="wardrobe_utility") == ai.AI_ORDER
     assert ai._resolve(None, (ai.GROQ_SIMPLE, "cf")) == (ai.GROQ_SIMPLE, "cf")
 
 
@@ -210,17 +208,17 @@ def test_openrouter_uses_ordered_model_fallbacks(monkeypatch):
     }
 
 
-def test_all_central_routes_skip_direct_mistral():
-    for order in {ai.SIMPLE_ORDER, ai.STANDARD_ORDER, ai.COMPLEX_ORDER}:
-        assert order == ("gemini", "openrouter")
+def test_central_chain_is_gemini_then_reserves_in_documented_order():
+    # docs/admin.md: Gemini, затем Groq, Mistral, Cloudflare AI и OpenRouter.
+    assert ai.AI_ORDER == ("gemini", "groq", "mistral", "cf", "openrouter")
 
 
-def test_all_central_routes_use_gemini_then_openrouter_only():
-    assert ai.SIMPLE_ORDER == ("gemini", "openrouter")
-    assert ai.STANDARD_ORDER == ("gemini", "openrouter")
-    assert ai.COMPLEX_ORDER == ("gemini", "openrouter")
+def test_all_central_routes_use_the_single_ai_chain():
+    assert ai.SIMPLE_ORDER == ai.AI_ORDER
+    assert ai.STANDARD_ORDER == ai.AI_ORDER
+    assert ai.COMPLEX_ORDER == ai.AI_ORDER
     assert all(
-        ai._resolve(None, None, module=module) == ("gemini", "openrouter")
+        ai._resolve(None, None, module=module) == ai.AI_ORDER
         for module in ai.MODULE_POLICY
     )
 
@@ -237,7 +235,7 @@ def test_every_central_text_ai_route_has_a_reserve_provider():
     ]
 
     for order, _unused in routes:
-        assert order == ("gemini", "openrouter")
+        assert order == ai.AI_ORDER
 
 
 def test_all_premium_recommendations_have_a_cache_ttl():

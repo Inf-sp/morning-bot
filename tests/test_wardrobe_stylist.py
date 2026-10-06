@@ -603,12 +603,13 @@ def test_parsed_item_keeps_fit_season_and_occasions():
     assert item["occasions"] == ["город", "офис"]
 
 
-def test_style_summary_explains_that_avoid_checks_are_restrictions():
+def test_style_summary_shows_only_selected_styles():
+    # Экран стиля упрощён (3435405): посадка, цвета и ограничения в сводке не выводятся.
     message = wardrobe_style(
         ["минимализм", "скандинавский"], "свободная", ["тёмные", "светлые"], ["узкий крой"])
 
     assert "Стиль: минимализм · скандинавский" in message.text
-    assert "Не предлагать: узкий крой" in message.text
+    assert "Не предлагать" not in message.text
 
 
 def test_style_screen_reads_settings_once(monkeypatch):

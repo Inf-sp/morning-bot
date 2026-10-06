@@ -109,7 +109,7 @@ def _view(kind, items, page=0):
     if items:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"yt:{kind}:{(page - 1) % len(items)}"),
-            InlineKeyboardButton(f"{page + 1}/5", callback_data="noop"),
+            InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"yt:{kind}:{(page + 1) % len(items)}"),
         ])
     back = "m_movie" if kind in ("movie", "tv") else f"m_{'books' if kind == 'book' else 'games'}"

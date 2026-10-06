@@ -1,4 +1,5 @@
 import copy
+import threading
 import time
 import uuid as _uuid
 from pathlib import Path
@@ -14,10 +15,12 @@ _save = storage_driver.save
 mutate_kv = storage_driver.mutate
 _PROFILE_CACHE_TTL = 60
 _profile_cache = {}
+_profile_generation = {}
+_profile_lock = threading.Lock()
 
 # --- helpers ---
 def get_settings(chat_id):
-    return _load(config.SETTINGS_FILE).get(str(chat_id), config.DEFAULT_CITY)
+    return _load(config.SETTINGS_FILE).get(str(chat_id)) or dict(config.DEFAULT_CITY)
 
 def set_settings(chat_id, lat, lon, city, country="", cc=""):
     def change(data):
@@ -55,9 +58,21 @@ def get_profile(chat_id):
     cached = _profile_cache.get(key)
     if cached and time.monotonic() - cached[0] < _PROFILE_CACHE_TTL:
         return copy.deepcopy(cached[1])
+    with _profile_lock:
+        generation = _profile_generation.get(key, 0)
     profile = _load(config.PROFILE_KEY).get(key, {})
-    _profile_cache[key] = (time.monotonic(), copy.deepcopy(profile))
+    with _profile_lock:
+        # Пока читали, профиль мог измениться в другом потоке: старое значение
+        # не кэшируем, иначе запись была бы «не видна» до истечения TTL.
+        if _profile_generation.get(key, 0) == generation:
+            _profile_cache[key] = (time.monotonic(), copy.deepcopy(profile))
     return copy.deepcopy(profile)
+
+
+def _forget_profile(key):
+    with _profile_lock:
+        _profile_generation[key] = _profile_generation.get(key, 0) + 1
+        _profile_cache.pop(key, None)
 
 def set_profile(chat_id, prof):
     """Атомарно заменяет профиль пользователя внутри общего KV-ключа."""
@@ -68,8 +83,10 @@ def set_profile(chat_id, prof):
         data[key] = profile
         return data, None
 
-    mutate_kv(config.PROFILE_KEY, change)
-    _profile_cache[key] = (time.monotonic(), copy.deepcopy(profile))
+    try:
+        mutate_kv(config.PROFILE_KEY, change)
+    finally:
+        _forget_profile(key)
 
 
 def mutate_profile(chat_id, mutator):
@@ -81,10 +98,12 @@ def mutate_profile(chat_id, mutator):
         updated, result = mutator(current if isinstance(current, dict) else {})
         updated = dict(updated or {})
         data[key] = updated
-        return data, (copy.deepcopy(updated), result)
+        return data, result
 
-    updated, result = mutate_kv(config.PROFILE_KEY, change)
-    _profile_cache[key] = (time.monotonic(), copy.deepcopy(updated))
+    try:
+        result = mutate_kv(config.PROFILE_KEY, change)
+    finally:
+        _forget_profile(key)
     return result
 
 
@@ -503,13 +522,18 @@ _PER_USER_KEYS.update(
 def purge_user(cid):
     """Удаляет все данные пользователя из БД: per-user ключи + wardrobe_user_{cid}."""
     cid_str = str(cid)
-    _profile_cache.pop(cid_str, None)
-    # Per-user JSON-словари
+
+    def change(data):
+        data.pop(cid_str, None)
+        return data, None
+
+    # Per-user JSON-словари общие для всех пользователей: удаляем атомарно,
+    # чтобы параллельная запись другого пользователя не потерялась.
     for key in _PER_USER_KEYS:
         d = _load(key)
         if isinstance(d, dict) and cid_str in d:
-            del d[cid_str]
-            _save(key, d)
+            mutate_kv(key, change)
+    _forget_profile(cid_str)
     # Отдельный ключ шкафа
     wardrobe_key = f"wardrobe_user_{cid_str}"
     storage_driver.delete(wardrobe_key)

@@ -491,22 +491,6 @@ async def send_scheduled_notification(bot, cid, kind):
         raise
 
 
-async def _run_notif_test(bot, cid, kind) -> bool:
-    """Предпросмотр уведомления: вызывает тот же код, что и плановое уведомление.
-    Возвращает True/False — вызывающий сам решает, что показать администратору."""
-    try:
-        await send_scheduled_notification(bot, cid, kind)
-        return True
-    except Exception as e:
-        _log.error("notif test failed for kind=%s: %r", kind, e, exc_info=True)
-        import tracking
-        tracking.log_error(
-            "app", str(e), kind=f"notif_test:{kind}", exc=e,
-            section="Мой день", action="не отправлено уведомление",
-        )
-        return False
-
-
 class NotificationOption:
     """Одно тестируемое уведомление для админ-панели: ключ + заголовок + расписание.
 
@@ -561,11 +545,6 @@ def get_notification_options() -> list:
             sort_key=_time_sort_key(time_label) * 100 + order,
         ))
     return sorted(options, key=lambda opt: opt.sort_key)
-
-
-def get_admin_notification_options() -> list:
-    """Compatibility wrapper: админка использует тот же список, что и пользовательское меню."""
-    return get_notification_options()
 
 
 def _notif_schedule(kind: str) -> str:
@@ -964,11 +943,6 @@ async def send_wardrobe_style(bot, cid, q=None):
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
-
-
-async def send_wardrobe_prefs(bot, cid, back="set_priorities", q=None):
-    """Совместимость со старыми сообщениями: открываем актуальный экран стиля."""
-    await send_wardrobe_style(bot, cid, q=q)
 
 
 async def handle_callback(bot, cid, data, q=None):

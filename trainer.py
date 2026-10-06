@@ -505,9 +505,11 @@ async def _explain_dutch_review(text, report, *, expected="", task="") -> dict:
     )
     try:
         result = await ai.allm_json(
-            prompt, 350, order=("gemini", "openrouter"), module="learning_trainer",
+            prompt, 350, module="learning_trainer",
         )
     except Exception:
+        return {}
+    if not isinstance(result, dict):
         return {}
     return {
         "acceptable": bool(result.get("acceptable")),

@@ -6,42 +6,15 @@
 
 Здесь только сборка текста. Логика/данные — в settings.py (send_admin_*).
 """
-from .builder import MessageBuilder, MessageSpec, WARNING_EMOJI
+from .builder import MessageBuilder
 from . import rich
-from .constants import STATUS_EMOJI, UI_EMOJI, ui_label
-
-# --- статус-точки (единственные допустимые «светофоры») ---
-OK, WARN, BAD, OFF = STATUS_EMOJI["ok"], STATUS_EMOJI["warn"], STATUS_EMOJI["bad"], "□"
-UNKNOWN = STATUS_EMOJI["unknown"]      # давно не было проверки - не значит "всё ок"
-WARNING = WARNING_EMOJI                # противоречивые/сломанные данные, а не статус сервиса
-
-
-def _num(n) -> str:
-    """Человекочитаемое число: 1234 -> '1.2k'."""
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        return str(n)
-    if n >= 10000:
-        return f"{n / 1000:.0f}k"
-    if n >= 1000:
-        return f"{n / 1000:.1f}k"
-    return str(n)
-
-
-def only():
-    return MessageSpec(text="❌ Только для администратора.")
+from .constants import UI_EMOJI, ui_label
 
 
 def deploy_report(version, title, release_notes):
     notes = [str(note).strip() for note in (release_notes or []) if str(note).strip()]
     if not notes:
         notes = ["Бот получил небольшие внутренние улучшения."]
-    change_notes = []
-    for note in notes:
-        change_notes.append(note)
-    if not change_notes:
-        change_notes = notes[:1]
 
     b = MessageBuilder()
     b.text_line(f"{UI_EMOJI['version']} ")
@@ -50,7 +23,7 @@ def deploy_report(version, title, release_notes):
     b.newline()
     b.bold("Что изменено:")
     b.newline()
-    for note in change_notes[:4]:
+    for note in notes[:4]:
         b.line(f"• {note}")
     b.spacer()
     b.text_line("Бот развёрнут и работает ✅")
@@ -351,126 +324,3 @@ def logs(rows, errors_24h, updated_at, updated_unix=None):
     msg = b.build_stripped()
     msg.rich_message = _logs_rich_message(rows, updated_at, updated_unix)
     return msg
-
-
-def user_card(name, city, cid, onboarded, last_seen, active_days, total_msgs, notif_on, notif_total):
-    b = MessageBuilder()
-    city_part = f" · {city}" if city else ""
-    b.bold(f"{name}{city_part}")
-    b.newline()
-    ob = "✅" if onboarded else "❌"
-    b.line(f"ID {str(cid)[:4]}… · онбординг {ob}")
-    b.spacer()
-    b.metric("Последний вход", last_seen.split(": ", 1)[-1] if ": " in last_seen else last_seen)
-    b.metric("Активных дней", f"{active_days} / 30")
-    b.metric("Сообщений всего", total_msgs)
-    b.metric("Уведомления", f"{notif_on} из {notif_total} вкл")
-    return b.build_stripped()
-
-
-def user_search_result(dot, name, city, last_seen):
-    b = MessageBuilder()
-    city_part = f" · {city}" if city else ""
-    b.line(f"{dot} {name}{city_part}")
-    b.line(last_seen)
-    return b.build_stripped()
-
-
-def _weather_ts_hhmm(value):
-    if not value:
-        return "—"
-    try:
-        from datetime import datetime
-        return datetime.fromisoformat(value).strftime("%H:%M")
-    except Exception:
-        return "—"
-
-
-def _weather_usage_status(total):
-    import config
-    if total >= config.WEATHER_HARD_DAILY_LIMIT:
-        return "🔴 Новые запросы заблокированы до следующего дня"
-    if total >= config.WEATHER_CRITICAL_LIMIT:
-        return f"{WARN} Почти достигнут бесплатный лимит"
-    if total >= config.WEATHER_WARNING_LIMIT:
-        return "🟡 Использование растёт"
-    return "🟢 Лимит в норме"
-
-
-def weather_usage_block(usage):
-    import config
-    total = int(usage.get("requests_total") or 0)
-    success = int(usage.get("requests_success") or 0)
-    failed = int(usage.get("requests_failed") or 0)
-    retry = int(usage.get("requests_retry") or 0)
-    cache_hits = int(usage.get("cache_hits") or 0)
-    left = max(0, config.WEATHER_FREE_DAILY_LIMIT - total)
-    b = MessageBuilder()
-    b.bold("OpenWeather · сегодня")
-    b.newline()
-    b.spacer()
-    b.label("Запросы", f"{total} / {config.WEATHER_FREE_DAILY_LIMIT:,}".replace(",", " "), lowercase=False).newline()
-    b.label("Успешно", success, lowercase=False)
-    b.text_line(" · ")
-    b.label("Ошибки", failed, lowercase=False)
-    b.text_line(" · ")
-    b.labeled_line("Повторы", retry, lowercase=False)
-    b.labeled_line("Из кэша", cache_hits, lowercase=False)
-    b.labeled_line("Осталось бесплатно", left, lowercase=False)
-    b.labeled_line("Последний запрос", _weather_ts_hhmm(usage.get("last_request_at")), lowercase=False)
-    if usage.get("last_error_reason"):
-        b.labeled_line("Последняя ошибка", usage.get("last_error_reason"))
-    b.spacer()
-    b.line(_weather_usage_status(total))
-    return b.build_stripped().text
-
-
-def _hm(ts):
-    if not ts:
-        return "—"
-    try:
-        from datetime import datetime
-        import config
-        return datetime.fromtimestamp(int(ts), config.TZ).strftime("%H:%M")
-    except Exception:
-        return "—"
-
-
-# ================= УВЕДОМЛЕНИЯ =================
-
-def broadcast(next_title, next_when):
-    """Экран «Уведомления»: только ближайшее автоматическое уведомление, без охвата."""
-    b = MessageBuilder()
-    b.bold(ui_label("notifications", "Уведомления"))
-    b.newline()
-    b.spacer()
-    b.bold("Следующее")
-    b.newline()
-    b.line(next_title)
-    b.line(next_when)
-    b.spacer()
-    b.line("Тест отправляется только вам.")
-    return b.build_stripped()
-
-
-def notification_picker(options):
-    """options: [NotificationOption]. Список для выбора уведомления перед тестом."""
-    b = MessageBuilder()
-    b.bold("Уведомление для теста")
-    b.newline()
-    b.spacer()
-    for opt in options:
-        b.line(opt.title)
-        b.line(opt.schedule_label)
-        b.spacer()
-    return b.build_stripped()
-
-
-# ================= ИНВАЙТ =================
-
-def invite(link):
-    b = MessageBuilder()
-    b.bold(ui_label("invite", "Подарочный инвайт:"))
-    b.newline()
-    b.link(link, link)
-    return b.build()

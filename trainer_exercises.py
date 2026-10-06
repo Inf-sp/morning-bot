@@ -158,32 +158,6 @@ def _is_sentence_like(value):
     return len(_tokens(value)) >= 4
 
 
-def _compatible_term(entry, candidate):
-    """Отвлекающий вариант должен совпадать по типу материала и форме."""
-    term = entry_term(entry)
-    other_term = entry_term(candidate)
-    if not term or not other_term or _value_kind(term) != _value_kind(other_term):
-        return False
-    pos = _entry_pos(entry)
-    other_pos = _entry_pos(candidate)
-    if pos and other_pos != pos:
-        return False
-    if pos == "verb":
-        lang = str(entry.get("lang") or "nl").casefold()
-        if _grammar_shape(term, lang) != _grammar_shape(other_term, lang):
-            return False
-    return True
-
-
-def _compatible_translation(entry, candidate):
-    correct = _first_translation(entry)
-    alternative = _first_translation(candidate)
-    if not correct or not alternative or _value_kind(correct) != _value_kind(alternative):
-        return False
-    pos = _entry_pos(entry)
-    return not pos or _entry_pos(candidate) == pos
-
-
 def clean_options(correct, candidates, needed=2):
     result = []
     seen = {str(correct).lower()}
@@ -216,15 +190,6 @@ def _local_distractors(entry, correct, language, rng):
         ))
     rng.shuffle(pool)
     return clean_options(correct, pool)
-
-
-def _wrong_terms(entry, other_entries, rng):
-    own_term = entry_term(entry).casefold()
-    pool = [entry_term(other) for other in other_entries
-            if entry_term(other) and entry_term(other).casefold() != own_term
-            and _compatible_term(entry, other)]
-    rng.shuffle(pool)
-    return pool
 
 
 def _blank_from_example(term, example_text):

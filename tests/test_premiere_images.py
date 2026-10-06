@@ -82,9 +82,11 @@ def test_game_premiere_without_poster_is_not_shown(monkeypatch):
 
     asyncio.run(leisure_games.send_game_premieres(bot, "42"))
 
-    assert [kind for kind, _kwargs in bot.sent] == ["gallery"]
+    # Одна перелистываемая карточка (docs/games.md): релиз без постера не попадает в страницы.
+    assert [kind for kind, _kwargs in bot.sent] == ["photo"]
     assert "Без постера" not in bot.sent[0][1]["caption"]
-    assert len(bot.sent[0][1]["media"]) == 2
+    assert bot.sent[0][1]["photo"] == "https://images.test/game0.jpg"
+    assert leisure_games._GAME_PREMIERE_VIEWS["42"] == items[1:]
 
 
 def test_book_premiere_without_cover_is_not_shown(monkeypatch):

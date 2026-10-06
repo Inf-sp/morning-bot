@@ -326,16 +326,14 @@ def _ctx_items(cid, ctx):
     if ctx.startswith("lv_") or ctx.startswith("lvls_"):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
-        store_key = {"movies": config.FAVORITE_MOVIES_KEY, "countries": config.SAVED_COUNTRIES_KEY,
-                     "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}.get(key)
+        store_key = _LOVE_STORE_KEYS.get(key)
         title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", "countries": f"{ui_label('countries', 'Чистка: страны')}",
                  "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
-        store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
-                     "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}.get(key)
+        store_key = _HIDDEN_STORE_KEYS.get(key)
         title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
                  "artists": "Скрытое: музыканты", "countries": "Скрытое: страны"}.get(key, "Скрытое")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
@@ -405,7 +403,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     total = len(items)
     pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
     page = max(0, min(page, pages - 1))
-    chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
+    chunk = _page_items(items, page)
     hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
     lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
@@ -474,8 +472,7 @@ def _cleanup_delete(cid, ctx):
         store.remove_wardrobe_items(cid, sel)
     elif ctx.startswith("lv_") or ctx.startswith("lvls_"):
         key = ctx[len("lvls_"):] if ctx.startswith("lvls_") else ctx[len("lv_"):]
-        store_key = {"movies": config.FAVORITE_MOVIES_KEY, "countries": config.SAVED_COUNTRIES_KEY,
-                     "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}.get(key)
+        store_key = _LOVE_STORE_KEYS.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
             if key == "artists":
@@ -483,8 +480,7 @@ def _cleanup_delete(cid, ctx):
                 leisure_concerts.invalidate_user_concerts_cache(cid)
     elif ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
-        store_key = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
-                     "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}.get(key)
+        store_key = _HIDDEN_STORE_KEYS.get(key)
         if store_key:
             store.set_list(store_key, cid, [it for i, it in enumerate(store.get_list(store_key, cid)) if i not in sel])
     elif ctx == "fridge":
@@ -655,9 +651,7 @@ def _apply_collection_action(ctx, cid, action_id, ids):
             )
             for value in selected_values:
                 recommendation_stoplist.add(cid, stoplist_kind, value, reason)
-    if action_id == "hide":
-        return _view_delete(ctx, cid, ids)
-    # remove and restore both mean: remove from the current collection only.
+    # hide, remove and restore all mean: remove from the current collection only.
     # For hidden collections this is "Вернуть в рекомендации" and does not add
     # the item to favorites/saved lists.
     return _view_delete(ctx, cid, ids)
@@ -690,18 +684,26 @@ async def open_collection(bot, cid, collection_id, back=None):
     await open_view(bot, cid, collection_id, back=back)
 
 
+def _ordered_view_items(ctx, cid):
+    """(title, items) в порядке отображения — общий для рендера и выбора страницы."""
+    title, items, _back = _view_items(ctx, cid)
+    if ctx == "music_favorite_artists":
+        import leisure_music
+        return title, leisure_music.group_favorite_artist_items(cid, items)
+    return title, _sort_items(items)
+
+
+def _page_items(items, page):
+    return items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
+
+
 async def _render_view(bot, cid, view_id, q=None):
     view = _views.get(view_id)
     if view is None:
         await _send_view_stale_message(bot, cid, q)
         return
     ctx = view["ctx"]
-    title, items, _back = _view_items(ctx, cid)
-    if ctx == "music_favorite_artists":
-        import leisure_music
-        items = leisure_music.group_favorite_artist_items(cid, items)
-    else:
-        items = _sort_items(items)
+    title, items = _ordered_view_items(ctx, cid)
     all_ids = {i for i, _ in items}
     view["selected_ids"] &= all_ids
     sel = view["selected_ids"]
@@ -709,7 +711,7 @@ async def _render_view(bot, cid, view_id, q=None):
     pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
     page = max(0, min(view["page"], pages - 1))
     view["page"] = page
-    chunk = items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]
+    chunk = _page_items(items, page)
     short_of = _short_ids([i for i, _ in chunk])
     if sel:
         count_line = f"Отмечено: {len(sel)} из {total}"
@@ -849,11 +851,14 @@ async def handle_view_callback(bot, cid, data, q=None):
         if not view.get("editing"):
             return
         short_id = rest[0]
-        _, items, _ = _view_items(ctx, cid)
-        matches = [i for i, _ in items if i.startswith(short_id)]
+        _, items = _ordered_view_items(ctx, cid)
+        # Короткий id уникален только в пределах показанной страницы.
+        page_ids = [i for i, _ in _page_items(items, view["page"])]
+        short_of = _short_ids(page_ids)
+        matches = [i for i in page_ids if short_of[i] == short_id] or [
+            i for i, _ in items if i.startswith(short_id)]
         if matches:
-            full_id = matches[0]
-            view["selected_ids"].symmetric_difference_update({full_id})
+            view["selected_ids"].symmetric_difference_update({matches[0]})
         await _render_view(bot, cid, view_id, q=q)
         return
     if op == "cledit":
@@ -870,9 +875,8 @@ async def handle_view_callback(bot, cid, data, q=None):
         return
     if op == "cla":
         page = int(rest[0])
-        _, items, _ = _view_items(ctx, cid)
-        items = _sort_items(items)
-        page_ids = {i for i, _ in items[page * CLEAN_PAGE:(page + 1) * CLEAN_PAGE]}
+        _, items = _ordered_view_items(ctx, cid)
+        page_ids = {i for i, _ in _page_items(items, page)}
         if page_ids <= view["selected_ids"]:
             view["selected_ids"] -= page_ids
         else:

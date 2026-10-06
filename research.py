@@ -22,9 +22,6 @@ import country_catalog
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
-_CF_CACHE = {}          # name.lower() -> (ts, dict)
-_CF_TTL = 86400         # факты о стране стабильны - сутки
-
 _ENGLISH_SEARCH_SCENARIOS = {
     "restaurant_local", "concert_specific", "game_releases", "book_releases",
 }
@@ -273,26 +270,6 @@ def wikidata_city_facts(name: str) -> dict:
 
 
 # ================= COUNTRY FACTS =================
-_COUNTRY_FACTS = {
-    "NL": {"capital": "Amsterdam", "languages": ["Dutch"], "region": "Europe", "currency": "EUR"},
-    "BE": {"capital": "Brussels", "languages": ["Dutch", "French", "German"], "region": "Europe", "currency": "EUR"},
-    "DE": {"capital": "Berlin", "languages": ["German"], "region": "Europe", "currency": "EUR"},
-    "FR": {"capital": "Paris", "languages": ["French"], "region": "Europe", "currency": "EUR"},
-    "GB": {"capital": "London", "languages": ["English"], "region": "Europe", "currency": "GBP"},
-    "ES": {"capital": "Madrid", "languages": ["Spanish"], "region": "Europe", "currency": "EUR"},
-    "IT": {"capital": "Rome", "languages": ["Italian"], "region": "Europe", "currency": "EUR"},
-    "AT": {"capital": "Vienna", "languages": ["German"], "region": "Europe", "currency": "EUR"},
-    "CH": {"capital": "Bern", "languages": ["German", "French", "Italian", "Romansh"], "region": "Europe", "currency": "CHF"},
-    "PL": {"capital": "Warsaw", "languages": ["Polish"], "region": "Europe", "currency": "PLN"},
-    "SE": {"capital": "Stockholm", "languages": ["Swedish"], "region": "Europe", "currency": "SEK"},
-    "DK": {"capital": "Copenhagen", "languages": ["Danish"], "region": "Europe", "currency": "DKK"},
-    "PT": {"capital": "Lisbon", "languages": ["Portuguese"], "region": "Europe", "currency": "EUR"},
-    "US": {"capital": "Washington, D.C.", "languages": ["English"], "region": "Americas", "currency": "USD"},
-    "CA": {"capital": "Ottawa", "languages": ["English", "French"], "region": "Americas", "currency": "CAD"},
-    "JP": {"capital": "Tokyo", "languages": ["Japanese"], "region": "Asia", "currency": "JPY"},
-    "IS": {"capital": "Reykjavík", "languages": ["Icelandic", "English"], "region": "Europe", "currency": "ISK"},
-}
-
 _COUNTRY_TRAVEL_PROFILES_PATH = Path(__file__).parent / "data" / "travel_country_profiles.json"
 
 
@@ -319,7 +296,7 @@ def country_facts(name, *, allow_fallback=True):
     row = country_catalog.country_data(name, allow_fallback=allow_fallback)
     if not row:
         return {}
-    currencies = row.get("currencies") or []
+    currencies = row.get("currencies") or [""]
     currency = currencies[0].get("code", "") if isinstance(currencies[0], dict) else str(currencies[0])
     return {
         "cc": row.get("country_code", ""), "capital": row.get("capital", ""),
@@ -352,11 +329,6 @@ def facts_block(d):
         parts.append(f"валюта: {d['currency']}")
     return "; ".join(parts)
 
-def grounded(d):
-    """Есть ли реальные данные (для advisory-лога «ответ без источника»)."""
-    return bool(d and (d.get("capital") or d.get("languages")))
-
-
 def country_lookup(query, *, allow_fallback=True):
     """Resolve a country through the local dataset; remote fallback is optional."""
     row = country_catalog.country_data(query, allow_fallback=allow_fallback)
@@ -367,45 +339,6 @@ def country_lookup(query, *, allow_fallback=True):
         "name_ru": row.get("name", ""), "name_en": row.get("name", ""),
         "name_nl": row.get("name", ""),
     }
-
-
-# ================= NL WORLD RECORDS =================
-_NL_RECORDS_CACHE: dict = {}
-_NL_RECORDS_TTL = 86400 * 7  # неделя
-
-
-def _extract_record_sents(extract: str) -> list:
-    """Предложения с конкретными данными из вики-статьи (числа / рекорды / мировые показатели)."""
-    if not extract:
-        return []
-    clean = _clean_wiki(extract)
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if len(s.strip()) > 40]
-    sents = [s for s in sents if not re.match(r"^.{0,60}[—–\-]", s)]
-    sents = [s for s in sents if not re.match(r"^.{0,80}\bis\s+a(?:n)?\s+\w+", s, re.I)]
-    return [s for s in sents
-            if re.search(r'\d|\bfirst\b|\blargest\b|\bmost\b|\brecord\b|\bworld\b', s, re.I)]
-
-
-def nl_world_records() -> list:
-    """Факты-рекорды о Нидерландах из Википедии."""
-    key = "nl_records"
-    hit = _NL_RECORDS_CACHE.get(key)
-    if hit and time.time() - hit[0] < _NL_RECORDS_TTL:
-        return hit[1]
-
-    seen: set = set()
-    result: list = []
-    for page in ("Records of the Netherlands", "Netherlands"):
-        en_title = _wiki_search_en(page) or page
-        extract = wiki_summary(en_title, "en")
-        for s in _extract_record_sents(extract):
-            if s not in seen:
-                result.append(s)
-                seen.add(s)
-
-    _NL_RECORDS_CACHE[key] = (time.time(), result)
-    _log.info("research: nl_world_records → %d sentences", len(result))
-    return result
 
 
 # ================= TAVILY =================
@@ -521,11 +454,6 @@ def web_snippet(query: str, max_chars: int = 1200, *, scenario: str = "", allow_
             parts.append(chunk)
             total += len(chunk)
     return "\n---\n".join(parts)
-
-
-def tavily_snippet(query: str, max_chars: int = 1200) -> str:
-    """Совместимость: больше не включает Tavily без явного сценария."""
-    return web_snippet(query, max_chars)
 
 
 def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general",

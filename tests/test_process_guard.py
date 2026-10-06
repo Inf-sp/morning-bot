@@ -61,3 +61,28 @@ def test_postgres_polling_lease_allows_only_one_replica(monkeypatch):
     finally:
         first.release()
         second.release()
+
+
+def test_polling_lease_reports_lost_connection():
+    """A dead lease connection (e.g. Postgres restart) marks the lease as lost."""
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, _query):
+            raise OSError("server closed the connection unexpectedly")
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    lease = process_guard.PollingLease()
+    lease._connection = Connection()
+    lease.backend = "postgres"
+
+    assert not lease.is_held()
+    assert lease.lost

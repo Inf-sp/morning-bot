@@ -18,7 +18,7 @@ _LEADING_ARTICLE_RE = re.compile(r"^(?:de|het|een|the|a|an|to)\s+", re.I)
 _EXAMPLE_STOP_WORDS = {
     "de", "het", "een", "the", "a", "an", "wat", "wie", "waar",
     "je", "jij", "jou", "u", "you", "ik", "i", "we", "wij", "ze",
-    "zij", "hij", "zij", "is", "zijn", "ben", "be", "doe", "do", "does",
+    "zij", "hij", "is", "zijn", "ben", "be", "doe", "do", "does",
     "daar", "there", "op", "in", "aan", "van", "voor", "to", "of", "and",
     "en", "that", "this", "it",
 }

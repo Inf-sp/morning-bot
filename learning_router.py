@@ -210,7 +210,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictdelokid_"):
         await dictionary.del_dict_entry_by_id(bot, cid, act[len("dictdelokid_"):], q=q)
     elif act.startswith("dictmoveok_"):
-        _, word_id, target_lang = act.split("_", 2)
+        word_id, _, target_lang = act[len("dictmoveok_"):].rpartition("_")
         await dictionary.move_dict_entry_by_id(bot, cid, word_id, target_lang, q=q)
     elif act.startswith("dictmoveid_"):
         await dictionary.confirm_move_dict_entry_by_id(bot, cid, act[len("dictmoveid_"):], q=q)

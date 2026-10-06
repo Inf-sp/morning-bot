@@ -142,9 +142,14 @@ JSON: {{"items":[{{"i":0,"clean_name":"","warmth":"обычные","colors":[],"
         except Exception as error:
             _log.warning("wardrobe schema migration batch uses local fallback: %r", error, exc_info=True)
 
+    # Пока шёл AI-запрос, вещь могла быть удалена: позиция в current_todo тогда
+    # сдвигается, поэтому ответ модели сопоставляем по id вещи.
+    index_by_id = {item.get("id"): index for index, (_z, _s, item) in enumerate(todo) if item.get("id")}
+
     def _mut(current):
         current_todo = [entry for entry in flat_items(current) if needs_migration(entry[2])]
-        for index, (zone, subcategory, item) in enumerate(current_todo):
+        for position, (zone, subcategory, item) in enumerate(current_todo):
+            index = index_by_id.get(item.get("id")) if item.get("id") else position
             parsed = by_index.get(index, {})
             source_name = str(item.get("name") or "")
             facts = _facts_text(item, source_name)

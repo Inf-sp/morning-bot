@@ -112,12 +112,11 @@ def _origin_module(exc) -> str:
 
 async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
-    import traceback
     msg = str(exc)
     expected_ai_outage = msg == "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
     if not expected_ai_outage:
-        _log.error("[error] %r", exc, exc_info=True)
-        traceback.print_exc()
+        # exc_info=exc: traceback именно этой ошибки, даже вне блока except.
+        _log.error("[error] %r", exc, exc_info=exc)
     try:
         if not expected_ai_outage:
             import tracking

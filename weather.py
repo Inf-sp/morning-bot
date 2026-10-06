@@ -125,27 +125,6 @@ def _rain_description(rain, rain_mm, periods=()):
     return f"дождь {rain:.0f}%" + (f" {when}" if when else "")
 
 
-def _weather_main_lines(
-    icon, tmax, rain, rain_mm, rain_when, wind_ms, *, plain_wind=False,
-):
-    rain_part = rain_text(rain, rain_mm, rain_when)
-    wemoji, wword = wind_scale(wind_ms)
-    if plain_wind:
-        classification = wword.lower()
-        if classification.endswith(" ветер"):
-            classification = classification[:-6]
-        wind_str = f"Ветер {wind_ms:.0f} м/с · {classification}"
-    else:
-        wind_str = f"{wemoji} {wword} {wind_ms:.0f} м/с" if wind_ms >= 8 else f"💨 Ветер {wind_ms:.0f} м/с"
-
-    first = f"{icon} До {tmax:+.0f}°C"
-    if rain_part:
-        first += f" • {rain_part}"
-    if wind_ms >= 8 and not plain_wind:
-        return [first, "", wind_str]
-    return [f"{first} • {wind_str}"]
-
-
 def humidity_phrase(data, day_str, tmax, cc):
     """Заголовок и пояснение о комфорте с учётом влажности; ('', '') если нечего добавить."""
     try:
@@ -346,17 +325,6 @@ def _world_fact():
         line = f"Кстати, сегодня в {name} около {t:+.0f}°C."
     return line
 
-def _joke_outfit(city, tmax, rain, wind_ms, desc, when="сегодня"):
-    try:
-        return ai.llm(
-            f"Город {city}, {when}: {desc}, до {tmax:+.0f}°C, дождь {rain:.0f}%, ветер {wind_ms:.0f} м/с. "
-            f"Напиши ОДНУ дерзкую дружелюбную фразу + короткий совет по одежде (нужна ли куртка/зонт). "
-            f"1 предложение, на русском, без markdown.", 120, 1.05, tier="cheap",
-            fallback_allowed=True, privacy_level="public", response_mode="plain_text").strip().splitlines()[0]
-    except Exception:
-        return f"Сегодня {city} явно выиграл погодную лотерею."
-
-
 # ---------- экстремальная погода (Code Geel и сильнее) ----------
 STORM_WIND_MS = 15      # порог шквалов
 SNOW_CODES = (71, 73, 75, 77, 85, 86)
@@ -380,16 +348,6 @@ def _meteo_fact(city, tmax, rain, wind_ms, desc, date_label="",
                 country="", cc="", lat=None, lon=None, tz="UTC"):
     """Исторические погодные рекорды отключены: текущая погода берётся только из OpenWeatherMap."""
     return ""
-
-
-def _wind_direction(value):
-    try:
-        degrees = float(value) % 360
-    except (TypeError, ValueError):
-        return ""
-    labels = ("северный", "северо-восточный", "восточный", "юго-восточный",
-              "южный", "юго-западный", "западный", "северо-западный")
-    return labels[int((degrees + 22.5) // 45) % 8]
 
 
 def _speed_range(values):
@@ -433,7 +391,8 @@ def _full_forecast_parts(now):
 async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     s = store.get_settings(cid)
     try:
-        data = fetch_weather(s["lat"], s["lon"], 9)
+        # fetch_weather синхронно ходит в сеть: не блокируем event loop бота.
+        data = await asyncio.to_thread(fetch_weather, s["lat"], s["lon"], 9)
     except WeatherDailyLimitExceeded:
         await bot.send_message(chat_id=cid, text=WEATHER_LIMIT_FALLBACK)
         return
@@ -557,7 +516,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                     fact_title = "Метео-факт"
                     fact = mf
         else:
-            fact = _world_fact()
+            fact = await asyncio.to_thread(_world_fact)
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)

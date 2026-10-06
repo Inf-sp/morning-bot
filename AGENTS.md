@@ -19,7 +19,7 @@
 - Не раскрывай пользователю внутренние модели, провайдеры, id, traceback и raw errors.
 - При изменении поведения обновляй соответствующий `docs/*.md`.
 - `RELEASE_NOTES.md` в проекте не используется и не создаётся.
-- Владелец самостоятельно отправляет изменения в Git и Railway.
+- Владелец самостоятельно отправляет изменения в Git и на сервер.
 
 ## Команды
 
@@ -32,7 +32,17 @@ python verify.py                  # когда нужна общая прове�
 python -m pytest -q path::test    # только целевые тесты
 ```
 
-Railway запускает `python bot.py`. Не деплой и не меняй Railway без прямой просьбы.
+Прод — GCE VM `morning-bot` (`us-east1-b`): systemd-сервис `morning-bot` запускает
+`python bot.py` из `/opt/morning-bot`, env — `/etc/morning-bot.env`. PostgreSQL остаётся
+на Railway (публичный URL). Обновление на VM:
+
+```bash
+sudo -u bot git -C /opt/morning-bot pull --ff-only \
+  && sudo -u bot /opt/morning-bot-venv/bin/pip install -q -r /opt/morning-bot/requirements.txt \
+  && sudo systemctl restart morning-bot
+```
+
+Не деплой и не меняй VM и Railway без прямой просьбы.
 Не запускай полный `pytest` после небольших правок. Не хардкодь секреты, токены,
 лимиты и настройки из env, `config.py`, `settings.py` или runtime-слоя.
 

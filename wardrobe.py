@@ -343,8 +343,6 @@ def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="",
     if candidate:
         store.set_wardrobe_purchase_recommendation(cid, candidate)
         return candidate
-    if current:
-        return current
     if fallback_tip:
         fallback = {
             "version": PURCHASE_RECOMMENDATION_VERSION,
@@ -397,21 +395,12 @@ def _clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
-def _build_entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Что важно:"):
-    msg = wardrobe_ui.entity_card(title, summary, quote, bullets, final, bullet_label)
-    return msg.text, msg.entities
-
 def _build_purchase_message(data):
     msg = wardrobe_ui.purchase_check_card(data)
     return msg.text, msg.entities
 
 def _build_purchase_suggestions_message(data):
     msg = wardrobe_ui.purchase_suggestions_card(data)
-    return msg.text, msg.entities
-
-
-def _build_purchase_recommendations_message(items):
-    msg = wardrobe_ui.purchase_recommendations_card(items)
     return msg.text, msg.entities
 
 

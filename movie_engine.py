@@ -67,7 +67,9 @@ def _excluded_norms(cid, include_shown=True):
     for k in keys:
         names += store.get_list(k, cid)
     names += recommendation_stoplist.values(cid, "movie")
-    ex = {_norm(x) for x in names}
+    # Элементы бывают {"id", "value"} и «Название (сериал, 2023)»: сравниваем
+    # только название, иначе любимое не исключается из подбора.
+    ex = {_norm(_title_only(x)) for x in names}
     if include_shown:
         ex |= _shown_norms(cid)
     return ex

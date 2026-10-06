@@ -184,8 +184,3 @@ def find_illustration(query):
         return None
     return (_unsplash(name, strict=True, first_result=True)
             or _pexels(name, strict=True, first_result=True))
-
-
-def find_photo(query):
-    """Alias: find_illustration for the detective game."""
-    return find_illustration(query)

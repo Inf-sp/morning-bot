@@ -193,6 +193,12 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
 async def request_dictionary_recheck(bot, cid, lang, q=None):
     """Совместимо запускает безопасную пакетную пересборку старых карточек."""
     code = lang if lang in ("nl", "en") else _active_language_code(cid)
+
+    def allow_retry(profile):
+        profile.pop("dictionary_card_migration_stopped", None)
+        return profile, None
+
+    store.mutate_profile(cid, allow_retry)
     queued = queue_dictionary_rebuild(cid)
     text = (
         f"Обновляю карточки: {queued}.\n\n"
@@ -225,6 +231,14 @@ def queue_dictionary_rebuild(cid):
 
     def change(profile):
         profile.pop("dictionary_recheck_request", None)
+        stopped = profile.get("dictionary_card_migration_stopped") or {}
+        if (pending and int(stopped.get("version") or 0) == _DICTIONARY_REBUILD_VERSION
+                and len(pending) <= int(stopped.get("pending") or 0)):
+            # AI уже не смог дособрать эти карточки: не тратим вызовы заново,
+            # пока не появятся новые карточки или пользователь не попросит сам.
+            profile.pop("dictionary_card_migration", None)
+            return profile, None
+        profile.pop("dictionary_card_migration_stopped", None)
         if not pending:
             profile.pop("dictionary_card_migration", None)
             return profile, None
@@ -274,18 +288,34 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
         pending_after = _pending_dictionary_rebuilds(cid)
         progress = len(pending_before) - len(pending_after)
         if progress <= 0:
+            attempts = int(state.get("attempts") or 0) + 1
+            if attempts >= _DICTIONARY_MIGRATION_MAX_ATTEMPTS:
+                def stop(profile):
+                    profile.pop("dictionary_card_migration", None)
+                    profile["dictionary_card_migration_stopped"] = {
+                        "version": _DICTIONARY_REBUILD_VERSION,
+                        "pending": len(pending_after),
+                        "stopped_at": datetime.now(config.TZ).isoformat(),
+                    }
+                    return profile, None
+                store.mutate_profile(cid, stop)
+                _log.warning(
+                    "dictionary migration stopped cid=%s remaining=%s attempts=%s",
+                    cid, len(pending_after), attempts,
+                )
+                continue
+
             def defer(profile):
                 current = dict(profile.get("dictionary_card_migration") or state)
-                attempts = int(current.get("attempts") or 0) + 1
                 current["attempts"] = attempts
-                current["retry_after_at"] = now_ts + 300
+                current["retry_after_at"] = now_ts + _DICTIONARY_MIGRATION_RETRY_SECONDS
                 current["last_failed_at"] = datetime.now(config.TZ).isoformat()
                 profile["dictionary_card_migration"] = current
                 return profile, None
             store.mutate_profile(cid, defer)
-            _log.warning(
-                "dictionary migration deferred cid=%s remaining=%s retry_seconds=300",
-                cid, len(pending_after),
+            _log.info(
+                "dictionary migration deferred cid=%s remaining=%s attempt=%s retry_seconds=%s",
+                cid, len(pending_after), attempts, _DICTIONARY_MIGRATION_RETRY_SECONDS,
             )
             continue
         total = max(int(state.get("initial_total") or 0), len(pending_before))
