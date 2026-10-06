@@ -292,6 +292,132 @@ _GAME_CATALOG = (
                 "reasons": ["Приложение берёт на себя правила монстров", "Сильная атмосфера расследования"],
                 "start": "выбери короткий сценарий из базовой коробки",
             },
+            {
+                "id": "nemesis", "name": "Nemesis",
+                "year": 2018, "rating": 8.3, "genres": ["board", "horror", "action"],
+                "description": "Выживание на корабле с чужими, где у каждого игрока есть своя скрытая цель.",
+                "reasons": ["Атмосфера фильма «Чужой» за столом", "Истории получаются разными каждый раз"],
+                "start": "в первой партии играй в кооперативном режиме",
+            },
+            {
+                "id": "arkham-horror-lcg", "name": "Arkham Horror: The Card Game",
+                "year": 2016, "rating": 8.1, "genres": ["board", "horror", "rpg"],
+                "description": "Кооперативная карточная кампания-расследование по мотивам Лавкрафта.",
+                "reasons": ["Сюжет продолжается от сценария к сценарию", "Хорошо играется вдвоём и соло"],
+                "start": "пройди первую кампанию базовой коробки готовыми колодами",
+            },
+            {
+                "id": "eldritch-horror", "name": "Eldritch Horror",
+                "year": 2013, "rating": 7.9, "genres": ["board", "horror", "adventure"],
+                "description": "Кооперативное путешествие по миру, чтобы остановить пробуждение Древнего.",
+                "reasons": ["Много историй на картах встреч", "Победа никогда не гарантирована"],
+                "start": "начни с Азатота — это самый понятный противник",
+            },
+            {
+                "id": "terraforming-mars", "name": "Terraforming Mars",
+                "year": 2016, "rating": 8.4, "genres": ["board", "strategy"],
+                "description": "Корпорации соревнуются в превращении Марса в пригодную для жизни планету.",
+                "reasons": ["Сотни разных карт проектов", "Есть одиночный режим"],
+                "start": "в первой партии возьми базовые корпорации без драфта",
+            },
+            {
+                "id": "root", "name": "Root",
+                "year": 2018, "rating": 8.0, "genres": ["board", "strategy", "action"],
+                "description": "Асимметричная война лесных фракций, где каждая играет по своим правилам.",
+                "reasons": ["Каждая фракция ощущается как отдельная игра", "Много взаимодействия"],
+                "start": "новичкам дай Маркизу и Орлов — их проще всего понять",
+            },
+            {
+                "id": "seven-wonders-duel", "name": "7 Wonders Duel",
+                "year": 2015, "rating": 8.1, "genres": ["board", "strategy"],
+                "description": "Дуэль двух цивилизаций с тремя разными путями к победе.",
+                "reasons": ["Одна из лучших игр на двоих", "Партия на 30 минут"],
+                "start": "следи за научной победой соперника — она приходит внезапно",
+            },
+            {
+                "id": "great-western-trail-2e", "name": "Great Western Trail: Second Edition",
+                "year": 2021, "rating": 8.3, "genres": ["board", "strategy"],
+                "description": "Перегон скота через Дикий Запад с колодостроением и развитием маршрута.",
+                "reasons": ["Глубокая стратегия для опытных игроков", "Партии сильно отличаются"],
+                "start": "сначала улучши колоду, потом думай о дальних поставках",
+            },
+            {
+                "id": "scythe", "name": "Scythe",
+                "year": 2016, "rating": 8.2, "genres": ["board", "strategy"],
+                "description": "Альтернативная Восточная Европа 1920-х: мехи, фермы и экономическое давление.",
+                "reasons": ["Красивое оформление и миниатюры", "Конфликт важен, но не обязателен"],
+                "start": "сосредоточься на одной ветке улучшений с первых ходов",
+            },
+            {
+                "id": "castles-of-burgundy", "name": "The Castles of Burgundy",
+                "year": 2011, "rating": 8.0, "genres": ["board", "strategy"],
+                "description": "Классическая евро-стратегия о развитии поместья на кубиках и тайлах.",
+                "reasons": ["Кубики дают свежие решения каждый ход", "Проверенная классика жанра"],
+                "start": "раньше бери рабочих — они делают кубики гибче",
+            },
+            {
+                "id": "parks", "name": "Parks",
+                "year": 2019, "rating": 7.7, "genres": ["board", "cozy"],
+                "description": "Путешествие по национальным паркам США с иллюстрациями в стиле постеров.",
+                "reasons": ["Очень красивая игра", "Простые правила и спокойный темп"],
+                "start": "бери снаряжение раньше — оно окупается весь сезон",
+            },
+            {
+                "id": "calico", "name": "Calico",
+                "year": 2020, "rating": 7.6, "genres": ["board", "cozy"],
+                "description": "Головоломка о шитье лоскутного одеяла, на которое приходят коты.",
+                "reasons": ["Компактная и уютная", "Каждый ход — маленькая головоломка"],
+                "start": "выбери одного кота и строй узор под него",
+            },
+            {
+                "id": "robinson-crusoe", "name": "Robinson Crusoe: Adventures on the Cursed Island",
+                "year": 2012, "rating": 7.8, "genres": ["board", "adventure"],
+                "description": "Кооперативное выживание на необитаемом острове со сценариями.",
+                "reasons": ["Жёсткое и честное выживание", "Работает в одиночку"],
+                "start": "начни с первого сценария и играй с собакой Пятницей",
+            },
+            {
+                "id": "clank", "name": "Clank!",
+                "year": 2016, "rating": 7.7, "genres": ["board", "adventure", "action"],
+                "description": "Колодостроительное ограбление подземелья, где шум будит дракона.",
+                "reasons": ["Весёлый азарт и риск", "Понятно даже новичкам"],
+                "start": "не уходи слишком глубоко без пары карт передвижения",
+            },
+            {
+                "id": "king-of-tokyo", "name": "King of Tokyo",
+                "year": 2011, "rating": 7.1, "genres": ["board", "action"],
+                "description": "Монстры дерутся за Токио на кубиках с выбором суперспособностей.",
+                "reasons": ["Объясняется за пять минут", "Подходит для компании"],
+                "start": "не сиди в Токио слишком долго, если здоровье на исходе",
+            },
+            {
+                "id": "gloomhaven", "name": "Gloomhaven",
+                "year": 2017, "rating": 8.6, "genres": ["board", "rpg", "adventure"],
+                "description": "Огромная тактическая кампания, где герои уходят на покой и открывают новых.",
+                "reasons": ["Сотни часов контента", "Каждый класс играется по-своему"],
+                "start": "если не играл в Jaws of the Lion, начни с неё",
+            },
+            {
+                "id": "descent-legends-of-the-dark", "name": "Descent: Legends of the Dark",
+                "year": 2021, "rating": 7.9, "genres": ["board", "rpg", "adventure"],
+                "description": "Кооперативная фэнтези-кампания с приложением и объёмным полем.",
+                "reasons": ["Приложение ведёт сюжет и монстров", "Зрелищная игра за столом"],
+                "start": "в первой миссии сосредоточься на понятном герое ближнего боя",
+            },
+            {
+                "id": "cartographers", "name": "Cartographers",
+                "year": 2019, "rating": 7.6, "genres": ["board", "cozy", "adventure"],
+                "description": "Рисуешь карту королевства по заданиям и прячешься от набегов монстров.",
+                "reasons": ["Любое число игроков", "Карта в конце радует глаз"],
+                "start": "оставляй место под задания следующих сезонов",
+            },
+            {
+                "id": "the-crew-deep-sea", "name": "The Crew: Mission Deep Sea",
+                "year": 2021, "rating": 8.1, "genres": ["board", "adventure"],
+                "description": "Кооперативная взятка, где вся команда выполняет миссии почти без слов.",
+                "reasons": ["Партия на 20 минут", "Прогрессия через миссии"],
+                "start": "соберите первые миссии из лёгких заданий",
+            },
         )
     ),
 )
@@ -444,6 +570,11 @@ def _decorate_game(item, cid, *, genre=None, board=False):
     }
 
 
+def _board_style(item):
+    genres = [value for value in (item or {}).get("genres") or [] if value != "board"]
+    return genres[0] if genres else ""
+
+
 def pick_game(cid, *, genre=None, refresh=False, board=False):
     """Локальный подбор без AI: платформы + жанр + защита от недавних повторов."""
     profile = store.get_profile(cid)
@@ -491,6 +622,13 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
     seen_order = {marker: index for index, marker in enumerate(seen)}
     candidates = sorted(candidates, key=lambda value: seen_order.get(game_key(value), -1))
     item = candidates[0]
+    if board or genre == "board":
+        # Настолки «живые»: случайная из свежих, по возможности другого жанра.
+        pool_by_key = {game_key(value): value for value in pool}
+        previous = next((pool_by_key[marker] for marker in reversed(seen) if marker in pool_by_key), None)
+        window = candidates[:6]
+        varied = [value for value in window if _board_style(value) != _board_style(previous)]
+        item = secrets.choice(varied or window)
     daily_entry = {"week": week_key, "signature": signature, "item": dict(item)}
 
     def save_selection(current):
