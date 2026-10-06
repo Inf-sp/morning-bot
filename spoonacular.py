@@ -11,6 +11,7 @@ import requests
 
 import api_usage
 import config
+import tracking
 import util
 
 
@@ -81,7 +82,7 @@ def _request(path: str, params=None, *, ttl=_SEARCH_TTL):
 
     started = time.time()
     try:
-        response = requests.get(f"{_BASE_URL}{safe_path}", params=query, timeout=10)
+        response = requests.get(f"{_BASE_URL}{safe_path}", params=query, timeout=tracking.bounded_timeout(10))
     except requests.exceptions.Timeout:
         api_usage.record_request("spoonacular", ok=False, error="timeout")
         return None

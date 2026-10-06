@@ -615,32 +615,6 @@ def firecrawl_credit_usage() -> dict | None:
     return _cached_remote_quota("firecrawl", fetch)
 
 
-def openrouter_key_usage() -> dict | None:
-    """Реальный остаток кредитов OpenRouter через /api/v1/key (кэш 30 мин)."""
-    if not config.OPENROUTER_API_KEY:
-        return None
-
-    def fetch():
-        r = requests.get(
-            "https://openrouter.ai/api/v1/key",
-            headers={"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"},
-            timeout=10,
-        )
-        if r.status_code != 200:
-            return None
-        d = (r.json() or {}).get("data") or {}
-        limit = d.get("limit")
-        remaining = d.get("limit_remaining")
-        used = d.get("usage")
-        if remaining is None and limit is not None and used is not None:
-            remaining = max(0, limit - used)
-        if remaining is None:
-            return None
-        return {"remaining": remaining, "limit": limit}
-
-    return _cached_remote_quota("openrouter", fetch)
-
-
 def seconds_until_gemini_slot(limit: int = 4, window: int = 60) -> float:
     data = store._load(config.API_USAGE_KEY)
     svc = ((data.get("services") or {}).get("gemini") or {}) if isinstance(data, dict) else {}

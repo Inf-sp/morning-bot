@@ -224,10 +224,11 @@ def _context(settings, now=None):
 def get_restaurant(cid, *, refresh=False):
     settings = store.get_settings(cid)
     city = str(settings.get("city") or "Alkmaar").strip()
-    context_key, search_context = _context(settings)
     cached = _cache(cid)
     if not refresh and _fresh(cached, city):
         return cached
+    # Погода нужна только для нового подбора: готовая карточка дня отдаётся без сети.
+    context_key, search_context = _context(settings)
     previous = str(cached.get("name") or "") if _usable(cached, city) else ""
     used_names = rotation.recent(
         [*(cached.get("history") or []), previous], limit=_HISTORY_LIMIT,

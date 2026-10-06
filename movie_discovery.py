@@ -8,7 +8,7 @@ if TYPE_CHECKING:
         _BIRTHDAY_FALLBACKS, _CINEMA_BIRTHDAY_CACHE_VERSION,
         _CINEMA_BIRTHDAY_LOCK, _CINEMA_REBUSES, _MONTHS,
         _MOVIE_PREMIERES_CACHE_VERSION, _log, _movie_prefs,
-        asyncio, config, datetime, get_current_movie, leisure_ui, local_cinema,
+        _cache_movie, asyncio, config, datetime, get_current_movie, leisure_ui, local_cinema,
         movie_title_for_lookup, quote_plus, requests, store, time, timedelta, tmdb,
     )
 
@@ -224,14 +224,18 @@ def _youtube_trailer_search_url(item):
 
 
 async def _with_trailer_urls(items):
-    """Добавляет ссылку на проверенный трейлер, не смешивая сеть с UI-рендером."""
-    enriched = []
-    for source in items or []:
+    """Добавляет ссылку на проверенный трейлер, не смешивая сеть с UI-рендером.
+
+    Уже сохранённый ночным прогревом трейлер берётся без запроса к TMDB.
+    """
+    async def enrich(source):
         item = dict(source or {})
-        trailer = await asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
-        item["trailer_url"] = trailer or _youtube_trailer_search_url(item)
-        enriched.append(item)
-    return enriched
+        if not str(item.get("trailer_url") or "").strip():
+            trailer = await asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
+            item["trailer_url"] = trailer or _youtube_trailer_search_url(item)
+        return item
+
+    return list(await asyncio.gather(*(enrich(source) for source in items or [])))
 
 
 async def _recommendation_with_trailer(tm):
@@ -359,11 +363,19 @@ def _load_cinema_birthday(day):
         return dict(birthday)
 
 
-async def _daily_cinema_content():
-    now = datetime.now(config.TZ)
+async def _daily_cinema_content(*, cached_only=False):
+    """Ребус и именинник дня; ``cached_only`` — только готовые данные без сети и AI."""
+    today = datetime.now(config.TZ).date()
+    if cached_only:
+        birthday = _cinema_birthday_cache_get(today)
+        return {
+            "rebus": monthly_rebuses.cached_for_day("movies", today, _CINEMA_REBUSES),
+            "birthday": birthday if birthday is not None
+            else dict(_BIRTHDAY_FALLBACKS.get((today.month, today.day)) or {}),
+        }
     return {
-        "rebus": await monthly_rebuses.for_day("movies", now.date(), _CINEMA_REBUSES),
-        "birthday": await asyncio.to_thread(_load_cinema_birthday, now.date()),
+        "rebus": await monthly_rebuses.for_day("movies", today, _CINEMA_REBUSES),
+        "birthday": await asyncio.to_thread(_load_cinema_birthday, today),
     }
 
 
@@ -375,7 +387,7 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     featured = _featured_now_playing(local_movies, require_overview=True)
     featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
-    cinema_day = await _daily_cinema_content()
+    cinema_day = await _daily_cinema_content(cached_only=True)
     item, tm = await get_current_movie(cid)
     if tm:
         tm = await _recommendation_with_trailer(tm)
@@ -407,10 +419,30 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
 
 
 async def warm_movie_home_cache(cid):
-    """Готовит недельный прокат, дневную рекомендацию и рубрики без сообщений."""
-    await get_local_now_playing(cid, limit=20)
+    """Готовит недельный прокат, дневную рекомендацию, рубрики и трейлеры без сообщений.
+
+    Трейлеры сохраняются в кэшах проката и рекомендации, поэтому открытие
+    витрины не ходит в TMDB.
+    """
+    items = await get_local_now_playing(cid, limit=20)
+    featured = _featured_now_playing(items, require_overview=True)[:3]
+    if any(not str(item.get("trailer_url") or "").strip() for item in featured):
+        trailers = {
+            (item.get("id"), item.get("title")): item["trailer_url"]
+            for item in await _with_trailer_urls(featured)
+        }
+        city = _movie_city(cid)
+        catalog = _now_playing_catalog_get(cid, city)
+        if catalog:
+            _now_playing_catalog_set(cid, city, [
+                {**item, "trailer_url": trailers[(item.get("id"), item.get("title"))]}
+                if (item.get("id"), item.get("title")) in trailers else item
+                for item in catalog
+            ])
     await _daily_cinema_content()
-    await get_current_movie(cid)
+    item, tm = await get_current_movie(cid)
+    if item and isinstance(tm, dict) and not str(tm.get("trailer_url") or "").strip():
+        _cache_movie(cid, item, await _recommendation_with_trailer(tm))
     return True
 
 

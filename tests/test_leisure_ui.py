@@ -1620,7 +1620,7 @@ def test_movie_home_shows_three_popular_local_premieres_with_trailer_links(monke
              "overview": "Друзья возвращаются в родной город"},
         ]
 
-    async def cinema_day():
+    async def cinema_day(**_kwargs):
         return {"rebus": {"emoji": "🎬", "answer": "Ответ"}}
 
     monkeypatch.setattr(leisure_movies, "get_local_now_playing", local_movies)
@@ -1663,7 +1663,7 @@ def test_movie_home_hides_movies_when_short_overviews_are_missing(monkeypatch):
             for index, title in enumerate(("Первый", "Второй", "Третий"), start=1)
         ]
 
-    async def cinema_day():
+    async def cinema_day(**_kwargs):
         return {"rebus": {"emoji": "🎬", "answer": "Ответ"}}
 
     monkeypatch.setattr(leisure_movies, "get_local_now_playing", local_movies)

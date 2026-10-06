@@ -47,9 +47,9 @@ def test_chain_does_not_start_another_provider_after_deadline(monkeypatch):
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
 
     def slow_failure(*_args, **_kwargs):
         calls.append("gemini")
@@ -75,9 +75,9 @@ def test_chain_preserves_time_for_the_next_ai_provider(monkeypatch):
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
 
     def primary(*_args, **_kwargs):
@@ -106,9 +106,9 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     calls = []
 
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
     monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *_args, **_kwargs: None)
 
@@ -124,7 +124,8 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     result = ai.chat_chain([{"role": "user", "content": "test"}])
 
     assert result == "Ответ Groq"
-    assert calls[:2] == [("gemini", 4.0), ("groq", 1.0)]
+    # После Groq остаётся один обычный резерв (Cloudflare), поэтому Groq получает 2 с.
+    assert calls[:2] == [("gemini", 4.0), ("groq", 2.0)]
 
 
 def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
@@ -132,9 +133,9 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
     calls = []
 
     monkeypatch.setattr(ai.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args: None)
 
     def slow_provider(provider, *_args, **_kwargs):
@@ -151,7 +152,7 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
 
 def test_free_chat_route_uses_the_standard_chain():
-    assert ai.CHAT_ORDER == ("gemini", "groq", "mistral", "cf", "openrouter")
+    assert ai.CHAT_ORDER == ("gemini", "groq", "cf", "openrouter")
     assert ai.FREE_CHAT_TIER == "smart"
 
 
@@ -182,7 +183,7 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     line = records[0]
     assert "scenario=assistant/free_chat" in line
     assert "tier=smart" in line
-    assert "provider_chain=gemini,groq,mistral,cf,openrouter" in line
+    assert "provider_chain=gemini,groq,cf,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line
@@ -253,7 +254,7 @@ def test_home_cache_warm_yields_to_active_user_action(monkeypatch):
     asyncio.run(bot.job_warm_home_pages(object()))
 
 
-def test_home_cache_warm_yields_to_dictionary_migration(monkeypatch):
+def test_home_cache_warm_runs_during_dictionary_migration(monkeypatch):
     calls = []
 
     class Job:
@@ -268,14 +269,15 @@ def test_home_cache_warm_yields_to_dictionary_migration(monkeypatch):
         bot.store, "get_profile",
         lambda _cid: {"dictionary_card_migration": {"version": 4}},
     )
-    monkeypatch.setattr(
-        bot.wardrobe, "warm_home_cache",
-        lambda _cid: calls.append("warm"),
-    )
+    async def warm(_cid):
+        calls.append("warm")
+        return True
+
+    monkeypatch.setattr(bot.wardrobe, "warm_home_cache", warm)
 
     asyncio.run(bot.job_warm_home_pages(Context()))
 
-    assert calls == []
+    assert calls == ["warm"]
 
 
 def test_home_cache_warm_schedule_separates_heavy_sections():

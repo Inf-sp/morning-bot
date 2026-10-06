@@ -36,8 +36,6 @@ WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY
 WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 GEMINI_DAILY_LIMIT = _env_int("GEMINI_DAILY_LIMIT", 0)
-MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "").strip()
-MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small-2603").strip() or "mistral-small-2603"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL_DAILY_LIMIT = _env_int("GROQ_MODEL_DAILY_LIMIT", 1000)
 GROQ_SIMPLE_MODEL = os.environ.get("GROQ_SIMPLE_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
@@ -104,9 +102,6 @@ API_QUOTAS = {
     "gemini": [
         {"mode": "local", "unit": "requests", "period": "day"},
         {"mode": "local", "unit": "tokens", "period": "day"},
-    ],
-    "mistral": [
-        {"mode": "local", "unit": "requests", "period": "day"},
     ],
     "tavily": [
         {"mode": "local", "unit": "credits", "period": "month"},

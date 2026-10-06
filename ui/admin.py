@@ -35,7 +35,7 @@ def deploy_report(version, title, release_notes):
 def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
          notif_line=None, users_line=None, data_line=None, logs_line=None,
-         system_rows=None, error_rows=None, version_line=None):
+         system_rows=None, error_rows=None, version_line=None, speed_line=None):
     """Render the admin home screen.
 
     The compact metric form is used by the current screen.  The older
@@ -46,8 +46,10 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
-    if version_line:
-        b.line(version_line)
+    head = [line for line in (version_line, speed_line) if line]
+    for line in head:
+        b.line(line)
+    if head:
         b.spacer()
     if system_rows is not None:
         rows = [str(row or "").strip() for row in system_rows if str(row or "").strip()]
@@ -327,3 +329,28 @@ def logs(rows, errors_24h, updated_at, updated_unix=None):
     msg = b.build_stripped()
     msg.rich_message = _logs_rich_message(rows, updated_at, updated_unix)
     return msg
+
+
+# ================= ПРОВЕРКА API =================
+
+_API_CHECK_MARKS = {"ok": "✅", "fail": "❌", "skip": "⏭"}
+
+
+def api_check_row(result):
+    parts = [f"{_API_CHECK_MARKS.get(result.get('status'), '❌')} {result.get('label') or '—'}"]
+    seconds = result.get("seconds")
+    if result.get("status") != "skip" and seconds is not None:
+        parts.append(f"{float(seconds):.1f} с".replace(".", ","))
+    if result.get("status") != "ok" and result.get("detail"):
+        parts.append(str(result["detail"]))
+    return " · ".join(parts)
+
+
+def api_check(results):
+    b = MessageBuilder()
+    b.bold("🩺 Проверка API")
+    b.newline()
+    b.spacer()
+    for result in results:
+        b.line(api_check_row(result))
+    return b.build_stripped()

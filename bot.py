@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime
 
 from telegram import ReplyKeyboardRemove
@@ -35,6 +36,7 @@ import weather
 import verify
 import secure
 import service_monitor
+import home_cache
 from process_guard import PollingLease, process_identity
 import onboard
 import tracking
@@ -65,7 +67,8 @@ _HOME_WARM_SCHEDULE = (
     ("games", "00:35"),
     ("myday", "00:40"),
 )
-
+# Повторы ночного прогрева: перестраивают только разделы без кэша на сегодня.
+_HOME_WARM_RETRY_TIMES = ("03:00", "06:00")
 
 
 def _claim_home_opening(cid, message_id, data):
@@ -158,6 +161,8 @@ async def answer_callback(update, context):
     topic = bot_callbacks._status_topic(data) or "Меню"
     budget = 15 if topic in {"myday", "wardrobe", "food", "leisure", "travel"} else 10
     trace = tracking.start_action(cid, topic, data or "callback", budget_seconds=budget)
+    home_section = home_cache.SECTION_BY_CALLBACK.get(data)
+    opened_at = time.monotonic()
     ok = True
     marker = getattr(bot, "mark_transient_message", None)
     if marker and menu.is_main_menu_markup(getattr(q.message, "reply_markup", None)):
@@ -171,6 +176,7 @@ async def answer_callback(update, context):
     )
     # Даём answerCallbackQuery начать отправку до синхронного чтения БД в обработчике.
     await asyncio.sleep(0)
+    cached = home_section and await asyncio.to_thread(home_cache.is_ready, home_section, cid)
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
@@ -184,7 +190,9 @@ async def answer_callback(update, context):
         except Exception:
             pass
         tracking.finish_action(trace, ok=ok)
-
+        if home_section:
+            _log.info("home_open section=%s seconds=%.2f cached=%s", home_section,
+                      time.monotonic() - opened_at, "yes" if cached else "no")
 
 
 # ---------- Текстовый роутер ----------
@@ -313,6 +321,7 @@ async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_weather_warn failed for cid=%s", cid)
 
 
+@ai.background_job
 async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
     seen = set()
     for cid in access.get_allowed_cids():
@@ -327,13 +336,7 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_warm_weather_cache failed for cid=%s", cid)
 
 
-def _dictionary_migration_active():
-    return any(
-        bool(store.get_profile(cid).get("dictionary_card_migration"))
-        for cid in access.get_allowed_cids()
-    )
-
-
+@ai.background_job
 async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
     """Globally refresh verified category news before home-screen warmups."""
     if tracking.has_active_actions():
@@ -343,9 +346,6 @@ async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
             data={"category_news_retry": True},
             **_job_options("category_news_refresh_retry"),
         )
-        return
-    if _dictionary_migration_active():
-        logging.info("category news refresh skipped: dictionary migration active")
         return
     try:
         report = await asyncio.to_thread(category_news.refresh_pool)
@@ -370,90 +370,7 @@ async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
         logging.exception("category news refresh failed")
 
 
-async def job_warm_home_pages(context: ContextTypes.DEFAULT_TYPE):
-    """Молча готовит главные экраны на день.
-
-    Ошибка одного раздела не мешает прогреть остальные. Пользователю ничего
-    не отправляется; при открытии раздела бот читает уже готовый кэш. Финальная
-    задача myday сначала дозаполняет всю цепочку зависимостей и только потом
-    собирает сводку.
-    """
-    scheduled_section = str(getattr(getattr(context, "job", None), "data", "") or "")
-    finalizing_myday = scheduled_section in ("", "myday")
-    if _dictionary_migration_active():
-        logging.info("home cache warm skipped: dictionary migration active")
-        if finalizing_myday:
-            _schedule_myday_warm_retry(context)
-        return
-    retry_myday = False
-    for cid in access.get_allowed_cids():
-        if tracking.has_active_actions():
-            logging.info("home cache warm skipped: user action active")
-            retry_myday = retry_myday or finalizing_myday
-            break
-        steps = (
-            ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
-            ("cooking", lambda: asyncio.to_thread(restaurant_discovery.get_restaurant, cid)),
-            ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
-            ("travel", lambda: travel.warm_home_cache(cid)),
-            ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
-            ("music", lambda: leisure_music.warm_music_home_cache(cid)),
-            ("books", lambda: leisure_books.warm_books_home_cache(cid)),
-            ("games", lambda: leisure_games.warm_games_home_cache(cid)),
-            ("myday", lambda: myday.warm_day_cache(cid, bot=context.bot)),
-        )
-        if scheduled_section and not finalizing_myday:
-            steps = tuple(step for step in steps if step[0] == scheduled_section)
-        warmed = []
-        dependency_failed = False
-        for name, call in steps:
-            if tracking.has_active_actions():
-                logging.info("home cache warm paused cid=%s before=%s", cid, name)
-                dependency_failed = True
-                break
-            if name == "myday" and dependency_failed:
-                break
-            await asyncio.sleep(0)
-            try:
-                result = await call()
-                ready = (
-                    bool(result.get("name")) if name == "cooking" and isinstance(result, dict)
-                    else bool(any(result.values())) if isinstance(result, dict)
-                    else result is not False
-                )
-                if ready:
-                    warmed.append(name)
-                else:
-                    dependency_failed = True
-                    logging.warning("home cache warm incomplete cid=%s section=%s", cid, name)
-            except Exception:
-                dependency_failed = True
-                logging.exception("home cache warm failed cid=%s section=%s", cid, name)
-        if finalizing_myday and (dependency_failed or "myday" not in warmed):
-            retry_myday = True
-        logging.info("home cache warm complete cid=%s sections=%s", cid, ",".join(warmed))
-    if retry_myday:
-        _schedule_myday_warm_retry(context)
-
-
-def _schedule_myday_warm_retry(context, delay_seconds=15 * 60):
-    """Повторяет всю финальную цепочку, если прогрев был прерван или неполон."""
-    job_queue = getattr(context, "job_queue", None)
-    if job_queue is None:
-        return False
-    job_name = "warm_home_myday_retry"
-    get_jobs_by_name = getattr(job_queue, "get_jobs_by_name", None)
-    if callable(get_jobs_by_name) and get_jobs_by_name(job_name):
-        return True
-    job_queue.run_once(
-        job_warm_home_pages,
-        when=delay_seconds,
-        data="myday",
-        **_job_options(job_name),
-    )
-    return True
-
-
+@ai.background_job
 async def job_warm_movie_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
     """Ночью обновляет витрины кинопремьер по одной на страну."""
     seen_countries = set()
@@ -471,6 +388,7 @@ async def job_warm_movie_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_warm_movie_premieres_cache failed for cid=%s", cid)
 
 
+@ai.background_job
 async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
     """Ночью обновляет единую книжную витрину один раз для всех пользователей."""
     if not access.get_allowed_cids() or tracking.has_active_actions():
@@ -481,6 +399,7 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
         logging.exception("job_warm_book_premieres_cache failed")
 
 
+@ai.background_job
 async def job_warm_game_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
     """Ночью готовит игровые премьеры под платформы каждого пользователя."""
     for cid in access.get_allowed_cids():
@@ -502,6 +421,7 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
 
+@ai.background_job
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
     """Прогревает недельный кэш концертов перед уведомлением «Ближайшие события» (10:00 пт),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
@@ -554,8 +474,11 @@ async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
 _bind_functions(globals(), _bot_maintenance, [
     "_run_startup_audits", "job_startup_audits", "job_retry_dictionary_adds",
     "job_dictionary_maintenance", "job_requested_dictionary_rechecks",
-    "job_normalize_favorite_collections",
+    "job_normalize_favorite_collections", "job_warm_home_pages", "_schedule_myday_warm_retry",
 ])
+job_warm_home_pages = ai.background_job(job_warm_home_pages)
+job_retry_dictionary_adds = ai.background_job(job_retry_dictionary_adds)
+job_requested_dictionary_rechecks = ai.background_job(job_requested_dictionary_rechecks)
 
 
 async def post_init(app):
@@ -714,6 +637,11 @@ def _build_application():
             days=tuple(range(7)),
             data=section,
             **_job_options(f"warm_home_{section}_daily"),
+        )
+    for time_label in _HOME_WARM_RETRY_TIMES:
+        jq.run_daily(
+            job_warm_home_pages, time=_t(time_label), days=tuple(range(7)), data="retry",
+            **_job_options(f"warm_home_retry_{time_label.replace(':', '')}"),
         )
     jq.run_daily(
         job_refresh_category_news, time=_t("01:30"), days=tuple(range(7)),

@@ -1108,6 +1108,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data in ("adm_system", "adm_api_ai"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
+    elif data == "adm_api_check":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_api_check(b, c, q))
     elif data == "adm_refresh_cards":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_card_refresh_menu(b, c, q))

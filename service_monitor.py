@@ -28,7 +28,7 @@ _blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("gemini", "groq", "mistral", "cloudflare", "openrouter")
+_AI_SERVICES = ("gemini", "groq", "cloudflare", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
@@ -49,9 +49,8 @@ _DATA_CATEGORIES = {
 }
 _AI_ROLES = {
     "gemini": "Основной",
-    "cloudflare": "Резерв 3",
-    "mistral": "Резерв 2",
-    "openrouter": "Резерв 4",
+    "cloudflare": "Резерв 2",
+    "openrouter": "Резерв 3",
 }
 _GROQ_MODELS = (
     ("simple", config.GROQ_SIMPLE_MODEL, "Основной"),
@@ -91,13 +90,6 @@ def _usage_detail(service: str) -> str:
         return f"{_number(requests_today)} сегодня"
     if service == "cloudflare":
         return f"{_number(usage['neurons_today'])} нейронов сегодня"
-    if service == "openrouter":
-        balance = api_usage.openrouter_key_usage()
-        if balance is not None and balance.get("remaining") is not None:
-            return f"${float(balance['remaining']):.2f} осталось"
-        return f"{_number(requests_today)} сегодня"
-    if service == "mistral":
-        return f"{_number(requests_today)} сегодня"
     if service == "gtts" and usage["characters_today"]:
         return f"{_number(usage['characters_today'])} символов сегодня"
     if service == "database":
@@ -144,7 +136,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
     if service == "groq":
         return _format_groq_row(state)
-    if service in ("gemini", "cloudflare", "mistral", "openrouter"):
+    if service in ("gemini", "cloudflare", "openrouter"):
         return _format_ai_row(service, state)
     if service == "google_books":
         usage = api_usage.google_books_requests()
@@ -176,6 +168,9 @@ def _format_groq_row(state: dict | None = None) -> str:
         return "🔴 Groq · Резерв 1 · API-ключ не настроен"
     remaining, total = _confirmed_quota("groq", state)
     status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    # Как у остальных AI-строк: неклассифицированный сбой — нейтральный ⚪, а не жёлтый без причины.
+    if state.get("error_type") == "unknown":
+        status = UNKNOWN
     if (status in (OK, UNKNOWN) and remaining is not None and total
             and int(remaining) * 2 < int(total)):
         status = WARNING
@@ -271,7 +266,6 @@ def _probe_request(service: str):
     probes = {
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
-        "mistral": ("GET", "https://api.mistral.ai/v1/models", {"headers": {"Authorization": f"Bearer {config.MISTRAL_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
         "cloudflare": (
             "POST",
@@ -400,7 +394,7 @@ def check_all(*, force=False) -> None:
     current = _load().get("services") or {}
     due = []
     for spec in SPECS:
-        # Проверка Groq, Mistral и Cloudflare может расходовать лимит. Их
+        # Проверка Groq и Cloudflare может расходовать лимит. Их
         # состояние обновляют реальные попытки из цепочки; фон проверяет лишь
         # основной сервис и последний резерв.
         if spec.key in provider_runtime.AI_PROVIDERS and spec.key not in ("gemini", "openrouter"):
@@ -443,3 +437,67 @@ def check_all(*, force=False) -> None:
 async def monitoring_job(_context) -> None:
     import asyncio
     await asyncio.to_thread(check_all)
+
+
+# ================= Ручная проверка API (🩺 Проверить API) =================
+
+LIVE_CHECK_TIMEOUT = 10  # секунд на один сервис; весь прогон ≈ самый медленный
+# Cloudflare probe — реальный вызов модели (тратит нейроны), YouTube search стоит
+# 100 единиц дневной квоты. Их состояние обновляют только реальные запросы.
+_LIVE_CHECK_REAL_ONLY = ("cloudflare", "youtube")
+# Админ только что нажал кнопку — Telegram заведомо отвечает.
+_LIVE_CHECK_EXCLUDED = ("telegram",)
+
+
+def live_check(service: str) -> dict:
+    """Один синхронный probe для админской проверки; запись — через probe()."""
+    def result(status, seconds=None, detail=""):
+        return {"service": service, "label": SPEC_BY_KEY[service].label,
+                "status": status, "seconds": seconds, "detail": detail}
+
+    if service in _LIVE_CHECK_REAL_ONLY:
+        return result("skip", detail="проверяется реальными запросами")
+    if not _configured(service):
+        return result("skip", detail="не подключена" if service == "database" else "ключ не настроен")
+    if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
+        return result("skip", detail="лимит исчерпан")
+    if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
+        return result("skip", detail="лимит исчерпан")
+    started = time.monotonic()
+    ok = probe(service)
+    seconds = time.monotonic() - started
+    if ok:
+        return result("ok", seconds)
+    # probe() уже записал дружелюбную причину; сырые ошибки сюда не попадают.
+    detail = provider_runtime.get_state(service).get("last_error") or "сервис не ответил"
+    return result("fail", seconds, detail)
+
+
+async def live_check_all() -> list[dict]:
+    """Проверить все сервисы параллельно; порядок строк — как в SPECS."""
+    import asyncio
+    services = [spec.key for spec in SPECS if spec.key not in _LIVE_CHECK_EXCLUDED]
+    loop = asyncio.get_running_loop()
+    # Свой пул: общий executor asyncio на маленькой VM даёт 5–6 потоков и
+    # растянул бы проверку на несколько «волн».
+    pool = ThreadPoolExecutor(max_workers=len(services))
+
+    async def one(service):
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(pool, live_check, service), LIVE_CHECK_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            return {"service": service, "label": SPEC_BY_KEY[service].label, "status": "fail",
+                    "seconds": float(LIVE_CHECK_TIMEOUT), "detail": "сервис не ответил"}
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("live check failed for %s", service)
+            return {"service": service, "label": SPEC_BY_KEY[service].label, "status": "fail",
+                    "seconds": None, "detail": "не удалось проверить"}
+
+    try:
+        return list(await asyncio.gather(*(one(service) for service in services)))
+    finally:
+        # Зависший probe дорабатывает в фоне и сам запишет результат.
+        pool.shutdown(wait=False)

@@ -178,20 +178,30 @@ def _idea_lock(cid):
         return _IDEA_LOCKS.setdefault(key, threading.Lock())
 
 
+def _home_idea_scope(cid):
+    profile = store.get_settings(cid)
+    return (datetime.now(config.TZ).date().isoformat(),
+            profile.get("city") or "Алкмар", str(profile.get("cc") or "NL").upper())
+
+
+def cached_home_idea(cid):
+    """Идея дня из кэша или None — без AI и сети."""
+    day, city, home_cc = _home_idea_scope(cid)
+    cached = (store._load(config.TRAVEL_IDEA_KEY) or {}).get(str(cid)) or {}
+    if (cached.get("version") == 3 and cached.get("day") == day and cached.get("city") == city
+            and cached.get("cc") == home_cc and cached.get("idea")):
+        return cached["idea"]
+    return None
+
+
 def _home_idea(cid, *, refresh=False):
     """Одна идея на день; страна профиля задаёт допустимый радиус."""
     key = str(cid)
-    day = datetime.now(config.TZ).date().isoformat()
-    profile = store.get_settings(cid)
-    city = profile.get("city") or "Алкмар"
-    home_cc = str(profile.get("cc") or "NL").upper()
+    day, city, home_cc = _home_idea_scope(cid)
     with _idea_lock(cid):
-        state = store._load(config.TRAVEL_IDEA_KEY) or {}
-        cached = state.get(key) or {}
-        if (not refresh and cached.get("version") == 3 and cached.get("day") == day and cached.get("city") == city
-                and cached.get("cc") == home_cc
-                and cached.get("idea")):
-            return cached["idea"]
+        cached = None if refresh else cached_home_idea(cid)
+        if cached:
+            return cached
         idea = _generate_home_idea(cid)
 
         def change(data):

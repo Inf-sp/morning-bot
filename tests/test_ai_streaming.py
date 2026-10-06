@@ -95,7 +95,7 @@ def test_stream_route_falls_back_before_first_delta(monkeypatch):
     monkeypatch.setattr(ai, "_record_ai_attempt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai.provider_runtime, "activate_fallback", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai, "_log_free_chat_route", lambda **kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _provider: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *args, **kwargs: None)
 
     def stream(provider, _history, _system, emit, **_kwargs):
@@ -117,7 +117,7 @@ def test_stream_route_does_not_mix_providers_after_visible_delta(monkeypatch):
     monkeypatch.setattr(ai, "CHAT_ORDER", (ai.GROQ_STANDARD, "cf"))
     monkeypatch.setattr(ai, "_record_ai_attempt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ai, "_log_free_chat_route", lambda **kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _provider: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *args, **kwargs: None)
 
     def stream(provider, _history, _system, emit, **_kwargs):

@@ -91,7 +91,7 @@ def test_wardrobe_item_parsing_uses_the_common_gemini_route():
 def test_invalid_json_from_primary_uses_the_next_provider(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: '{"items": [}')
     monkeypatch.setattr(ai, "_gen_cf", lambda *_args, **_kwargs: '{"items": [{"name": "готово"}]}')
 
@@ -105,7 +105,7 @@ def test_invalid_json_from_primary_uses_the_next_provider(monkeypatch):
 def test_semantically_invalid_json_uses_the_next_provider(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: '{"ok":false}')
     monkeypatch.setattr(ai, "_gen_cf", lambda *_args, **_kwargs: '{"ok":true}')
 
@@ -120,7 +120,7 @@ def test_semantically_invalid_json_uses_the_next_provider(monkeypatch):
 def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch):
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("groq down")))
     monkeypatch.setattr(
         ai, "_openrouter_plain_text_fallback",
@@ -133,31 +133,6 @@ def test_public_learning_modules_use_the_last_ai_reserve_by_default(monkeypatch)
     )
 
     assert result == "резервный ответ"
-
-
-def test_mistral_json_reserve_uses_direct_api(monkeypatch):
-    captured = {}
-
-    class Response:
-        @staticmethod
-        def json():
-            return {"choices": [{"message": {"content": '{"ok":true}'}}]}
-
-    def fake_post(url, headers, payload, *_args, **_kwargs):
-        captured.update(url=url, headers=headers, payload=payload)
-        return Response()
-
-    monkeypatch.setattr(ai.config, "MISTRAL_API_KEY", "secret")
-    monkeypatch.setattr(ai.config, "MISTRAL_MODEL", "mistral-small-2603")
-    monkeypatch.setattr(ai, "_post", fake_post)
-
-    result = ai._gen_mistral("Верни JSON", 120, 0.0, "json")
-
-    assert result == '{"ok":true}'
-    assert captured["url"] == "https://api.mistral.ai/v1/chat/completions"
-    assert captured["payload"]["model"] == "mistral-small-2603"
-    assert captured["payload"]["response_format"] == {"type": "json_object"}
-    assert captured["headers"]["Authorization"] == "Bearer secret"
 
 
 def test_cloudflare_accepts_openai_compatible_choices(monkeypatch):
@@ -210,8 +185,8 @@ def test_openrouter_uses_ordered_model_fallbacks(monkeypatch):
 
 
 def test_central_chain_is_gemini_then_reserves_in_documented_order():
-    # docs/admin.md: Gemini, затем Groq, Mistral, Cloudflare AI и OpenRouter.
-    assert ai.AI_ORDER == ("gemini", "groq", "mistral", "cf", "openrouter")
+    # docs/admin.md: Gemini, затем Groq, Cloudflare AI и OpenRouter.
+    assert ai.AI_ORDER == ("gemini", "groq", "cf", "openrouter")
 
 
 def test_all_central_routes_use_the_single_ai_chain():
@@ -299,9 +274,9 @@ def test_one_action_can_use_gemini_only_once(monkeypatch):
     calls = []
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or "first")
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args: calls.append("groq") or "second")
 
@@ -320,12 +295,12 @@ def test_unavailable_gemini_does_not_consume_action_budget(monkeypatch):
     unavailable = {"gemini": True}
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda name: (
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda name, **_k: (
         ai.LLMProviderError(name, "cooldown", temporary=True, error_type="cooldown")
         if unavailable.get(name) else None
     ))
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or "g")
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args: calls.append("groq") or "q")
 
@@ -404,9 +379,9 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
     _patch_mutate_kv(monkeypatch, tracking.store)
     monkeypatch.setattr(ai, "_cache_get", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_mark_cooldown", lambda *_args, **_kwargs: None)
 
     def unavailable(*_args, **_kwargs):
@@ -446,9 +421,9 @@ def test_second_action_uses_cached_premium_answer_without_gemini(monkeypatch):
 
     monkeypatch.setattr(ai.store, "mutate_kv", mutate)
     monkeypatch.setattr(ai.store, "_save", lambda key, value: memory.__setitem__(key, value))
-    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda _name: None)
+    monkeypatch.setattr(ai, "_provider_is_unavailable", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
-    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order: order)
+    monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or '{"ok":true}')
 
     first = tracking.start_action("42", "Поездка", "first", budget_seconds=10)

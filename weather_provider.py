@@ -1,5 +1,6 @@
 """OpenWeather provider, quota accounting and persistent forecast cache."""
 
+import contextvars
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -9,6 +10,7 @@ import requests
 
 import api_usage
 import config
+import tracking
 import store
 
 _log = logging.getLogger(__name__)
@@ -381,7 +383,7 @@ def _mark_weather_cache_hit():
 def _http_get_counted(url, *, params=None, timeout=20, is_retry=False):
     _reserve_weather_request(is_retry=is_retry)
     try:
-        r = requests.get(url, params=params, timeout=timeout)
+        r = requests.get(url, params=params, timeout=tracking.bounded_timeout(timeout))
     except Exception as e:
         _mark_weather_failed(_safe_error_reason(e))
         raise
@@ -475,9 +477,9 @@ def fetch_weather(lat, lon, days=2):
 
     try:
         with ThreadPoolExecutor(max_workers=3) as pool:
-            fut_current = pool.submit(_onecall_get, "current", lat, lon)
-            fut_hourly = pool.submit(_onecall_get, "timeline/1h", lat, lon)
-            fut_daily = pool.submit(_onecall_get, "timeline/1day", lat, lon)
+            fut_current = pool.submit(contextvars.copy_context().run, _onecall_get, "current", lat, lon)
+            fut_hourly = pool.submit(contextvars.copy_context().run, _onecall_get, "timeline/1h", lat, lon)
+            fut_daily = pool.submit(contextvars.copy_context().run, _onecall_get, "timeline/1day", lat, lon)
             current_payload = fut_current.result()
             hourly_payload = fut_hourly.result()
             daily_payload = fut_daily.result()

@@ -16,6 +16,7 @@ import requests
 _log = logging.getLogger(__name__)
 import util
 import config
+import tracking
 import api_usage
 import provider_runtime
 import country_catalog
@@ -68,7 +69,7 @@ def _wiki_ru_title(name):
         r = requests.get("https://en.wikipedia.org/w/api.php", params={
             "action": "query", "format": "json", "prop": "langlinks",
             "lllang": "ru", "lllimit": 1, "redirects": 1, "titles": name,
-        }, headers=_WIKI_UA, timeout=10)
+        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(10))
         for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
             if "missing" in p:
                 continue
@@ -85,7 +86,7 @@ def _wiki_search_en(name):
         r = requests.get("https://en.wikipedia.org/w/api.php", params={
             "action": "opensearch", "search": name, "limit": 1,
             "format": "json", "namespace": 0
-        }, headers=_WIKI_UA, timeout=8)
+        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(8))
         arr = r.json()
         return arr[1][0] if len(arr) > 1 and arr[1] else ""
     except Exception:
@@ -98,7 +99,7 @@ def wiki_summary(title, lang):
         r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params={
             "action": "query", "format": "json", "prop": "extracts",
             "exintro": 1, "explaintext": 1, "redirects": 1, "titles": title,
-        }, headers=_WIKI_UA, timeout=10)
+        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(10))
         for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
             if "missing" in p:
                 continue
@@ -189,7 +190,7 @@ def _wd_qid(name_clean: str) -> str:
             r = requests.get("https://www.wikidata.org/w/api.php", params={
                 "action": "wbsearchentities", "search": name_clean,
                 "language": lang, "type": "item", "limit": 3, "format": "json"
-            }, headers=_WIKI_UA, timeout=8)
+            }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(8))
             items = r.json().get("search", [])
             # берём первый результат у которого description содержит city/municipality/город
             for it in items:
@@ -222,7 +223,7 @@ def wikidata_city_facts(name: str) -> dict:
         return facts
     try:
         r = requests.get(f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
-                         headers=_WIKI_UA, timeout=12)
+                         headers=_WIKI_UA, timeout=tracking.bounded_timeout(12))
         claims = r.json().get("entities", {}).get(qid, {}).get("claims", {})
 
         # P571 — год основания
@@ -422,7 +423,7 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
         r = requests.post(
             "https://api.tavily.com/search",
             json=payload,
-            timeout=15,
+            timeout=tracking.bounded_timeout(15),
         )
         ok = 200 <= r.status_code < 300
         error = "" if ok else f"HTTP {r.status_code} {r.text[:240]}"
@@ -472,7 +473,7 @@ def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general"
             else "https://api.firecrawl.dev/v1/search",
             json=payload,
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
-            timeout=18,
+            timeout=tracking.bounded_timeout(18),
         )
         ok = 200 <= r.status_code < 300
         api_usage.record_request("firecrawl", ok=ok, status_code=r.status_code,

@@ -415,3 +415,12 @@ def test_restaurant_search_excludes_full_recent_history_from_search_and_ai_cache
     assert cache_contexts[0]["history"] == [
         "roest alkmaar", "mada", cached["name"].casefold(),
     ]
+
+
+def test_shown_place_offers_another_place_by_live_request():
+    message = restaurant_menu({
+        "city": "Alkmaar", "name": "Bistro", "map_url": "https://maps.example/bistro",
+    })
+
+    first_row = message.reply_markup.inline_keyboard[0][0]
+    assert (first_row.text, first_row.callback_data) == ("✨ Другое место", "m_food_next")

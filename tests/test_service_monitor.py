@@ -36,16 +36,14 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
 
 def test_ai_provider_catalog_uses_roles_not_sections():
     assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Основной"
-    assert provider_runtime.SPEC_BY_KEY["mistral"].category == "Резерв 2"
+    assert provider_runtime.SPEC_BY_KEY["cloudflare"].category == "Резерв 2"
     assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Питание"
 
 
-def test_mistral_is_a_configured_ai_reserve(monkeypatch):
-    monkeypatch.setattr(provider_runtime.config, "MISTRAL_API_KEY", "secret")
-
-    assert "mistral" in provider_runtime.AI_PROVIDERS
-    assert provider_runtime.is_configured("mistral")
-    assert provider_runtime.SPEC_BY_KEY["mistral"].fallbacks == ("cloudflare", "openrouter")
+def test_mistral_is_removed_from_the_ai_chain():
+    assert "mistral" not in provider_runtime.AI_PROVIDERS
+    assert "mistral" not in provider_runtime.SPEC_BY_KEY
+    assert provider_runtime.SPEC_BY_KEY["groq"].fallbacks == ("cloudflare", "openrouter")
 
 
 def test_cloudflare_probe_uses_real_workers_ai_route(monkeypatch):
@@ -130,7 +128,7 @@ def test_unclassified_openrouter_monitor_result_is_neutral(monkeypatch):
     )
 
     assert service_monitor.format_row("openrouter") == (
-        "⚪ OpenRouter · Резерв 4 · 0 сегодня"
+        "⚪ OpenRouter · Резерв 3 · 0 сегодня"
     )
 
 
@@ -234,19 +232,26 @@ def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
     )
 
 
-def test_openrouter_balance_is_shown_as_money_not_requests(monkeypatch):
+def test_openrouter_row_shows_requests_not_money(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
-    monkeypatch.setattr(
-        service_monitor.api_usage, "openrouter_key_usage",
-        lambda: {"remaining": 0.999994555, "limit": 1},
-    )
+    monkeypatch.setattr(service_monitor.api_usage, "service_usage", lambda _service: {"requests_today": 12})
     state = provider_runtime.blank_state("openrouter")
-    state.update({"status": provider_runtime.OK, "quota_remaining": 1, "quota_total": 1})
+    state.update({"status": provider_runtime.OK})
 
-    assert service_monitor.format_row("openrouter", state) == (
-        "🟢 OpenRouter · Резерв 4 · $1.00 осталось"
-    )
+    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 3 · 12 сегодня"
+
+
+def test_groq_unclassified_error_is_neutral_not_yellow(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    state = provider_runtime.blank_state("groq")
+    state.update({
+        "status": provider_runtime.WARNING, "error_type": "unknown",
+        "last_error": "не удалось определить статус", "quota_remaining": 999, "quota_total": 1000,
+    })
+
+    assert service_monitor.format_row("groq", state) == "⚪ Groq · Резерв 1 · 999/1 000 осталось"
 
 
 def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
@@ -289,7 +294,7 @@ def test_active_ai_reserves_are_shown_in_main_rows(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert service_monitor._AI_SERVICES == ("gemini", "groq", "mistral", "cloudflare", "openrouter")
+    assert service_monitor._AI_SERVICES == ("gemini", "groq", "cloudflare", "openrouter")
     assert any("Groq" in row for row in rows)
     assert not any("gpt-oss" in row or "qwen" in row for row in rows)
     assert any("Cloudflare AI" in row for row in rows)
@@ -437,3 +442,72 @@ def test_own_error_replaces_inherited_unavailable_reserve_status(monkeypatch):
     assert (current["error_type"], current["last_error"]) == ("auth", "ошибка авторизации")
     rows = [row for row in provider_runtime.history(10) if row["service"] == "gemini"]
     assert rows[0]["status_code"] == 403
+
+
+def test_live_check_all_runs_concurrently(monkeypatch):
+    import asyncio
+    import time
+
+    def slow_check(service):
+        time.sleep(0.3)
+        return {"service": service, "label": service, "status": "ok", "seconds": 0.3, "detail": ""}
+
+    monkeypatch.setattr(service_monitor, "live_check", slow_check)
+    started = time.monotonic()
+    results = asyncio.run(service_monitor.live_check_all())
+    elapsed = time.monotonic() - started
+
+    assert len(results) > 10
+    assert "telegram" not in [row["service"] for row in results]
+    assert elapsed < 1.0  # sum would be ≈ 0.3 × N
+
+
+def test_live_check_all_times_out_one_slow_service(monkeypatch):
+    import asyncio
+    import time
+
+    def check(service):
+        if service == "gemini":
+            time.sleep(0.5)
+        return {"service": service, "label": service, "status": "ok", "seconds": 0.0, "detail": ""}
+
+    monkeypatch.setattr(service_monitor, "live_check", check)
+    monkeypatch.setattr(service_monitor, "LIVE_CHECK_TIMEOUT", 0.1)
+    results = {row["service"]: row for row in asyncio.run(service_monitor.live_check_all())}
+
+    assert results["gemini"]["status"] == "fail"
+    assert results["gemini"]["detail"] == "сервис не ответил"
+    assert results["groq"]["status"] == "ok"
+
+
+def test_live_check_skips_unconfigured_and_quota_spending_services(monkeypatch):
+    monkeypatch.setattr(service_monitor.config, "SERP_API_KEY", "")
+    monkeypatch.setattr(service_monitor, "probe", lambda _s: (_ for _ in ()).throw(AssertionError))
+
+    assert service_monitor.live_check("serpapi")["detail"] == "ключ не настроен"
+    assert service_monitor.live_check("cloudflare")["status"] == "skip"
+    assert service_monitor.live_check("youtube")["detail"] == "проверяется реальными запросами"
+
+
+def test_live_check_failure_is_friendly_and_has_no_secrets(monkeypatch):
+    from ui import admin as admin_ui
+    _memory_store(monkeypatch)
+    secret = "gsk_SECRET123"
+    monkeypatch.setattr(service_monitor.config, "GROQ_API_KEY", secret)
+
+    class Response:
+        status_code = 401
+        headers = {}
+        content = b'{"error": "invalid key gsk_SECRET123"}'
+
+    monkeypatch.setattr(service_monitor.requests, "request", lambda *a, **k: Response())
+    result = service_monitor.live_check("groq")
+    text = admin_ui.api_check([result]).text
+
+    assert result["status"] == "fail"
+    assert "❌ Groq · " in text and text.endswith("ошибка авторизации")
+    assert secret not in text and "http" not in text and "401" not in text
+
+    Response.status_code = 200
+    assert service_monitor.live_check("groq")["status"] == "ok"
+    assert provider_runtime.get_state("groq")["status"] == provider_runtime.OK

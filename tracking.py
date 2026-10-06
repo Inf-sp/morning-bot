@@ -83,6 +83,17 @@ def remaining_action_seconds(trace=None) -> float | None:
     return max(0.0, trace.budget_seconds - (time.monotonic() - trace.started))
 
 
+def bounded_timeout(default: float, *, minimum: float = 0.5) -> float:
+    """HTTP-таймаут внутри действия пользователя не длиннее остатка его бюджета.
+
+    В фоне (нет текущего действия) возвращает исходный таймаут.
+    """
+    remaining = remaining_action_seconds()
+    if remaining is None:
+        return float(default)
+    return max(minimum, min(float(default), remaining))
+
+
 def has_active_actions() -> bool:
     with _active_action_lock:
         return bool(_active_action_ids)
@@ -232,7 +243,7 @@ _FALLBACK_BY_SERVICE = {
     "gTTS": "текстовая карточка", "TMDB": "Gemini",
     "Google Books": "Open Library", "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
-    "Gemini": "Groq", "Groq": "Mistral",
+    "Gemini": "Groq", "Groq": "Cloudflare AI",
 }
 
 

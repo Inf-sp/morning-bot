@@ -137,8 +137,8 @@ def test_food_home_uses_cached_restaurant_without_recipe_generation(monkeypatch)
     assert shown == ["De Eendracht"]
 
 
-def test_opening_food_rotates_the_restaurant_recommendation(monkeypatch):
-    """Обычное открытие «Питания» не должно повторять дневную карточку."""
+def test_opening_food_serves_the_day_restaurant_card(monkeypatch):
+    """Обычное открытие «Готовки» показывает готовую карточку дня без нового поиска."""
     calls = []
 
     class Status:
@@ -162,7 +162,7 @@ def test_opening_food_rotates_the_restaurant_recommendation(monkeypatch):
 
     asyncio.run(bot_callbacks.handle(update, context, lambda *_args: None))
 
-    assert calls[0]["refresh"] is True
+    assert calls[0].get("refresh", False) is False
 
 
 def test_dinner_button_uses_dinner_cache_without_forced_refresh(monkeypatch):

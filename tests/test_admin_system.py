@@ -104,7 +104,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки"], ["👥 Пользователи"], ["#️⃣ Главная"],
+        ["🔄 Обновить карточки"], ["🩺 Проверить API"], ["👥 Пользователи"], ["#️⃣ Главная"],
     ]
 
 
@@ -418,11 +418,10 @@ def test_system_summary_deduplicates_unavailable_functions():
 
 
 def test_system_summary_counts_ai_reserves_of_the_active_chain():
-    # Groq, Mistral и Cloudflare AI — резервы основной цепочки (a7556ea), их статус учитывается.
+    # Groq и Cloudflare AI — резервы основной цепочки, их статус учитывается.
     summary = admin._system_summary([
         {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
         {"service": "cloudflare", "status": "warning", "fallback": ""},
-        {"service": "mistral", "status": "down", "fallback": "", "error_type": "timeout"},
     ])
 
     assert summary["line"] == "3 функции недоступны"
@@ -489,3 +488,50 @@ def _patch_mutate_kv(monkeypatch, store):
         return result
 
     monkeypatch.setattr(store, "mutate_kv", mutate)
+
+
+def test_api_check_rows_format_ok_fail_skip_with_comma_latency():
+    msg = admin_ui.api_check([
+        {"label": "Gemini", "status": "ok", "seconds": 0.83, "detail": ""},
+        {"label": "Groq", "status": "fail", "seconds": 3.0, "detail": "ошибка авторизации"},
+        {"label": "SerpApi", "status": "skip", "seconds": None, "detail": "ключ не настроен"},
+    ])
+
+    assert msg.text.splitlines() == [
+        "🩺 Проверка API", "",
+        "✅ Gemini · 0,8 с",
+        "❌ Groq · 3,0 с · ошибка авторизации",
+        "⏭ SerpApi · ключ не настроен",
+    ]
+
+
+def test_api_check_screen_shows_results_and_buttons(monkeypatch):
+    async def fake_check_all():
+        return [{"label": "Gemini", "status": "ok", "seconds": 1.24, "detail": ""}]
+
+    monkeypatch.setattr(admin.service_monitor, "live_check_all", fake_check_all)
+    bot = _Bot()
+
+    asyncio.run(admin.send_api_check(bot, "42"))
+
+    assert "✅ Gemini · 1,2 с" in bot.sent[0]["text"]
+    markup = bot.sent[0]["reply_markup"].inline_keyboard
+    assert [[(b.text, b.callback_data) for b in row] for row in markup] == [
+        [("🩺 Проверить снова", "adm_api_check")], [("⬅️ Назад", "adm_home")],
+    ]
+
+
+def test_api_check_callback_is_admin_only(monkeypatch):
+    called = []
+
+    async def fake_send(bot, cid, q=None):
+        called.append(cid)
+
+    monkeypatch.setattr(admin, "send_api_check", fake_send)
+    monkeypatch.setattr(settings.config, "CHAT_ID", "1")
+    bot = _Bot()
+
+    asyncio.run(settings.handle_callback(bot, "999", "adm_api_check", None))
+    assert called == []
+    asyncio.run(settings.handle_callback(bot, "1", "adm_api_check", None))
+    assert called == ["1"]

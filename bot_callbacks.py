@@ -276,8 +276,9 @@ async def handle(update, context, remove_reply_keyboard):
         )
         return
     if data == "m_food":
+        # Главный экран — готовая карточка дня; новый поиск только по m_food_next.
         await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
+            lambda status: menu.send_food_menu(bot, cid, status=status),
             preserve_message=False,
         )
         return

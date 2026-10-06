@@ -776,7 +776,7 @@ async def send_games_home(bot, cid, *, q=None, status=None):
         items = await get_game_premieres(cid, refresh=True, seasonal=True)
     today = datetime.now(config.TZ).date()
     _season_start, _season_end, season = _game_season(today)
-    daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
+    daily = monthly_rebuses.cached_for_day("games", today, _GAME_DAILY_CONTENT)
     home_items = []
     items = _rotated_season_items(items, today)
     for source in items[:3]:
@@ -812,6 +812,8 @@ async def send_games_home(bot, cid, *, q=None, status=None):
 async def warm_games_home_cache(cid):
     """Готовит сезонную витрину и дневной ребус без отправки сообщения."""
     items = await get_game_premieres(cid, seasonal=True)
+    if not has_seasonal_premieres_cache(cid):
+        items = await get_game_premieres(cid, refresh=True, seasonal=True) or items
     today = datetime.now(config.TZ).date()
     daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
     return bool(items or daily)
@@ -1041,13 +1043,24 @@ def _rotated_season_items(items, today):
     return [rows[(offset + index) % len(rows)] for index in range(3)]
 
 
+def _premiere_signature(cid, start_date, end_date):
+    return f"{_platform_signature(cid)}:{start_date.isoformat()}:{end_date.isoformat()}"
+
+
+def has_seasonal_premieres_cache(cid):
+    """Есть ли свежая сезонная витрина главного экрана (без сети)."""
+    today = datetime.now(config.TZ).date()
+    start_date, end_date, _season = _game_season(today)
+    return _premiere_cache_get(_premiere_signature(cid, start_date, end_date), today) is not None
+
+
 async def get_game_premieres(cid, *, refresh=False, seasonal=False):
     today = datetime.now(config.TZ).date()
     if seasonal:
         start_date, end_date, season = _game_season(today)
     else:
         start_date, end_date, season = today, today + timedelta(days=180), ""
-    signature = f"{_platform_signature(cid)}:{start_date.isoformat()}:{end_date.isoformat()}"
+    signature = _premiere_signature(cid, start_date, end_date)
     cached = _premiere_cache_get(signature, today)
     if cached is not None:
         return cached

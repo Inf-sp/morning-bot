@@ -313,10 +313,14 @@ async def send_books_home(bot, cid, q=None, status=None):
 
 
 async def warm_books_home_cache(cid, *, refresh=False):
-    """Готовит данные литературной витрины без персональной рекомендации."""
+    """Готовит данные литературной витрины без персональной рекомендации.
+
+    Недельная подборка общая для всех: внешний поиск только при её отсутствии,
+    поэтому повторный прогрев за неделю не ходит в Google Books.
+    """
     await asyncio.gather(
         _daily_book_content(refresh=True),
-        get_weekly_new_books(refresh=True),
+        get_weekly_new_books(refresh=refresh or _weekly_book_cache_get() is None),
     )
     return True
 

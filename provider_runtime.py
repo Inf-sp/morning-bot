@@ -6,6 +6,7 @@ probes are adapters around this state; neither owns provider availability.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -56,14 +57,12 @@ class ProviderSpec:
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
     ProviderSpec("gemini", "Gemini", ("Питание", "Обучение", "Ассистент"),
-                 ("groq", "mistral", "cloudflare", "openrouter"), 3600, role="Основной"),
+                 ("groq", "cloudflare", "openrouter"), 3600, role="Основной"),
     ProviderSpec("groq", "Groq", ("Питание", "Обучение", "Ассистент"),
-                 ("mistral", "cloudflare", "openrouter"), 3600, role="Резерв 1"),
-    ProviderSpec("mistral", "Mistral", ("Питание", "Обучение", "Ассистент"),
-                 ("cloudflare", "openrouter"), 3600, role="Резерв 2"),
+                 ("cloudflare", "openrouter"), 3600, role="Резерв 1"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
-                 ("openrouter",), 3600, role="Резерв 3"),
+                 ("openrouter",), 3600, role="Резерв 2"),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Поездка", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),
@@ -83,14 +82,13 @@ SPECS = (
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
-AI_PROVIDERS = {"gemini", "groq", "mistral", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "gemini": config.GEMINI_API_KEY,
         "groq": config.GROQ_API_KEY,
-        "mistral": config.MISTRAL_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,
         "cloudflare": config.CF_API_TOKEN and config.CF_ACCOUNT_ID,
         "openweather": config.WEATHER_API_KEY,
@@ -197,6 +195,52 @@ def cooldown_remaining(provider: str, now: int | None = None) -> int:
     state = get_state(provider)
     current = int(now or time.time())
     return max(0, int(state.get("cooldown_until") or 0) - current)
+
+
+# In-process AI circuit breaker, shared by every module of this process.
+# ai.py decides which failures open it; any real success (or, except for a
+# rate limit, a passing monitor probe) closes it early.
+AI_BREAKER_FAILURES = 2
+AI_BREAKER_COOLDOWN_SECONDS = 600
+AI_BREAKER_OUTAGE = "outage"  # timeouts/5xx/network/unknown after N in a row
+_ai_breaker: dict[str, dict] = {}
+_ai_breaker_lock = threading.Lock()
+
+
+def note_ai_failure(provider: str, *, kind: str = AI_BREAKER_OUTAGE,
+                    seconds: int = AI_BREAKER_COOLDOWN_SECONDS) -> None:
+    """Count one live failure; open the breaker on the N-th outage in a row
+    or immediately for any other kind (auth, rate_limit)."""
+    now = time.time()
+    with _ai_breaker_lock:
+        entry = dict(_ai_breaker.get(provider) or {})
+        was_open = float(entry.get("until") or 0) > now
+        entry["streak"] = int(entry.get("streak") or 0) + 1
+        if kind == AI_BREAKER_OUTAGE and entry["streak"] < AI_BREAKER_FAILURES:
+            _ai_breaker[provider] = entry
+            return
+        entry["until"] = max(float(entry.get("until") or 0), now + int(seconds))
+        if not was_open or kind != AI_BREAKER_OUTAGE:
+            entry["kind"] = kind
+        _ai_breaker[provider] = entry
+    if not was_open:
+        _log.warning("AI provider %s skipped for %ss: %s", provider, int(seconds), kind)
+
+
+def ai_breaker_kind(provider: str) -> str:
+    """Kind of the open breaker for ``provider`` or "" when it may be called."""
+    entry = _ai_breaker.get(provider) or {}
+    return str(entry.get("kind") or "") if float(entry.get("until") or 0) > time.time() else ""
+
+
+def reset_ai_breaker(provider: str, *, keep_rate_limit: bool = False) -> None:
+    with _ai_breaker_lock:
+        entry = _ai_breaker.get(provider)
+        if not entry:
+            return
+        if keep_rate_limit and entry.get("kind") == "rate_limit" and float(entry.get("until") or 0) > time.time():
+            return
+        _ai_breaker.pop(provider, None)
 
 
 def _next_month_reset_at(now: int) -> int:
@@ -466,6 +510,8 @@ def record_result(
         # Health probes must not silently clear a rate-limit incident. Product
         # requests keep the default real_request=True.
         real_request = bool(record_history)
+    if ok and provider in AI_PROVIDERS:
+        reset_ai_breaker(provider, keep_rate_limit=not real_request)
     header_remaining, header_total = quota_from_headers(headers)
     remaining = quota_remaining if quota_remaining is not None else header_remaining
     total = quota_total if quota_total is not None else header_total

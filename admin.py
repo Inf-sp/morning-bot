@@ -249,10 +249,20 @@ def _mark_logs_viewed(cid, errors):
 
 # ================= ДОМ =================
 
+def _home_speed_line():
+    try:
+        import home_cache
+        return home_cache.today_open_stats_line()
+    except Exception:
+        _log.warning("home open stats unavailable", exc_info=True)
+        return ""
+
+
 async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
+        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -260,8 +270,29 @@ async def send_home(bot, cid, q=None):
         system_rows=monitor_rows,
         error_rows=_active_error_rows(limit=5),
         version_line=deploy_report.version_line(),
+        speed_line=_home_speed_line(),
     )
     await _show(bot, cid, msg, kb, q)
+
+
+async def send_api_check(bot, cid, q=None):
+    """Живая проверка всех API: статус ожидания → одна строка на сервис."""
+    import util
+    status = None
+    if q is not None:
+        status = await util.StatusManager.start_inline(
+            q, bot=bot, cid=cid, stages=((0, "🩺 Проверяю API..."),), preserve_message=True,
+        )
+    try:
+        results = await service_monitor.live_check_all()
+    finally:
+        if status is not None:
+            await status.stop(delete=True)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🩺 Проверить снова", callback_data="adm_api_check")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+    ])
+    await _show(bot, cid, ui.api_check(results), kb, q)
 
 
 _REFRESH_CARDS = (
@@ -580,7 +611,7 @@ def _llm_failure_reason(entry):
     raw_values.append(str(entry.get("error") or entry.get("msg") or ""))
     raw = " ; ".join(raw_values).casefold()
     providers = (
-        ("groq", "Groq"), ("gemini", "Gemini"), ("mistral", "Mistral"),
+        ("groq", "Groq"), ("gemini", "Gemini"),
         ("cloudflare", "Cloudflare AI"), ("cf:", "Cloudflare AI"),
         ("openrouter", "OpenRouter"),
     )

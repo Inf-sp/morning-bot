@@ -11,6 +11,7 @@ import requests
 
 import api_usage
 import config
+import tracking
 import util
 
 
@@ -58,7 +59,7 @@ def _request(endpoint: str, params=None, ttl=_FILTER_TTL) -> list[dict]:
         return cached
     started = time.time()
     try:
-        response = requests.get(_url(endpoint), params=params, timeout=8)
+        response = requests.get(_url(endpoint), params=params, timeout=tracking.bounded_timeout(8))
     except requests.exceptions.Timeout:
         api_usage.record_request("themealdb", ok=False, error="timeout")
         return []

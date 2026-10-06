@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import contextvars
+import functools
 import inspect
 import logging
 import re
@@ -24,6 +26,15 @@ _GEMINI_RATE_LOCK = threading.Lock()
 _ACTIVE_DEADLINE = contextvars.ContextVar("ai_deadline", default=None)
 STANDARD_BUDGET_SECONDS = 10.0
 COMPLEX_BUDGET_SECONDS = 15.0
+# Live calls made inside a user action (button/text) without an explicit
+# budget_seconds: the reserve must answer before the user gives up.
+LIVE_INTERACTIVE_BUDGET_SECONDS = 8.0
+# Background mode (night warm-up etc.): nobody is waiting, a slow primary may
+# be waited for instead of falling back to a weaker reserve.
+BACKGROUND_BUDGET_SECONDS = 120.0
+BACKGROUND_PROVIDER_TIMEOUT_SECONDS = 50.0
+BACKGROUND_RETRY_PAUSE_SECONDS = 2.0
+_AI_MODE = contextvars.ContextVar("ai_mode", default="live")
 OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
 FREE_CHAT_BUDGET_SECONDS = 7.0
 FREE_CHAT_MAX_TOKENS = 350
@@ -35,7 +46,6 @@ _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "groq": 2.5,
     "groq_standard": 2.5,
     "cf": 2.0,
-    "mistral": 2.5,
     "openrouter": 2.5,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
@@ -116,6 +126,33 @@ class StreamOutputInterrupted(Exception):
         super().__init__("⏳ Ответ оборвался. Отправь сообщение ещё раз.")
 
 
+@contextlib.contextmanager
+def background_mode():
+    """Run ai.llm/allm/llm_json/allm_json calls inside with background limits.
+
+    A contextvar: works around sync and async code and is copied into
+    asyncio.to_thread. Never sends anything to users by itself.
+    """
+    token = _AI_MODE.set("background")
+    try:
+        yield
+    finally:
+        _AI_MODE.reset(token)
+
+
+def background_job(job):
+    """Wrap an async scheduler job so every AI call inside runs in background_mode."""
+    @functools.wraps(job)
+    async def run(*args, **kwargs):
+        with background_mode():
+            return await job(*args, **kwargs)
+    return run
+
+
+def _is_background() -> bool:
+    return _AI_MODE.get() == "background"
+
+
 def _budget_for_module(module: str) -> float:
     module = str(module or "").casefold()
     if module.startswith(_COMPLEX_MODULE_PREFIXES):
@@ -152,14 +189,19 @@ def _run_with_deadline(module, budget_seconds, call):
         if remaining is not None and remaining <= 0.2:
             raise _deadline_error()
         return call()
-    budget = float(budget_seconds or _budget_for_module(module))
-    try:
-        import tracking
-        action_remaining = tracking.remaining_action_seconds()
-        if action_remaining is not None:
-            budget = min(budget, action_remaining)
-    except Exception:
-        pass
+    if _is_background():
+        budget = BACKGROUND_BUDGET_SECONDS
+    else:
+        budget = float(budget_seconds or _budget_for_module(module))
+        try:
+            import tracking
+            if not budget_seconds and tracking.current_action() is not None:
+                budget = min(budget, LIVE_INTERACTIVE_BUDGET_SECONDS)
+            action_remaining = tracking.remaining_action_seconds()
+            if action_remaining is not None:
+                budget = min(budget, action_remaining)
+        except Exception:
+            pass
     if budget <= 0.2:
         raise _deadline_error()
     token = _ACTIVE_DEADLINE.set(time.monotonic() + budget)
@@ -218,7 +260,6 @@ _TIMEOUT_CAPS = {
     "gemini": 6.0,
     "groq": 5.0,
     "cf": 4.0,
-    "mistral": 6.0,
 }
 
 
@@ -466,8 +507,6 @@ def _provider_model_name(provider: str) -> str:
         return config.GROQ_STANDARD_MODEL
     if provider == "cf":
         return config.CF_MODEL
-    if provider == "mistral":
-        return config.MISTRAL_MODEL
     return ""
 
 
@@ -585,10 +624,13 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
     service = service_aliases.get(name, name)
     meter_service = usage_service or service
     gemini_request = service == "gemini"
-    if timeout_cap is None:
-        timeout_cap = _timeout_cap(name)
-    if timeout_cap is not None:
-        timeout = min(float(timeout), float(timeout_cap))
+    if _is_background():
+        timeout = BACKGROUND_PROVIDER_TIMEOUT_SECONDS
+    else:
+        if timeout_cap is None:
+            timeout_cap = _timeout_cap(name)
+        if timeout_cap is not None:
+            timeout = min(float(timeout), float(timeout_cap))
     t0 = time.time()
     timeout = _bounded_timeout(timeout)
 
@@ -664,10 +706,13 @@ def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_s
     service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
     service = service_aliases.get(name, name)
     meter_service = usage_service or service
-    if timeout_cap is None:
-        timeout_cap = _timeout_cap(name)
-    if timeout_cap is not None:
-        timeout = min(float(timeout), float(timeout_cap))
+    if _is_background():
+        timeout = BACKGROUND_PROVIDER_TIMEOUT_SECONDS
+    else:
+        if timeout_cap is None:
+            timeout_cap = _timeout_cap(name)
+        if timeout_cap is not None:
+            timeout = min(float(timeout), float(timeout_cap))
     timeout = _bounded_timeout(timeout)
     started = time.time()
     accounted = False
@@ -889,7 +934,12 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         generation_config["responseMimeType"] = "application/json"
     payload = {"contents": [{"parts": [{"text": prompt}]}],
                "generationConfig": generation_config}
-    with _GEMINI_RATE_LOCK:
+    # A background request may hold the lock for up to a minute; a live call
+    # must not wait past its own deadline and falls back instead.
+    remaining = _remaining_seconds()
+    if not _GEMINI_RATE_LOCK.acquire(timeout=-1 if remaining is None else max(0.0, remaining - 0.2)):
+        raise _deadline_error()
+    try:
         wait = api_usage.seconds_until_gemini_slot(limit=4, window=60)
         if wait > 0:
             remaining = _remaining_seconds()
@@ -900,6 +950,8 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
         r = _post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model or _provider_model_name(provider)}:generateContent",
             {"x-goog-api-key": config.GEMINI_API_KEY}, payload, 30, provider, timeout_cap=5)
+    finally:
+        _GEMINI_RATE_LOCK.release()
     data = r.json()
     usage = data.get("usageMetadata") or data.get("usage_metadata") or {}
     input_tokens = int(usage.get("promptTokenCount") or usage.get("prompt_token_count") or 0)
@@ -1001,7 +1053,10 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
         return None
     token_cap = 5000 if response_mode == "json" else 700
     try:
-        timeout = _bounded_timeout(30 if response_mode == "json" else 12)
+        timeout = _bounded_timeout(
+            BACKGROUND_PROVIDER_TIMEOUT_SECONDS if _is_background()
+            else 30 if response_mode == "json" else 12
+        )
     except LLMProviderError:
         return None
     try:
@@ -1109,27 +1164,6 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     return r.json()["choices"][0]["message"]["content"]
 
 
-def _gen_mistral(prompt, max_tokens, temperature,
-                 response_mode: ResponseMode = "plain_text"):
-    """Direct Mistral reserve through its OpenAI-compatible chat endpoint."""
-    if not config.MISTRAL_API_KEY:
-        raise LLMProviderError("mistral", "no Mistral key", error_type="credentials")
-    payload = {
-        "model": config.MISTRAL_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if response_mode == "json":
-        payload["response_format"] = {"type": "json_object"}
-    r = _post(
-        "https://api.mistral.ai/v1/chat/completions",
-        {"Authorization": f"Bearer {config.MISTRAL_API_KEY}",
-         "Content-Type": "application/json"},
-        payload, 40, "mistral", timeout_cap=6,
-    )
-    return r.json()["choices"][0]["message"]["content"]
-
 def _gen_cf(prompt, max_tokens):
     if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
         raise Exception("no cf")
@@ -1144,38 +1178,63 @@ def _gen_cf(prompt, max_tokens):
     )
     return output
 
-# ---------- circuit breaker для временных сбоев ----------
+# ---------- circuit breaker ----------
+# Состояние общее для процесса и живёт в provider_runtime: любой успешный
+# запрос или monitor-probe снимает паузу раньше срока.
 _RATE_LIMIT_COOLDOWN_SEC = 300
-_OUTAGE_COOLDOWN_SEC = 90
-_cooldowns = {}  # provider -> ts до которого он считается недоступным
+_BREAKER_IGNORED_ERRORS = frozenset({"deadline", "cooldown", "credentials", "invalid_response"})
 
 def _mark_cooldown(name, err):
-    """Временно убирает нестабильного провайдера из начала цепочки.
+    """Учитывает живой сбой провайдера в общем circuit breaker.
 
-    429 требует более длинной паузы, а 5xx/timeout/network — короткой. При этом
-    провайдер не исключается навсегда: после паузы он автоматически проверяется
-    следующим обычным запросом.
+    401/403/429 сразу открывают паузу; timeout/5xx/сеть/прочее — после
+    AI_BREAKER_FAILURES сбоев подряд. Собственный дедлайн цепочки и ошибки
+    JSON-режима (400) не считаются отказом провайдера.
     """
-    if (not _is_temporary_exception(err)
-            or getattr(err, "error_type", "") == "deadline"):
+    if getattr(err, "error_type", "") in _BREAKER_IGNORED_ERRORS:
         return
     status = getattr(err, "status_code", None)
-    seconds = _RATE_LIMIT_COOLDOWN_SEC if status == 429 else _OUTAGE_COOLDOWN_SEC
-    retry_after = getattr(err, "retry_after", None)
-    if retry_after:
-        seconds = max(seconds, min(int(retry_after), 3600))
-    key = _ROUTE_PROVIDER_BASE.get(name, name)
-    _cooldowns[key] = max(_cooldowns.get(key, 0), time.time() + seconds)
+    if _is_json_validation_error(status, str(err)):
+        return
+    provider = _monitor_name(name)
+    if status == 429:
+        seconds = _RATE_LIMIT_COOLDOWN_SEC
+        retry_after = getattr(err, "retry_after", None)
+        if retry_after:
+            seconds = max(seconds, min(int(retry_after), 3600))
+        provider_runtime.note_ai_failure(provider, kind="rate_limit", seconds=seconds)
+    elif status in (401, 403):
+        provider_runtime.note_ai_failure(provider, kind="auth")
+    else:
+        provider_runtime.note_ai_failure(provider)
 
-def _is_cooling(name):
-    return _cooldowns.get(_ROUTE_PROVIDER_BASE.get(name, name), 0) > time.time()
+def _is_cooling(name, primary=""):
+    kind = provider_runtime.ai_breaker_kind(_monitor_name(name))
+    if not kind:
+        return False
+    # Фон может подождать медленный основной провайдер, но не ключ/лимит.
+    return not (_is_background() and name == primary and kind == provider_runtime.AI_BREAKER_OUTAGE)
 
-def _reorder_for_cooldown(order):
-    """Провайдеров на cooldown (недавний временный сбой) отодвигаем в конец, чтобы не терять
-    время на заведомо неудачный запрос перед рабочим fallback-ом."""
-    if not any(_is_cooling(n) for n in order):
+def _breaker_skip_set(order, *, include_openrouter=True):
+    """Провайдеры, которых сейчас пропускаем. Если на паузе все доступные —
+    не пропускаем никого: пусть пробуются по порядку."""
+    primary = order[0] if order else ""
+    cooling = {n for n in order if _is_cooling(n, primary)}
+    candidates = {
+        n for n in order
+        if (n != "openrouter" or include_openrouter)
+        and provider_runtime.is_configured(_monitor_name(n))
+    }
+    if candidates and candidates <= cooling:
+        return frozenset()
+    return frozenset(cooling)
+
+def _reorder_for_cooldown(order, skip=frozenset()):
+    """Провайдеров на паузе отодвигаем в конец, чтобы не терять время на
+    заведомо неудачный запрос перед рабочим fallback-ом."""
+    if not skip:
         return order
-    return tuple(sorted(order, key=lambda n: _is_cooling(n)))
+    return tuple(sorted(order, key=lambda n: n in skip))
 
 
 def _monitor_name(provider):
@@ -1209,7 +1268,7 @@ def _reorder_for_monitor(order):
     return tuple(result)
 
 
-def _provider_is_unavailable(name):
+def _provider_is_unavailable(name, skip=frozenset()):
     service = _monitor_name(name)
     # Не тратим дедлайн на провайдера, чей ключ не задан: необязательный
     # резерв должен немедленно уступить место следующему в цепочке.
@@ -1219,9 +1278,26 @@ def _provider_is_unavailable(name):
         rate_limit = _gemini_cooldown_error()
         if rate_limit is not None:
             return rate_limit
-    if _is_cooling(name):
+    if name in skip:
         return LLMProviderError(name, f"{name} cooldown", temporary=True, error_type="cooldown")
     return None
+
+def _with_background_retry(call):
+    """Background only: one repeat of a temporary failure (timeout/5xx/network)."""
+    def run():
+        try:
+            return call()
+        except Exception as exc:
+            if (not _is_temporary_exception(exc)
+                    or getattr(exc, "status_code", None) == 429
+                    or getattr(exc, "error_type", "") in _BREAKER_IGNORED_ERRORS | {"rate_limit"}):
+                raise
+            remaining = _remaining_seconds()
+            if remaining is not None and remaining <= BACKGROUND_RETRY_PAUSE_SECONDS + 1:
+                raise
+            time.sleep(BACKGROUND_RETRY_PAUSE_SECONDS)
+            return call()
+    return run
 
 def _friendly(errs):
     joined = "; ".join(errs)
@@ -1243,7 +1319,7 @@ def _reserve_gemini_for_action() -> bool:
 
 # Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
 # попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
-AI_ORDER = ("gemini", "groq", "mistral", "cf", "openrouter")
+AI_ORDER = ("gemini", "groq", "cf", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
@@ -1259,7 +1335,6 @@ PROVIDER_ORDER = {
     "cf": AI_ORDER,
     "groq": AI_ORDER,
     "gemini": AI_ORDER,
-    "mistral": AI_ORDER,
 }
 
 # --- тиры: маршрутизация по задаче ---
@@ -1314,7 +1389,7 @@ def _resolve(tier, order, route=None, module=""):
             n for n in order
             if n == "openrouter" or n in PROVIDER_ORDER or n in DEFAULT_ORDER
             or n in {GROQ_SIMPLE, GROQ_STANDARD, GROQ_COMPLEX,
-                     "groq", "gemini", "cf", "mistral"}
+                     "groq", "gemini", "cf"}
         )
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
@@ -1398,7 +1473,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     pre_gemini_unavailable = _gemini_cooldown_error() if any(
         _monitor_name(name) == "gemini" for name in order
     ) else None
-    order = _reorder_for_cooldown(_reorder_for_monitor(order))
+    breaker_skip = _breaker_skip_set(order, include_openrouter=policy.openrouter_allowed)
+    order = _reorder_for_cooldown(_reorder_for_monitor(order), skip=breaker_skip)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         GROQ_SIMPLE: lambda: _gen_groq(
@@ -1415,7 +1491,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
-        "mistral": lambda: _gen_mistral(prompt, max_tokens, temperature, response_mode),
     }
     errs = []
     temporary_errs = []
@@ -1440,7 +1515,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             # зарезервированы для последнего общего AI-fallback.
             errs.append("chain:openrouter-reserved")
             break
-        unavailable = _provider_is_unavailable(name)
+        unavailable = _provider_is_unavailable(name, skip=breaker_skip)
         if unavailable is not None:
             _record_ai_attempt(
                 name, _provider_model_name(name), module, ok=False,
@@ -1468,7 +1543,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         t0 = time.time()
         try:
             out = _as_text(_run_provider_attempt(
-                calls[name],
+                _with_background_retry(calls[name]) if _is_background() else calls[name],
                 reserve_seconds=_reserve_for_later_providers(
                     order, provider_index, policy,
                 ),
@@ -1777,18 +1852,6 @@ def _chat(provider, history, system, timeout_cap=None):
              "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8}, 40, provider, timeout_cap=bounded_cap(5),
              usage_service=api_usage.groq_model_service(_provider_model_name(provider)))
         return r.json()["choices"][0]["message"]["content"]
-    if provider == "mistral":
-        if not config.MISTRAL_API_KEY:
-            raise LLMProviderError("mistral", "no Mistral key", error_type="credentials")
-        r = _post(
-            "https://api.mistral.ai/v1/chat/completions",
-            {"Authorization": f"Bearer {config.MISTRAL_API_KEY}", "Content-Type": "application/json"},
-            {"model": config.MISTRAL_MODEL,
-             "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
-            40, "mistral", timeout_cap=bounded_cap(5),
-        )
-        return r.json()["choices"][0]["message"]["content"]
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
             raise LLMProviderError("openrouter", "no OpenRouter key", error_type="credentials")
@@ -1854,19 +1917,6 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
             bounded_cap(5), provider, emit,
             usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
         )
-    if provider == "mistral":
-        if not config.MISTRAL_API_KEY:
-            raise LLMProviderError(provider, "no Mistral key", error_type="credentials")
-        return _stream_openai_chat(
-            "https://api.mistral.ai/v1/chat/completions",
-            {
-                "Authorization": f"Bearer {config.MISTRAL_API_KEY}",
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-            },
-            {**payload, "model": config.MISTRAL_MODEL},
-            bounded_cap(5), provider, emit,
-        )
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:
             raise LLMProviderError(provider, "no OpenRouter key", error_type="credentials")
@@ -1908,12 +1958,13 @@ def _chat_chain_impl(history, cid=None):
         tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
     except Exception:
         pass
+    breaker_skip = _breaker_skip_set(CHAT_ORDER)
     for provider_index, p in enumerate(CHAT_ORDER):
         remaining = _remaining_seconds()
         if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
             errs.append("chain:deadline")
             break
-        unavailable = _provider_is_unavailable(p)
+        unavailable = _provider_is_unavailable(p, skip=breaker_skip)
         if unavailable is not None:
             _record_ai_attempt(p, _provider_model_name(p), "assistant", ok=False,
                                failure=str(unavailable))
@@ -1988,12 +2039,13 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
     except Exception:
         pass
 
+    breaker_skip = _breaker_skip_set(CHAT_ORDER)
     for provider_index, p in enumerate(CHAT_ORDER):
         remaining = _remaining_seconds()
         if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
             errs.append("chain:deadline")
             break
-        unavailable = _provider_is_unavailable(p)
+        unavailable = _provider_is_unavailable(p, skip=breaker_skip)
         if unavailable is not None:
             _record_ai_attempt(
                 p, _provider_model_name(p), "assistant", ok=False, failure=str(unavailable),

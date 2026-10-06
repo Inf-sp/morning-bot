@@ -9,6 +9,7 @@ import requests
 
 import api_usage
 import config
+import tracking
 import provider_runtime
 
 
@@ -47,7 +48,7 @@ def _pexels(query, strict=True, first_result=False, result_index=0, result_valid
             "https://api.pexels.com/v1/search",
             headers={"Authorization": config.PEXELS_API_KEY},
             params=params,
-            timeout=12,
+            timeout=tracking.bounded_timeout(12),
         )
         ok = response.status_code == 200
         api_usage.record_request(
@@ -122,7 +123,7 @@ def _unsplash(query, strict=True, first_result=False):
             "https://api.unsplash.com/search/photos",
             headers={"Authorization": f"Client-ID {config.UNSPLASH_ACCESS_KEY}", "Accept-Version": "v1"},
             params=params,
-            timeout=12,
+            timeout=tracking.bounded_timeout(12),
         )
         ok = response.status_code == 200
         api_usage.record_request(
