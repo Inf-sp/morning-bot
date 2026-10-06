@@ -387,14 +387,8 @@ async def send_movie_now_playing(bot, cid, q=None, status=None):
     featured = _featured_now_playing(local_movies, require_overview=True)
     featured = featured[:3]
     now_playing = await _with_trailer_urls(featured)
-    cinema_day = await _daily_cinema_content(cached_only=True)
-    item, tm = await get_current_movie(cid)
-    if tm:
-        tm = await _recommendation_with_trailer(tm)
-    recommendation = {"item": item, "tm": tm} if item else None
     msg = leisure_ui.movie_now_playing_screen(
-        city, now_playing, cinema_day, news=category_news.cached_line("movie"),
-        day=now.date(), recommendation=recommendation,
+        city, now_playing, news=category_news.cached_line("movie"), day=now.date(),
     )
     kb = _movie_home_kb()
     if status is not None:

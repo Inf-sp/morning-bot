@@ -433,26 +433,16 @@ def yearly_top_screen(kind, year, item):
     return b.build_stripped()
 
 
-def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=None, recommendation=None):
-    """Ежедневная кино-витрина: рекомендация дня, локальный прокат и кинофакт."""
-    cinema_day = cinema_day or {}
-    birthday = cinema_day.get("birthday") or {}
-    rebus = cinema_day.get("rebus") or {}
+def movie_now_playing_screen(city, now_playing, *, news=None, day=None):
+    """Ежедневная кино-витрина: только локальный прокат без подписи блока."""
     day = day if isinstance(day, date) else date.today()
     b = MessageBuilder()
     b.text_line("🎬 ")
     b.bold(f"Кино сегодня · {_format_today_label(day)}")
     b.newline()
-
-    # Основной фильм — та же рекомендация, что открывает «🍿 Что посмотреть».
-    if recommendation:
-        _format_featured_movie(b, recommendation)
-
     b.spacer()
-    b.bold("Сейчас в кино:")
     cinema = _movie_now_playing_lines(now_playing)[:3]
     if cinema:
-        b.newline()
         for movie in cinema:
             b.text_line("• ")
             trailer_url = str(_item_value(movie, "trailer_url", "") or "").strip()
@@ -474,70 +464,9 @@ def movie_now_playing_screen(city, now_playing, cinema_day, *, news=None, day=No
                 b.text_line(f" · {overview}")
             b.newline()
     else:
-        b.text_line(" ")
         b.line("Пока не удалось подтвердить актуальные показы.")
-
-    fact = _cinema_fact_text(birthday, rebus)
-    if fact:
-        b.spacer()
-        b.bold("📰 Кинофакт:")
-        b.text_line(" ")
-        b.line(fact)
     append_weekly_news(b, news)
     return b.build_stripped()
-
-
-def _format_featured_movie(b: MessageBuilder, recommendation) -> None:
-    """Компактная строка основной рекомендации: «Название» (тип · год · рейтинг) · завязка."""
-    recommendation = recommendation if isinstance(recommendation, dict) else {}
-    item = recommendation.get("item") or {}
-    tm = recommendation.get("tm") or {}
-    if not isinstance(tm, dict):
-        tm = {}
-    title = _clean_quoted_title(tm.get("name") or item.get("title") or "")
-    if not title:
-        return
-    kind = str(tm.get("kind") or "").lower()
-    type_label = "сериал" if kind == "tv" else ("фильм" if kind == "movie" else "")
-    year = str(tm.get("year") or "").strip()
-    meta = [part for part in (type_label, year, _featured_rating(tm)) if part]
-    b.text_line("«")
-    trailer_url = str(tm.get("trailer_url") or "").strip()
-    if trailer_url:
-        b.link(title, trailer_url)
-    else:
-        b.text_line(title)
-    b.text_line("»")
-    if meta:
-        b.text_line(f" ({' · '.join(meta)})")
-    overview = _movie_premiere_summary(
-        _clean_external_text(tm.get("overview") or ""), limit=200,
-    )
-    if overview:
-        if overview[-1] not in ".!?…":
-            overview += "."
-        b.text_line(f" · {overview}")
-
-
-def _featured_rating(tm) -> str | None:
-    try:
-        value = float(tm.get("rating"))
-    except (TypeError, ValueError):
-        return None
-    if value <= 0 or int(tm.get("vote_count") or 0) < 50:
-        return None
-    return f"⭐ {value:.1f}"
-
-
-def _cinema_fact_text(birthday, rebus) -> str:
-    """Кинофакт: проверенный именинник дня, иначе интересный факт о кино — не описание премьеры."""
-    name = _clean_external_text(birthday.get("name"))
-    fact = _strip_external_label(birthday.get("fact"), "интересно", "факт")
-    if name and fact:
-        return f"Сегодня — день рождения: {name}. {fact}"
-    if name:
-        return f"Сегодня — день рождения: {name}."
-    return _strip_external_label((rebus or {}).get("fact"), "интересно", "факт")
 
 
 def _movie_now_playing_lines(now_playing) -> list[dict]:

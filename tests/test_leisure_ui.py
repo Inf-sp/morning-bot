@@ -991,24 +991,7 @@ def test_category_week_screens_are_compact_and_show_only_content():
         "title": "Фильм", "genres": ["drama", "thriller"],
         "trailer_url": "https://www.youtube.com/watch?v=trailer123",
         "overview": "Героиня возвращается домой и находит старую тайну",
-    }], {
-        "rebus": {
-            "emoji": "🦈 🌊 👨‍🔬", "answer": "Челюсти",
-            "fact": "Стивен Спилберг использовал механическую акулу на съёмках.",
-        },
-        "birthday": {
-            "name": "Грета Гервиг", "birth": "+1983-08-04T00:00:00Z", "role": "режиссёр и актриса",
-            "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
-        },
-    }, day=date(2026, 8, 25), recommendation={
-        "item": {"title": "Пространство"},
-        "tm": {
-            "name": "Пространство", "kind": "tv", "year": "2015", "rating": 8.1,
-            "vote_count": 1000,
-            "overview": "Детектив и капитан звездолёта расследуют исчезновение девушки",
-            "trailer_url": "https://www.youtube.com/watch?v=space-trailer",
-        },
-    })
+    }], day=date(2026, 8, 25))
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "🧙‍♀️ ⚡ 🚂", "answer": "Гарри Поттер", "fact": "Факт."},
         "birthday": {"name": "Кнут Гамсун", "birth": "1859-08-04", "detail": "норвежский писатель"},
@@ -1030,28 +1013,19 @@ def test_category_week_screens_are_compact_and_show_only_content():
     assert "🎬 Кино сегодня · Вт, 25 августа" in movie.text
     assert "Ребус дня:" not in movie.text
     assert "Именинник дня:" not in movie.text
-    assert "Фильм под настроение:" not in movie.text
     assert (
-        "«Пространство» (сериал · 2015 · ⭐ 8.1) · "
-        "Детектив и капитан звездолёта расследуют исчезновение девушки."
-    ) in movie.text
-    assert (
-        "Сейчас в кино:\n• «Фильм» (драма, триллер) · "
+        "Вт, 25 августа\n\n• «Фильм» (драма, триллер) · "
         "Героиня возвращается домой и находит старую тайну."
     ) in movie.text
+    assert "Сейчас в кино:" not in movie.text
+    assert "📰 Кинофакт:" not in movie.text
+    assert "Пространство" not in movie.text
     encoded = movie.text.encode("utf-16-le")
     movie_links = {
         entity.url: encoded[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
         for entity in movie.entities if entity.type == MessageEntity.TEXT_LINK
     }
-    assert movie_links["https://www.youtube.com/watch?v=space-trailer"] == "Пространство"
     assert movie_links["https://www.youtube.com/watch?v=trailer123"] == "«Фильм»"
-    assert "💡 Интересно:" not in movie.text
-    assert (
-        "📰 Кинофакт: Сегодня — день рождения: Грета Гервиг. "
-        "«Леди Бёрд» принесла ей две номинации на «Оскар»."
-    ) in movie.text
-    assert movie.text.index("«Пространство»") < movie.text.index("Сейчас в кино:") < movie.text.index("📰 Кинофакт:")
     assert movie.rich_message is None
     assert not any(entity.type == MessageEntity.SPOILER for entity in movie.entities)
     assert "📚 Литературный вайб · 25 августа" in books.text
@@ -1084,17 +1058,10 @@ def test_movie_home_cleans_cached_markup_fragments():
         "title": "**«Из любви»***&#x20;*",
         "genres": ["**drama**"],
         "overview": "История о чувствах не должна попадать в строку афиши.",
-    }], {
-        "rebus": {
-            "emoji": "🕶️ 💊 🤖",
-            "answer": "**Матрица**",
-            "fact": "��**&#x20;Интересно:** Сёстры Вачовски отправили актёров на подготовку.",
-        },
-    })
+    }])
 
     assert "• «Из любви» (драма)" in movie.text
     assert "Ребус дня:" not in movie.text
-    assert "📰 Кинофакт: Сёстры Вачовски отправили актёров на подготовку." in movie.text
     assert "**" not in movie.text
     assert "&#x20;" not in movie.text
     assert "�" not in movie.text
@@ -1467,10 +1434,7 @@ def test_movie_home_opens_daily_cinema_screen(monkeypatch):
 def test_daily_category_block_titles_are_bold():
     movie = leisure_movies.leisure_ui.movie_now_playing_screen("Алкмар", [{
         "title": "Фильм", "genres": ["drama"],
-    }], {
-        "rebus": {"emoji": "🦈", "answer": "Челюсти", "fact": "Факт."},
-        "birthday": {"name": "Имя", "role": "актёр", "fact": "Интересный факт."},
-    })
+    }])
     books = leisure_movies.leisure_ui.weekly_books_screen("Алкмар", {
         "rebus": {"emoji": "📚", "answer": "Ответ", "fact": "Факт."},
         "birthday": {"name": "Имя", "detail": "писатель"},
@@ -1480,8 +1444,7 @@ def test_daily_category_block_titles_are_bold():
         "legend": {"name": "Имя", "detail": "музыкант"},
     }, [{"artist": "Артист", "date": "Сегодня", "place": "Алкмар", "artist_fact": "Интересный факт."}])
 
-    assert {"Сейчас в кино:",
-            "📰 Кинофакт:"}.issubset(_bold_values(movie))
+    assert {"Сейчас в кино:", "📰 Кинофакт:"}.isdisjoint(_bold_values(movie))
     assert {"Свежие релизы:", "💡 Интересно:"}.issubset(_bold_values(books))
     assert {"В ближайшее время:", "💡 Интересно:"}.issubset(_bold_values(music))
     assert "Вайб дня:" not in _bold_values(music)

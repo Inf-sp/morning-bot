@@ -41,8 +41,7 @@ def test_all_home_renderers_append_one_linked_weekly_news_line():
     )
     food = menu_ui.restaurant_menu({}, news=news)
     movie = leisure_ui.movie_now_playing_screen(
-        "Алкмар", [{"title": "Фильм", "genres": ["drama"]}],
-        {"rebus": {"emoji": "🎬", "answer": "Ответ"}}, news=news,
+        "Алкмар", [{"title": "Фильм", "genres": ["drama"]}], news=news,
     )
     travel = travel_ui.home_screen({
         "emoji": "🚆", "transport_title": "Поезд", "intro": "Маршрут на день.",
