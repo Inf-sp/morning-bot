@@ -1049,25 +1049,8 @@ async def send_games_home(bot, cid, *, q=None, status=None):
     msg = leisure_ui.game_home_screen(
         None, home_items, daily, day=today, year=today.year, season=season,
     )
-    markup = _game_home_keyboard()
-    poster = next(
-        (str(item.get("poster") or "").strip() for item in home_items
-         if str(item.get("poster") or "").strip()),
-        "",
-    )
-    if poster:
-        try:
-            await bot.send_photo(
-                chat_id=cid,
-                photo=poster,
-                caption=msg.text,
-                caption_entities=msg.entities,
-                reply_markup=markup,
-            )
-            return
-        except Exception:
-            pass
-    await _deliver(bot, cid, msg, markup, q=q, status=status)
+    # Главный экран — текст без постера.
+    await _deliver(bot, cid, msg, _game_home_keyboard(), q=q, status=status)
 
 
 async def warm_games_home_cache(cid):
@@ -1137,7 +1120,7 @@ async def _send_board_game(bot, cid, item, *, genre=None, q=None, status=None):
                 _GENRE_LABEL.get(value, value)
                 for value in item.get("genres") or [] if value != "board"
             ][:2],
-            "is_new": bool(year) and year >= datetime.now(config.TZ).year - 2,
+            "is_new": year == datetime.now(config.TZ).year,
         }
     msg = leisure_ui.board_game_card(item)
     markup = _game_keyboard(no_match=not item, genre=genre, board=True)

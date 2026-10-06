@@ -277,7 +277,7 @@ def test_season_games_rotate_when_more_than_three_are_available():
     assert first != second
 
 
-def test_game_home_attaches_nearest_release_poster(monkeypatch):
+def test_game_home_is_text_without_poster(monkeypatch):
     sent = []
     items = [{
         "title": "Новая игра",
@@ -302,8 +302,7 @@ def test_game_home_attaches_nearest_release_poster(monkeypatch):
 
     asyncio.run(leisure_games.send_games_home(Bot(), "42"))
 
-    assert [kind for kind, _kwargs in sent] == ["photo"]
-    assert sent[0][1]["photo"] == "https://images.igdb.com/new-game.jpg"
+    assert [kind for kind, _kwargs in sent] == ["message"]
 
 
 def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
