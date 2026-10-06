@@ -592,30 +592,27 @@ def record_result(
                     int(state.get("cooldown_until") or 0),
                     now + max(60, retry_after),
                 )
-            already_unavailable = (
-                old_status == DOWN
-                and not old_fallback
-                and old_error == "резерв недоступен"
-                and old_error_type == "fallback"
-            )
-            if not already_unavailable:
-                state["error_type"], state["last_error"] = kind, friendly
-                has_fallback = bool(state.get("fallback"))
-                state["status"] = WARNING if has_fallback or kind in (
-                    "quota", "rate_limit", "timeout", "temporary", "unknown",
-                ) else DOWN
-                if not incident_id:
-                    incident_id = f"{provider}-{now}-{uuid.uuid4().hex[:8]}"
-                    incident_started_at = now
-                    state["incident_id"] = incident_id
-                    state["incident_started_at"] = incident_started_at
-                    append_history(
-                        data, provider, f"{SPEC_BY_KEY[provider].label}: {friendly}.", now,
-                        event_type="error", incident_id=incident_id,
-                        status_code=status_code, exception_type=exception_type,
-                        message=str(error or friendly), latency_ms=latency_ms,
-                        started_at=incident_started_at,
-                    )
+            # Собственная ошибка провайдера всегда важнее унаследованного «резерв недоступен»:
+            # иначе реальная причина сбоя (401/429/timeout) не видна ни в админке, ни в истории.
+            state["error_type"], state["last_error"] = kind, friendly
+            has_fallback = bool(state.get("fallback"))
+            state["status"] = WARNING if has_fallback or kind in (
+                "quota", "rate_limit", "timeout", "temporary", "unknown",
+            ) else DOWN
+            new_incident = not incident_id
+            if new_incident:
+                incident_id = f"{provider}-{now}-{uuid.uuid4().hex[:8]}"
+                incident_started_at = now
+                state["incident_id"] = incident_id
+                state["incident_started_at"] = incident_started_at
+            if new_incident or (old_error_type, old_error) != (kind, friendly):
+                append_history(
+                    data, provider, f"{SPEC_BY_KEY[provider].label}: {friendly}.", now,
+                    event_type="error", incident_id=incident_id,
+                    status_code=status_code, exception_type=exception_type,
+                    message=str(error or friendly), latency_ms=latency_ms,
+                    started_at=incident_started_at,
+                )
             for source, source_state in data["services"].items():
                 if source_state.get("fallback") != provider:
                     continue
@@ -723,36 +720,6 @@ def clear_history() -> None:
     def mutate(data):
         data = normalise_state(data)
         data["history"] = []
-        return data, None
-
-    store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)
-
-
-def record_unavailable_fallback(provider: str) -> None:
-    if provider not in SPEC_BY_KEY:
-        return
-    now = int(time.time())
-
-    def mutate(data):
-        data = normalise_state(data)
-        state = data["services"][provider]
-        if (
-            state.get("status") == DOWN
-            and not state.get("fallback")
-            and state.get("last_error") == "резерв недоступен"
-            and state.get("error_type") == "fallback"
-        ):
-            return data, None
-        state["status"] = DOWN
-        state["fallback"] = ""
-        state["fallback_reason"] = ""
-        state["last_error"] = "резерв недоступен"
-        state["error_type"] = "fallback"
-        _append_history(
-            data, provider, f"{SPEC_BY_KEY[provider].label}: резерв недоступен.", now,
-            event_type="system", incident_id=state.get("incident_id") or "",
-            started_at=state.get("incident_started_at") or now,
-        )
         return data, None
 
     store.mutate_kv(config.SERVICE_MONITOR_KEY, mutate)

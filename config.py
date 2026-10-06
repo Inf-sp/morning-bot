@@ -201,6 +201,7 @@ DICT_KEY = "dict.json"
 TTS_CACHE_KEY = "tts_cache.json"
 PROFILE_KEY = "profile.json"   # память пользователя: фокус, фидбек гардероба, наблюдения
 LIFEHACK_KEY = "lifehacks_seen.json"       # anti-repeat для fallback lifehacks.json
+LIFEHACK_CATALOG_KEY = "lifehack_catalog.json"  # каталог лайфхаков; lifehacks.json — только стартовый набор
 LIFEHACK_POOL_KEY = "myday_lifehack_pool.json"  # недельный AI-пул базы знаний {cid: {...}}
 FRIDGE_KEY = "fridge.json"
 LEFTOVER_RECIPES_SEEN_KEY = "leftover_recipes_seen.json"  # anti-repeat: {cid: [последние N названий]}

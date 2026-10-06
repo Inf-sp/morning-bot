@@ -271,12 +271,21 @@ def _normalize_lifehack_with_ai(text):
 
 
 def _load_lifehack_catalog():
-    """Читает новый список записей и прозрачно мигрирует старые группы tips."""
-    try:
-        with open(_HERE / "lifehacks.json", encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception:
-        return []
+    """Читает новый список записей и прозрачно мигрирует старые группы tips.
+
+    Каталог живёт в store (PostgreSQL): файл в репозитории только засевает его при первом
+    чтении. Иначе счётчики и добавленные лайфхаки терялись при деплое и ломали git pull.
+    """
+    raw = store._load(config.LIFEHACK_CATALOG_KEY).get("items")
+    if raw is None:
+        try:
+            raw = json.loads((_HERE / "lifehacks.json").read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(raw, dict):
+            raw = raw.get("items") or []
+        if isinstance(raw, list):
+            store._save(config.LIFEHACK_CATALOG_KEY, {"items": raw})
     if isinstance(raw, dict):
         raw = raw.get("items") or []
     if not isinstance(raw, list):
@@ -309,9 +318,7 @@ def _load_lifehack_catalog():
 
 
 def _save_lifehack_catalog(records):
-    (_HERE / "lifehacks.json").write_text(
-        json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-    )
+    store._save(config.LIFEHACK_CATALOG_KEY, {"items": records})
 
 
 def lifehack_records(*, include_disabled=True):

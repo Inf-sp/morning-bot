@@ -419,3 +419,21 @@ def test_monitor_probe_does_not_create_a_developer_error(monkeypatch):
     assert service_monitor.probe("gtts") is False
     assert provider_runtime.get_state("gtts")["status"] == provider_runtime.DOWN
     assert provider_runtime.history() == []
+
+
+def test_own_error_replaces_inherited_unavailable_reserve_status(monkeypatch):
+    """Унаследованное «резерв недоступен» не должно скрывать реальную ошибку провайдера."""
+    memory = _memory_store(monkeypatch)
+    state = provider_runtime.blank_state("gemini")
+    state.update({
+        "status": provider_runtime.DOWN, "last_error": "резерв недоступен",
+        "error_type": "fallback", "incident_id": "gemini-old",
+    })
+    memory[provider_runtime.config.SERVICE_MONITOR_KEY] = {"services": {"gemini": state}, "history": []}
+
+    provider_runtime.record_result("gemini", False, status_code=403, error="API key not valid")
+
+    current = provider_runtime.get_state("gemini")
+    assert (current["error_type"], current["last_error"]) == ("auth", "ошибка авторизации")
+    rows = [row for row in provider_runtime.history(10) if row["service"] == "gemini"]
+    assert rows[0]["status_code"] == 403

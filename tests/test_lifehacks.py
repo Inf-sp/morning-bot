@@ -25,6 +25,9 @@ def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch)
         {"cat": "Быт и дом", "emoji": "🏠", "tips": []},
     ], ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(myday, "_HERE", tmp_path)
+    kv = {}
+    monkeypatch.setattr(myday.store, "_load", lambda key: kv.get(key, {}))
+    monkeypatch.setattr(myday.store, "_save", lambda key, value: kv.__setitem__(key, value))
 
     bot = FakeBot()
     text = (
@@ -35,7 +38,8 @@ def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch)
 
     assert asyncio.run(assistant.try_add_lifehack_from_chat(bot, "42", text)) is True
 
-    saved = json.loads(path.read_text(encoding="utf-8"))
+    saved = kv[myday.config.LIFEHACK_CATALOG_KEY]["items"]
+    assert json.loads(path.read_text(encoding="utf-8"))[0]["cat"] == "Быт и дом"  # файл не трогаем
     language = next(item for item in saved if item["category"] == "язык")
     assert language["source"] == "user"
     assert language["tags"] == ["язык"]
@@ -118,3 +122,18 @@ def test_chat_router_prioritizes_lifehack_command_over_dictionary(monkeypatch):
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
 
     assert routed == [("lifehack-router", "Добавь лайфхак\nDE — синий, HET — оранжевый.")]
+
+
+def test_lifehack_catalog_is_seeded_into_store_once(tmp_path, monkeypatch):
+    (tmp_path / "lifehacks.json").write_text(json.dumps([
+        {"id": "lh_1", "text": "Клади ключи в одно место у двери, чтобы не искать их утром.", "category": "дом"},
+    ], ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(myday, "_HERE", tmp_path)
+    kv = {}
+    monkeypatch.setattr(myday.store, "_load", lambda key: kv.get(key, {}))
+    monkeypatch.setattr(myday.store, "_save", lambda key, value: kv.__setitem__(key, value))
+
+    assert [item["id"] for item in myday.lifehack_records()] == ["lh_1"]
+    (tmp_path / "lifehacks.json").write_text("[]", encoding="utf-8")
+
+    assert [item["id"] for item in myday.lifehack_records()] == ["lh_1"]
