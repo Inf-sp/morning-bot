@@ -46,6 +46,12 @@ _CITY_FALLBACKS = {
     ),
 }
 _HISTORY_LIMIT = 100
+# Разные углы поиска дают разные источники, а значит новые места, а не те же топ-3.
+_SEARCH_ANGLES = (
+    "", "local favorite", "Italian", "Asian", "seafood", "Dutch cuisine",
+    "vegetarian friendly", "hidden gem", "Mediterranean", "new opening",
+    "Japanese", "Indonesian", "wine bar", "city centre",
+)
 
 
 def _cache(cid):
@@ -115,14 +121,17 @@ def _usable(value, city):
 
 def _fallback_card(city, previous="", context_key="", history=None):
     items = _CITY_FALLBACKS.get(str(city or "").casefold()) or ()
-    used = {_normal(value) for value in (history or []) if _normal(value)}
-    picked = next(
-        (item for item in items
-         if _normal(item.get("name")) not in used
-         and _normal(item.get("name")) != _normal(previous)),
-        next((item for item in items
-              if _normal(item.get("name")) != _normal(previous)), items[0] if items else None),
+    # Сначала ни разу не показанные, затем давно показанные; текущее — последним.
+    # Иначе после полного круга резерв чередует только первые два места.
+    order = {_normal(value): index for index, value in enumerate(history or []) if _normal(value)}
+    ranked = sorted(
+        items,
+        key=lambda item: (
+            _normal(item.get("name")) == _normal(previous),
+            order.get(_normal(item.get("name")), -1),
+        ),
     )
+    picked = ranked[0] if ranked else None
     if not picked:
         return {"city": city}
     name = picked["name"]
@@ -235,7 +244,9 @@ def get_restaurant(cid, *, refresh=False):
     )
     exclusions = rotation.search_exclusions(used_names, limit=10)
     search_query = " ".join(part for part in (
-        f"best {search_context} in {city} official menu opening hours signature dish price",
+        f"best {search_context} in {city}",
+        _SEARCH_ANGLES[len(used_names) % len(_SEARCH_ANGLES)],
+        "official menu opening hours signature dish price",
         exclusions,
     ) if part)
     rows = research.web_search(
