@@ -180,6 +180,49 @@ _GAME_CATALOG = (
     *(
         {"platforms": ["board"], "poster": "", **item}
         for item in (
+            # Новинки 2026: год и описание сверены по поиску, рейтинг ещё не устоялся.
+            {
+                "id": "sanibel", "name": "Sanibel",
+                "year": 2026, "rating": 0, "genres": ["board", "cozy"],
+                "description": "Спокойная выкладка тайлов от автора «Крыльев»: собираешь ракушки на пляже и складываешь из них узоры.",
+                "reasons": ["Новая игра Elizabeth Hargrave", "Расслабленный темп для вечера"],
+                "start": "сначала собирай узоры одной формы, а не всё подряд",
+            },
+            {
+                "id": "hanami", "name": "Hanami",
+                "year": 2026, "rating": 0, "genres": ["board", "strategy"],
+                "description": "Переосмысление классики Reiner Knizia «Samurai»: борьба за влияние на пикниках под цветущей сакурой.",
+                "reasons": ["Две карты: классическая Япония и Токио с новыми правилами", "Партия на 30–60 минут"],
+                "start": "первую партию сыграй на карте Японии — это классические правила",
+            },
+            {
+                "id": "duel-of-meloch", "name": "Duel of Meloch",
+                "year": 2026, "rating": 0, "genres": ["board", "strategy", "action"],
+                "description": "Дуэль от Stonemaier Games: один игрок играет по правилам Scythe, другой — по правилам Expeditions.",
+                "reasons": ["Партия на 45 минут вдвоём", "Есть одиночный режим"],
+                "start": "если знаешь Scythe, начни за его сторону",
+            },
+            {
+                "id": "the-queens-dilemma", "name": "The Queen's Dilemma",
+                "year": 2026, "rating": 0, "genres": ["board", "strategy", "adventure"],
+                "description": "Легаси-продолжение The King's Dilemma: совет королевы решает судьбу страны, а карта меняется от решений.",
+                "reasons": ["Сюжетная кампания для постоянной компании", "Решения влияют на всю игру"],
+                "start": "соберите постоянный состав — кампанию играют одной компанией",
+            },
+            {
+                "id": "wildscape", "name": "Wildscape",
+                "year": 2026, "rating": 0, "genres": ["board", "cozy", "strategy"],
+                "description": "Восстанавливаешь земли Африки: леса, болота и саванны, куда возвращаются животные.",
+                "reasons": ["Был первым в BGG Hotness", "От 1 до 4 игроков"],
+                "start": "сначала связывай похожие места обитания — так быстрее приходят животные",
+            },
+            {
+                "id": "adas-dream", "name": "Ada's Dream",
+                "year": 2025, "rating": 0, "genres": ["board", "strategy"],
+                "description": "Евро-стратегия о том, как Ада Лавлейс строит первый компьютер: кубики и развитие движка.",
+                "reasons": ["Победитель Diamant d'Or 2026", "Глубокая игра для опытных"],
+                "start": "планируй кубики на пару ходов вперёд",
+            },
             {
                 "id": "seti", "name": "SETI: Search for Extraterrestrial Intelligence",
                 "year": 2024, "rating": 8.4, "genres": ["board", "strategy"],
@@ -552,7 +595,9 @@ def _eligible_games(cid, genre=None, board=False):
             return False
         if recency == "classic" and (not year or year >= 2020):
             return False
-        return min_rating is None or float(item.get("rating") or 0) >= min_rating
+        # Рейтинг новинки ещё не устоялся — неизвестный рейтинг не отсекает игру.
+        rating = float(item.get("rating") or 0)
+        return min_rating is None or not rating or rating >= min_rating
 
     filtered = [item for item in candidates if preferred(item)]
     return filtered or candidates
