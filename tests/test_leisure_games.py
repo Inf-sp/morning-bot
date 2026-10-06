@@ -543,7 +543,10 @@ def test_digital_game_recommendation_keeps_a_poster_when_igdb_is_unavailable(mon
 
 def test_local_game_catalog_has_ready_poster_stock():
     for item in leisure_games._GAME_CATALOG:
-        assert str(item.get("poster") or "").startswith("https://"), item["name"]
+        poster = str(item.get("poster") or "")
+        if item["platforms"] == ["board"] and not poster:
+            continue  # настолка без проверенной обложки — текстовая карточка
+        assert poster.startswith("https://"), item["name"]
 
 
 def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
