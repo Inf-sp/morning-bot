@@ -367,6 +367,10 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
     candidates = rotation.candidates_for_cycle(
         pool, seen, current=seen[-1] if seen else None, key=game_key,
     )
+    # После полного круга — сначала давно не показанные, иначе ротация
+    # залипает на первых по рангу (особенно в маленьком каталоге настолок).
+    seen_order = {marker: index for index, marker in enumerate(seen)}
+    candidates = sorted(candidates, key=lambda value: seen_order.get(game_key(value), -1))
     item = candidates[0]
     daily_entry = {"week": week_key, "signature": signature, "item": dict(item)}
 
