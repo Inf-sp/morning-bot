@@ -569,6 +569,53 @@ async def get_current_movie(cid):
     _cache_movie(cid, it, tm)
     return it, tm
 
+async def _discover_movie_pick(cid, prefs):
+    """Свежий качественный фильм из TMDb discover без AI."""
+    requested_kind = prefs.get("type_pref") or "movie"
+    excluded = movie_engine._excluded_norms(cid)
+    requested_kinds = [requested_kind]
+    if prefs.get("type_pref"):
+        requested_kinds.append("tv" if requested_kind == "movie" else "movie")
+    candidates = []
+    for candidate_kind in requested_kinds:
+        try:
+            candidates = await asyncio.to_thread(
+                tmdb.discover, candidate_kind, None,
+                max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
+        except Exception:
+            candidates = []
+        candidates = [movie for movie in candidates
+                      if movie_engine._norm(movie.get("name")) not in excluded
+                      and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
+        if candidates:
+            break
+    candidates = movie_engine.rank(candidates, {
+        "genres": {}, "countries": {}, "kind_pref": None,
+    }, prefs)
+    tm = candidates[0] if candidates else None
+    if not tm:
+        return None, None
+    return {"title": tm.get("name", ""),
+            "hook": "Свежий фильм с хорошими оценками — можно начать с него."}, tm
+
+
+async def _lookup_movie_tm(it):
+    """Ищет TMDb-данные для LLM-варианта в пределах бюджета действия."""
+    if not config.TMDB_API_KEY:
+        return None
+    remaining = tracking.remaining_action_seconds()
+    timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
+    if timeout <= 0.2:
+        return None
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(tmdb.lookup_title, it.get("title", ""), it.get("title_en", "")),
+            timeout=timeout,
+        )
+    except Exception:
+        return None
+
+
 async def send_recos(bot, cid, kind, status=None):
     if kind == "book":
         import leisure_books
@@ -586,32 +633,18 @@ async def send_recos(bot, cid, kind, status=None):
     if inclusive_pick:
         it, tm = inclusive_pick
     elif not seen:
-        requested_kind = prefs.get("type_pref") or "movie"
-        excluded = movie_engine._excluded_norms(cid)
-        requested_kinds = [requested_kind]
-        if prefs.get("type_pref"):
-            requested_kinds.append("tv" if requested_kind == "movie" else "movie")
-        candidates = []
-        for candidate_kind in requested_kinds:
-            candidates = await asyncio.to_thread(
-                tmdb.discover, candidate_kind, None,
-                max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
-            candidates = [movie for movie in candidates
-                          if movie_engine._norm(movie.get("name")) not in excluded
-                          and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
-            if candidates:
-                break
-        candidates = movie_engine.rank(candidates, {
-            "genres": {}, "countries": {}, "kind_pref": None,
-        }, prefs)
-        tm = candidates[0] if candidates else None
-        it = {"title": (tm or {}).get("name", ""),
-              "hook": "Свежий фильм с хорошими оценками — можно начать с него."} if tm else None
+        it, tm = await _discover_movie_pick(cid, prefs)
     else:
         it, tm = await _tmdb_engine_pick(cid)
+        if it is None:
+            # Быстрый TMDB-резерв до медленного LLM-пути.
+            it, tm = await _discover_movie_pick(cid, prefs)
     if it is None:
         it, tm = await _llm_movie_pick(cid, _movie_used(cid))
-    if not it:
+        if it and not tm:
+            tm = await _lookup_movie_tm(it)
+    # Без данных TMDb карточка выходит пустой («Название» + сырой hook) — не показываем.
+    if not it or not tm:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
             reply_markup=_movie_home_only_kb()); return
