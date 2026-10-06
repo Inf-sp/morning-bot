@@ -219,6 +219,59 @@ def game_card(data):
     return b.build_stripped()
 
 
+def board_game_card(data):
+    """Текстовая карточка настолки: заголовок → мета → о чём → почему → старт."""
+    data = data or {}
+    b = MessageBuilder()
+    if not data:
+        b.section("🎲 Настолка не нашлась")
+        b.line("В этом жанре пока нет варианта.")
+        return b.build_stripped()
+    b.text_line("🎲 ")
+    b.bold("Настолка для тебя")
+    b.newline()
+    b.spacer()
+    name = str(data.get("name") or "Настолка")
+    trailer_url = str(data.get("trailer_url") or "").strip()
+    if trailer_url:
+        b.link(name, trailer_url)
+    else:
+        b.bold(name)
+    b.newline()
+    meta = []
+    try:
+        rating = float(data.get("rating") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+    if rating:
+        meta.append(f"⭐ {rating:.1f}")
+    meta.extend(str(value) for value in data.get("genre_labels") or [] if str(value).strip())
+    if data.get("year"):
+        meta.append(str(data["year"]))
+    if data.get("is_new"):
+        meta.append("🆕 Новинка")
+    if data.get("lgbt"):
+        meta.append("🏳️‍🌈 ЛГБТ")
+    if meta:
+        b.line(" · ".join(meta[:5]))
+    description = str(data.get("description") or "").strip()
+    if description:
+        b.spacer()
+        b.line(description)
+    reasons = [str(value).strip() for value in data.get("reasons") or [] if str(value).strip()]
+    if reasons:
+        b.spacer()
+        b.bold("Почему стоит:")
+        b.newline()
+        for reason in reasons[:2]:
+            b.bullet(reason)
+    start = str(data.get("start") or "").strip()
+    if start:
+        b.spacer()
+        b.labeled_line("С чего начать", start, lowercase=False)
+    return b.build_stripped()
+
+
 def game_home_screen(city, items, daily, *, day=None, year=None, season="лета"):
     daily = daily or {}
     day = day if isinstance(day, date) else date.today()

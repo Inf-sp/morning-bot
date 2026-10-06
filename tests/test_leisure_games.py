@@ -348,7 +348,7 @@ def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch)
         object(), "42", status=status, refresh=True, genre="board",
     ))
 
-    assert "🎲 Настолки" in status.call[0]
+    assert "🎲 Настолка для тебя" in status.call[0]
     labels = _labels(status.call[1]["reply_markup"])
     assert labels == [
         ["🎭 По жанру"],

@@ -1092,6 +1092,9 @@ async def send_game_recommendation(
         if candidate:
             item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre, board=board)
     item = item or pick_game(cid, genre=genre, refresh=refresh, board=board)
+    if board or genre == "board":
+        await _send_board_game(bot, cid, item, genre=genre, q=q, status=status)
+        return
     if item:
         item = await asyncio.to_thread(igdb.enrich_game_recommendation, item)
         item = _ensure_game_trailer_url(item)
@@ -1115,6 +1118,29 @@ async def send_game_recommendation(
             return
         except Exception:
             pass
+    await _deliver(bot, cid, msg, markup, q=q, status=status)
+
+
+async def _send_board_game(bot, cid, item, *, genre=None, q=None, status=None):
+    """Настолки — текстовая карточка в стиле бота, без обложки и IGDB."""
+    if item:
+        item = _ensure_game_trailer_url(item)
+        inclusive = bool(item.get("lgbt")) or inclusive_recommendations.is_inclusive(
+            "game", item.get("name"),
+        )
+        inclusive_recommendations.record(cid, "game", inclusive)
+        year = int(item.get("year") or 0)
+        item = {
+            **item,
+            "lgbt": inclusive,
+            "genre_labels": [
+                _GENRE_LABEL.get(value, value)
+                for value in item.get("genres") or [] if value != "board"
+            ][:2],
+            "is_new": bool(year) and year >= datetime.now(config.TZ).year - 2,
+        }
+    msg = leisure_ui.board_game_card(item)
+    markup = _game_keyboard(no_match=not item, genre=genre, board=True)
     await _deliver(bot, cid, msg, markup, q=q, status=status)
 
 
