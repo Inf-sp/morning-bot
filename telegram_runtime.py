@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from urllib.parse import urlparse
 
 from telegram import InlineKeyboardMarkup, Message
@@ -84,22 +85,26 @@ class RetryingHTTPXRequest(HTTPXRequest):
             return await super().do_request(*args, **kwargs)
 
 
-# Цвет кнопки по контракту из AGENTS.md (Bot API 9.4): действие с данными — по эмодзи.
-_BUTTON_STYLES = (("✅", "success"), ("❌", "danger"), ("✨", "primary"))
+# Кнопки действий с данными (Bot API 9.4): эмодзи убирается, цвет задаёт смысл.
+# Отметки выбора («✅ Комедия», «❌ Не добавлять») не трогаем — только глаголы.
+_ADD_RE = re.compile(r"^✅\s*((?:Добавить|Создать)\b.*)$", re.S)
+_DELETE_RE = re.compile(r"^❌\s*((?:Удалить|Очистить|Убрать)\b.*)$", re.S)
 _buttons_enhanced = True  # выключается до рестарта, если Telegram отклонит новые поля
 
 
 def _enhance_markup(markup):
-    """Inline-клавиатура с цветами и неактивными служебными кнопками, либо None.
+    """Inline-клавиатура по контракту кнопок из AGENTS.md, либо None без изменений.
 
-    ``noop``-кнопки (счётчик страниц, индикатор ожидания) становятся disabled
-    (Bot API 10.3): нажатие ничего не отправляет боту.
+    «Добавить» — зелёная, без эмодзи и всегда в верхнем ряду; «Удалить» — красная
+    без эмодзи; ``noop``-кнопки (счётчик страниц, индикатор ожидания) становятся
+    disabled (Bot API 10.3) и ничего не отправляют боту.
     """
     if not isinstance(markup, InlineKeyboardMarkup):
         return None
-    data = markup.to_dict()
+    rows = markup.to_dict().get("inline_keyboard", [])
     changed = False
-    for row in data.get("inline_keyboard", []):
+    add_rows = set()
+    for index, row in enumerate(rows):
         for button in row:
             if button.get("callback_data") == "noop":
                 button.pop("callback_data")
@@ -107,11 +112,18 @@ def _enhance_markup(markup):
                 changed = True
                 continue
             text = str(button.get("text") or "")
-            style = next((value for prefix, value in _BUTTON_STYLES if text.startswith(prefix)), None)
-            if style and "style" not in button:
-                button["style"] = style
-                changed = True
-    return data if changed else None
+            for pattern, style in ((_ADD_RE, "success"), (_DELETE_RE, "danger")):
+                match = pattern.match(text)
+                if match:
+                    button["text"] = match.group(1).strip()
+                    button.setdefault("style", style)
+                    changed = True
+                    if style == "success":
+                        add_rows.add(index)
+    if not changed:
+        return None
+    order = sorted(range(len(rows)), key=lambda index: index not in add_rows)
+    return {"inline_keyboard": [rows[index] for index in order]}
 
 
 class MenuCleanupBot(ExtBot):

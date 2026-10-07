@@ -9,12 +9,15 @@ import telegram_runtime
 
 
 def _markup():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Добавить слово", callback_data="add"),
-        InlineKeyboardButton("❌ Удалить", callback_data="del"),
-        InlineKeyboardButton("2/5", callback_data="noop"),
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_menu"),
-    ]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
+        [InlineKeyboardButton("✅ Комедия", callback_data="pref"),
+         InlineKeyboardButton("❌ Не добавлять", callback_data="skip")],
+        [InlineKeyboardButton("❌ Удалить", callback_data="del"),
+         InlineKeyboardButton("2/5", callback_data="noop")],
+        [InlineKeyboardButton("✅ Добавить слово", callback_data="add")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu")],
+    ])
 
 
 @pytest.fixture
@@ -32,14 +35,20 @@ def sent(monkeypatch):
     return calls
 
 
-def test_buttons_get_contract_colors_and_noop_becomes_disabled(sent):
+def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     bot = telegram_runtime.MenuCleanupBot("1:x")
     asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": _markup()}))
 
-    row = sent[0]["reply_markup"]["inline_keyboard"][0]
-    assert [button.get("style") for button in row] == ["success", "danger", None, None]
-    assert row[2] == {"text": "2/5", "disabled": {}}
-    assert row[3]["callback_data"] == "m_menu"
+    rows = sent[0]["reply_markup"]["inline_keyboard"]
+    texts = [[button["text"] for button in row] for row in rows]
+    assert texts == [
+        ["Добавить слово"], ["✨ Другой фильм"], ["✅ Комедия", "❌ Не добавлять"],
+        ["Удалить", "2/5"], ["⬅️ Назад"],
+    ]
+    styles = {button["text"]: button.get("style") for row in rows for button in row}
+    assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
+    assert styles["✨ Другой фильм"] is None and styles["✅ Комедия"] is None
+    assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
 
 def test_rejected_styles_fall_back_to_plain_keyboard(sent):
