@@ -1,39 +1,25 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from ui.constants import ui_label
 import asyncio
 import logging
-import re
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import config
 import store
-import settings
 import tmdb
 import movie_engine
 import recommendation_stoplist
 import inclusive_recommendations
-import verify
 import tracking
 import monthly_rebuses
-from util import _MONTHS
 from ui import leisure as leisure_ui
 from leisure_collection import (
-    canonical_movie_label,
-    content_recommend,
     item_text,
     movie_title_for_lookup,
-    normalize_movie_items,
 )
-from module_binding import bind_functions as _bind_functions
-import movie_discovery as _movie_discovery
-import movie_recommendation as _movie_recommendation
 
 _log = logging.getLogger(__name__)
-_DISCOVERY_DEPENDENCIES = (
-    InputMediaPhoto, time, timedelta, _MONTHS, movie_title_for_lookup,
-)
 
 
 _MOVIE_PREMIERES_CACHE_VERSION = 5
@@ -82,8 +68,7 @@ def _movie_home_only_kb():
 def _favorite_movie_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("lz_lib"),
     ])
 
 
@@ -187,16 +172,9 @@ async def send_favorite_movies(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="movie_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("lz_lib"))
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None):
@@ -219,8 +197,7 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
         "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
     rows.append([InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("movie_favorites"))
     kb = InlineKeyboardMarkup(rows)
     poster = str(item["tm"].get("poster") or "").strip()
     if q is not None and poster:
@@ -233,7 +210,7 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
             )
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_movie_genre: ignored error", exc_info=True)
     if poster:
         try:
             await bot.send_photo(
@@ -242,7 +219,7 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
             )
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_movie_genre: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
     )
@@ -264,8 +241,7 @@ async def send_favorite_movie_card(bot, cid, token, short_id, genre_index, page)
     _title, msg = _movie_card({"title": item["title"]}, item["tm"])
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"mfd:{token}:{short_id}:{genre_index}:{page}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"mfg:{token}:{genre_index}:{page}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"mfg:{token}:{genre_index}:{page}"),
     ])
     poster = item["tm"].get("poster")
     if poster:
@@ -274,7 +250,7 @@ async def send_favorite_movie_card(bot, cid, token, short_id, genre_index, page)
                                  caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_movie_card: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -300,7 +276,7 @@ async def send_favorite_movie_delete_confirmation(bot, cid, token, short_id, gen
                 await q.message.edit_text(text, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_movie_delete_confirmation: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
@@ -331,10 +307,7 @@ def _movie_kb(i, category=None):
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Моё кино", callback_data=f"movie_love_{i}")],
     ]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -351,8 +324,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for button in buttons:
         rows.append([button])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
@@ -461,7 +433,7 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
             await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("_send_movie_card: ignored error", exc_info=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -693,19 +665,58 @@ async def send_current_movie(bot, cid, status=None):
 
 # Daily rebus and premieres live in movie_discovery.py.
 
-_INCLUSIVE_MOVIE_TITLES = _movie_recommendation._INCLUSIVE_MOVIE_TITLES
-_PREF_TYPE = _movie_recommendation._PREF_TYPE
-_PREF_RECENCY = _movie_recommendation._PREF_RECENCY
-_PREF_RATING = _movie_recommendation._PREF_RATING
-_bind_functions(globals(), _movie_recommendation, [
-    "_movie_prefs", "_inclusive_movie_pick", "_as_float", "_tmdb_engine_pick",
-    "_candidate_to_card", "_reason_text", "_reason_label", "_llm_movie_pick",
-    "movie_dislike", "_advance_movie", "_advance_in_category",
-    "send_movie_genre_menu", "_show_menu_over_card", "_movie_prefs_kb",
-    "send_movie_prefs", "toggle_movie_pref", "_genre_label",
-    "send_movie_by_genre", "_show_discovered", "_passes_genre_gate",
-    "_discover_pick", "movie_love",
-])
+from movie_recommendation import (  # noqa: E402 — movie_recommendation uses names defined above
+    _INCLUSIVE_MOVIE_TITLES,
+    _PREF_TYPE,
+    _PREF_RECENCY,
+    _PREF_RATING,
+    _movie_prefs,
+    _inclusive_movie_pick,
+    _as_float,
+    _tmdb_engine_pick,
+    _candidate_to_card,
+    _reason_text,
+    _reason_label,
+    _llm_movie_pick,
+    movie_dislike,
+    _advance_movie,
+    _advance_in_category,
+    send_movie_genre_menu,
+    _show_menu_over_card,
+    _movie_prefs_kb,
+    send_movie_prefs,
+    toggle_movie_pref,
+    _genre_label,
+    send_movie_by_genre,
+    _show_discovered,
+    _passes_genre_gate,
+    _discover_pick,
+    movie_love,
+)
 
 
-_bind_functions(globals(), _movie_discovery, ["_movie_country_label","_now_playing_week_key","_daily_rebus","daily_movie_rebus","warm_movie_premieres_cache","_movie_premieres_cache_get","_movie_premieres_cache_set","_movie_premiere_item","get_movie_premieres","_movie_premieres_view","_movie_premieres_with_posters","send_movie_premieres","show_movie_premiere_page","get_series_premieres","_series_premieres_view","send_series_premieres","show_series_premiere_page","_combined_premieres","_combined_premieres_view","send_combined_premieres","show_combined_premiere_page"])
+from movie_discovery import (  # noqa: E402 — movie_discovery uses names defined above
+    _movie_country_label,
+    _now_playing_week_key,
+    _daily_rebus,
+    daily_movie_rebus,
+    warm_movie_premieres_cache,
+    _movie_premieres_cache_get,
+    _movie_premieres_cache_set,
+    _movie_premiere_item,
+    get_movie_premieres,
+    _movie_premieres_view,
+    _movie_premieres_with_posters,
+    send_movie_premieres,
+    show_movie_premiere_page,
+    get_series_premieres,
+    _series_premieres_view,
+    send_series_premieres,
+    show_series_premiere_page,
+    _combined_premieres,
+    _combined_premieres_view,
+    send_combined_premieres,
+    show_combined_premiere_page,
+)
+import rich_delivery
+from ui.navigation import nav_row

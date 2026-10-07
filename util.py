@@ -263,14 +263,14 @@ async def ack_loading(q) -> None:
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(loading_phrase(), callback_data="noop")]])
         await q.edit_message_reply_markup(reply_markup=kb)
     except Exception:
-        pass
+        _log.debug("ack_loading: ignored error", exc_info=True)
 
 async def clear_loading(q) -> None:
     """Убирает клавиатуру-индикатор загрузки после того, как готовый ответ уже отправлен новым сообщением."""
     try:
         await q.edit_message_reply_markup(reply_markup=None)
     except Exception:
-        pass
+        _log.debug("clear_loading: ignored error", exc_info=True)
 
 
 # Имя страны (ru/en, нижний регистр) -> ISO-2 код. Офлайн, без LLM.
@@ -316,17 +316,6 @@ def cc_of(name):
     return _COUNTRY_CC.get((name or "").strip().lower(), "")
 
 
-def country_name_from_cc(cc):
-    """Русское название страны по ISO-2 без сетевого запроса."""
-    code = str(cc or "").strip().upper()
-    special = {"AE": "ОАЭ", "US": "США", "ZA": "ЮАР"}
-    if code in special:
-        return special[code]
-    for name, value in _COUNTRY_CC.items():
-        if value == code and re.search(r"[а-яё]", name, re.I):
-            return name.capitalize()
-    return ""
-
 def country_flag(name):
     """Эмодзи флага по названию страны - офлайн, без LLM. Неизвестное -> ''."""
     from ui.constants import COUNTRY_EMOJI
@@ -352,17 +341,6 @@ _CASE_SENSITIVE_LABELS = {
 }
 
 
-def _lower_plain_initial(text: str) -> str:
-    for index, char in enumerate(text):
-        if char.isalpha():
-            return text[:index] + char.lower() + text[index + 1:]
-        if char.isdigit() or char == "<":
-            break
-        if not char.isspace() and char not in "«„\"'([{—–-":
-            break
-    return text
-
-
 def _format_plain_label_line(line: str) -> str:
     """Страховка для свободного AI-текста: ``Подпись: текст`` -> Telegram HTML."""
     match = _PLAIN_LABEL_LINE_RE.match(line)
@@ -377,18 +355,6 @@ def _format_plain_label_line(line: str) -> str:
     body = match.group("body").strip()
     return f'{match.group("indent")}<b>{label}:</b> {body}'
 
-
-def _lower_html_label_content(line: str) -> str:
-    match = re.match(
-        r"^(?P<prefix>\s*<b>(?P<label>[^<]{1,64}):</b>\s+)(?P<body>.+)$",
-        line,
-    )
-    if not match:
-        return line
-    body = match.group("body")
-    if match.group("label").strip().casefold() not in _CASE_SENSITIVE_LABELS:
-        body = _lower_plain_initial(body)
-    return match.group("prefix") + body
 
 def tg_html(text: str | None) -> str:
     """Чистит ответ модели под Telegram HTML: убирает markdown, оставляет

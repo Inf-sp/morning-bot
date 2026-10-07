@@ -9,6 +9,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_music
 from ui import leisure as leisure_ui
+from fakes import RecordingBot
 
 
 def test_recent_artist_history_is_unique_and_limited(monkeypatch):
@@ -64,15 +65,8 @@ def test_artist_card_links_have_short_notes_and_no_web_preview(monkeypatch):
         "tracks": ["Sweater Weather", "Daddy Issues", "Afraid"],
     }))
 
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
     message = leisure_ui.artist_card(data)
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(leisure_music._deliver_artist_card(bot, "42", message, reply_markup=None))
 
     assert all(track["note"] for track in data["tracks"])
@@ -264,16 +258,12 @@ def test_music_selects_from_one_batch_without_retrying_ai(monkeypatch):
 def test_music_task_returns_a_usable_track(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(leisure_music, "_task_for_today", lambda _key: {
         "title": "Тренировка", "track": "Gorilla", "artist": "Little Simz",
         "tag": "Уверенный грув.", "note": "Когда нужен темп.",
     })
 
-    asyncio.run(leisure_music.send_music_task(Bot(), "42", "workout"))
+    asyncio.run(leisure_music.send_music_task(RecordingBot(sent), "42", "workout"))
 
     assert "Gorilla — Little Simz" in sent[0]["text"]
     assert [(button.text, button.callback_data) for button in sent[0]["reply_markup"].inline_keyboard[0]] == [

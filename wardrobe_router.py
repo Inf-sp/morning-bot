@@ -1,14 +1,19 @@
 """Telegram callback routing extracted from the wardrobe controller."""
 
+import store
+import util
+import verify
+import wardrobe
+
 
 async def ingest(bot, cid, text):
     store.add_wardrobe_mode.pop(str(cid), None)
-    await add_item(bot, cid, text)
+    await wardrobe.add_item(bot, cid, text)
 
 
 async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_look":
-        previous = _get_cached_look(cid) or {}
+        previous = wardrobe._get_cached_look(cid) or {}
         previous_style_tip = (previous.get("look_data") or {}).get("style_tip") or None
         previous_style = (previous.get("look_data") or {}).get("primary_style") or None
         previous_main_accent = (previous.get("look_data") or {}).get("main_accent") or None
@@ -21,7 +26,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 preserve_message=True,
             )
         try:
-            await send_looks(
+            await wardrobe.send_looks(
                 bot, cid, status=status,
                 previous_item_ids=previous.get("item_ids") or [],
                 previous_style_tip=previous_style_tip,
@@ -35,7 +40,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 await status.stop(delete=True)
         return
     if data in ("w_closet", "w_del_g"):
-        await send_wardrobe_zones(bot, cid, q=q)
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
     if data == "w_add":
         store.pending_input[str(cid)] = "wardrobe_add"
@@ -45,7 +50,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 "Опиши её одним сообщением или отправь вещи списком через запятую.\n\n"
                 "Пример: Голубая свободная рубашка Uniqlo."
             ),
-            reply_markup=_back_kb(),
+            reply_markup=wardrobe._back_kb(),
         )
         return
     if data == "w_fill":
@@ -53,65 +58,65 @@ async def handle_callback(bot, cid, q, data, status=None):
         await bot.send_message(
             chat_id=cid,
             text="Пришли список всей своей одежды одним сообщением — я сам разложу всё по шкафу.",
-            reply_markup=_back_kb(),
+            reply_markup=wardrobe._back_kb(),
         )
         return
     if data in ("w_add_ok", "w_add_all", "w_add_edit"):
-        await send_wardrobe_zones(bot, cid, q=q)
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
     if data == "w_search":
-        await send_wardrobe_zones(bot, cid, q=q)
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
     if data.startswith("w_searchdel_"):
-        await send_delete_confirmation(bot, cid, data[len("w_searchdel_"):], q=q)
+        await wardrobe.send_delete_confirmation(bot, cid, data[len("w_searchdel_"):], q=q)
         return
     if data.startswith("w_cat_"):
         category_data = data[len("w_cat_"):]
         zone_slug, separator, page_value = category_data.rpartition("_")
-        if separator and zone_slug in ZONE_BY_SLUG and page_value.isdigit():
-            await send_category(bot, cid, zone_slug, int(page_value), q=q)
+        if separator and zone_slug in wardrobe.ZONE_BY_SLUG and page_value.isdigit():
+            await wardrobe.send_category(bot, cid, zone_slug, int(page_value), q=q)
         else:
-            await send_category(bot, cid, category_data, q=q)
+            await wardrobe.send_category(bot, cid, category_data, q=q)
         return
     if data.startswith("w_item_"):
-        await send_item_card(bot, cid, data[len("w_item_"):], q=q)
+        await wardrobe.send_item_card(bot, cid, data[len("w_item_"):], q=q)
         return
     if data.startswith("w_edit_"):
-        await send_item_card(bot, cid, data[len("w_edit_"):], q=q)
+        await wardrobe.send_item_card(bot, cid, data[len("w_edit_"):], q=q)
         return
     if data.startswith("w_deleteok_"):
         item_id = data[len("w_deleteok_"):]
         store.remove_wardrobe_items(cid, [item_id])
-        await send_wardrobe_zones(bot, cid, q=q)
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
     if data.startswith("w_delete_"):
-        await send_delete_confirmation(bot, cid, data[len("w_delete_"):], q=q)
+        await wardrobe.send_delete_confirmation(bot, cid, data[len("w_delete_"):], q=q)
         return
     if data == "w_del" or data.startswith(("w_del_", "w_delz_", "w_delsc_")):
-        await send_wardrobe_zones(bot, cid, q=q)
+        await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
     if data == "w_improve":
-        await send_home(bot, cid, q=q)
+        await wardrobe.send_home(bot, cid, q=q)
         return
     if data == "w_buy":
-        await send_purchase_screen(bot, cid)
+        await wardrobe.send_purchase_screen(bot, cid)
         return
     if data == "w_buy_more":
-        await send_purchase_screen(bot, cid, q=q, more=True)
+        await wardrobe.send_purchase_screen(bot, cid, q=q, more=True)
         return
     if data.startswith("w_buy_i:"):
-        await show_purchase_card(bot, cid, data.partition(":")[2], q=q)
+        await wardrobe.show_purchase_card(bot, cid, data.partition(":")[2], q=q)
         return
     if data.startswith("w_buy_got:"):
-        await buy_purchase(bot, cid, data.partition(":")[2], q=q)
+        await wardrobe.buy_purchase(bot, cid, data.partition(":")[2], q=q)
         return
     if data.startswith("w_buy_no:"):
-        await reject_purchase(bot, cid, data.partition(":")[2], q=q)
+        await wardrobe.reject_purchase(bot, cid, data.partition(":")[2], q=q)
         return
     if data.startswith("w_buy"):
         # «⬅️ Назад» из карточки и старые кнопки прежних экранов
         # (w_buy_page:*, w_buy_new*, w_buy_gap, w_buy_pick) ведут на экран 1.
-        await send_purchase_screen(bot, cid, q=q)
+        await wardrobe.send_purchase_screen(bot, cid, q=q)
         return
     if data == "w_check":
-        await ask_purchase_check(bot, cid)
+        await wardrobe.ask_purchase_check(bot, cid)

@@ -15,6 +15,7 @@ from trainer_engine import (
     EXERCISE_CHOOSE_REACTION,
 )
 from ui import learning as learning_ui
+from ui.navigation import nav_row
 
 def _cap(value):
     value = str(value or "").strip()
@@ -326,8 +327,5 @@ _EXERCISE_LABELS = {
 async def send_progress(bot, cid):
     data = build_progress_screen(cid)
     msg = learning_ui.progress_screen(data)
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
+    kb = InlineKeyboardMarkup([nav_row("m_learn")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)

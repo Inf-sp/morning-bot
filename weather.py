@@ -2,23 +2,18 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timedelta
-import requests
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 import ai
-from util import cap_sentence, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
-import verify
+from util import cap_sentence, flag_from_cc, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
 from ui import weather as weather_ui
 import weather_provider as _provider
 from weather_weekly import (
     qualitative_outlook as _qualitative_outlook,
-    week_advice as _weekly_advice,
     week_overview as _week_overview,
 )
-from module_binding import bind_functions as _bind_functions
-import weather_location as _weather_location
 
 _log = logging.getLogger(__name__)
 
@@ -110,46 +105,12 @@ def _finish_sentence(text):
     return text
 
 
-def rain_text(rain, rain_mm=None, when=""):
-    """Кусок строки про дождь. Пусто, только если вероятность нулевая."""
-    if rain:
-        return f"Дождь{when} {rain:.0f}%"
-    return ""
-
-
 def _rain_description(rain, rain_mm, periods=()):
     """Короткая фактическая фраза для AI-сводки без неинициализированных данных."""
     if not _rain_real(rain, rain_mm):
         return "без осадков"
     when = ", ".join(str(period).strip() for period in (periods or []) if str(period).strip())
     return f"дождь {rain:.0f}%" + (f" {when}" if when else "")
-
-
-def humidity_phrase(data, day_str, tmax, cc):
-    """Заголовок и пояснение о комфорте с учётом влажности; ('', '') если нечего добавить."""
-    try:
-        hours = data["hourly"]["time"]
-        hum_vals = data["hourly"].get("relativehumidity_2m") or []
-    except Exception:
-        return "", ""
-    if not hum_vals:
-        return "", ""
-    day_hum = [
-        v for t, v in zip(hours, hum_vals)
-        if t.startswith(day_str) and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H and v is not None
-    ]
-    if not day_hum:
-        return "", ""
-    rh = sum(day_hum) / len(day_hum)
-    if rh >= 80 and tmax >= 22:
-        return "💧 Высокая влажность", "Может ощущаться теплее, чем показывает температура"
-    if rh >= 70 and tmax >= 20:
-        return "💧 Высокая влажность", "Из-за влажности может казаться жарче"
-    if rh >= 75 and (cc or "").upper() == "NL":
-        return "💧 Высокая влажность", "Вечерами у каналов будет свежо"
-    if rh < 35:
-        return "💧 Низкая влажность", "Воздух сухой"
-    return "", ""
 
 
 # ---------- иконка ----------
@@ -187,10 +148,6 @@ def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None):
     if code in (45, 48):
         return "🌫️"
     return "☁️"
-
-
-def _week_advice(days):
-    return _weekly_advice(days, STRONG_WIND_MS)
 
 
 # ---------- периоды по часам ----------
@@ -402,7 +359,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     if mode == "full":
         dt = now
         cc = str(s.get("cc") or "").upper()
-        flag = __import__("util").flag_from_cc(cc) or ""
+        flag = flag_from_cc(cc) or ""
         place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"
         header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
         hourly = data.get("hourly") or {}
@@ -467,8 +424,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         advice = _qualitative_outlook([tomorrow], "Завтра")
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"),
-             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+            nav_row("m_myday"),
         ])
         msg = weather_ui.full_forecast(
             header, None, periods, sunrise_line, sunset_line, advice,
@@ -480,7 +436,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         day = 0 if mode == "today" else 1
         dt = now + timedelta(days=day)
         title = "сегодня" if mode == "today" else "завтра"
-        flag = __import__("util").flag_from_cc(s.get("cc", "")) or ""
+        flag = flag_from_cc(s.get("cc", "")) or ""
         header = f"Погода на {title} • {_WEEKDAYS[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} • {s['city']} {flag}"
         code = d["weathercode"][day]
         _tmin, tmax = _daytime_temperature_range(
@@ -517,7 +473,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                     fact = mf
         else:
             fact = await asyncio.to_thread(_world_fact)
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([nav_row("m_myday")])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title=fact_title, fact=fact)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -565,7 +521,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                 if summary:
                     fact = _finish_sentence(cap_sentence(summary))
             except Exception:
-                pass
+                _log.debug("send_weather: ignored error", exc_info=True)
         msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title="Метео-итог", fact=fact)
         await bot.send_message(
             chat_id=cid,
@@ -621,7 +577,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     overview = _week_overview(day_data)
     advice = _qualitative_outlook(day_data)
 
-    kb = None if week_plain else InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="m_myday"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    kb = None if week_plain else InlineKeyboardMarkup([nav_row("m_myday")])
     msg = weather_ui.week_forecast(
         rng, s["city"], overview, day_data, advice,
         country=s.get("country", ""), country_code=s.get("cc", ""),
@@ -632,4 +588,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-_bind_functions(globals(), _weather_location, ["set_city_text", "location_handler"])
+from weather_location import (  # noqa: E402 — after definitions weather_location uses
+    set_city_text,
+    location_handler,
+)
+from ui.navigation import nav_row

@@ -10,7 +10,6 @@ from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
     public_item_name,
-    strip_internal_tags,
 )
 
 WARDROBE_OUTERWEAR_MAX_TEMP = 20
@@ -24,7 +23,6 @@ SAFE_NEUTRAL_STYLE_TIPS = (
     "Сделай силуэт спокойнее, чтобы образ выглядел современнее.",
     "Оставь линии комплекта чистыми, чтобы образ выглядел собраннее.",
 )
-SAFE_NEUTRAL_STYLE_TIP = SAFE_NEUTRAL_STYLE_TIPS[0]
 _SUNGLASSES_MARKERS = ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")
 _RAINCOAT_MARKERS = ("дождевик", "raincoat")
 _SHORTS_MARKERS = ("шорт", "shorts")
@@ -639,7 +637,6 @@ def build_outfit_reasons(items, weather_ctx, score_details=None):
     return reasons
 
 
-_LONG_SLEEVE_MARKERS = ("длинн", "лонгслив")
 _OPENABLE_LAYER_MARKERS = ("рубаш", "куртк", "пиджак", "кардиган", "пальто", "плащ", "ветровк")
 
 
@@ -796,20 +793,6 @@ _GARMENT_CLAIM_MARKERS = (
     "плащ", "ветровк", "брюк", "джинс", "чинос", "шорт", "юбк", "кед", "кроссов",
     "лофер", "ботин", "сандал", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "очк",
 )
-_ACCESSORY_CLAIM_MARKERS = ("аксессуар", "часы", "ремн", "сумк", "рюкзак", "шарф", "кепк", "шапк", "очк", "украшен", "кольц", "цепоч")
-_STYLE_TIP_ACTION_RE = re.compile(
-    r"\b(?:заправ|подверн|закат|остав|расстег|застег|подтян|сдвин|слож|нос|сдела|"
-    r"добав|сними|убери|возьми)\w*",
-    re.IGNORECASE,
-)
-_STYLE_TIP_RESULT_RE = re.compile(r"(?:чтобы|так\s+(?:образ|силуэт|сочетание))", re.IGNORECASE)
-_UNHELPFUL_STYLE_TIP_MARKERS = (
-    "без дополнительных", "без изменений", "ничего добавлять", "ничего менять",
-    "образ готов", "не нужно", "носи комплект", "носи этот наряд",
-)
-_DISALLOWED_STYLE_TIP_MARKERS = (
-    "слегка заправь верх спереди",
-)
 
 
 def _facts_text(items):
@@ -857,116 +840,6 @@ def _claims_are_grounded(text, items):
     if re.search(r"(?:объ[её]мн\w*\s+рукав|рукав\w*\s+объ[её]мн)", claim):
         return False
     return True
-
-
-def _sanitize_generated_text(text, items):
-    clean = str(text or "")
-    for item in items:
-        raw_name = str(item.get("name") or "")
-        if raw_name:
-            clean = clean.replace(raw_name, public_item_name(item))
-    return strip_internal_tags(clean).strip()
-
-
-def _natural_reason(reason):
-    text = re.sub(r"\s+", " ", str(reason or "")).strip().casefold()
-    banned = (
-        "составляют основу комплекта",
-        "светлый цвет обуви",
-        "поддерживает палитру комплекта",
-        "завершает комплект",
-        "завершают комплект",
-    )
-    return (
-        bool(text)
-        and "(" not in text
-        and ")" not in text
-        and text.count("комплект") <= 1
-        and not any(phrase in text for phrase in banned)
-    )
-
-
-def _valid_style_tip(tip, items):
-    tip_low = str(tip or "").casefold()
-    if (any(marker in tip_low for marker in _UNHELPFUL_STYLE_TIP_MARKERS)
-            or any(marker in tip_low for marker in _DISALLOWED_STYLE_TIP_MARKERS)
-            or not _STYLE_TIP_ACTION_RE.search(tip_low)
-            or not _STYLE_TIP_RESULT_RE.search(tip_low)):
-        return False
-    if not _claims_are_grounded(tip, items):
-        return False
-    if any(action in tip_low for action in ("подверни рукав", "подвернуть рукав", "закатай рукав", "закатать рукав")):
-        return any(_has_confirmed_long_sleeves(item) for item in items)
-    if "подверн" in tip_low and any(word in tip_low for word in ("брюк", "джинс", "чинос")):
-        return any(
-            item.get("zone") == "Низ" and "длинн" in str(item.get("name") or "").casefold()
-            for item in items
-        )
-    return True
-
-
-def validate_outfit_copy(items, wardrobe, weather_ctx, reasons, tip, final_heading, final_text):
-    """Финальный guard между генерацией и UI: только факты из выбранных вещей.
-
-    Заодно сверяет id аксессуаров с текущей базой гардероба и не разрешает
-    финальному штриху предлагать аксессуар, которого нет в выбранном комплекте.
-    """
-    database_items = [item for _zone, _subcategory, item in _flat_wardrobe_items(wardrobe)]
-    database_ids = {item.get("id") for item in database_items if item.get("id")}
-    verified_items = [item for item in items if not item.get("id") or item.get("id") in database_ids]
-
-    clean_reasons = []
-    for reason in reasons or []:
-        clean = _sanitize_generated_text(reason, verified_items)
-        if _claims_are_grounded(clean, verified_items) and _natural_reason(clean):
-            clean_reasons.append(clean)
-    if not clean_reasons:
-        clean_reasons = build_outfit_reasons(verified_items, weather_ctx)
-
-    clean_tip = _sanitize_generated_text(tip, verified_items)
-    if not _valid_style_tip(clean_tip, verified_items):
-        clean_tip = SAFE_NEUTRAL_STYLE_TIP
-
-    clean_final = _sanitize_generated_text(final_text, verified_items)
-    if (final_heading or "Образ готов") == "Образ готов" and any(
-        marker in clean_final.casefold() for marker in _ACCESSORY_CLAIM_MARKERS
-    ):
-        selected_accessories = [item for item in verified_items if item.get("zone") == "Аксессуары"]
-        if not selected_accessories or not _claims_are_grounded(clean_final, selected_accessories):
-            clean_final = "Комплект собран из вещей твоего шкафа"
-
-    return {
-        "items": verified_items,
-        "reasons": clean_reasons[:1],
-        "style_tip": clean_tip,
-        "final_text": clean_final or "Комплект собран из вещей твоего шкафа",
-    }
-
-
-def build_wardrobe_insight(cid, items, wardrobe_history):
-    """Один инсайт по фиксированному приоритету правил, первое совпавшее — оно и
-    возвращается. None, если ничего не подошло."""
-    item_ids = {it.get("id") for it in items}
-    if wardrobe_history:
-        last = wardrobe_history[-1]
-        if item_ids and item_ids == set(last.get("item_ids") or []):
-            return "Этот образ был и вчера."
-    today = datetime.now(config.TZ).date()
-    for it in items:
-        last_used = it.get("last_used")
-        if last_used:
-            try:
-                days = (today - datetime.fromisoformat(last_used).date()).days
-            except ValueError:
-                days = None
-            if days is not None and days > 14:
-                return f"{it.get('name')} — впервые за {days} дней."
-    if len(wardrobe_history) >= 3:
-        last3 = wardrobe_history[-3:]
-        for it in items:
-            if all(it.get("id") in (e.get("item_ids") or []) for e in last3):
-                return f"{it.get('name')} — в последних образах подряд."
-    return None
 
 
 def save_outfit_feedback(cid, item_ids, weather_tags):

@@ -5,10 +5,12 @@ import time
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+import dictionary_views
 import learning_dictionary
 import dictionary_import
 import learning
 from dictionary_repository import DictionaryRepository
+from fakes import RecordingBot
 
 
 def test_phrases_are_kept_in_storage_but_hidden_from_word_dictionary(monkeypatch):
@@ -105,10 +107,6 @@ def test_requested_full_dictionary_check_reports_result_and_clears_request(monke
     }]
     state = {"items": before}
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def rebuild(*_args, **_kwargs):
         state["items"] = after
         return after
@@ -117,14 +115,14 @@ def test_requested_full_dictionary_check_reports_result_and_clears_request(monke
         "dictionary_recheck_request": {"lang": "nl", "requested_at": "2026-08-26"},
     })
     monkeypatch.setattr(
-        learning_dictionary, "_dict_lang_entries",
+        dictionary_views, "_dict_lang_entries",
         lambda *_args: [dict(item) for item in state["items"]],
     )
     monkeypatch.setattr(learning_dictionary, "normalize_user_dictionary", lambda _cid: state["items"])
     monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", rebuild)
 
     handled = asyncio.run(
-        learning_dictionary.process_requested_dictionary_rechecks(Bot(), [cid])
+        learning_dictionary.process_requested_dictionary_rechecks(RecordingBot(sent), [cid])
     )
 
     assert handled == 1
@@ -164,7 +162,7 @@ def test_failed_requested_dictionary_check_sets_one_hour_backoff(monkeypatch):
         },
     })
     monkeypatch.setattr(
-        learning_dictionary, "_dict_lang_entries",
+        dictionary_views, "_dict_lang_entries",
         lambda *_args: [{"id": "1", "lang": "nl", "term": "Huis",
                          "translation": "Дом", "pos": "существительное"}],
     )
@@ -469,6 +467,7 @@ def test_dictionary_category_card_and_language_home_expose_list_view(monkeypatch
         "translation": "Работать", "pos": "глагол", "breakdown": "глагол",
     }]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: entries)
 
     class Bot:
         messages = []
@@ -499,14 +498,9 @@ def test_dictionary_category_list_uses_two_columns(monkeypatch):
         for index in range(3)
     ]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: entries)
 
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(learning_dictionary.send_dict_category_list(bot, "42", "nl", 1))
     rows = bot.message["reply_markup"].inline_keyboard
 

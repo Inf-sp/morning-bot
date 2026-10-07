@@ -8,6 +8,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import ai
 import bot
+import bot_maintenance
 import config
 import home_cache
 import leisure_books
@@ -56,9 +57,9 @@ def _patch_warm_steps(monkeypatch, calls, probe=None):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", step("wardrobe"))
-    monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", step("cooking", False))
+    monkeypatch.setattr(bot_maintenance.restaurant_discovery, "get_restaurant", step("cooking", False))
     monkeypatch.setattr(bot.learning, "warm_home_cache", step("learning", False))
-    monkeypatch.setattr(bot.leisure_hub, "warm_hub_cache", step("leisure"))
+    monkeypatch.setattr(bot_maintenance.leisure_hub, "warm_hub_cache", step("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", step("myday"))
 
 

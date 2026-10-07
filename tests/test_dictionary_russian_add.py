@@ -7,9 +7,11 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_import
+import dictionary_views
 import learning_dictionary
 import learning_router
 import bot_text
+from fakes import RecordingBot
 
 
 def test_add_word_command_extracts_russian_value(monkeypatch):
@@ -65,10 +67,6 @@ def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
         async def stop(self):
             return None
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def start(*_args, **_kwargs):
         return Status()
 
@@ -84,7 +82,7 @@ def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
         lambda _cid, entry: ("added", saved.append(entry) or entry),
     )
 
-    assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add мозг"))
+    assert asyncio.run(dictionary_import.try_add_dict_from_chat(RecordingBot(sent), "42", "Add мозг"))
 
     assert saved[0]["lang"] == "nl"
     assert saved[0]["term"] == "Brein"
@@ -98,10 +96,6 @@ def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch
     class Status:
         async def stop(self):
             return None
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
 
     async def start(*_args, **_kwargs):
         return Status()
@@ -121,7 +115,7 @@ def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch
         lambda _cid, entry: ("added", saved.append(entry) or entry),
     )
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), "42", "разум", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), "42", "разум", "nl"))
 
     assert saved[0]["term"] == "Verstand"
     assert saved[0]["article"] == "het"
@@ -156,10 +150,6 @@ def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
         async def stop(self):
             return None
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def start(*_args, **_kwargs):
         return Status()
 
@@ -170,7 +160,7 @@ def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
     dictionary_import.store.set_profile(cid, {})
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "мудрость", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "мудрость", "nl"))
 
     queued = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
     assert queued[0]["term"] == "мудрость"
@@ -320,10 +310,6 @@ def test_card_rebuild_merges_missing_fields_from_saved_card(monkeypatch):
 def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
     cid, sent = "queued-russian-retry", []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def normalize(*_args, **_kwargs):
         return {
             "lang": "nl", "term": "Wijsheid", "article": "de",
@@ -346,7 +332,7 @@ def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
     monkeypatch.setattr(dictionary_import.learning_data_quality, "check_new_entry", unchanged)
 
     processed = asyncio.run(
-        dictionary_import.process_queued_dictionary_adds(Bot(), [cid])
+        dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid])
     )
 
     assert processed == 1
@@ -658,10 +644,6 @@ def test_add_dutch_phrase_uses_its_dutch_verb_as_a_language_hint():
 def test_add_dutch_phrase_offers_one_study_word_instead_of_saving_phrase(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def extract(text, lang):
         assert text == "Ik kies voor"
         assert lang == "nl"
@@ -674,7 +656,7 @@ def test_add_dutch_phrase_offers_one_study_word_instead_of_saving_phrase(monkeyp
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", no_normalize)
     dictionary_import.store.dict_pending_batch.pop("42", None)
 
-    assert asyncio.run(dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Ik kies voor"))
+    assert asyncio.run(dictionary_import.try_add_dict_from_chat(RecordingBot(sent), "42", "Add Ik kies voor"))
     assert "Kiezen → выбирать" in sent[-1]["text"]
     assert dictionary_import.store.dict_pending_batch["42"]["items"] == [
         {"term": "kiezen", "translation": "выбирать"},
@@ -705,10 +687,6 @@ def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
         async def stop(self):
             return None
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def start(*_args, **_kwargs):
         return Status()
 
@@ -729,7 +707,7 @@ def test_bare_add_eentje_is_saved_and_shows_card_without_ai(monkeypatch):
     monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
 
     assert asyncio.run(
-        dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add eentje")
+        dictionary_import.try_add_dict_from_chat(RecordingBot(sent), "42", "Add eentje")
     )
     assert saved[0]["term"] == "Eentje"
     assert saved[0]["translation"] == "Один; одна; одно"
@@ -745,10 +723,6 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
     class Status:
         async def stop(self):
             return None
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
 
     async def start(*_args, **_kwargs):
         return Status()
@@ -778,7 +752,7 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
         effective_chat=SimpleNamespace(id="42"),
         message=SimpleNamespace(text="Add overdag"),
     )
-    context = SimpleNamespace(bot=Bot())
+    context = SimpleNamespace(bot=RecordingBot(sent))
 
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
     assert saved[0]["term"] == "Overdag"
@@ -795,10 +769,6 @@ def test_bare_add_aanwezig_is_saved_and_shows_card_without_ai(monkeypatch):
     class Status:
         async def stop(self):
             return None
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
 
     async def start(*_args, **_kwargs):
         return Status()
@@ -820,7 +790,7 @@ def test_bare_add_aanwezig_is_saved_and_shows_card_without_ai(monkeypatch):
     monkeypatch.setattr(dictionary_import, "_save_normalized_dict_entry", save)
 
     assert asyncio.run(
-        dictionary_import.try_add_dict_from_chat(Bot(), "42", "Add Aanwezig")
+        dictionary_import.try_add_dict_from_chat(RecordingBot(sent), "42", "Add Aanwezig")
     )
     assert saved[0]["term"] == "Aanwezig"
     assert saved[0]["translation"] == "Присутствующий; имеющийся"
@@ -836,10 +806,6 @@ def test_add_niet_storen_is_not_saved_as_a_phrase_when_ai_is_unavailable(monkeyp
     class Status:
         async def stop(self):
             return None
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
 
     async def start(*_args, **_kwargs):
         return Status()
@@ -872,7 +838,7 @@ def test_add_niet_storen_is_not_saved_as_a_phrase_when_ai_is_unavailable(monkeyp
         effective_chat=SimpleNamespace(id=cid),
         message=SimpleNamespace(text="Add niet storen"),
     )
-    asyncio.run(bot_text.handle(update, SimpleNamespace(bot=Bot()), remove_keyboard))
+    asyncio.run(bot_text.handle(update, SimpleNamespace(bot=RecordingBot(sent)), remove_keyboard))
 
     assert saved == []
     assert "Пришли нужное слово отдельно" in sent[-1]["text"]
@@ -887,10 +853,6 @@ def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
         async def stop(self):
             return None
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def start(*_args, **_kwargs):
         return Status()
 
@@ -903,7 +865,7 @@ def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
     dictionary_import.store.pending_input.pop(cid, None)
     dictionary_import.store.dict_pending_add.pop(cid, None)
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "tering", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "tering", "nl"))
 
     saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
     assert saved[0]["term"] == "Tering"
@@ -935,10 +897,6 @@ def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):
         async def stop(self):
             return None
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def start(*_args, **_kwargs):
         return Status()
 
@@ -961,7 +919,7 @@ def test_ambiguous_dictionary_word_offers_translation_choices(monkeypatch):
     dictionary_import.store.pending_input.pop(cid, None)
     dictionary_import.store.dict_pending_add.pop(cid, None)
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), cid, "oplossen", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "oplossen", "nl"))
 
     buttons = [button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row]
     assert buttons[:3] == ["Решать", "Растворять", "Погашать"]
@@ -1114,10 +1072,6 @@ def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypa
     saved = []
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     dictionary_import.store.pending_input[cid] = "dictclarify_nl"
     dictionary_import.store.dict_pending_add[cid] = {"term": "tering", "lang": "nl"}
     monkeypatch.setattr(
@@ -1125,7 +1079,7 @@ def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypa
         lambda _cid, entry: ("added", saved.append(dict(entry)) or entry),
     )
 
-    asyncio.run(dictionary_import.add_dict_clarification(Bot(), cid, "ругательство"))
+    asyncio.run(dictionary_import.add_dict_clarification(RecordingBot(sent), cid, "ругательство"))
 
     assert saved[0]["lang"] == "nl"
     assert saved[0]["term"] == "Tering"
@@ -1223,15 +1177,9 @@ def test_dictionary_pagination_button_uses_edit_navigation(monkeypatch):
     entries = [{"lang": "nl", "term": f"word{i}", "translation": "x"} for i in range(11)]
 
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda _cid, _lang: entries)
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda _cid, _lang: entries)
 
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(learning_dictionary.send_dict_manage(bot, cid, "nl", page=0))
 
     keyboard = bot.sent[-1]["reply_markup"]
@@ -1249,15 +1197,9 @@ def test_dictionary_view_callback_stays_within_telegram_limit_for_long_term(monk
     entries = [{"lang": "nl", "term": long_term, "translation": "x"}]
 
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda _cid, _lang: entries)
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda _cid, _lang: entries)
 
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(learning_dictionary.send_dict_manage(bot, cid, "nl", page=0))
 
     keyboard = bot.sent[-1]["reply_markup"]

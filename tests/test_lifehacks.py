@@ -9,14 +9,8 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import assistant
 import bot_text
 import myday
+from fakes import RecordingBot
 
-
-class FakeBot:
-    def __init__(self):
-        self.sent = []
-
-    async def send_message(self, **kwargs):
-        self.sent.append(kwargs)
 
 
 def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch):
@@ -29,7 +23,7 @@ def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch)
     monkeypatch.setattr(myday.store, "_load", lambda key: kv.get(key, {}))
     monkeypatch.setattr(myday.store, "_save", lambda key, value: kv.__setitem__(key, value))
 
-    bot = FakeBot()
+    bot = RecordingBot()
     text = (
         "Добавь лайфхак\n\n"
         "DE — синий, HET — оранжевый. Представляй слова с de синими, "
@@ -77,7 +71,7 @@ def test_local_lifehack_is_mixed_with_existing_ai_pool(monkeypatch):
 
 
 def test_lifehack_command_can_collect_text_in_second_message(monkeypatch):
-    bot = FakeBot()
+    bot = RecordingBot()
     saved = []
     monkeypatch.setattr(
         assistant.myday,
@@ -117,7 +111,7 @@ def test_chat_router_prioritizes_lifehack_command_over_dictionary(monkeypatch):
         effective_chat=SimpleNamespace(id="lifehack-router"),
         message=SimpleNamespace(text="Добавь лайфхак\nDE — синий, HET — оранжевый."),
     )
-    context = SimpleNamespace(bot=FakeBot())
+    context = SimpleNamespace(bot=RecordingBot())
 
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
 

@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder
+from ui.navigation import nav_row
 
 
 def export_choice():
@@ -21,8 +22,5 @@ def export_choice_keyboard():
         [InlineKeyboardButton("📤 Мой холодильник", callback_data="as_export_fridge")],
         [InlineKeyboardButton("📤 Мой словарь", callback_data="as_export_dictionary")],
         [InlineKeyboardButton("📤 Любимое", callback_data="as_export_favorites")],
-        [
-            InlineKeyboardButton("⬅️ Назад", callback_data="m_settings"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ],
+        nav_row("m_settings"),
     ])

@@ -7,6 +7,8 @@ import learning_settings as learning_preferences
 from ui import settings as settings_ui
 from ui import weather as weather_ui
 from ui.constants import cuisine_label, ui_label
+import rich_delivery
+from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
 
@@ -48,10 +50,6 @@ FIT_OPTIONS = [
 PALETTE_OPTIONS = ["тёмные", "светлые", "яркие"]
 PALETTE_ALIASES = {"цветные": "яркие"}
 STYLE_AVOID_OPTIONS = ["крупные принты", "узкий крой"]
-STYLE_AVOID_LABELS = {
-    "крупные принты": "Без крупных принтов",
-    "узкий крой": "Без узкого кроя",
-}
 
 COLOR_OPTIONS = [
     "белый", "чёрный", "серый", "бежевый", "синий", "зелёный",
@@ -196,7 +194,7 @@ async def send_home(bot, cid, q=None):
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
             return
         except Exception:
-            pass
+            _log.debug("send_home: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
@@ -210,8 +208,7 @@ async def send_preferences(bot, cid, q=None):
         [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
         [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
         [InlineKeyboardButton("👾 Игры", callback_data="set_pref_games")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("set_home"),
     ]
     msg = settings_ui.preferences_home()
     markup = InlineKeyboardMarkup(rows)
@@ -220,7 +217,7 @@ async def send_preferences(bot, cid, q=None):
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
             return
         except Exception:
-            pass
+            _log.debug("send_preferences: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
@@ -243,8 +240,7 @@ async def send_lifehacks(bot, cid, q=None):
             InlineKeyboardButton("▶️", callback_data="set_lh_page_1"),
         ])
     rows.extend([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("set_home"),
     ])
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -252,7 +248,7 @@ async def send_lifehacks(bot, cid, q=None):
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
             return
         except Exception:
-            pass
+            _log.debug("send_lifehacks: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
@@ -274,15 +270,14 @@ async def send_lifehack_page(bot, cid, page, q=None):
             InlineKeyboardButton("◀️", callback_data=f"set_lh_page_{(page - 1) % total_pages}"),
             InlineKeyboardButton("▶️", callback_data=f"set_lh_page_{(page + 1) % total_pages}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("set_home"))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
             return
         except Exception:
-            pass
+            _log.debug("send_lifehack_page: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 
@@ -302,10 +297,7 @@ def _lifehack_selection_rows(records, prefix, page=0, total_pages=1, action="del
             InlineKeyboardButton("◀️", callback_data=f"{callback_prefix}{(page - 1) % total_pages}"),
             InlineKeyboardButton("▶️", callback_data=f"{callback_prefix}{(page + 1) % total_pages}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="set_lifehacks"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("set_lifehacks"))
     return rows
 
 
@@ -562,7 +554,7 @@ async def send_notif(bot, cid, q=None):
         on = notif_on(cid, opt.key)
         mark = "✅" if on else "□"
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("set_home"))
     msg = settings_ui.notifications()
     text = msg.text
     kb = InlineKeyboardMarkup(rows)
@@ -572,7 +564,7 @@ async def send_notif(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_notif: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -606,7 +598,7 @@ async def toggle_notification_from_message(cid, kind, q):
         try:
             await q.message.edit_reply_markup(reply_markup=markup)
         except Exception:
-            pass
+            _log.debug("toggle_notification_from_message: ignored error", exc_info=True)
 
 
 async def notif_off_all(bot, cid, q=None):
@@ -618,17 +610,11 @@ async def notif_off_all(bot, cid, q=None):
 async def send_personalization(bot, cid, q=None):
     """Безопасный редирект для уже отправленных кнопок старой персонализации."""
     rows = [
-        [InlineKeyboardButton("⬅️ Назад", callback_data="set_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("set_home"),
     ]
     msg = settings_ui.personalization()
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 def _cuisines_kb(cid, back="as_fridge_home"):
@@ -641,7 +627,7 @@ def _cuisines_kb(cid, back="as_fridge_home"):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 
@@ -657,7 +643,7 @@ async def send_cuisines(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_cuisines: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -723,7 +709,7 @@ async def set_style(bot, cid, i, q=None):
                 try:
                     await q.answer(f"Можно выбрать максимум {STYLE_LIMIT} стиля.", show_alert=False)
                 except Exception:
-                    pass
+                    _log.debug("set_style: ignored error", exc_info=True)
             await send_wardrobe_style(bot, cid, q=q)
             return
         else:
@@ -803,7 +789,7 @@ def _multi_pick_kb(selected, options, prefix, back):
     buttons = [InlineKeyboardButton(("✅ " if v in selected else "") + v, callback_data=f"{prefix}_{i}")
                for i, v in enumerate(options)]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 
@@ -816,7 +802,7 @@ async def send_colors_love(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_colors_love: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -835,7 +821,7 @@ async def send_colors_avoid(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_colors_avoid: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -850,13 +836,7 @@ async def send_constraints(bot, cid, q=None):
     облегающий верх», «визуально вытягивать силуэт»."""
     msg = settings_ui.mydata_section("Ограничения", "Отметь, что учитывать при подборе образа.")
     kb = _multi_pick_kb(wardrobe_constraints_list(cid), CONSTRAINT_OPTIONS, "set_constraint", "set_wardrobe_style")
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def set_constraint_toggle(bot, cid, i, q=None):
@@ -923,7 +903,7 @@ def _wardrobe_style_kb(cid, state=None):
     style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + f"{emojis[s]} {s}", callback_data=f"set_style_{i}")
                      for i, s in enumerate(STYLES)]
     rows = [[button] for button in style_buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("w_closet"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -939,7 +919,7 @@ async def send_wardrobe_style(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_wardrobe_style: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -1099,7 +1079,7 @@ async def handle_callback(bot, cid, data, q=None):
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
     elif data == "set_ward_add":
         store.pending_input[cid] = "wardrobe_add_set"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="set_wardrobe_g"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+        kb = InlineKeyboardMarkup([nav_row("set_wardrobe_g")])
         msg = settings_ui.wardrobe_item_input()
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
     elif data == "adm_home":

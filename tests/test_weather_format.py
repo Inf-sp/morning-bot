@@ -13,6 +13,7 @@ import weather_warn
 import settings
 import bot
 from ui import weather as weather_ui
+from fakes import RecordingBot
 
 
 def test_tomorrow_forecast_uses_compact_period_weather_line():
@@ -152,25 +153,6 @@ def test_week_forecast_header_shows_country_and_flag():
     assert message.text.startswith("Неделя с 5–11 августа · Лилль, FR 🇫🇷")
 
 
-def test_week_forecast_marks_extreme_heat_as_a_reason_to_change_plans():
-    days = [
-        {"name": "вторник", "tmax": 33, "tmin": 20, "wind": 4, "rain_real": False},
-        {"name": "среда", "tmax": 37, "tmin": 22, "wind": 4, "rain_real": False},
-        {"name": "четверг", "tmax": 40, "tmin": 24, "wind": 4, "rain_real": False},
-        {"name": "пятница", "tmax": 34, "tmin": 21, "wind": 4, "rain_real": False},
-        {"name": "суббота", "tmax": 31, "tmin": 19, "wind": 4, "rain_real": False},
-        {"name": "воскресенье", "tmax": 30, "tmin": 18, "wind": 4, "rain_real": False},
-        {"name": "понедельник", "tmax": 30, "tmin": 18, "wind": 4, "rain_real": False},
-    ]
-
-    advice = weather._week_advice(days)
-    message = weather_ui.week_forecast("11–17 августа", "Руан", "Жарко", [], advice, country="FR")
-
-    assert advice.startswith("В четверг до +40°C")
-    assert "избегай долгих прогулок и велосипеда днём" in advice
-    assert "💡 Полезно: В четверг до +40°C" in message.text
-
-
 def test_qualitative_outlook_describes_weather_without_numbers():
     days = [
         {"code": 61, "tmax": 19, "wind": 9, "rain_real": True},
@@ -241,10 +223,6 @@ def test_weather_warning_job_skips_disabled_users(monkeypatch):
 def test_weather_warning_notification_links_only_to_home(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"lat": 52.6, "lon": 4.7})
     monkeypatch.setattr(weather, "fetch_weather", lambda *_args: {"daily": {}})
     monkeypatch.setattr(
@@ -257,7 +235,7 @@ def test_weather_warning_notification_links_only_to_home(monkeypatch):
         ),
     )
 
-    asyncio.run(settings._send_scheduled_notification(Bot(), "42", "weather_warn"))
+    asyncio.run(settings._send_scheduled_notification(RecordingBot(sent), "42", "weather_warn"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [

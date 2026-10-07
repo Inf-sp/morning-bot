@@ -4,7 +4,9 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+import ai
 import wardrobe
+import wardrobe_management
 from ui import wardrobe as wardrobe_ui
 
 
@@ -69,6 +71,7 @@ def test_success_confirmation_is_sent_only_after_store_returns_saved_item(monkey
         return [item]
 
     monkeypatch.setattr(wardrobe, "_parse_items", parse)
+    monkeypatch.setattr(wardrobe_management, "_parse_items", parse)
     monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda _cid, _items: [item])
     bot = _Bot()
 
@@ -84,6 +87,7 @@ def test_no_success_confirmation_when_store_did_not_save_item(monkeypatch):
         return [item]
 
     monkeypatch.setattr(wardrobe, "_parse_items", parse)
+    monkeypatch.setattr(wardrobe_management, "_parse_items", parse)
     monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda _cid, _items: [])
     bot = _Bot()
 
@@ -103,7 +107,7 @@ def test_text_accessory_is_saved_when_ai_parser_is_unavailable(monkeypatch):
         stored_items.extend(items)
         return [{**items[0], "id": "chain-1"}]
 
-    monkeypatch.setattr(wardrobe.ai, "allm_json", unavailable)
+    monkeypatch.setattr(ai, "allm_json", unavailable)
     monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", save)
     bot = _Bot()
 

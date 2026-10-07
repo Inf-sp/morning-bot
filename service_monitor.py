@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 import requests
 
 import api_usage
@@ -24,7 +23,6 @@ WARNING = provider_runtime.WARNING
 DOWN = provider_runtime.DOWN
 _DOT = provider_runtime.DOT
 _configured = provider_runtime.is_configured
-_blank = provider_runtime.blank_state
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
@@ -252,12 +250,6 @@ def rows() -> list[str]:
             detail = "нет подключения" if service == "database" else "ошибка отправки"
             out.append(f"🔴 {label} · {detail}")
     return out
-
-
-def last_check_time() -> str:
-    checks = [int(row.get("last_check") or 0) for row in provider_runtime.states()]
-    ts = max(checks, default=0)
-    return datetime.fromtimestamp(ts, config.TZ).strftime("%H:%M") if ts else "—"
 
 
 def _probe_request(service: str):

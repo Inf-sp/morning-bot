@@ -124,25 +124,6 @@ def test_transient_navigation_message_keeps_its_keyboard_before_next_message():
     assert cid not in bot.store.last_inline_message
 
 
-def test_transient_message_survives_restart_without_being_deleted():
-    deleted = []
-    cid = "persisted-transient-user"
-    bot.store.transient_message.pop(cid, None)
-    bot.store.set_persisted_transient_message_id(cid, 91)
-
-    class Cleanup:
-        async def delete_message(self, **kwargs):
-            deleted.append(kwargs)
-
-        async def edit_message_reply_markup(self, **_kwargs):
-            raise AssertionError("persisted message should be deleted")
-
-    asyncio.run(bot._MenuCleanupBot._delete_transient(Cleanup(), cid))
-
-    assert deleted == []
-    assert bot.store.get_persisted_transient_message_id(cid) is None
-
-
 def test_reminder_is_due_once_and_activity_starts_new_cycle(monkeypatch):
     state = {}
     clock = {"now": 1_000_000}

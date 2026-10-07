@@ -1,5 +1,19 @@
 """City search and Telegram location handlers extracted from weather controller."""
 
+import asyncio
+import logging
+
+import requests
+
+import ai
+import config
+import store
+import verify
+import weather
+from ui import weather as weather_ui
+
+_log = logging.getLogger(__name__)
+
 
 async def set_city_text(bot, cid, name, show_brief=True):
     import re as _re
@@ -23,7 +37,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
         if official and official.lower() not in {value.lower() for value in variants}:
             variants.insert(0, official)
     except Exception:
-        pass
+        _log.debug("set_city_text: ignored error", exc_info=True)
     try:
         result = None
         for value in variants:
@@ -96,7 +110,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             if translated and len(translated) <= 80 and not any(char.isdigit() for char in translated):
                 city_name = translated
         except Exception:
-            pass
+            _log.debug("set_city_text: ignored error", exc_info=True)
         store.set_settings(
             cid, city["latitude"], city["longitude"], city_name, country, country_code,
         )
@@ -104,7 +118,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
             import myday
             myday.reset_day_cache(cid)
         except Exception:
-            pass
+            _log.debug("set_city_text: ignored error", exc_info=True)
         msg = weather_ui.city_changed(city_name, country, country_code)
         await bot.send_message(chat_id=cid, text=msg.text)
         if show_brief:
@@ -112,7 +126,7 @@ async def set_city_text(bot, cid, name, show_brief=True):
                 import myday
                 await myday.send_plany(bot, cid)
             except Exception:
-                pass
+                _log.debug("set_city_text: ignored error", exc_info=True)
     except Exception as error:
         await verify.safe_error(bot, cid, error, back="m_myday")
 
@@ -148,10 +162,10 @@ async def location_handler(update, context):
         import myday
         myday.reset_day_cache(cid)
     except Exception:
-        pass
+        _log.debug("location_handler: ignored error", exc_info=True)
     msg = weather_ui.location_changed(city, country, country_code)
     await update.message.reply_text(msg.text)
     try:
-        await send_weather(context.bot, cid, "today")
+        await weather.send_weather(context.bot, cid, "today")
     except Exception:
-        pass
+        _log.debug("location_handler: ignored error", exc_info=True)

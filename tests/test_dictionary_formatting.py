@@ -19,6 +19,7 @@ from ui import learning as learning_ui
 from ui import dictionary as dictionary_ui
 from ui.builder import MessageBuilder, MessageSpec
 from ui.learning_entry import render_learning_entry
+from fakes import RecordingBot
 
 
 def _complete_study_entry(term, translation, *, lang="nl"):
@@ -245,10 +246,6 @@ def test_normalize_dictionary_merges_same_term_with_different_translations(monke
 def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
     monkeypatch.setattr(
         dictionary_morning,
@@ -256,7 +253,7 @@ def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
         lambda *_args: (MessageSpec(text="🇳🇱 Слово дня"), []),
     )
 
-    asyncio.run(settings._send_scheduled_notification(Bot(), "42", "daily_words"))
+    asyncio.run(settings._send_scheduled_notification(RecordingBot(sent), "42", "daily_words"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [

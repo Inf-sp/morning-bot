@@ -7,17 +7,12 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import fridge
 import dictionary_import
 import wardrobe
+from fakes import RecordingBot
 
 
 def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
-
-class _Bot:
-    message = None
-
-    async def send_message(self, **kwargs):
-        self.message = kwargs
 
 
 def _assert_add_menu(rows, expected_add):
@@ -36,7 +31,7 @@ def test_wardrobe_add_action_is_above_navigation_and_separate():
 
 def test_fridge_has_categories_and_a_separate_add_action(monkeypatch):
     monkeypatch.setattr(fridge.store, "get_list", lambda *_args: [])
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(fridge.send_fridge(bot, "pytest-add-layout"))
 

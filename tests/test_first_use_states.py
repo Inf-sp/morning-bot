@@ -12,6 +12,7 @@ import bot_text
 import cooking
 import fridge
 import learning
+import dictionary_views
 import learning_dictionary
 import learning_settings
 import menu
@@ -19,7 +20,9 @@ import onboard
 import settings
 import store
 import wardrobe
+import wardrobe_management
 from ui import menu as menu_ui
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -142,14 +145,9 @@ def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [])
-    bot = Bot()
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: [])
+    bot = RecordingBot()
 
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
@@ -163,12 +161,6 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
 
 
 def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     entries = [
         {"id": "1", "term": "Mooi", "pos": "adjective"},
         {"id": "2", "term": "Lopen", "pos": "verb"},
@@ -179,7 +171,8 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
         {"id": "7", "term": "Hoe gaat het?", "pos": "sentence"},
     ]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
-    bot = Bot()
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: entries)
+    bot = RecordingBot()
 
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
@@ -196,29 +189,18 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
 
 
 def test_dictionary_home_does_not_wait_for_ai_migrations(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("dictionary home must not wait for an AI migration")
 
     monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", forbidden)
     monkeypatch.setattr(learning_dictionary, "migrate_dict_entries_for_srs", forbidden)
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [])
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: [])
 
-    asyncio.run(learning_dictionary.send_dict_lang(Bot(), "42", "nl"))
+    asyncio.run(learning_dictionary.send_dict_lang(RecordingBot(), "42", "nl"))
 
 
 def test_dictionary_pagination_shows_current_page(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     entries = [
         {
             "id": str(index), "lang": "nl", "term": f"Word{index}",
@@ -227,11 +209,12 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
         for index in range(21)
     ]
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: entries)
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: entries)
     monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: True)
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("opening a card must not start an AI rebuild")
     monkeypatch.setattr(learning_dictionary, "_refresh_dict_entry", forbidden)
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))
 
@@ -244,20 +227,15 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
 
 
 def test_dictionary_category_opens_a_full_word_card(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     entry = {
         "id": "noun-1", "lang": "nl", "term": "huis", "article": "het",
         "translation": "дом", "pos": "noun", "plural": "huizen",
         "examples": [{"text": "Dit huis is groot.", "translation": "Этот дом большой."}],
     }
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: [entry])
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: [entry])
     monkeypatch.setattr(learning_dictionary, "_entry_needs_ai_refresh", lambda _entry: False)
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2))
 
@@ -285,11 +263,13 @@ def test_dictionary_category_delete_returns_to_the_next_card(monkeypatch):
 
     monkeypatch.setattr(learning_dictionary.store, "set_list", save)
     monkeypatch.setattr(learning_dictionary, "_dict_lang_entries", lambda *_args: list(entries))
+    monkeypatch.setattr(dictionary_views, "_dict_lang_entries", lambda *_args: list(entries))
 
     async def show(_bot, _cid, lang, category_index, page=0, q=None):
         shown.append((lang, category_index, page, q))
 
     monkeypatch.setattr(learning_dictionary, "send_dict_category", show)
+    monkeypatch.setattr(dictionary_views, "send_dict_category", show)
     query = object()
 
     asyncio.run(learning_dictionary.del_dict_category_entry(
@@ -311,14 +291,8 @@ def test_learning_preferences_return_to_active_dictionary():
 
 
 def test_dictionary_overview_has_learning_language_preferences(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(learning_dictionary, "_dict_counts", lambda _cid: {"nl": 12, "en": 8})
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(learning_dictionary.send_dict(bot, "42"))
 
     assert _labels(bot.message["reply_markup"]) == [
@@ -401,13 +375,9 @@ def test_legacy_japanese_cuisine_preference_migrates_to_asian(monkeypatch):
 def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(dictionary_seed, "_seed_language", lambda *_args: ("nl", "нидерландский", "simple"))
 
-    asyncio.run(dictionary_seed.send_seed_intro(Bot(), "42"))
+    asyncio.run(dictionary_seed.send_seed_intro(RecordingBot(sent), "42"))
 
     assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(sent[0]["reply_markup"]) == [
@@ -504,6 +474,7 @@ def test_fill_wardrobe_returns_to_the_normal_home_after_saving(monkeypatch):
         opened.append(cid)
 
     monkeypatch.setattr(wardrobe, "_parse_items", parse)
+    monkeypatch.setattr(wardrobe_management, "_parse_items", parse)
     monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda *_args: [{"name": "Белая футболка"}])
     monkeypatch.setattr(wardrobe, "send_home", send_home)
 
@@ -528,10 +499,6 @@ def test_fill_wardrobe_text_input_opens_normal_home(monkeypatch):
     sent = []
     opened = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def parse(_text):
         return [{"name": "Белая футболка"}]
 
@@ -539,11 +506,12 @@ def test_fill_wardrobe_text_input_opens_normal_home(monkeypatch):
         opened.append(routed_cid)
 
     monkeypatch.setattr(wardrobe, "_parse_items", parse)
+    monkeypatch.setattr(wardrobe_management, "_parse_items", parse)
     monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda *_args: [{"name": "Белая футболка"}])
     monkeypatch.setattr(wardrobe, "send_home", send_home)
     _prepare_pending_text_router(monkeypatch)
 
-    bot = Bot()
+    bot = RecordingBot(sent)
     asyncio.run(wardrobe.handle_callback(bot, cid, None, "w_fill"))
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=cid),
@@ -582,14 +550,10 @@ def test_first_fridge_fill_returns_to_normal_cooking_home(monkeypatch):
     async def unexpected_fridge_screen(*_args, **_kwargs):
         raise AssertionError("first fill must not end on the fridge screen")
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(menu, "send_food_menu", send_food_home)
     monkeypatch.setattr(fridge, "send_fridge", unexpected_fridge_screen)
 
-    asyncio.run(fridge.fridge_add_done(Bot(), "42", "курица, рис"))
+    asyncio.run(fridge.fridge_add_done(RecordingBot(sent), "42", "курица, рис"))
 
     assert opened == [("42", True)]
     assert sent == []
@@ -600,10 +564,6 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
     saved = []
     sent = []
     opened = []
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
 
     monkeypatch.setattr(fridge.store, "get_list", lambda _key, _cid: list(saved))
     monkeypatch.setattr(
@@ -618,7 +578,7 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
     monkeypatch.setattr(menu, "send_food_menu", send_food_home)
     _prepare_pending_text_router(monkeypatch)
 
-    bot = Bot()
+    bot = RecordingBot(sent)
     asyncio.run(cooking.handle_callback(bot, cid, None, "as_fridge_add"))
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=cid),

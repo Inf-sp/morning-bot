@@ -72,21 +72,6 @@ def test_month_recipe_pool_only_uses_current_profile_and_month():
     ) == []
 
 
-def test_nightly_cooking_warm_prepares_all_meals(monkeypatch):
-    hours = []
-
-    def idea(_cid, now=None, refresh=False):
-        hours.append((now.hour, refresh))
-        return {"name": "Каша"}
-
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", idea)
-
-    result = recipe_generation.warm_cooking_home_ideas("42")
-
-    assert result == {"breakfast": True, "lunch": True, "dinner": True}
-    assert hours == [(8, False), (13, False), (18, False)]
-
-
 def test_other_food_place_refresh_replaces_inline_status(monkeypatch):
     calls = []
 

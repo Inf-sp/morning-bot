@@ -223,68 +223,6 @@ def _updated_footer(updated_at, updated_unix=None):
     ])
 
 
-def _system_table_row(line):
-    parts = [part.strip() for part in str(line or "").split(" · ") if part.strip()]
-    if not parts:
-        return ("—", "—")
-    if len(parts) == 1:
-        return (parts[0], "—")
-    # A phone-width system screen needs one compact status column. Keep the
-    # role, model, quota or recovery reason together instead of losing it.
-    return (parts[0], " · ".join(parts[1:]))
-
-
-def _system_rich_message(rows, updated_at, updated_unix=None):
-    groups = []
-    current_title = ""
-    current_rows = []
-    for raw in rows:
-        line = str(raw or "")
-        if line in ("AI", "Данные"):
-            if current_title:
-                groups.append((current_title, current_rows))
-            current_title, current_rows = line, []
-        elif line:
-            current_rows.append(_system_table_row(line))
-    if current_title:
-        groups.append((current_title, current_rows))
-    if not groups:
-        groups = [("Сервисы", [])]
-
-    blocks = [rich.heading("🛠 Система", size=2)]
-    for title, table_rows in groups:
-        blocks.append(rich.heading(title, size=4))
-        if table_rows:
-            blocks.append(rich.table(
-                ("Сервис", "Состояние"), table_rows,
-                striped=True, bordered=True,
-            ))
-        else:
-            blocks.append(rich.paragraph("Пока нет данных"))
-    blocks.append(_updated_footer(updated_at, updated_unix))
-    return rich.message(blocks)
-
-
-def api_ai(rows, updated_at, updated_unix=None):
-    """Система: native table, with the existing compact text as a fallback."""
-    b = MessageBuilder()
-    b.bold("🛠 Система")
-    b.newline()
-    for line in rows:
-        if str(line) in ("AI", "Данные"):
-            if str(line) == "Данные":
-                b.spacer()
-            b.bold(str(line))
-            b.newline()
-        else:
-            b.line(str(line))
-    b.spacer()
-    b.line(f"Обновлено в {updated_at}")
-    msg = b.build_stripped()
-    msg.rich_message = _system_rich_message(rows, updated_at, updated_unix)
-    return msg
-
-
 def _log_table_row(row):
     row = str(row or "")
     if " · " not in row:

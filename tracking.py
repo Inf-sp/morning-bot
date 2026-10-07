@@ -9,6 +9,7 @@
 Все записи best-effort: трекинг НИКОГДА не должен ломать основной поток бота,
 поэтому каждая точка входа обёрнута в try/except с молчаливым проглатыванием.
 """
+import logging
 import contextvars
 import inspect
 import os
@@ -22,6 +23,8 @@ from datetime import datetime
 
 import config
 import store
+
+_log = logging.getLogger(__name__)
 
 _ERR_MAX = 200          # rolling-буфер ошибок
 ERROR_TTL_SECONDS = 12 * 3600
@@ -188,7 +191,7 @@ def finish_action(trace=None, *, ok=True) -> None:
 
         store.mutate_kv(config.ACTION_LATENCY_KEY, change)
     except Exception:
-        pass
+        _log.debug("finish_action: ignored error", exc_info=True)
     finally:
         with _active_action_lock:
             _active_action_ids.discard(trace.trace_id)
@@ -362,7 +365,7 @@ def log_error(source: str, msg: str, kind: str = "", *, section: str = "",
 
         store.mutate_kv(config.ERROR_LOG_KEY, change)
     except Exception:
-        pass
+        _log.debug("log_error: ignored error", exc_info=True)
 
 
 def get_errors(source: str = None, limit: int = 20) -> list:
@@ -377,7 +380,7 @@ def get_errors(source: str = None, limit: int = 20) -> list:
         try:
             store._save(config.ERROR_LOG_KEY, {"log": fresh[-_ERR_MAX:]})
         except Exception:
-            pass
+            _log.debug("get_errors: ignored error", exc_info=True)
     buf = fresh
     if source:
         buf = [e for e in buf if e.get("source") == source]
@@ -388,17 +391,7 @@ def clear_errors() -> None:
     try:
         store._save(config.ERROR_LOG_KEY, {"log": []})
     except Exception:
-        pass
-
-
-def errors_today() -> int:
-    """Число ошибок за последние сутки."""
-    try:
-        cutoff = time.time() - DAY
-        buf = store._load(config.ERROR_LOG_KEY).get("log", [])
-        return sum(1 for e in buf if e.get("ts", 0) >= cutoff)
-    except Exception:
-        return 0
+        _log.debug("clear_errors: ignored error", exc_info=True)
 
 
 # ================= АКТИВНОСТЬ =================
@@ -440,7 +433,7 @@ def touch(cid) -> None:
 
         store.mutate_kv(config.ACTIVITY_KEY, change)
     except Exception:
-        pass
+        _log.debug("touch: ignored error", exc_info=True)
 
 
 def _all() -> dict:

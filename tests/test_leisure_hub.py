@@ -22,6 +22,7 @@ import routing
 import store
 from ui import leisure as leisure_ui
 from ui import menu as menu_ui
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -77,13 +78,6 @@ def _seed_caches(monkeypatch):
         [{"title": "Hades II", "url": "https://games.example/hades"}],
     )
 
-
-class _Bot:
-    def __init__(self):
-        self.sent = []
-
-    async def send_message(self, **kwargs):
-        self.sent.append(kwargs)
 
 
 def test_main_menu_has_leisure_hub_instead_of_four_sections():
@@ -146,7 +140,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
         (leisure_games.ai, "allm_json"), (leisure_games.igdb, "get_upcoming_games"),
     ):
         monkeypatch.setattr(module, name, _boom)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 

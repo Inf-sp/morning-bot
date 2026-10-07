@@ -53,35 +53,6 @@ def _table_blocks(message):
     return [block for block in message.rich_message["blocks"] if block["type"] == "table"]
 
 
-def test_system_screen_has_grouped_native_tables_and_datetime_footer():
-    message = admin_ui.api_ai(
-        [
-            "AI",
-            "🟢 Groq · Основной · gpt-oss-20b · 900/1 000 осталось",
-            "Данные",
-            "🟡 Google Books · Книги · временно недоступен",
-        ],
-        "12:30",
-        1_780_000_000,
-    )
-
-    tables = _table_blocks(message)
-    assert len(tables) == 2
-    assert [cell["text"] for cell in tables[0]["cells"][0]] == ["Сервис", "Состояние"]
-    assert [cell["text"] for cell in tables[0]["cells"][1]] == [
-        "🟢 Groq", "Основной · gpt-oss-20b · 900/1 000 осталось",
-    ]
-    footer = message.rich_message["blocks"][-1]
-    assert footer["type"] == "footer"
-    assert footer["text"] == [
-        "Обновлено в ",
-        {
-            "type": "date_time", "text": "12:30",
-            "unix_time": 1_780_000_000, "date_time_format": "t",
-        },
-    ]
-
-
 def test_logs_use_phone_friendly_table():
     logs = admin_ui.logs(
         ["08:00 · Система · Groq · лимит исчерпан"], 1, "12:30",

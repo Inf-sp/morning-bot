@@ -170,7 +170,7 @@ def _invalidate_connection():
         try:
             connection.close()
         except Exception:
-            pass
+            _log.debug("_invalidate_connection: ignored error", exc_info=True)
 
 
 def load(key):

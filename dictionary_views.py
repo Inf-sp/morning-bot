@@ -1,5 +1,26 @@
 """Dictionary Telegram views extracted from the dictionary controller."""
 
+import logging
+import re
+from datetime import datetime
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+import config
+import learning_dictionary
+import store
+from dictionary_management import dict_entry_view_kb as _dict_entry_view_kb
+from dictionary_model import (
+    canonical_part_of_speech, display_term, entry_is_dictionary_word,
+    normalize_term_case, study_card_is_complete,
+)
+from ui import dictionary as dict_ui
+from ui.constants import delete_label
+from ui.navigation import back_menu_keyboard, nav_row
+
+_log = logging.getLogger(__name__)
+
+
 async def _show_screen(
     bot, cid, text, entities=None, reply_markup=None, q=None, persistent_inline=False,
 ):
@@ -14,7 +35,7 @@ async def _show_screen(
                     marker(cid, getattr(q.message, "message_id", None))
             return
         except Exception:
-            pass
+            _log.debug("_show_screen: ignored error", exc_info=True)
     extra = {"persistent_inline": True} if persistent_inline else {}
     await bot.send_message(
         chat_id=cid,
@@ -34,7 +55,7 @@ _DICT_BACK_TO_ORIGIN = {v: k for k, v in _DICT_ORIGIN_TO_BACK.items()}
 
 
 async def send_dict(bot, cid, back="m_learn", q=None):
-    c = _dict_counts(cid)
+    c = learning_dictionary._dict_counts(cid)
     nl_total = c["nl"]
     en_total = c["en"]
     msg = dict_ui.dict_overview(nl_total, en_total)
@@ -43,7 +64,7 @@ async def send_dict(bot, cid, back="m_learn", q=None):
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_learning_dictionary")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(back),
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
@@ -64,7 +85,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
     rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(back))
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
     else:
@@ -86,10 +107,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     ]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     if not entries:
-        rows = [[
-            InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]]
+        rows = [nav_row(f"a_dictlang_{lang}")]
         await _show_screen(
             bot, cid, f"{flag} {category}\n\nПока здесь нет записей.", None,
             InlineKeyboardMarkup(rows), q=q,
@@ -119,10 +137,7 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
         "🔢 Показать списком",
         callback_data=f"a_dictcatlist_{lang}_{category_index}_0",
     )])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row(f"a_dictlang_{lang}"))
     await _show_screen(
         bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows),
         q=q, persistent_inline=True,
@@ -144,7 +159,7 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
     page = max(0, min(int(page), pages - 1))
     chunk = entries[page * page_size:(page + 1) * page_size]
     buttons = [InlineKeyboardButton(
-        display_term(_entry_term(item), item.get("article") or "")[:24],
+        display_term(learning_dictionary._entry_term(item), item.get("article") or "")[:24],
         callback_data=f"a_dictcat_{lang}_{category_index}_{page * page_size + offset}",
     ) for offset, item in enumerate(chunk)]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
@@ -154,10 +169,7 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"a_dictcatlist_{lang}_{category_index}_{(page + 1) % pages}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row(f"a_dictlang_{lang}"))
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     await _show_screen(
         bot, cid, f"{flag} {category} · {len(entries)}\n\nВыбери слово.", None,
@@ -169,9 +181,9 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
     """Сразу перепроверяет одну карточку общей цепочкой Gemini → OpenRouter."""
     entry = _entry_by_id(cid, word_id)
     if not entry:
-        await send_dict_lang(bot, cid, _active_language_code(cid), q=q)
+        await send_dict_lang(bot, cid, learning_dictionary._active_language_code(cid), q=q)
         return
-    words = normalize_user_dictionary(cid)
+    words = learning_dictionary.normalize_user_dictionary(cid)
     for item in words:
         if str(item.get("id") or "") == str(word_id):
             item["dictionary_rebuild_version"] = 0
@@ -179,20 +191,20 @@ async def check_dictionary_entry(bot, cid, word_id, q=None):
             break
     store.set_list(config.DICT_KEY, cid, words)
     try:
-        await rebuild_dictionary_entries(cid, force=True, word_id=word_id, max_batches=1)
-    except DictionaryRebuildDeferred:
+        await learning_dictionary.rebuild_dictionary_entries(cid, force=True, word_id=word_id, max_batches=1)
+    except learning_dictionary.DictionaryRebuildDeferred:
         answer = getattr(q, "answer", None)
         if callable(answer):
             try:
                 await answer("Сейчас не получилось обновить. Сохранил прежнюю карточку.")
             except Exception:
-                pass
+                _log.debug("check_dictionary_entry: ignored error", exc_info=True)
     await send_dict_entry_view_by_id(bot, cid, 0, word_id, q=q)
 
 
 async def request_dictionary_recheck(bot, cid, lang, q=None):
     """Совместимо запускает безопасную пакетную пересборку старых карточек."""
-    code = lang if lang in ("nl", "en") else _active_language_code(cid)
+    code = lang if lang in ("nl", "en") else learning_dictionary._active_language_code(cid)
 
     def allow_retry(profile):
         profile.pop("dictionary_card_migration_stopped", None)
@@ -218,7 +230,7 @@ def _pending_dictionary_rebuilds(cid):
         if entry_is_dictionary_word(item)
         and (
             int(item.get("dictionary_rebuild_version") or 0)
-            < _DICTIONARY_REBUILD_VERSION
+            < learning_dictionary._DICTIONARY_REBUILD_VERSION
             or not study_card_is_complete(item)
         )
     ]
@@ -232,7 +244,7 @@ def queue_dictionary_rebuild(cid):
     def change(profile):
         profile.pop("dictionary_recheck_request", None)
         stopped = profile.get("dictionary_card_migration_stopped") or {}
-        if (pending and int(stopped.get("version") or 0) == _DICTIONARY_REBUILD_VERSION
+        if (pending and int(stopped.get("version") or 0) == learning_dictionary._DICTIONARY_REBUILD_VERSION
                 and len(pending) <= int(stopped.get("pending") or 0)):
             # AI уже не смог дособрать эти карточки: не тратим вызовы заново,
             # пока не появятся новые карточки или пользователь не попросит сам.
@@ -243,9 +255,9 @@ def queue_dictionary_rebuild(cid):
             profile.pop("dictionary_card_migration", None)
             return profile, None
         current = dict(profile.get("dictionary_card_migration") or {})
-        if int(current.get("version") or 0) != _DICTIONARY_REBUILD_VERSION:
+        if int(current.get("version") or 0) != learning_dictionary._DICTIONARY_REBUILD_VERSION:
             current = {
-                "version": _DICTIONARY_REBUILD_VERSION,
+                "version": learning_dictionary._DICTIONARY_REBUILD_VERSION,
                 "requested_at": now,
                 "initial_total": len(pending),
                 "rebuilt": 0,
@@ -270,7 +282,7 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
         if attempted >= limit:
             break
         state = dict(store.get_profile(cid).get("dictionary_card_migration") or {})
-        if int(state.get("version") or 0) != _DICTIONARY_REBUILD_VERSION:
+        if int(state.get("version") or 0) != learning_dictionary._DICTIONARY_REBUILD_VERSION:
             continue
         now_ts = int(datetime.now(config.TZ).timestamp())
         if int(state.get("retry_after_at") or 0) > now_ts:
@@ -285,20 +297,20 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
         # После неудачных попыток пакет сдвигается, чтобы безнадёжные первые
         # карточки не мешали пересобрать остальные до остановки миграции.
         offset = int(state.get("attempts") or 0)
-        lang = _dict_lang(pending_before[
-            (offset * _DICTIONARY_REBUILD_BATCH_SIZE) % len(pending_before)
+        lang = learning_dictionary._dict_lang(pending_before[
+            (offset * learning_dictionary._DICTIONARY_REBUILD_BATCH_SIZE) % len(pending_before)
         ])
         attempted += 1
-        await rebuild_dictionary_entries(cid, lang=lang, max_batches=1, offset=offset)
+        await learning_dictionary.rebuild_dictionary_entries(cid, lang=lang, max_batches=1, offset=offset)
         pending_after = _pending_dictionary_rebuilds(cid)
         progress = len(pending_before) - len(pending_after)
         if progress <= 0:
             attempts = int(state.get("attempts") or 0) + 1
-            if attempts >= _DICTIONARY_MIGRATION_MAX_ATTEMPTS:
+            if attempts >= learning_dictionary._DICTIONARY_MIGRATION_MAX_ATTEMPTS:
                 def stop(profile):
                     profile.pop("dictionary_card_migration", None)
                     profile["dictionary_card_migration_stopped"] = {
-                        "version": _DICTIONARY_REBUILD_VERSION,
+                        "version": learning_dictionary._DICTIONARY_REBUILD_VERSION,
                         "pending": len(pending_after),
                         "stopped_at": datetime.now(config.TZ).isoformat(),
                     }
@@ -313,14 +325,14 @@ async def process_dictionary_rebuilds(bot, cids, limit=1):
             def defer(profile):
                 current = dict(profile.get("dictionary_card_migration") or state)
                 current["attempts"] = attempts
-                current["retry_after_at"] = now_ts + _DICTIONARY_MIGRATION_RETRY_SECONDS
+                current["retry_after_at"] = now_ts + learning_dictionary._DICTIONARY_MIGRATION_RETRY_SECONDS
                 current["last_failed_at"] = datetime.now(config.TZ).isoformat()
                 profile["dictionary_card_migration"] = current
                 return profile, None
             store.mutate_profile(cid, defer)
             _log.info(
                 "dictionary migration deferred cid=%s remaining=%s attempt=%s retry_seconds=%s",
-                cid, len(pending_after), attempts, _DICTIONARY_MIGRATION_RETRY_SECONDS,
+                cid, len(pending_after), attempts, learning_dictionary._DICTIONARY_MIGRATION_RETRY_SECONDS,
             )
             continue
         total = max(int(state.get("initial_total") or 0), len(pending_before))
@@ -389,13 +401,13 @@ async def process_requested_dictionary_rechecks(bot, cids, limit=1):
         before = [dict(item) for item in _dict_lang_entries(cid, lang)]
         started_at = datetime.now(config.TZ).isoformat()
         try:
-            await rebuild_dictionary_entries(cid, force=True, lang=lang)
-        except DictionaryRebuildDeferred as error:
+            await learning_dictionary.rebuild_dictionary_entries(cid, force=True, lang=lang)
+        except learning_dictionary.DictionaryRebuildDeferred as error:
             defer(error.retry_after)
             continue
         after = [
-            dict(item) for item in normalize_user_dictionary(cid)
-            if _dict_lang(item) == lang and entry_is_dictionary_word(item)
+            dict(item) for item in learning_dictionary.normalize_user_dictionary(cid)
+            if learning_dictionary._dict_lang(item) == lang and entry_is_dictionary_word(item)
         ]
         checked = sum(
             1 for item in after
@@ -449,7 +461,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
         "Я сам приведу в правильную форму, переведу и разберу."
     )
     if not entries:
-        rows = [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]
+        rows = [nav_row(f"a_dictlang_{lang}")]
         text = f"{flag} Словарь {lang_title} языка пока пуст.\n\n{add_hint}"
         await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
         return
@@ -461,7 +473,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     for item in chunk:
         word_id = str(item.get("id") or "")
         word_buttons.append(InlineKeyboardButton(
-            normalize_term_case(_entry_term(item), _kind_of(_entry_term(item)))[:20],
+            normalize_term_case(learning_dictionary._entry_term(item), learning_dictionary._kind_of(learning_dictionary._entry_term(item)))[:20],
             callback_data=f"a_dictviewid_{page}_{word_id}",
         ))
     word_rows = [word_buttons[i:i + 2] for i in range(0, len(word_buttons), 2)]
@@ -469,7 +481,7 @@ async def send_dict_manage(bot, cid, lang, back="m_learn", q=None, page=0):
     if total_pages > 1:
         next_page = page + 1 if page < total_pages - 1 else 0
         nav_rows.append([InlineKeyboardButton("▶️", callback_data=f"a_dictedit_{lang}_{next_page}")])
-    rows = word_rows + nav_rows + [[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]
+    rows = word_rows + nav_rows + [nav_row(f"a_dictlang_{lang}")]
     text = (
         f"{flag} Показаны {start + 1}–{start + len(chunk)} из {len(entries)}. "
         "Нажми на слово, чтобы посмотреть перевод, пример и удалить его.\n\n"
@@ -487,10 +499,7 @@ async def send_dict_add_prompt(bot, cid, lang):
             "✏️ Напиши слово в чат.\n\n"
             "Я приведу его в правильную форму, переведу и добавлю в твой словарь."
         ),
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]]),
+        reply_markup=InlineKeyboardMarkup([nav_row(f"a_dictlang_{lang}")]),
     )
 
 
@@ -498,14 +507,13 @@ def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"a_dictlang_{lang}"),
     ])
 
 
 async def send_dict_search_prompt(bot, cid, lang, q=None):
     store.pending_input[str(cid)] = f"dictsearch_{lang}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictedit_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+    kb = InlineKeyboardMarkup([nav_row(f"a_dictedit_{lang}")])
     await _show_screen(bot, cid, "🔍 Введи слово для поиска.", None, kb, q=q)
 
 
@@ -516,7 +524,7 @@ def _dict_tts_row(entry):
 
 
 def _dict_search_kb(entry, term_key):
-    lang = _dict_lang(entry)
+    lang = learning_dictionary._dict_lang(entry)
     word_id = str(entry.get("id") or "")
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
@@ -528,7 +536,7 @@ def _dict_search_kb(entry, term_key):
         *_dict_tts_row(entry),
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}_keep"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"a_dictlang_{lang}_keep"),
     ])
 
 
@@ -542,12 +550,12 @@ async def handle_dict_search(bot, cid, lang, query):
             reply_markup=back_menu_keyboard(f"a_dictedit_{lang}"),
         )
         return
-    words = [item for item in _ensure_dict(cid) if entry_is_dictionary_word(item)]
+    words = [item for item in learning_dictionary._ensure_dict(cid) if entry_is_dictionary_word(item)]
     match = None
     for item in words:
-        if _dict_lang(item) != lang:
+        if learning_dictionary._dict_lang(item) != lang:
             continue
-        term = _entry_term(item)
+        term = learning_dictionary._entry_term(item)
         if query_norm in term.casefold():
             match = item
             break
@@ -557,15 +565,14 @@ async def handle_dict_search(bot, cid, lang, query):
             text="Не нашла в словаре. Попробуй другое слово или посмотри весь список.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Мои слова", callback_data=f"a_dictedit_{lang}")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+                nav_row(f"a_dictlang_{lang}"),
             ]),
         )
         return
-    if _entry_needs_ai_refresh(match):
-        match = await _refresh_dict_entry(cid, match)
-    msg = _dict_entry_message(match, status="found")
-    term_key = _dict_item_key(lang, "", _entry_term(match))[2]
+    if learning_dictionary._entry_needs_ai_refresh(match):
+        match = await learning_dictionary._refresh_dict_entry(cid, match)
+    msg = learning_dictionary._dict_entry_message(match, status="found")
+    term_key = learning_dictionary._dict_item_key(lang, "", learning_dictionary._entry_term(match))[2]
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=_dict_search_kb(match, term_key), persistent_inline=True)
@@ -573,7 +580,7 @@ async def handle_dict_search(bot, cid, lang, query):
 
 def _entry_by_id(cid, word_id):
     return next((
-        item for item in _ensure_dict(cid)
+        item for item in learning_dictionary._ensure_dict(cid)
         if (entry_is_dictionary_word(item)
             and str(item.get("id") or "") == str(word_id))
     ), None)
@@ -621,25 +628,25 @@ def _dictionary_category(entry):
 def _dict_lang_entries(cid, lang):
     """Записи языка, отсортированные по категории и алфавиту."""
     entries = [
-        w for w in _ensure_dict(cid)
-        if _dict_lang(w) == lang and entry_is_dictionary_word(w)
+        w for w in learning_dictionary._ensure_dict(cid)
+        if learning_dictionary._dict_lang(w) == lang and entry_is_dictionary_word(w)
     ]
     category_index = {label: index for index, label in enumerate(_DICT_CATEGORY_ORDER)}
     return sorted(entries, key=lambda w: (
-        category_index[_dictionary_category(w)], _cap(_entry_term(w)).casefold(),
+        category_index[_dictionary_category(w)], learning_dictionary._cap(learning_dictionary._entry_term(w)).casefold(),
     ))
 
 
 async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
     """Карточка слова из списка — тот же вид, что при добавлении, плюс удаление."""
     entries = _dict_lang_entries(cid, lang)
-    match = next((w for w in entries if _dict_entry_matches_key(w, lang, term_key)), None)
+    match = next((w for w in entries if learning_dictionary._dict_entry_matches_key(w, lang, term_key)), None)
     if not match:
         await send_dict_lang(bot, cid, lang, page=page, q=q)
         return
-    if _entry_needs_ai_refresh(match):
-        match = await _refresh_dict_entry(cid, match)
-    msg = _dict_entry_message(match, status="found")
+    if learning_dictionary._entry_needs_ai_refresh(match):
+        match = await learning_dictionary._refresh_dict_entry(cid, match)
+    msg = learning_dictionary._dict_entry_message(match, status="found")
     await _show_screen(
         bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, term_key),
         q=q, persistent_inline=True)
@@ -648,11 +655,11 @@ async def send_dict_entry_view(bot, cid, lang, page, term_key, q=None):
 async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
     match = _entry_by_id(cid, word_id)
     if not match:
-        await send_dict_lang(bot, cid, _active_language_code(cid), page=page, q=q)
+        await send_dict_lang(bot, cid, learning_dictionary._active_language_code(cid), page=page, q=q)
         return
-    if _entry_needs_ai_refresh(match):
-        match = await _refresh_dict_entry(cid, match)
-    msg = _dict_entry_message(match, status="found")
+    if learning_dictionary._entry_needs_ai_refresh(match):
+        match = await learning_dictionary._refresh_dict_entry(cid, match)
+    msg = learning_dictionary._dict_entry_message(match, status="found")
     await _show_screen(
         bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, ""),
         q=q, persistent_inline=True)

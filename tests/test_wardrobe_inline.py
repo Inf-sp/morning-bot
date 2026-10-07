@@ -4,10 +4,12 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+import ai
 import wardrobe
 import bot_callbacks
 import util
 from ui.wardrobe import purchase_check_card, purchase_suggestions_card
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -15,13 +17,7 @@ def _labels(markup):
 
 
 def test_empty_wardrobe_explains_how_to_fill_it():
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(wardrobe.send_home(bot, "pytest-wardrobe-inline"))
 
@@ -196,12 +192,8 @@ def test_preserved_inline_status_sends_ready_result_as_new_message():
     class Query:
         message = Message()
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     status = asyncio.run(util.StatusManager.start_inline(
-        Query(), bot=Bot(), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=True))
+        Query(), bot=RecordingBot(sent), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=True))
     asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
 
     assert sent == [{"chat_id": "42", "text": "Готовая карточка", "reply_markup": "final-kb"}]
@@ -229,12 +221,8 @@ def test_inline_status_does_not_send_duplicate_after_uncertain_edit():
     class Query:
         message = Message()
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     status = asyncio.run(util.StatusManager.start_inline(
-        Query(), bot=Bot(), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=False))
+        Query(), bot=RecordingBot(sent), cid="42", stages=((0, "⏳ Ищу..."),), preserve_message=False))
     asyncio.run(status.replace("Готовая карточка", reply_markup="final-kb"))
 
     assert sent == []
@@ -385,10 +373,6 @@ def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeyp
     }
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def recommend(*_args, **_kwargs):
         return {
             "colors": [{"color": "бордовый", "reason": "даёт акцент"}],
@@ -398,9 +382,9 @@ def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeyp
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
     monkeypatch.setattr(wardrobe.store, "wardrobe_to_text", lambda _w: "Оливковая худи; Серые джинсы; Белые кеды")
     monkeypatch.setattr(wardrobe._settings, "wardrobe_prefs_context", lambda _cid: "")
-    monkeypatch.setattr(wardrobe.ai, "allm_json", recommend)
+    monkeypatch.setattr(ai, "allm_json", recommend)
 
-    asyncio.run(wardrobe.recommend_purchase(Bot(), "42", "худи"))
+    asyncio.run(wardrobe.recommend_purchase(RecordingBot(sent), "42", "худи"))
 
     assert "Бордовый — даёт акцент." in sent[0]["text"]
     assert "выдуманные вещи" not in sent[0]["text"]
@@ -634,17 +618,11 @@ def test_main_menu_personal_sections_replace_welcome_with_prepared_card(monkeypa
 
 
 def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
         "zones": {"Верх": {"Футболки": [{"id": "top-1", "name": "Футболка"}]}}
     })
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
@@ -682,12 +660,6 @@ def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypat
 
 
 def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
         "zones": {
             "Верх": {"Футболки": [
@@ -698,7 +670,7 @@ def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
         },
     })
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     assert bot.message["text"] == (
@@ -709,17 +681,11 @@ def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
 
 
 def test_closet_category_has_add_item_button_above_navigation(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
         "zones": {"Верх": {"Футболки": [{"id": "top-1", "name": "Футболка"}]}},
     })
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(wardrobe.send_category(bot, "closet-test", "top"))
 
     labels = _labels(bot.message["reply_markup"])
@@ -728,12 +694,6 @@ def test_closet_category_has_add_item_button_above_navigation(monkeypatch):
 
 
 def test_closet_category_uses_movie_style_pagination(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     items = [
         {"id": f"top-{index}", "name": f"Вещь {index}"}
         for index in range(1, 11)
@@ -742,7 +702,7 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
         "zones": {"Верх": {"Футболки": items}},
     })
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(wardrobe.send_category(bot, "closet-test", "top", page=1))
 
     labels = _labels(bot.message["reply_markup"])

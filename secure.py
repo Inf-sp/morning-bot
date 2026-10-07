@@ -109,33 +109,3 @@ def is_dangerous_med(text):
     """True, если запрос про передозировку/суицид/самоповреждение -> кризис-ответ вместо генерации."""
     t = str(text or "")
     return any(p.search(t) for p in _DANGER_RE)
-
-
-# --- статический скан хардкод-секретов (continuous eval) ---
-_SCAN_SKIP = ("secure.py",)   # сам модуль содержит паттерны, не находки
-
-def scan_secrets(paths=None):
-    """Best-effort: хардкод-секреты в *.py (вне os.environ). -> list[str] находок."""
-    import glob
-    import os
-    if paths is None:
-        root = os.path.dirname(os.path.abspath(__file__))
-        paths = [p for p in glob.glob(os.path.join(root, "*.py"))
-                 if os.path.basename(p) not in _SCAN_SKIP]
-    findings = []
-    key_assign = re.compile(r"""(?i)(api[_-]?key|token|secret|password|passwd)\s*=\s*["']([^"']{12,})["']""")
-    literal = re.compile(r"""["'](sk-[A-Za-z0-9]{12,}|AIza[A-Za-z0-9_\-]{12,}|ghp_[A-Za-z0-9]{12,})["']""")
-    for p in paths:
-        try:
-            src = open(p, encoding="utf-8").read()
-        except Exception:
-            continue
-        base = p.rsplit("/", 1)[-1]
-        for m in key_assign.finditer(src):
-            val = m.group(2)
-            if "os.environ" in val or "getenv" in val:
-                continue
-            findings.append(f"{base}: подозрительное присваивание {m.group(1)}=…")
-        for m in literal.finditer(src):
-            findings.append(f"{base}: литерал ключа {m.group(1)[:8]}…")
-    return sorted(set(findings))

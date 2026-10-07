@@ -4,6 +4,7 @@
 Они остаются только в пользовательском экспорте, чтобы не терять старые данные.
 """
 
+import logging
 import io
 import re
 import secrets
@@ -21,6 +22,8 @@ from leisure_collection import (
 import secure
 import store
 from ui import data_export as export_ui
+
+_log = logging.getLogger(__name__)
 
 
 _ARCHIVED_CONTENT_RECORDS_KEY = "content_records.json"
@@ -186,7 +189,7 @@ async def send_export_choice(bot, cid, q=None):
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
             return
         except Exception:
-            pass
+            _log.debug("send_export_choice: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
 

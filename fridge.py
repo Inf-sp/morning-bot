@@ -1,5 +1,6 @@
 """Холодильник: список продуктов, категории и приготовление из остатков."""
 
+import logging
 import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,6 +20,9 @@ from fridge_model import (
     _fridge_split_input,
 )
 from ui import food as food_ui
+from ui.navigation import nav_row
+
+_log = logging.getLogger(__name__)
 
 send_leftovers = cooking.send_leftovers
 
@@ -74,7 +78,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="set_pref_cuisines",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(back))
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -83,7 +87,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_fridge: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -128,7 +132,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             "✏️ Изменить",
             callback_data=f"as_fridge_clean_{cat_idx}",
         )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("as_fridge_home"))
 
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -137,7 +141,7 @@ async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_fridge_cat: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
@@ -217,10 +221,7 @@ async def send_fridge_category_choice(bot, cid, q=None):
         [InlineKeyboardButton(_CAT_BTN_LABEL[cat], callback_data=f"as_fridge_pick_{index}")]
         for index, cat in enumerate(_CAT_ORDER)
     ]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="as_fridge_home"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("as_fridge_home"))
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -228,7 +229,7 @@ async def send_fridge_category_choice(bot, cid, q=None):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            pass
+            _log.debug("send_fridge_category_choice: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
 

@@ -53,7 +53,9 @@ sudo systemctl daemon-reload && sudo systemctl enable --now morning-bot-update.t
 
 ## Архитектурные границы
 
-- `bot.py`, `bot_callbacks.py` — вход и маршрутизация.
+- `bot.py`, `bot_callbacks.py` — вход и маршрутизация. Новый callback — запись
+  `R(...)` в `bot_callbacks.ROUTES`/`ACTIONS` (порядок важен, ключи и `sub` — только
+  литералы: их читает `routing.py`).
 - Feature-модули (`myday.py`, `wardrobe.py`, `cooking.py`, `learning*.py`,
   `leisure_*.py`) — сценарии и бизнес-логика.
 - `ui/*.py` — только текст, форматирование и кнопки; без store, AI, сети и решений.

@@ -951,21 +951,6 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     return idea
 
 
-def warm_cooking_home_ideas(cid, now=None) -> dict:
-    """Готовит дневной кэш завтрака, обеда и ужина без сообщений пользователю."""
-    base = now or datetime.now(TZ)
-    result = {}
-    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 18)):
-        meal_time = base.replace(hour=hour, minute=0, second=0, microsecond=0)
-        try:
-            idea = get_cooking_home_idea(cid, now=meal_time, refresh=False)
-            result[meal] = bool(idea)
-        except Exception as error:
-            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
-            result[meal] = False
-    return result
-
-
 def _cuisine_context(cid):
     # settings импортирует cooking для обратной совместимости старых callback-ов;
     # ленивый импорт не создаёт цикл при загрузке генератора рецептов.

@@ -13,7 +13,6 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import access
-import api_usage
 import config
 import deploy_report
 import provider_runtime
@@ -23,25 +22,17 @@ from ui.constants import delete_label, ui_label
 import store
 import tracking
 from ui import admin as ui
+from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
 
 DAY = 86400
-STALE_AFTER = 15 * 60
-DB_SLOW_MS = 500
 _MONTHS_RU = ("", "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
 async def _show(bot, cid, msg, reply_markup=None, q=None):
     await rich_delivery.show(
         bot, cid, msg, reply_markup=reply_markup, query=q,
     )
-
-
-def _hhmm(ts) -> str:
-    try:
-        return datetime.fromtimestamp(ts, config.TZ).strftime("%H:%M")
-    except Exception:
-        return "—"
 
 
 def _log_date_time(ts) -> str:
@@ -58,30 +49,6 @@ def _updated_at(ts=None) -> str:
     return moment.strftime("%H:%M")
 
 
-def _num(n) -> str:
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        return str(n)
-    if n >= 10000:
-        return f"{n / 1000:.0f}k"
-    if n >= 1000:
-        return f"{n / 1000:.1f}k"
-    return str(n)
-
-
-def _today_errors(source=None) -> list:
-    cutoff = time.time() - DAY
-    return [e for e in tracking.get_errors(source=source, limit=200) if e.get("ts", 0) >= cutoff]
-
-
-def _snapshot_service(snapshot, service):
-    for svc in (snapshot or {}).get("services") or []:
-        if svc.get("service") == service:
-            return svc
-    return {}
-
-
 def _plural(n, one, few, many):
     n = abs(int(n))
     if n % 10 == 1 and n % 100 != 11:
@@ -96,92 +63,6 @@ def _repeat_suffix(count):
     return f" · повторилось {count} {_plural(count, 'раз', 'раза', 'раз')}" if count > 1 else ""
 
 
-def _system_summary(states):
-    """Aggregate saved monitoring by user impact, without naming providers."""
-    restricted = []
-    unknown = []
-    unavailable_functions = set()
-    fallback_unavailable = False
-    for state in states:
-        service = state.get("service")
-        if service in ("database", "telegram"):
-            continue
-        spec = provider_runtime.SPEC_BY_KEY.get(service)
-        status = state.get("status")
-        fallback = str(state.get("fallback") or "")
-        if fallback or status == provider_runtime.WARNING:
-            restricted.append(service)
-            continue
-        if status == provider_runtime.UNKNOWN:
-            unknown.append(service)
-            continue
-        if status == provider_runtime.DOWN:
-            if spec:
-                unavailable_functions.update(spec.sections)
-            fallback_unavailable = fallback_unavailable or state.get("error_type") == "fallback"
-
-    if unavailable_functions:
-        count = len(unavailable_functions)
-        noun = _plural(count, "функция недоступна", "функции недоступны", "функций недоступны")
-        line = f"{count} {noun}"
-    elif restricted:
-        count = len(restricted)
-        noun = _plural(count, "сервис ограничен", "сервиса ограничены", "сервисов ограничены")
-        line = f"{count} {noun}"
-        if any(
-            str(state.get("fallback") or "")
-            for state in states if state.get("service") in restricted
-        ):
-            line += " · резерв включён"
-    elif unknown:
-        count = len(unknown)
-        if count == 1:
-            line = "статус сервиса не получен"
-        else:
-            noun = _plural(count, "сервиса", "сервисов", "сервисов")
-            line = f"статус {count} {noun} не получен"
-    else:
-        line = "без ограничений"
-    return {
-        "line": line,
-        "restricted": len(restricted),
-        "unknown": len(unknown),
-        "unavailable_functions": len(unavailable_functions),
-        "fallback_unavailable": fallback_unavailable,
-    }
-
-
-def _database_health():
-    """Run one cheap PostgreSQL query; storage fallback is not a healthy DB."""
-    previous = provider_runtime.get_state("database")
-    started = time.monotonic()
-    try:
-        connection = store._db()
-        if connection is None:
-            raise ConnectionError("database connection is not configured")
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-        latency_ms = round((time.monotonic() - started) * 1000)
-    except Exception as error:
-        provider_runtime.record_result("database", False, error=type(error).__name__)
-        return {"line": "подключение потеряно", "kind": "lost", "latency_ms": None}
-
-    provider_runtime.record_result("database", True)
-    if latency_ms >= DB_SLOW_MS:
-        return {"line": "медленный ответ", "kind": "slow", "latency_ms": latency_ms}
-    was_lost = bool(
-        previous.get("last_check")
-        and previous.get("status") in (provider_runtime.DOWN, provider_runtime.WARNING)
-        and previous.get("last_error")
-    )
-    return {
-        "line": "подключение восстановлено" if was_lost else "подключение стабильно",
-        "kind": "restored" if was_lost else "stable",
-        "latency_ms": latency_ms,
-    }
-
-
 def _error_signature(entry):
     if str(entry.get("source") or "") == "llm":
         kind = str(entry.get("kind") or "")
@@ -194,43 +75,6 @@ def _error_signature(entry):
         str(entry.get("source") or ""), str(entry.get("kind") or ""),
         str(entry.get("file") or ""), str(entry.get("error") or entry.get("msg") or "")[:240],
     )
-
-
-def _admin_state():
-    try:
-        return store._load(config.ADMIN_STATE_KEY) or {}
-    except Exception:
-        return {}
-
-
-def _new_log_errors(cid):
-    cutoff = time.time() - DAY
-    errors = [
-        entry for entry in reversed(tracking.get_errors(limit=200))
-        if int(entry.get("ts") or 0) >= cutoff
-    ]
-    cursor = (_admin_state().get("log_cursors") or {}).get(str(cid)) or {}
-    cursor_id = str(cursor.get("id") or "")
-    if cursor_id:
-        index = next((i for i, entry in enumerate(errors) if str(entry.get("id") or "") == cursor_id), None)
-        unseen = errors[index + 1:] if index is not None else [
-            entry for entry in errors if int(entry.get("ts") or 0) > int(cursor.get("ts") or 0)
-        ]
-    else:
-        viewed_at = int(cursor.get("ts") or 0)
-        unseen = [entry for entry in errors if int(entry.get("ts") or 0) > viewed_at]
-
-    counts = {}
-    for entry in errors:
-        signature = _error_signature(entry)
-        counts[signature] = counts.get(signature, 0) + 1
-    critical = [
-        entry for entry in unseen
-        if str(entry.get("severity") or "").casefold() == "critical"
-        or "critical" in str(entry.get("kind") or "").casefold()
-        or counts.get(_error_signature(entry), 0) >= 3
-    ]
-    return {"entries": unseen, "count": len(unseen), "critical": len(critical)}
 
 
 def _mark_logs_viewed(cid, errors):
@@ -309,10 +153,7 @@ async def send_card_refresh_menu(bot, cid, q=None, *, status=""):
         [InlineKeyboardButton(label, callback_data=f"adm_refresh_card_{key}")]
         for key, label in _REFRESH_CARDS
     ]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("adm_home"))
     await _show(
         bot, cid, ui.card_refresh_menu(status), InlineKeyboardMarkup(rows), q,
     )
@@ -389,19 +230,6 @@ def _user_stats():
     }
 
 
-def _users_summary_line(stats):
-    """Compact user count for the admin home screen."""
-    stats = stats or {}
-    parts = [f"всего {int(stats.get('total') or 0)}"]
-    active = int(stats.get("active_today") or 0)
-    new = int(stats.get("new_today") or 0)
-    if active:
-        parts.append(f"активны сегодня {active}")
-    if new:
-        parts.append(f"новых сегодня {new}")
-    return " · ".join(parts)
-
-
 _USERS_LIST_LIMIT = 15
 
 
@@ -439,7 +267,7 @@ async def send_users(bot, cid, q=None):
     ]
     if _removable_users():
         rows.append([InlineKeyboardButton(delete_label("Удалить пользователя"), callback_data="adm_user_del")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("adm_home"))
     msg = ui.users(stats, users_list[:_USERS_LIST_LIMIT], len(users_list), _updated_at())
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
@@ -450,7 +278,7 @@ async def send_user_delete_list(bot, cid, q=None):
         [InlineKeyboardButton(f"{name} · {last_seen}", callback_data=f"adm_user_delconfirm_{u_cid}")]
         for u_cid, name, last_seen in removable
     ]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("adm_users"))
     msg = ui.user_delete_list(removable)
     await _show(bot, cid, msg, InlineKeyboardMarkup(rows), q)
 
@@ -477,7 +305,7 @@ async def do_user_delete(bot, cid, target_cid, q=None):
 async def send_invite(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("adm_users"),
     ])
     msg = ui.invite_prompt()
     await _show(bot, cid, msg, kb, q)
@@ -488,7 +316,7 @@ async def create_invite(bot, cid, q=None):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("adm_users"),
     ])
     msg = ui.invite_created(link)
     if q is not None and getattr(q, "message", None) is not None:
@@ -501,7 +329,7 @@ async def create_invite(bot, cid, q=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("create_invite: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid,
         text=msg.text,
@@ -515,30 +343,10 @@ async def send_welcome(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Изменить", callback_data="adm_welcome_edit"),
          InlineKeyboardButton("Предпросмотр", callback_data="adm_welcome_preview")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_users"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("adm_users"),
     ])
     msg = ui.welcome_admin()
     await _show(bot, cid, msg, kb, q)
-
-
-def _notification_stats(cid):
-    from settings import notif_on, NOTIF_TYPES
-    active_types = sum(1 for kind, _label in NOTIF_TYPES if notif_on(cid, kind))
-    snapshot = api_usage.snapshot()
-    telegram = _snapshot_service(snapshot, "telegram")
-    sent_today = int(telegram.get("day_messages") or 0)
-    failed_today = int(telegram.get("day_failures") or 0)
-    cutoff = time.time() - DAY
-    errors = [
-        e for e in tracking.get_errors(limit=200)
-        if e.get("ts", 0) >= cutoff
-        and (e.get("source") == "broadcast" or str(e.get("kind", "")).startswith("notif"))
-    ]
-    return {
-        "sent_today": sent_today,
-        "errors_today": max(failed_today, len(errors)),
-        "active_types": active_types,
-    }
 
 
 # ================= API И AI (единый экран, § docs/admin.md) =================
@@ -749,7 +557,7 @@ async def send_logs(bot, cid, q=None):
     buttons = []
     if combined_count:
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="adm_home"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    buttons.append(nav_row("adm_home"))
     kb = InlineKeyboardMarkup(buttons)
     now = int(time.time())
     msg = ui.logs(visible_rows, len(visible_rows), _updated_at(now), now)

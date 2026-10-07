@@ -15,6 +15,7 @@ import secrets
 from telegram.error import BadRequest, EndPointNotFound
 
 import config
+from ui.builder import MessageSpec
 
 _log = logging.getLogger(__name__)
 _FALLBACK_ERRORS = (BadRequest, EndPointNotFound)
@@ -63,7 +64,9 @@ async def show(bot, cid, message, *, reply_markup=None, query=None):
     Network timeouts deliberately propagate: sending a second message after an
     uncertain request could duplicate a useful result in the chat.
     """
-    markup = reply_markup if reply_markup is not None else message.reply_markup
+    if isinstance(message, str):
+        message = MessageSpec(message)
+    markup =reply_markup if reply_markup is not None else message.reply_markup
     rich_message = _rich_payload(message)
     can_send_rich = bool(rich_message and enabled(bot))
     target = getattr(query, "message", None) if query is not None else None
@@ -87,7 +90,7 @@ async def show(bot, cid, message, *, reply_markup=None, query=None):
         except Exception:
             # This mirrors the existing screen behavior: a stale/non-editable
             # callback message should not prevent the new screen from opening.
-            pass
+            _log.debug("show: ignored error", exc_info=True)
 
     if can_send_rich:
         try:

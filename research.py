@@ -79,7 +79,7 @@ def _wd_qid(name_clean: str) -> str:
             if items:
                 return items[0]["id"]
         except Exception:
-            pass
+            _log.debug("_wd_qid: ignored error", exc_info=True)
     return ""
 
 

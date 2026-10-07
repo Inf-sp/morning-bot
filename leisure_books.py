@@ -28,6 +28,8 @@ import tracking
 from util import _MONTHS
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
+import rich_delivery
+from ui.navigation import nav_row
 
 
 _log = logging.getLogger(__name__)
@@ -199,7 +201,6 @@ def content_recommend(kind, cid):
 
 
 def _book_cover(title, title_en=""):
-    import requests
     timeout = 4.0
     remaining = tracking.remaining_action_seconds()
     if remaining is not None:
@@ -256,8 +257,7 @@ def _book_kb(i):
         [InlineKeyboardButton("✨ Другая книга", callback_data="book_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Мои книги", callback_data=f"book_love_{i}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("m_leisure"),
     ])
 
 
@@ -681,8 +681,7 @@ async def handle_manual_book_add_callback(bot, cid, q, data):
 def _favorite_book_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("lz_lib"),
     ])
 
 
@@ -705,7 +704,7 @@ async def send_favorite_books_added_card(bot, cid, items, *, already=False):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_books_added_card: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, disable_web_page_preview=True,
@@ -740,7 +739,7 @@ async def _favorite_book_records(cid):
                         asyncio.to_thread(google_books.enrich_book, metadata), timeout=5.0,
                     )
                 except Exception:
-                    pass
+                    _log.debug("enrich: ignored error", exc_info=True)
         metadata = _with_book_url(dict(metadata or {}))
         return {
             "id": str(record.get("id") or ""),
@@ -832,16 +831,9 @@ async def send_favorite_books(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="book_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("lz_lib"))
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None):
@@ -865,8 +857,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
         "❌ Удалить", callback_data=f"bfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
     rows.append([InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("book_favorites"))
     kb = InlineKeyboardMarkup(rows)
     cover = str(book.get("cover_url") or "").strip()
     if q is not None and cover:
@@ -879,7 +870,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
             )
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_book_genre: ignored error", exc_info=True)
     if cover:
         try:
             await bot.send_photo(
@@ -888,7 +879,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
             )
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_book_genre: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, disable_web_page_preview=True,
@@ -896,13 +887,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
 
 
 async def _deliver_book_view(bot, cid, msg, markup, q=None):
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=markup)
+    await rich_delivery.show(bot, cid, msg, reply_markup=markup, query=q)
 
 
 def _favorite_book_from_view(cid, token, short_id):
@@ -922,8 +907,7 @@ async def send_favorite_book_card(bot, cid, token, short_id, genre_index, page):
     msg = _book_text(book)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"bfd:{token}:{short_id}:{genre_index}:{page}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"bfg:{token}:{genre_index}:{page}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"bfg:{token}:{genre_index}:{page}"),
     ])
     cover = str(book.get("cover_url") or "").strip()
     if cover:
@@ -932,7 +916,7 @@ async def send_favorite_book_card(bot, cid, token, short_id, genre_index, page):
                                  caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_book_card: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=kb, disable_web_page_preview=True)
 
@@ -1177,10 +1161,7 @@ def _book_premieres_view(items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"book_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("lz_prem"))
     return msg, InlineKeyboardMarkup(rows), page
 
 
@@ -1198,7 +1179,7 @@ async def send_book_premieres(bot, cid, *, status=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_book_premieres: ignored error", exc_info=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
                              disable_web_page_preview=True)
@@ -1226,8 +1207,7 @@ def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -1239,7 +1219,7 @@ async def send_book_genre_menu(bot, cid, q=None):
             await q.message.edit_reply_markup(reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_book_genre_menu: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
 
 
@@ -1254,21 +1234,14 @@ def _book_preferences_kb(cid):
         *[[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                 callback_data=f"bookpref_rating_{value}")]
           for label, value in _PREF_RATING],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="book_favorites"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("book_favorites"),
     ])
 
 
 async def send_book_preferences(bot, cid, q=None):
     text = "📚 Книги\n\nВыбери новизну и минимальную оценку читателей."
     kb = _book_preferences_kb(cid)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def toggle_book_preference(bot, cid, data, q=None):
@@ -1319,7 +1292,7 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
             return it
         except Exception:
-            pass
+            _log.debug("_send_book_card: ignored error", exc_info=True)
     if status is not None:
         await status.replace(
             msg.text,
@@ -1514,7 +1487,7 @@ async def _inclusive_book_pick(cid, extra_skip=()):
         try:
             item = await asyncio.to_thread(google_books.enrich_book, item)
         except Exception:
-            pass
+            _log.debug("_inclusive_book_pick: ignored error", exc_info=True)
         item["lgbt"] = True
         return item
     return None

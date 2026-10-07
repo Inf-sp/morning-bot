@@ -12,6 +12,7 @@ import learning_dictionary as ld
 import leisure_collection
 from dictionary_model import present_conjugation, _dutch_present_stem
 from dictionary_repository import DictionaryRepository
+from fakes import RecordingBot
 
 
 # --- 1. SRS-прогресс при схлопывании дублей -------------------------------
@@ -146,10 +147,6 @@ def test_unstressed_eren_conjugation():
 def test_rejected_queued_add_is_dropped_after_max_attempts(monkeypatch):
     cid, sent, calls = "queued-reject-limit", [], []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def rejected(term, *_args, **_kwargs):
         calls.append(term)
         return None
@@ -159,13 +156,13 @@ def test_rejected_queued_add_is_dropped_after_max_attempts(monkeypatch):
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", rejected)
 
     for _ in range(dictionary_import._DICT_PENDING_MAX_REJECTIONS - 1):
-        asyncio.run(dictionary_import.process_queued_dictionary_adds(Bot(), [cid]))
+        asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
     queue = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
     assert queue[0]["attempts"] == dictionary_import._DICT_PENDING_MAX_REJECTIONS - 1
     assert sent == []
 
-    asyncio.run(dictionary_import.process_queued_dictionary_adds(Bot(), [cid]))
-    asyncio.run(dictionary_import.process_queued_dictionary_adds(Bot(), [cid]))
+    asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
+    asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
 
     assert len(calls) == dictionary_import._DICT_PENDING_MAX_REJECTIONS
     assert "dictionary_pending_analysis" not in dictionary_import.store.get_profile(cid)

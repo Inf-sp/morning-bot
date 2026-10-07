@@ -21,29 +21,13 @@ import research
 import secure
 import util
 from leisure_collection import item_text
-from util import esc, _WEEKDAY_SHORT, _MONTHS
+from util import _WEEKDAY_SHORT, _MONTHS
 import verify
 from ui import myday as myday_ui
 from ui import weather as weather_ui
 
 TZ = config.TZ
 
-def _strip_quotes(s):
-    """Убирает внешние кавычки (« » \" \" \" ') с краёв, чтобы не задваивать обёртку."""
-    s = (s or "").strip()
-    pairs = ('«»', '""', '""', "''", '„“', '‚‘')
-    changed = True
-    while changed and len(s) >= 2:
-        changed = False
-        for p in pairs:
-            if s[0] == p[0] and s[-1] == p[1]:
-                s = s[1:-1].strip()
-                changed = True
-        # одинаковые прямые кавычки с обеих сторон
-        if len(s) >= 2 and s[0] in '"\'' and s[-1] == s[0]:
-            s = s[1:-1].strip()
-            changed = True
-    return s
 
 # --- Недельные AI-пулы (факты о городе, база знаний) ---
 # Общий движок: раз в неделю AI генерирует пачку 14-21 элемент, каждый день выдаётся
@@ -575,50 +559,6 @@ def daily_lifehack(cid, rain=False, hot=False, is_weekend=False):
     return _lifehack_fallback(cid, rain=rain, hot=hot, is_weekend=is_weekend)
 
 
-def kitchen_lifehacks(cid, n=3):
-    """N кухонных лайфхаков из того же недельного пула, что и «Мой день» (категория
-    «кухня») — без отдельного AI-вызова на каждый заход в «Готовку». Помечает выданные
-    как показанные, чтобы при следующем входе на этой неделе не повторяться."""
-    cid = str(cid)
-    _pool_ensure_fresh(config.LIFEHACK_POOL_KEY, cid, "default", lambda: _generate_lifehack_pool(cid))
-    bucket = _pool_get(config.LIFEHACK_POOL_KEY, cid, "default")
-    items = bucket.get("items") or []
-    unshown_kitchen = [
-        i for i in items
-        if i.get("category") == "кухня" and not i.get("shown_at") and _lifehack_useful(i.get("text"))
-    ]
-    if len(unshown_kitchen) < n:
-        # даже показанные ранее кухонные лучше, чем пустой экран - лучше повторить, чем показать ничего
-        any_kitchen = [
-            i for i in items
-            if i.get("category") == "кухня" and _lifehack_useful(i.get("text"))
-        ]
-        unshown_kitchen = any_kitchen if len(any_kitchen) >= n else unshown_kitchen
-    chosen = unshown_kitchen[:n]
-    if chosen:
-        ids = {c["id"] for c in chosen}
-
-        def mut(data):
-            b = data.setdefault(cid, {}).setdefault("default", {})
-            for it in b.get("items") or []:
-                if it.get("id") in ids and not it.get("shown_at"):
-                    it["shown_at"] = int(datetime.now(TZ).timestamp())
-            return data, True
-
-        store.mutate_kv(config.LIFEHACK_POOL_KEY, mut)
-        return [c["text"] for c in chosen]
-    fallback = []
-    for _ in range(n):
-        _label, text = _lifehack_fallback(cid)
-        if text and text not in fallback:
-            fallback.append(text)
-    return fallback
-
-
-
-_QUOTE_RESET_AFTER = 15  # сбрасываем anti-repeat после N авторов
-
-
 def _item_text(item):
     """Текст элемента списка: элемент может быть строкой или {"id":..., "value": строка}
     (после захода в удаление, см. store.ensure_list_ids_via)."""
@@ -767,156 +707,9 @@ def _motivating_book_quote(cid, shown_ids=None):
     }, list(shown)
 
 
-def _book_quote_fallback(cid=None):
-    """Берёт цитату из любимой книги пользователя; если нет совпадений —
-    случайная цитата из кураторской базы. Учитывает показанных авторов."""
-    seen_authors = store.get_list(config.QUOTE_AUTHORS_KEY, cid) if cid else []
-    books = [
-        _item_text(b) for b in store.get_list(config.FAVORITE_BOOKS_KEY, cid)
-        if _item_text(b)
-    ] if cid else []
-
-    # Любимые книги важнее, но только пока дают нового автора. Иначе одна
-    # любимая книга с единственной цитатой будет повторяться каждый день.
-    matches = []
-    for title in books:
-        entry = _BOOK_QUOTES.get(title.casefold())
-        if entry:
-            quote, author = entry
-            if author not in seen_authors:
-                matches.append({"quote": quote, "src": author})
-    if matches:
-        return random.choice(matches)
-
-    # Любимые книги уже исчерпаны: лучше новая качественная цитата из базы,
-    # чем немедленный повтор знакомой.
-    all_quotes = list(_BOOK_QUOTES.values())
-    fresh = [(q, a) for q, a in all_quotes if a not in seen_authors]
-    pool = fresh or all_quotes
-    quote, author = random.choice(pool)
-    return {"quote": quote, "src": author}
-
-
-def _build_quote_context(cid):
-    """Собирает контекст пользователя для персонализации цитаты."""
-    movies = store.get_list(config.FAVORITE_MOVIES_KEY, cid)[:6]
-    books = store.get_list(config.FAVORITE_BOOKS_KEY, cid)[:6]
-    artists = store.get_list(config.FAVORITE_ARTISTS_KEY, cid)[:6]
-    seen_authors = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
-    if len(seen_authors) >= _QUOTE_RESET_AFTER:
-        store.set_list(config.QUOTE_AUTHORS_KEY, cid, [])
-        seen_authors = []
-    return {
-        "movies": [_item_text(m) for m in movies if _item_text(m)],
-        "books": [_item_text(b) for b in books if _item_text(b)],
-        "artists": [_item_text(a) for a in artists if _item_text(a)],
-        "seen_authors": seen_authors,
-    }
-
-
-def _is_favorite_artist(value, artists):
-    """Only attribute a music quote to an artist the user has actually saved."""
-    normalised = " ".join(str(value or "").casefold().split())
-    return bool(normalised) and normalised in {
-        " ".join(str(artist or "").casefold().split()) for artist in artists
-    }
-
-
-def _fetch_quote(cid=None):
-    """Цитата дня; любимые исполнители получают приоритет и точную атрибуцию."""
-    today = datetime.now(TZ).strftime("%Y-%m-%d")
-    ctx = _build_quote_context(cid) if cid else {
-        "movies": [], "books": [], "artists": [], "focus": "", "seen_authors": []
-    }
-    if cid:
-        cached = store.get_profile(cid).get("myday_quote_cache") or {}
-        if cached.get("date") == today and isinstance(cached.get("data"), dict):
-            cached_quote = cached["data"]
-            if not ctx["artists"] or _is_favorite_artist(cached_quote.get("src"), ctx["artists"]):
-                return cached_quote
-
-    parts = []
-    if ctx["movies"]:
-        parts.append(f"Любимые фильмы/сериалы: {', '.join(ctx['movies'])}")
-    if ctx["books"]:
-        parts.append(f"Любимые книги: {', '.join(ctx['books'])}")
-    if ctx["artists"]:
-        parts.append(f"Любимые исполнители: {', '.join(ctx['artists'])}")
-
-    context_block = ("\n".join(parts) + "\n\n") if parts else ""
-
-    avoid_block = ""
-    if ctx["seen_authors"]:
-        avoid_block = f"Этих авторов уже показывали — не повторяй: {', '.join(ctx['seen_authors'])}.\n\n"
-
-    if ctx["artists"]:
-        author_hint = (
-            "Выбери только одного исполнителя из списка «Любимые исполнители». "
-            "Это должна быть его реальная, хорошо известная цитата; не придумывай и не приписывай "
-            "слова другому человеку. В поле src скопируй имя исполнителя из списка без изменений."
-        )
-    elif parts:
-        author_hint = (
-            "Выбери автора, чьё мировоззрение или творчество перекликается с интересами человека выше. "
-            "Это может быть режиссёр, писатель, музыкант, философ, предприниматель или учёный — "
-            "главное, чтобы цитата резонировала с его вкусами или фокусом дня."
-        )
-    else:
-        author_hint = (
-            "Выбери мыслителя или предпринимателя (Сенека, Марк Аврелий, Навал Равикант, "
-            "Монтень, Шопенгауэр, Эпиктет, Чарли Мунгер — без банальностей)."
-        )
-
-    prompt = (
-        f"{context_block}"
-        f"{avoid_block}"
-        f"Дай одну нестандартную цитату (1-2 предложения). {author_hint} "
-        "Цитата должна быть реальной — не выдумывай. "
-        'Строго JSON: {"quote": "текст на русском", "src": "Автор"}. '
-        "Только кириллица, никаких латинских букв в тексте цитаты."
-    )
-
-    try:
-        d = ai.llm_json(prompt, 200, tier="cheap", module="myday_utility")
-    except Exception as e:
-        _log.warning("myday: quote AI failed, using book fallback: %s", e)
-        d = {}
-    if not isinstance(d, dict):
-        d = {}
-
-    # При любимых артистах не подменяем их автора книгой или случайным мыслителем:
-    # лучше не показать строку, чем выдумать музыкальную атрибуцию.
-    raw_ai_quote = _strip_quotes(d.get("quote", ""))
-    if ctx["artists"] and (
-        not raw_ai_quote
-        or not _quote_valid(raw_ai_quote)
-        or not _is_favorite_artist(d.get("src"), ctx["artists"])
-    ):
-        _log.warning("myday: no valid quote from a favorite artist")
-        d = {}
-    elif not raw_ai_quote or not _quote_valid(raw_ai_quote):
-        d = _book_quote_fallback(cid)
-
-    src = (d.get("src") or "").strip()
-    if src and cid:
-        seen = store.get_list(config.QUOTE_AUTHORS_KEY, cid)
-        if src not in seen:
-            store.set_list(config.QUOTE_AUTHORS_KEY, cid, seen + [src])
-    if cid:
-        quote_cache = {"date": today, "data": d}
-        store.mutate_profile(cid, lambda profile: (
-            {**profile, "myday_quote_cache": quote_cache}, None,
-        ))
-
-    return d
-
 def _cap(s):
     s = (s or "").strip()
     return s[:1].upper() + s[1:] if s else s
-
-def _quote_valid(q):
-    """Пропускает цитату если LLM вставил латинское слово в кириллический текст."""
-    return not re.search(r'[а-яА-ЯЁё][a-zA-Z]|[a-zA-Z][а-яА-ЯЁё]', q or "")
 
 
 _QUOTE_MAX_CHARS = 220  # ограничивает цитату 2-3 строками в Telegram-карточке
@@ -1208,7 +1001,7 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
             try:
                 await bot.send_chat_action(chat_id=cid, action="typing")
             except Exception:
-                pass
+                _log.debug("send_plany: ignored error", exc_info=True)
         # Сбой подготовки образа не должен ронять всю сводку дня.
         await _prepare_outfit(bot, cid)
         try:

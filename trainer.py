@@ -3,6 +3,7 @@
 Соединяет чистые engine/exercises/grading, состояние сессии, SRS, словарь и UI.
 """
 
+import logging
 import asyncio
 import json
 import random
@@ -30,7 +31,10 @@ from trainer_engine import (
     EXERCISE_RECALL,
 )
 from ui import learning as learning_ui
-from ui.navigation import back_menu_keyboard
+from ui.navigation import back_menu_keyboard, nav_row
+import rich_delivery
+
+_log = logging.getLogger(__name__)
 
 
 def _learning():
@@ -171,8 +175,7 @@ async def start(bot, cid, language, mode=None):
     if not repository.training_entries(lang_code):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📖 Открыть словарь", callback_data=f"a_dictlang_{lang_code}_from_menu")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
-             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+            nav_row("m_learn"),
         ])
         await bot.send_message(
             chat_id=cid,
@@ -329,13 +332,7 @@ async def confirm_remove_from_training(bot, cid, task_id="", q=None):
         [("❌ Удалить", f"ex_remove_confirm_{task_id}")],
         [("Отмена", f"ex_remove_cancel_{task_id}")],
     ])
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
+    await rich_delivery.show(bot, cid, text, reply_markup=markup, query=q)
 
 
 async def cancel_remove_from_training(bot, cid, task_id="", q=None):
@@ -349,17 +346,7 @@ async def cancel_remove_from_training(bot, cid, task_id="", q=None):
     if message is None:
         return
     markup = _result_keyboard(data)
-    if q is not None:
-        try:
-            await q.message.edit_text(
-                message.text, entities=message.entities, reply_markup=markup,
-            )
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid, text=message.text, entities=message.entities, reply_markup=markup,
-    )
+    await rich_delivery.show(bot, cid, message, reply_markup=markup, query=q)
 
 
 async def remove_from_training(bot, cid, task_id="", q=None):
@@ -381,13 +368,7 @@ async def remove_from_training(bot, cid, task_id="", q=None):
     data["_removed"] = True
     text = f"✅ Удалено из обучения\n\n{_trainer_display_term(data)}"
     markup = _result_keyboard(data, allow_remove=False)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=markup)
+    await rich_delivery.show(bot, cid, text, reply_markup=markup, query=q)
 
 
 def _reinsert_failed(state, data):

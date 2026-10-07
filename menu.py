@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 
 import config
 import category_news
 import store
 from ui import menu as menu_ui
+
+_log = logging.getLogger(__name__)
 
 REPLY_KB_REMOVED_FLAG = "reply_kb_removed_v7"  # разово снимаем нижнюю Reply-клавиатуру
                                                 # «Ассистент» у профилей, где она уже была
@@ -73,7 +76,7 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
                 msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
             return
         except Exception:
-            pass
+            _log.debug("_deliver: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 

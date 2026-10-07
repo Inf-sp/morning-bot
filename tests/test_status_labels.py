@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import pytest
 
 import bot_callbacks
+from fakes import RecordingBot
 
 
 def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
@@ -129,10 +130,6 @@ def test_learning_notification_opens_learning_without_replacing_words(monkeypatc
     sent = []
     markup = object()
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.trainer, "cancel", lambda _cid: None)
     monkeypatch.setattr(
@@ -149,7 +146,7 @@ def test_learning_notification_opens_learning_without_replacing_words(monkeypatc
         callback_query = Query()
 
     class Context:
-        bot = Bot()
+        bot = RecordingBot(sent)
 
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
@@ -217,10 +214,6 @@ def test_long_inline_actions_have_three_distinct_progress_stages():
 def test_removed_travel_callbacks_open_main_menu(monkeypatch):
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_callbacks.menu, "main_menu_screen", lambda _cid: ("menu", [], "kb"))
 
@@ -229,7 +222,7 @@ def test_removed_travel_callbacks_open_main_menu(monkeypatch):
             "data": data, "message": type("Message", (), {"chat_id": "42", "message_id": 7})(),
         })()
         update = type("Update", (), {"callback_query": query})()
-        asyncio.run(bot_callbacks.handle(update, type("Context", (), {"bot": Bot()})(), None))
+        asyncio.run(bot_callbacks.handle(update, type("Context", (), {"bot": RecordingBot(sent)})(), None))
 
     assert [(m["text"], m["reply_markup"]) for m in sent] == [("menu", "kb")] * 4
     assert bot_callbacks._status_topic("a_trav_go") is None

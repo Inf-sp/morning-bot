@@ -92,7 +92,7 @@ class PollingLease:
                 try:
                     connection.close()
                 except Exception:
-                    pass
+                    _log.debug("_try_postgres: ignored error", exc_info=True)
             _log.warning("Polling lease DB check failed: %s", error)
             return False
 

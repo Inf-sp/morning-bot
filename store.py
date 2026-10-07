@@ -9,7 +9,6 @@ import runtime_state
 
 _HERE = Path(__file__).parent
 
-_db = storage_driver.db
 _load = storage_driver.load
 _save = storage_driver.save
 mutate_kv = storage_driver.mutate
@@ -105,25 +104,6 @@ def mutate_profile(chat_id, mutator):
     finally:
         _forget_profile(key)
     return result
-
-
-def get_persisted_transient_message_id(chat_id):
-    """Последний служебный экран пользователя, в том числе после рестарта."""
-    value = _load(config.TRANSIENT_MESSAGES_KEY).get(str(chat_id))
-    try:
-        return int(value) if value else None
-    except (TypeError, ValueError):
-        return None
-
-
-def set_persisted_transient_message_id(chat_id, message_id):
-    key = str(chat_id)
-
-    def change(data):
-        data[key] = int(message_id)
-        return data, None
-
-    mutate_kv(config.TRANSIENT_MESSAGES_KEY, change)
 
 
 def clear_persisted_transient_message_id(chat_id, expected_message_id=None):
@@ -249,8 +229,6 @@ def set_level(chat_id, language, level):
 
     mutate_kv(config.LEVELS_FILE, change)
 
-def has_level(chat_id, language):
-    return language in _load(config.LEVELS_FILE).get(str(chat_id), {})
 
 def ensure_level(chat_id, language, level="simple"):
     if level == "medium":
@@ -411,13 +389,6 @@ def remove_wardrobe_items(cid, item_ids) -> int:
 
     mutate_wardrobe(cid, _mut)
     return removed["n"]
-
-
-def reset_wardrobe(cid):
-    """Полная замена гардероба пустым (используется при mode=replace в анкете)."""
-    save_wardrobe(_empty_wardrobe(), cid)
-    clear_wardrobe_daylook(cid)
-    clear_wardrobe_purchase_recommendation(cid)
 
 
 def get_valid_wardrobe_daylook(cid):

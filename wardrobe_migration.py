@@ -36,10 +36,6 @@ def needs_migration(item):
     return version < ATTRIBUTE_SCHEMA_VERSION
 
 
-def migration_count(wardrobe):
-    return sum(1 for _zone, _subcategory, item in flat_items(wardrobe) if needs_migration(item))
-
-
 def _ensure_defaults(item):
     for key, value in _ATTR_DEFAULTS.items():
         item.setdefault(key, list(value) if isinstance(value, list) else value)

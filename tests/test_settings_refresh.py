@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import settings
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -16,11 +17,7 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Алкмар"})
     monkeypatch.setattr(settings.store, "learning_is_enabled", lambda _cid: False)
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
-    asyncio.run(settings.send_home(Bot(), "42"))
+    asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
     labels = _labels(sent[0]["reply_markup"])
     assert "🔄 Обновить" not in labels

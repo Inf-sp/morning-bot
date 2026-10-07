@@ -107,7 +107,7 @@ def test_stream_route_falls_back_before_first_delta(monkeypatch):
 
     monkeypatch.setattr(ai, "_chat_stream", stream)
 
-    assert ai._chat_chain_stream_impl([], emit=deltas.append) == "резерв ответил"
+    assert ai._chat_chain_impl([], emit=deltas.append) == "резерв ответил"
     assert calls == [ai.GROQ_STANDARD, "cf"]
     assert deltas == ["резерв ответил"]
 
@@ -131,7 +131,7 @@ def test_stream_route_does_not_mix_providers_after_visible_delta(monkeypatch):
     monkeypatch.setattr(ai, "_chat_stream", stream)
 
     with pytest.raises(ai.StreamOutputInterrupted):
-        ai._chat_chain_stream_impl([], emit=lambda _delta: None)
+        ai._chat_chain_impl([], emit=lambda _delta: None)
     assert calls == [ai.GROQ_STANDARD]
 
 

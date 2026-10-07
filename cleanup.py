@@ -14,6 +14,7 @@ store.add_wardrobe_items/remove_wardrobe_items):
            рекомендации» в скрытый сигнал «мне нравится»),
            fridge/diary (холодильник/История самочувствия).
 """
+import logging
 import secrets
 import time
 
@@ -25,6 +26,10 @@ from fridge_model import _CAT_BTN_LABEL, _CAT_ORDER, _fridge_migrate
 from wardrobe_model import ZONE_SUBCATS
 from util import esc
 from ui.constants import delete_label, ui_label
+from ui.navigation import nav_row
+import rich_delivery
+
+_log = logging.getLogger(__name__)
 
 CLEAN_PAGE = 8
 
@@ -44,8 +49,6 @@ _PERSONAL_COLLECTION_BACK = {
 }
 _HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
                       "artists": config.MUSIC_DISLIKE_KEY}
-_SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_KEY,
-                    "artists": config.MUSIC_SEEN_KEY}
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
                 add_button=None, menu_button=None,
@@ -129,15 +132,6 @@ _COLLECTION_ALIASES = {
     "wl": "cinema_favorites",
     "fridge": "fridge_items",
 }
-
-
-def _is_view_ctx(ctx):
-    return (ctx in COLLECTIONS or ctx in _COLLECTION_ALIASES
-            or ctx.startswith("lv_") or ctx.startswith("lvls_")
-            or ctx.startswith("hid_")
-            or ctx.startswith("d_") or ctx == "wl"
-            or ctx.startswith("fridge_cat_")
-            or ctx in ("fridge", "diary"))
 
 
 def _canonical_ctx(ctx):
@@ -429,7 +423,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
         page_ids = {i for i, _ in chunk}
         page_label = "✅ Снять выбор на странице" if page_ids <= sel else "Выбрать все на странице"
         rows.append([InlineKeyboardButton(page_label, callback_data=f"cla_{ctx}_{page}")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(back))
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -437,7 +431,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
             await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_cleanup: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -567,15 +561,6 @@ def _view_delete(ctx, cid, ids):
     return removed
 
 
-def _hidden_key_for_collection(ctx):
-    canonical = _canonical_ctx(ctx)
-    return {
-        "cinema_favorites": config.MOVIE_BLACKLIST_KEY,
-        "books_favorites": config.BOOK_BLACKLIST_KEY,
-        "music_favorite_artists": config.MUSIC_DISLIKE_KEY,
-    }.get(canonical)
-
-
 def _stoplist_kind_for_collection(ctx):
     canonical = _canonical_ctx(ctx)
     if canonical.startswith("cinema_"):
@@ -585,18 +570,6 @@ def _stoplist_kind_for_collection(ctx):
     if canonical.startswith("music_"):
         return "artist"
     return None
-
-
-def _add_unique_raw(key, cid, value):
-    target = str(value.get("name", value.get("value", value)) if isinstance(value, dict) else value).strip().lower()
-    if not target:
-        return False
-    for item in store.get_list(key, cid):
-        cur = str(item.get("name", item.get("value", item)) if isinstance(item, dict) else item).strip().lower()
-        if cur == target:
-            return False
-    store.add_to_list(key, cid, value)
-    return True
 
 
 def _selected_values(ctx, cid, ids):
@@ -755,8 +728,7 @@ async def _render_view(bot, cid, view_id, q=None):
             "Готово" if view.get("editing") else "✏️ Изменить",
             callback_data=f"cledit:{view_id}:{0 if view.get('editing') else 1}",
         )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=view["back"]),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row(view["back"]))
     kb = InlineKeyboardMarkup(rows)
     text = "\n".join(lines)
     if q is not None:
@@ -764,7 +736,7 @@ async def _render_view(bot, cid, view_id, q=None):
             await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("_render_view: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -779,26 +751,14 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     text = f"{label} ({n})? Это действие нельзя отменить."
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{label} ({n})", callback_data=f"clactc:{view_id}:{action_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"clcancel:{view_id}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"clcancel:{view_id}"),
     ])
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def _send_view_stale_message(bot, cid, q=None):
     text = "Список уже изменился. Откройте его заново."
-    if q is not None:
-        try:
-            await q.message.edit_text(text)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text)
+    await rich_delivery.show(bot, cid, text, query=q)
 
 
 async def handle_view_callback(bot, cid, data, q=None):
@@ -905,19 +865,6 @@ async def handle_view_callback(bot, cid, data, q=None):
         view["confirming"] = False
         await _render_view(bot, cid, view_id, q=q)
         return
-
-
-async def open_cleanup(bot, cid, ctx, back=None):
-    """Свежий вход в режим чистки — сбрасываем выбор.
-
-    Для view-контекстов делегирует на новую инфраструктуру (стабильный id +
-    revision + короткий callback_data); для остальных —
-    прежний позиционный формат без изменений."""
-    if _is_view_ctx(ctx):
-        await open_view(bot, cid, ctx, back=back)
-        return
-    store.list_sel[f"{cid}:{ctx}"] = set()
-    await send_cleanup(bot, cid, ctx, 0)
 
 
 async def handle_cleanup(bot, cid, data, q=None):

@@ -1,14 +1,22 @@
 """Cinema premieres discovery and the daily movie rebus."""
 
-from typing import TYPE_CHECKING
+import logging
+import asyncio
+from datetime import datetime, timedelta
 
-if TYPE_CHECKING:
-    from leisure_movies import (
-        InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto,
-        _CINEMA_REBUSES, _MONTHS, _MOVIE_PREMIERES_CACHE_VERSION,
-        asyncio, config, datetime, leisure_ui, monthly_rebuses,
-        movie_title_for_lookup, store, timedelta, tmdb,
-    )
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+
+import config
+import leisure_movies
+import monthly_rebuses
+import store
+import tmdb
+from leisure_collection import movie_title_for_lookup
+from ui import leisure as leisure_ui
+from util import _MONTHS
+from ui.navigation import nav_row
+
+_log = logging.getLogger(__name__)
 
 
 def _movie_country_label(name, cc=""):
@@ -43,7 +51,7 @@ def _now_playing_week_key():
 
 def _daily_rebus(day):
     """Один ребус и связанный факт на календарную дату, без случайных повторов в течение дня."""
-    return monthly_rebuses.cached_for_day("movies", day, _CINEMA_REBUSES)
+    return monthly_rebuses.cached_for_day("movies", day, leisure_movies._CINEMA_REBUSES)
 
 
 def daily_movie_rebus(day):
@@ -60,7 +68,7 @@ async def warm_movie_premieres_cache(cid):
 def _movie_premieres_cache_get(country_code, today, *, allow_stale=False):
     data = store._load(config.MOVIE_PREMIERES_CACHE_KEY) or {}
     entry = data.get(str(country_code or "").upper()) if isinstance(data, dict) else None
-    if not isinstance(entry, dict) or entry.get("version") != _MOVIE_PREMIERES_CACHE_VERSION:
+    if not isinstance(entry, dict) or entry.get("version") != leisure_movies._MOVIE_PREMIERES_CACHE_VERSION:
         return None
     if not allow_stale and entry.get("week") != _now_playing_week_key():
         return None
@@ -80,7 +88,7 @@ def _movie_premieres_cache_set(country_code, expires, items):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
         data[country_code] = {
-            "version": _MOVIE_PREMIERES_CACHE_VERSION,
+            "version": leisure_movies._MOVIE_PREMIERES_CACHE_VERSION,
             "week": _now_playing_week_key(),
             "expires": expires.isoformat(),
             "items": [dict(item) for item in items if isinstance(item, dict)],
@@ -195,10 +203,7 @@ def _movie_premieres_view(cid, items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"movie_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("lz_prem"))
     return msg, InlineKeyboardMarkup(rows), page
 
 
@@ -227,7 +232,7 @@ async def send_movie_premieres(bot, cid, *, status=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_movie_premieres: ignored error", exc_info=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -318,10 +323,7 @@ def _series_premieres_view(items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"series_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("lz_prem"))
     return msg, InlineKeyboardMarkup(rows), page
 
 
@@ -336,7 +338,7 @@ async def send_series_premieres(bot, cid, *, status=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_series_premieres: ignored error", exc_info=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
         return
@@ -379,8 +381,7 @@ def _combined_premieres_view(items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"combined_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("lz_prem"))
     return msg, InlineKeyboardMarkup(rows), page
 
 
@@ -395,7 +396,7 @@ async def send_combined_premieres(bot, cid, *, status=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_combined_premieres: ignored error", exc_info=True)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
     else:
@@ -415,7 +416,7 @@ async def show_combined_premiere_page(cid, q, page):
         )
         return
     except Exception:
-        pass
+        _log.debug("show_combined_premiere_page: ignored error", exc_info=True)
     try:
         await q.edit_message_caption(
             caption=msg.text, caption_entities=msg.entities, reply_markup=kb,

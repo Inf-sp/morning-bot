@@ -11,6 +11,7 @@ Endpoint'ы:
 - detail         — детали (runtime/страна/студия для movie; сезоны/статус/… для tv)
 - discover       — подбор по жанру/настроению/фильтрам
 """
+import logging
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
@@ -19,6 +20,8 @@ import requests
 import config
 import api_usage
 import util
+
+_log = logging.getLogger(__name__)
 
 _BASE = "https://api.themoviedb.org/3"
 _IMG = "https://image.tmdb.org/t/p/w500"
@@ -35,12 +38,6 @@ GENRES = {
 }
 
 # Имя жанра → genre_id для discover (movie-центрично; tv-эквиваленты подставляются в discover).
-GENRE_NAME_TO_ID = {
-    "боевик": 28, "приключения": 12, "анимация": 16, "комедия": 35, "криминал": 80,
-    "документальный": 99, "драма": 18, "семейный": 10751, "фэнтези": 14, "история": 36,
-    "ужасы": 27, "музыка": 10402, "детектив": 9648, "мелодрама": 10749, "романтика": 10749,
-    "фантастика": 878, "триллер": 53, "военный": 10752, "вестерн": 37, "sci-fi": 878,
-}
 
 _BAD = ("making of", "behind the scenes", "bonus", "featurette",
         "the making", "deleted scenes", "trailer", "teaser")
@@ -74,7 +71,7 @@ def _get(path, params, timeout=12, language=None):
                 return None
             timeout = min(float(timeout), remaining)
     except Exception:
-        pass
+        _log.debug("_get: ignored error", exc_info=True)
     request_params = {"api_key": config.TMDB_API_KEY, "language": language or _LANG}
     request_params.update(params or {})
     try:

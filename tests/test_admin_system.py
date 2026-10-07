@@ -12,40 +12,7 @@ import settings
 import tracking
 import verify
 from ui import admin as admin_ui
-
-
-def test_error_time_uses_configured_timezone_not_server_timezone():
-    # 2026-07-19 12:34 UTC is 14:34 in Europe/Amsterdam.
-    assert admin._hhmm(1_784_464_440) == "14:34"
-
-
-def test_system_ui_has_no_last_raw_error_block():
-    message = admin_ui.api_ai(["🟢 Groq · Обучение · 3 запроса сегодня"], "21:44")
-
-    assert message.text.startswith("🛠 Система\n\n🟢 Groq · Обучение · 3 запроса сегодня")
-    assert "Автоматический резерв" not in message.text
-    assert "95%" not in message.text
-    assert "Последняя ошибка" not in message.text
-    assert message.text.endswith("Обновлено в 21:44")
-
-
-def test_system_ui_separates_ai_and_data_sections_without_heading_emojis():
-    message = admin_ui.api_ai(
-        ["AI", "🟢 Groq · Основной · 1 000/1 000 осталось",
-         "Данные", "🟢 TMDB · Кино · 1 сегодня"],
-        "21:44",
-    )
-
-    assert message.text == (
-        "🛠 Система\n\n"
-        "AI\n"
-        "🟢 Groq · Основной · 1 000/1 000 осталось\n\n"
-        "Данные\n"
-        "🟢 TMDB · Кино · 1 сегодня\n\n"
-        "Обновлено в 21:44"
-    )
-    assert "🧠 AI" not in message.text
-    assert "🌐 Данные" not in message.text
+from fakes import RecordingBot
 
 
 def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
@@ -79,22 +46,12 @@ def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
     assert "[REDACTED]" in entry["error"]
 
 
-class _Bot:
-    def __init__(self):
-        self.sent = []
-
-    async def send_message(self, **kwargs):
-        self.sent.append(kwargs)
-
 
 def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch):
     monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
     monkeypatch.setattr(admin.provider_runtime, "states", lambda: [])
     monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5: [])
-    monkeypatch.setattr(admin, "_database_health", lambda: {"kind": "ok"})
-    monkeypatch.setattr(admin, "_notification_stats", lambda _cid: {"errors_today": 0})
-    monkeypatch.setattr(admin, "_new_log_errors", lambda _cid: {"critical": 0, "count": 0})
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_api_ai(bot, "42"))
 
@@ -109,7 +66,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
 
 
 def test_admin_card_refresh_menu_has_all_cards():
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_card_refresh_menu(bot, "42"))
 
@@ -128,7 +85,7 @@ def test_admin_refresh_card_reports_success(monkeypatch):
         return True
 
     monkeypatch.setattr(admin, "_refresh_card_cache", refresh)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.refresh_card(bot, "42", "leisure"))
 
@@ -145,7 +102,7 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     }
     monkeypatch.setattr(tracking, "get_errors", lambda limit=200: [entry])
     monkeypatch.setattr(admin.time, "time", lambda: 1_700_000_100)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -170,7 +127,7 @@ def test_logs_hide_llm_provider_payload_and_code_location(monkeypatch):
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [entry])
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -199,7 +156,7 @@ def test_logs_keep_ai_chain_failures_separate_for_each_section(monkeypatch):
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -262,7 +219,7 @@ def test_logs_hide_monitor_incidents_resolved_by_recovery_or_fallback(monkeypatc
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [recovered, fallback])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -288,7 +245,7 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: app_errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: ticketmaster)
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -310,7 +267,7 @@ def test_logs_collapse_duplicate_app_errors_and_keep_exact_message(monkeypatch):
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -332,7 +289,7 @@ def test_logs_limit_total_message_size_for_many_unique_errors(monkeypatch):
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
     monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
 
@@ -390,73 +347,6 @@ def test_admin_home_ui_shows_current_errors_under_status():
     )
 
 
-def test_system_summary_counts_user_impact_and_not_replaced_api():
-    states = [
-        {"service": "gemini", "status": "warning", "fallback": "groq"},
-        {"service": "openweather", "status": "warning", "fallback": ""},
-        {"service": "telegram", "status": "down", "fallback": ""},
-        {"service": "database", "status": "down", "fallback": ""},
-    ]
-
-    summary = admin._system_summary(states)
-
-    assert summary["line"] == "2 сервиса ограничены · резерв включён"
-    assert summary["unavailable_functions"] == 0
-
-
-def test_system_summary_deduplicates_unavailable_functions():
-    states = [
-        {"service": "gemini", "status": "down", "fallback": "", "error_type": "fallback"},
-        {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
-    ]
-
-    summary = admin._system_summary(states)
-
-    assert summary["line"] == "3 функции недоступны"
-    assert summary["fallback_unavailable"] is True
-
-
-def test_system_summary_counts_ai_reserves_of_the_active_chain():
-    # Groq и Cloudflare AI — резервы основной цепочки, их статус учитывается.
-    summary = admin._system_summary([
-        {"service": "groq", "status": "down", "fallback": "", "error_type": "auth"},
-        {"service": "cloudflare", "status": "warning", "fallback": ""},
-    ])
-
-    assert summary["line"] == "3 функции недоступны"
-    assert summary["unavailable_functions"] == 3
-    assert summary["restricted"] == 1
-
-
-def test_zero_user_metrics_are_hidden_from_home_line():
-    assert admin._users_summary_line({"total": 4, "active_today": 0, "new_today": 0}) == "всего 4"
-
-
-def test_log_cursor_hides_errors_after_logs_open(monkeypatch):
-    now = 1_700_000_000
-    errors = [
-        {"id": "new", "ts": now, "source": "app", "kind": "ValueError"},
-        {"id": "old", "ts": now - 1, "source": "app", "kind": "TypeError"},
-    ]
-    state = {}
-    monkeypatch.setattr(admin.time, "time", lambda: now)
-    monkeypatch.setattr(tracking, "get_errors", lambda limit=200: errors)
-    monkeypatch.setattr(admin.store, "_load", lambda _key: state)
-
-    def mutate(_key, fn):
-        value, result = fn(state)
-        if value is not state:
-            state.clear()
-            state.update(value)
-        return result
-
-    monkeypatch.setattr(admin.store, "mutate_kv", mutate)
-
-    assert admin._new_log_errors("42")["count"] == 2
-    admin._mark_logs_viewed("42", errors)
-    assert admin._new_log_errors("42")["count"] == 0
-
-
 class _FailingBot:
     async def send_message(self, **_kwargs):
         raise RuntimeError("Telegram failed")
@@ -509,7 +399,7 @@ def test_api_check_screen_shows_results_and_buttons(monkeypatch):
         return [{"label": "Gemini", "status": "ok", "seconds": 1.24, "detail": ""}]
 
     monkeypatch.setattr(admin.service_monitor, "live_check_all", fake_check_all)
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(admin.send_api_check(bot, "42"))
 
@@ -528,7 +418,7 @@ def test_api_check_callback_is_admin_only(monkeypatch):
 
     monkeypatch.setattr(admin, "send_api_check", fake_send)
     monkeypatch.setattr(settings.config, "CHAT_ID", "1")
-    bot = _Bot()
+    bot = RecordingBot()
 
     asyncio.run(settings.handle_callback(bot, "999", "adm_api_check", None))
     assert called == []

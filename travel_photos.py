@@ -101,16 +101,6 @@ def _pexels(query, strict=True, first_result=False, result_index=0, result_valid
         return None
 
 
-def pexels_photo(
-        query, *, strict=True, first_result=False, result_index=0,
-        result_validator=None):
-    """Общий публичный вход к Pexels для экранов с фото."""
-    return _pexels(
-        query, strict=strict, first_result=first_result, result_index=result_index,
-        result_validator=result_validator,
-    )
-
-
 def _unsplash(query, strict=True, first_result=False):
     if not config.UNSPLASH_ACCESS_KEY:
         return None
@@ -163,15 +153,6 @@ def _unsplash(query, strict=True, first_result=False):
         api_usage.record_request("unsplash", ok=False, error=type(exc).__name__)
         provider_runtime.record_result("unsplash", False, error=type(exc).__name__)
         return None
-
-
-def country_cover(country):
-    """Return exactly one cached-ready landscape photo descriptor or None."""
-    name = " ".join(str(country or "").split()).strip()
-    if not name:
-        return None
-    query = f"{name} scenic travel landscape"
-    return _pexels(query, strict=True) or _unsplash(query, strict=True)
 
 
 def find_illustration(query):

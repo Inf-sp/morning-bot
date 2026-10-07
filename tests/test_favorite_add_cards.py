@@ -5,6 +5,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_movies
+import movie_recommendation
 import leisure_music
 import leisure_games
 import leisure_books
@@ -79,7 +80,7 @@ def test_movie_recommendation_add_does_not_fail_when_markup_is_unchanged(monkeyp
         leisure_movies.store, "add_to_list", lambda *args: added.append(args),
     )
     monkeypatch.setattr(
-        leisure_movies, "normalize_movie_items",
+        movie_recommendation, "normalize_movie_items",
         lambda items: list(items),
     )
     advanced = []
@@ -88,6 +89,7 @@ def test_movie_recommendation_add_does_not_fail_when_markup_is_unchanged(monkeyp
         advanced.append((bot, cid))
 
     monkeypatch.setattr(leisure_movies, "_advance_movie", advance)
+    monkeypatch.setattr(movie_recommendation, "_advance_movie", advance)
 
     asyncio.run(leisure_movies.movie_love(object(), "42", 0, Query()))
 

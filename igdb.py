@@ -7,6 +7,7 @@ match. Board games are intentionally left untouched.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 import re
 import threading
@@ -17,6 +18,8 @@ import requests
 import api_usage
 import config
 import util
+
+_log = logging.getLogger(__name__)
 
 
 _TOKEN_URL = "https://id.twitch.tv/oauth2/token"
@@ -69,7 +72,7 @@ def _request_timeout(default=12.0) -> float:
         if remaining is not None:
             return max(0.2, min(float(default), float(remaining)))
     except Exception:
-        pass
+        _log.debug("_request_timeout: ignored error", exc_info=True)
     return float(default)
 
 

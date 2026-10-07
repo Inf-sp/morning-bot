@@ -1,5 +1,6 @@
 """Мастер начального наполнения учебного словаря."""
 
+import logging
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -18,7 +19,10 @@ from dictionary_seed_ui import (
     level_keyboard as _seed_level_keyboard,
 )
 from ui import menu as menu_ui
-from ui.navigation import back_menu_keyboard
+from ui.navigation import back_menu_keyboard, nav_row
+import rich_delivery
+
+_log = logging.getLogger(__name__)
 
 _DICT_SEED_LIMIT = 30
 _dict_item_key = dictionary._dict_item_key
@@ -101,18 +105,7 @@ def _seed_state_clear(cid):
 async def send_seed_intro(bot, cid, lang=None, q=None):
     code, _language, _level = _seed_language(cid, lang)
     msg = menu_ui.learning_menu({"has_material": False, "lang_code": code})
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=msg.reply_markup,
-    )
+    await rich_delivery.show(bot, cid, msg, reply_markup=msg.reply_markup, query=q)
 
 
 async def offer_seed_for_level_change(bot, cid, language, level):
@@ -149,16 +142,8 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
             "Для вашего уровня пока нет новых стартовых слов.\n"
             "Можно добавить своё слово вручную."
         )
-        if q is not None:
-            try:
-                await q.message.edit_text(
-                    text, reply_markup=back_menu_keyboard(f"a_dictlang_{code}"))
-                return
-            except Exception:
-                pass
-        await bot.send_message(
-            chat_id=cid, text=text,
-            reply_markup=back_menu_keyboard(f"a_dictlang_{code}"))
+        await rich_delivery.show(bot, cid, text, reply_markup=back_menu_keyboard(f"a_dictlang_{code}"), query=q)
+        return
         return
     st = {
         "lang": code,
@@ -173,13 +158,7 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
     _seed_state_set(cid, st)
     text = _seed_render_text(st)
     kb = _seed_render_kb(st)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def seed_toggle(bot, cid, idx, q=None):
@@ -225,13 +204,7 @@ async def seed_choose_level(bot, cid, q=None):
     code = code or _seed_language(cid)[0]
     text = "📶 Выбери уровень слов для добавления."
     kb = _seed_level_kb(cid, code)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def seed_set_level(bot, cid, lang, level, q=None):
@@ -287,7 +260,7 @@ async def seed_add_selected(bot, cid, q=None):
         text = f"✅ Добавлено {len(added)} слов: {terms}{more}"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎯 Начать обучение", callback_data=f"a_train_{lang}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+            nav_row(f"a_dictlang_{lang}"),
         ])
     else:
         text = "Ничего не отмечено — словарь не изменился."

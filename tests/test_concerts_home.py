@@ -8,24 +8,11 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_concerts
 from ui import leisure as leisure_ui
+from fakes import RecordingBot
 
 
 def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
-
-
-def test_concerts_home_opens_nearest_events_instead_of_an_intro(monkeypatch):
-    calls = []
-
-    async def fake_find(bot, cid, mode="home", artists_override=None):
-        calls.append((bot, cid, mode, artists_override))
-
-    monkeypatch.setattr(leisure_concerts, "find_concerts", fake_find)
-    bot = object()
-
-    asyncio.run(leisure_concerts.send_concerts_home(bot, "42"))
-
-    assert calls == [(bot, "42", "home", None)]
 
 
 def test_concerts_screen_has_no_artist_search_or_favorites(monkeypatch):
@@ -108,13 +95,6 @@ def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_
         for date in ("2026-08-22", "2027-02-12", "2027-07-18")
     ]
 
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
     monkeypatch.setattr(leisure_concerts, "_ensure_artists", lambda _cid: ["Romy"])
     monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {
         "cc": "NL", "country": "NL",
@@ -122,7 +102,7 @@ def test_concerts_show_the_full_year_without_confirmation_and_with_full_country_
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: events)
     monkeypatch.setattr(leisure_concerts.config, "TICKETMASTER_API_KEY", "test-key")
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(leisure_concerts.find_concerts(bot, "42"))
 
     message = bot.sent[0]
@@ -295,16 +275,12 @@ def test_weekly_events_notification_has_category_buttons(monkeypatch):
 
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     monkeypatch.setattr(
         leisure_concerts, "_build_weekly_events_msg",
         lambda _cid: _async(MessageSpec(text="🎲 Ближайшие события")),
     )
 
-    asyncio.run(leisure_concerts.send_weekend_events(Bot(), "42"))
+    asyncio.run(leisure_concerts.send_weekend_events(RecordingBot(sent), "42"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [

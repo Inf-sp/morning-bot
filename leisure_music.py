@@ -17,6 +17,8 @@ import store
 import youtube_tracks
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
+from ui.navigation import nav_row
+import rich_delivery
 
 _log = logging.getLogger(__name__)
 _BACKGROUND_TASKS = set()
@@ -301,8 +303,7 @@ def _favorite_artist_style_labels(cid):
 def _favorite_artist_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("lz_lib"),
     ])
 
 
@@ -328,8 +329,7 @@ def _listen_kb():
         [InlineKeyboardButton("✨ Другой артист", callback_data="music_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Мои артисты", callback_data="listen_love")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("m_leisure"),
     ])
 
 
@@ -387,8 +387,7 @@ def _task_for_today(key):
 
 def _music_task_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("m_leisure"),
     ])
 
 
@@ -415,8 +414,7 @@ def _music_genre_menu_kb(cid):
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -426,13 +424,7 @@ async def send_music_genre_menu(bot, cid, q=None):
         return
     text = "Выбери один из отмеченных стилей — подберу нового артиста в этом звучании."
     kb = _music_genre_menu_kb(cid)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def send_music_by_genre(bot, cid, genre_key, *, status=None):
@@ -472,28 +464,20 @@ def _music_preferences_kb(cid):
         for key, label, _prompt_name in _MUSIC_GENRES
     ]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="artist_favorites"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("artist_favorites"))
     return InlineKeyboardMarkup(rows)
 
 
 async def send_music_preferences(bot, cid, q=None):
     text = "🎧 Музыка\n\nВыбери хотя бы один стиль — рекомендации будут только из отмеченных жанров."
     kb = _music_preferences_kb(cid)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📝 Предпочтения", callback_data="music_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("m_leisure"),
     ])
 
 

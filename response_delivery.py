@@ -19,13 +19,6 @@ def clean_card_text(value):
     return text_ui.clean_card_text(value)
 
 
-def build_entity_card(title, summary="", quote="", bullets=None, final="",
-                      bullet_label="Рекомендации:", emoji=""):
-    message = text_ui.entity_card(
-        title, summary, quote, bullets, final, bullet_label, emoji=emoji)
-    return message.text, message.entities
-
-
 def answer_keyboard(cont_label="Подробнее", cont_callback="chat_retry", depth=True):
     rows = []
     if cont_label and cont_callback:

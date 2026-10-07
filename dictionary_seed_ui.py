@@ -1,6 +1,7 @@
 """Представление мастера начального наполнения словаря."""
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from ui.navigation import nav_row
 
 
 LEVEL_LABELS = {
@@ -83,6 +84,5 @@ def level_keyboard(code, current):
             callback_data=f"a_dictseedlvl_{code}_{level}")]
         for level in SEED_LEVELS
     ] + [
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictseed_start_{code}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"a_dictseed_start_{code}"),
     ])

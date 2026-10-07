@@ -14,16 +14,14 @@ from ui.myday import day_summary
 from ui.wardrobe import (
     outfit_emoji, outfit_header, outfit_item_names, render_wardrobe_message,
 )
-from wardrobe_model import normalize_parsed_item, public_item_name
+from wardrobe_model import normalize_parsed_item
 from wardrobe_outfit import (
     build_main_accent,
     build_how_to_wear,
     build_sock_recommendation,
-    SAFE_NEUTRAL_STYLE_TIP,
     build_style_tip,
     outfit_display_order,
     pick_best_outfit,
-    validate_outfit_copy,
 )
 import settings
 
@@ -487,12 +485,6 @@ def test_city_style_does_not_recommend_a_tshirt_when_a_city_base_already_exists(
     ) is None
 
 
-def test_weather_intro_changes_between_new_outfits():
-    weather = {"tmax": 22, "has_rain": False, "strong_wind": False, "warm": True}
-
-    assert wardrobe._weather_decision(weather, variant=0) != wardrobe._weather_decision(weather, variant=1)
-
-
 def test_purchase_recommendation_is_stable_until_a_more_important_gap(monkeypatch):
     profile = {}
     monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
@@ -667,45 +659,6 @@ def test_wardrobe_preferences_show_only_six_emoji_styles():
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 
 
-def test_outfit_copy_rejects_short_sleeve_hallucinations_and_internal_tags():
-    shirt = {
-        "id": "top-1",
-        "zone": "Верх",
-        "subcategory": "Рубашки",
-        "name": "Голубая рубашка с коротким рукавом (летняя, utility casual, город)",
-        "color": "голубой",
-        "colors": ["голубой"],
-        "fit": None,
-        "season": ["лето"],
-        "style": "utility casual",
-        "occasions": ["город"],
-    }
-    trousers = _item("bottom-1", "Низ", "Синие брюки")
-    shoes = _item("shoe-1", "Обувь", "Белые кеды")
-    selected = [shirt, trousers, shoes]
-    wardrobe = {"zones": {
-        "Верх": {"Рубашки": [shirt]},
-        "Низ": {"Брюки": [trousers]},
-        "Обувь": {"Кеды": [shoes]},
-    }}
-
-    result = validate_outfit_copy(
-        selected,
-        wardrobe,
-        {},
-        ["Объёмные рукава рубашки уравновешивают широкие брюки."],
-        "Подверни рукава и оставь рубашку навыпуск.",
-        "Образ готов",
-        "Добавь серебристые часы.",
-    )
-
-    assert public_item_name(shirt) == "Голубая рубашка с коротким рукавом"
-    assert result["style_tip"] == SAFE_NEUTRAL_STYLE_TIP
-    assert all("объём" not in reason.casefold() and "широк" not in reason.casefold() for reason in result["reasons"])
-    assert "utility" not in " ".join(result["reasons"]).casefold()
-    assert result["final_text"] == "Комплект собран из вещей твоего шкафа"
-
-
 def test_style_tip_rolls_sleeves_only_when_length_is_confirmed():
     short = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с коротким рукавом"}
     long = {"zone": "Верх", "subcategory": "Рубашки", "name": "Рубашка с длинными рукавами"}
@@ -743,19 +696,3 @@ def test_generic_style_tip_has_a_broader_safe_rotation():
     assert all("чтобы" in tip.casefold() for tip in tips)
 
 
-def test_final_accessory_is_allowed_only_when_selected_and_present_in_database():
-    watch = {
-        "id": "watch-1",
-        "zone": "Аксессуары",
-        "subcategory": "Часы",
-        "name": "Серебристые часы",
-        "colors": ["серебристый"],
-    }
-    wardrobe = {"zones": {"Аксессуары": {"Часы": [watch]}}}
-
-    result = validate_outfit_copy(
-        [watch], wardrobe, {}, ["Серебристые часы завершают комплект."],
-        SAFE_NEUTRAL_STYLE_TIP, "Образ готов", "Добавь серебристые часы.",
-    )
-
-    assert result["final_text"] == "Добавь серебристые часы."

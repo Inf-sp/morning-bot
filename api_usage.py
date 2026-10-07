@@ -5,14 +5,16 @@ not counted as API usage.
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta
 
-import requests
 
 import config
 import provider_runtime
 import store
+
+_log = logging.getLogger(__name__)
 
 SERVICE_LABELS = {
     key: label for key, label in provider_runtime.LABELS.items()
@@ -77,36 +79,6 @@ def _model_slug(model: str) -> str:
 def groq_model_service(model: str) -> str:
     """Stable usage bucket for one Groq model's daily request quota."""
     return f"groq_model:{_model_slug(model)}"
-
-
-def groq_model_usage(model: str) -> dict:
-    usage = service_usage(groq_model_service(model))
-    used = int(usage["requests_today"])
-    return {
-        "used": used,
-        "remaining": max(int(config.GROQ_MODEL_DAILY_LIMIT) - used, 0),
-        "total": int(config.GROQ_MODEL_DAILY_LIMIT),
-    }
-
-
-def openrouter_usage() -> dict:
-    usage = service_usage("openrouter")
-    used = int(usage["requests_today"])
-    return {
-        "used": used,
-        "remaining": max(int(config.OPENROUTER_DAILY_LIMIT) - used, 0),
-        "total": int(config.OPENROUTER_DAILY_LIMIT),
-    }
-
-
-def cloudflare_neuron_usage() -> dict:
-    usage = service_usage("cloudflare")
-    used = int(usage.get("neurons_today") or 0)
-    return {
-        "used": used,
-        "remaining": max(int(config.CF_NEURON_DAILY_LIMIT) - used, 0),
-        "total": int(config.CF_NEURON_DAILY_LIMIT),
-    }
 
 
 def estimate_cloudflare_neurons(prompt: str, output: str) -> int:
@@ -186,16 +158,7 @@ def record_tavily_event(scenario: str, event: str, *, credits: int = 0) -> None:
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
-        pass
-
-
-def tavily_scenario_stats() -> dict:
-    try:
-        data = store._load(config.API_USAGE_KEY) or {}
-        svc = ((data.get("services") or {}).get("tavily") or {})
-        return dict((svc.get("scenario_stats") or {}).get(_now().strftime("%Y-%m"), {}))
-    except Exception:
-        return {}
+        _log.debug("record_tavily_event: ignored error", exc_info=True)
 
 
 def _bucket(period: str, dt=None) -> str:
@@ -322,7 +285,7 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
-        pass
+        _log.debug("record_request: ignored error", exc_info=True)
     if monitor_result:
         try:
             provider_runtime.record_result(
@@ -331,7 +294,7 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
             )
         except Exception:
             # Usage accounting must never make a product request fail.
-            pass
+            _log.debug("record_request: ignored error", exc_info=True)
 
 
 def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = None,
@@ -364,13 +327,13 @@ def set_gemini_rate_limit(*, limit_scope: str = "", retry_after: int | None = No
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
-        pass
+        _log.debug("set_gemini_rate_limit: ignored error", exc_info=True)
     try:
         provider_runtime.record_result(
             "gemini", False, status_code=429, error=message or f"quota {scope}",
         )
     except Exception:
-        pass
+        _log.debug("set_gemini_rate_limit: ignored error", exc_info=True)
 
 
 def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
@@ -392,11 +355,11 @@ def record_gemini_fallback(*, target: str = "local", reason: str = "") -> None:
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
-        pass
+        _log.debug("record_gemini_fallback: ignored error", exc_info=True)
     try:
         provider_runtime.activate_fallback("gemini", target, reason=reason)
     except Exception:
-        pass
+        _log.debug("record_gemini_fallback: ignored error", exc_info=True)
 
 
 def should_log_gemini_limit(dedup_token: str) -> bool:
@@ -460,7 +423,7 @@ def record_cache_hit(service: str) -> None:
     try:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
-        pass
+        _log.debug("record_cache_hit: ignored error", exc_info=True)
 
 
 def _recent_rate_limit(svc: dict) -> bool:
@@ -572,47 +535,6 @@ def snapshot():
             "errors": list(svc.get("errors") or [])[-10:],
         })
     return {"updated_at": int(time.time()), "services": out}
-
-
-_REMOTE_QUOTA_CACHE = {}   # service -> (ts, dict|None)
-_REMOTE_QUOTA_TTL = 1800   # 30 минут - диагностический экран, свежесть не критична
-
-
-def _cached_remote_quota(service: str, fetch_fn) -> dict | None:
-    hit = _REMOTE_QUOTA_CACHE.get(service)
-    if hit and time.time() - hit[0] < _REMOTE_QUOTA_TTL:
-        return hit[1]
-    try:
-        data = fetch_fn()
-    except Exception:
-        data = None
-    _REMOTE_QUOTA_CACHE[service] = (time.time(), data)
-    return data
-
-
-def firecrawl_credit_usage() -> dict | None:
-    """Реальный остаток кредитов Firecrawl через /v2/team/credit-usage (кэш 30 мин)."""
-    if not config.FIRECRAWL_API_KEY:
-        return None
-
-    def fetch():
-        r = requests.get(
-            "https://api.firecrawl.dev/v2/team/credit-usage",
-            headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
-            timeout=10,
-        )
-        if r.status_code != 200:
-            return None
-        d = (r.json() or {}).get("data") or {}
-        if d.get("remainingCredits") is None:
-            return None
-        return {
-            "remaining": d.get("remainingCredits"),
-            "limit": d.get("planCredits"),
-            "reset_at": d.get("billingPeriodEnd"),
-        }
-
-    return _cached_remote_quota("firecrawl", fetch)
 
 
 def seconds_until_gemini_slot(limit: int = 4, window: int = 60) -> float:

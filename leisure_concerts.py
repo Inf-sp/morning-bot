@@ -19,6 +19,7 @@ import settings
 import store
 import util
 from ui import leisure as leisure_ui
+from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
 
@@ -311,12 +312,6 @@ _EXTERNAL_SOURCE_PRIORITY = {
     "other": 4,
 }
 
-_EXTERNAL_SOURCE_LABEL = {
-    "official_site": "сайт исполнителя",
-    "venue": "сайт площадки",
-    "ticket_service": "билетный сервис",
-    "other": "веб-поиск",
-}
 
 _NL_VENUE_DOMAINS = (
     "paradiso.nl", "melkweg.nl", "afaslive.nl", "ziggodome.nl",
@@ -993,10 +988,6 @@ def _concert_country_label(cc: str, fallback: str = "") -> str:
     flag = util.flag_from_cc(str(cc or "").upper())
     return f"{flag} {name}".strip()
 
-async def send_concerts_home(bot, cid, q=None):
-    """Open the actual nearest-events result, not a second introductory screen."""
-    await find_concerts(bot, cid, "home")
-
 
 async def prompt_artist_search(bot, cid):
     store.pending_input[str(cid)] = "concert_artist_search"
@@ -1031,10 +1022,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     if not artists:
         rows.append([InlineKeyboardButton("✅ Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(_concert_country_label(cc, cname), callback_data="a_concerts_pick")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("lz_prem"))
     kb = InlineKeyboardMarkup(rows)
 
     if not artists and not artists_override:
@@ -1220,9 +1208,6 @@ async def concert_pick_country(bot, cid):
         for cc, _name, label in sorted(countries, key=lambda x: x[1])
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="a_concerts_find"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("a_concerts_find"))
     await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
                            reply_markup=InlineKeyboardMarkup(rows))

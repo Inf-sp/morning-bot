@@ -1,5 +1,6 @@
 """Проверяемая городская рекомендация для главного экрана Готовки."""
 
+import logging
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -9,6 +10,8 @@ import research
 import recommendation_rotation as rotation
 import secure
 import store
+
+_log = logging.getLogger(__name__)
 
 
 _CITY_FALLBACKS = {
@@ -82,7 +85,7 @@ def _save(cid, card):
         import myday
         myday.reset_day_cache(cid)
     except Exception:
-        pass
+        _log.debug("_save: ignored error", exc_info=True)
 
 
 def cached_restaurant_preview(cid):
@@ -100,15 +103,6 @@ def cached_restaurant_preview(cid):
             if str(card.get(field) or "").strip()
         ),
     }
-
-
-def cached_restaurant_summary(cid):
-    """Совместимая короткая строка из готовой сегодняшней карточки."""
-    preview = cached_restaurant_preview(cid)
-    return " · ".join(
-        value for value in (preview.get("name", ""), preview.get("details", ""))
-        if value
-    )
 
 
 def _usable(value, city):

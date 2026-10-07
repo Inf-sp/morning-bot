@@ -1,43 +1,29 @@
-"""Startup audits and low-priority maintenance jobs."""
+"""Low-priority maintenance jobs."""
+
+import asyncio
+import logging
+
+import ai
+import access
+import home_cache
+import learning
+import learning_dictionary as dictionary
+import leisure_collection
+import leisure_hub
+import myday
+import restaurant_discovery
+import tracking
+import wardrobe
 
 
-def _run_startup_audits():
-    """Проверить исходники после готовности polling, не задерживая запуск."""
-    audits = (
-        ("Callback", verify.audit_callbacks),
-        ("Architecture", verify.audit_architecture),
-        ("Trainer contract", verify.audit_trainer_contracts),
-        ("Navigation", verify.audit_navigation_contracts),
-    )
-    for label, audit in audits:
-        try:
-            violations = audit()
-            if violations:
-                logging.warning("%s audit: violations -> %s", label, "; ".join(violations))
-            else:
-                logging.info("%s audit: OK", label)
-        except Exception:
-            logging.exception("%s audit failed", label)
-    try:
-        leaks = secure.scan_secrets()
-        if leaks:
-            logging.warning("Secrets scan: findings -> %s", "; ".join(leaks))
-        else:
-            logging.info("Secrets scan: OK")
-    except Exception:
-        logging.exception("Secrets scan failed")
+def _job_options(job_id):
+    return {
+        "name": job_id,
+        "job_kwargs": {"id": job_id, "replace_existing": True},
+    }
 
 
-async def job_startup_audits(context):
-    if tracking.has_active_actions():
-        context.application.job_queue.run_once(
-            job_startup_audits, when=30, name="startup_audits_once",
-            job_kwargs={"id": "startup_audits_once", "replace_existing": True},
-        )
-        return
-    await asyncio.to_thread(_run_startup_audits)
-
-
+@ai.background_job
 async def job_retry_dictionary_adds(context):
     """Повторяет только сохранённые Add-запросы; пользователь ничего не вводит заново."""
     if tracking.has_active_actions():
@@ -64,6 +50,7 @@ async def job_dictionary_maintenance(context):
             logging.exception("Dictionary maintenance failed user_id=%s", cid)
 
 
+@ai.background_job
 async def job_requested_dictionary_rechecks(context):
     """Забирает пользовательские запросы полной проверки по одному за проход."""
     if tracking.has_active_actions():
@@ -93,6 +80,7 @@ async def job_normalize_favorite_collections(context):
         logging.exception("Favorite collections normalization failed")
 
 
+@ai.background_job
 async def job_warm_home_pages(context):
     """Молча готовит главные экраны на день.
 

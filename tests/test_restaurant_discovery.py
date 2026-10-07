@@ -10,7 +10,6 @@ from telegram import MessageEntity
 import restaurant_discovery
 import menu
 from ui.menu import restaurant_menu
-from ui.myday import day_summary
 
 
 def test_restaurant_card_has_google_link_and_compact_details():
@@ -63,41 +62,6 @@ def test_restaurant_card_decodes_entities_and_supports_three_dishes():
     assert "Mada - Smaak van Georgië (грузинская · €€)" in message.text
     assert "• Лобио" in message.text
     assert "&#x" not in message.text
-
-
-def test_myday_restaurant_summary_reads_only_ready_cached_card(monkeypatch):
-    card = {
-        "city": "Alkmaar", "name": "Roest Alkmaar",
-        "cuisine": "современная европейская", "price": "€€",
-        "map_url": "https://maps.example/roest",
-        "cached_at": datetime.now(restaurant_discovery.config.TZ).isoformat(),
-    }
-    monkeypatch.setattr(
-        restaurant_discovery.store, "get_settings", lambda _cid: {"city": "Alkmaar"},
-    )
-    monkeypatch.setattr(
-        restaurant_discovery.store, "get_profile",
-        lambda _cid: {"food_restaurant_recommendation": card},
-    )
-
-    assert restaurant_discovery.cached_restaurant_summary("42") == (
-        "Roest Alkmaar · современная европейская · €€"
-    )
-    assert restaurant_discovery.cached_restaurant_preview("42") == {
-        "name": "Roest Alkmaar",
-        "url": "https://maps.example/roest",
-        "details": "современная европейская · €€",
-    }
-    message = day_summary(
-        "Вт, 1 сентября", "Alkmaar",
-        restaurant_name="Roest Alkmaar",
-        restaurant_url="https://maps.example/roest",
-        restaurant_line="современная европейская · €€",
-    )
-    links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
-    assert "🍽️ Куда сходить: Roest Alkmaar · современная европейская · €€." in message.text
-    assert len(links) == 1
-    assert links[0].url == "https://maps.example/roest"
 
 
 def test_restaurant_screen_always_disables_link_preview(monkeypatch):

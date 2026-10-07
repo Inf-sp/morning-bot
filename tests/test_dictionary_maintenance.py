@@ -6,7 +6,9 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import bot
+import dictionary_views
 import learning_dictionary
+from fakes import RecordingBot
 
 
 def test_dictionary_maintenance_queues_legacy_cards_without_spending_ai(monkeypatch):
@@ -99,10 +101,6 @@ def test_dictionary_migration_keeps_progress_until_every_old_card_is_rebuilt(mon
     ]
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     def complete(entry):
         entry.update({
             "dictionary_rebuild_version": learning_dictionary._DICTIONARY_REBUILD_VERSION,
@@ -137,13 +135,13 @@ def test_dictionary_migration_keeps_progress_until_every_old_card_is_rebuilt(mon
     assert learning_dictionary.queue_dictionary_rebuild(cid) == 4
     assert "dictionary_recheck_request" not in learning_dictionary.store.get_profile(cid)
     assert asyncio.run(
-        learning_dictionary.process_dictionary_rebuilds(Bot(), [cid])
+        learning_dictionary.process_dictionary_rebuilds(RecordingBot(sent), [cid])
     ) == 1
     assert "dictionary_card_migration" in learning_dictionary.store.get_profile(cid)
     assert not sent
 
     assert asyncio.run(
-        learning_dictionary.process_dictionary_rebuilds(Bot(), [cid])
+        learning_dictionary.process_dictionary_rebuilds(RecordingBot(sent), [cid])
     ) == 1
     assert "dictionary_card_migration" not in learning_dictionary.store.get_profile(cid)
     assert "Все карточки приведены к единому виду: 4" in sent[-1]["text"]
@@ -196,10 +194,6 @@ def test_manual_rebuild_updates_one_card_without_a_progress_message(monkeypatch)
     }
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     rebuilt = []
     async def rebuild(*_args, **kwargs):
         rebuilt.append(kwargs)
@@ -209,10 +203,12 @@ def test_manual_rebuild_updates_one_card_without_a_progress_message(monkeypatch)
         sent.append({"text": "Benadering → Подход"})
 
     monkeypatch.setattr(learning_dictionary, "_entry_by_id", lambda *_args: old)
+    monkeypatch.setattr(dictionary_views, "_entry_by_id", lambda *_args: old)
     monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", rebuild)
     monkeypatch.setattr(learning_dictionary, "send_dict_entry_view_by_id", show)
+    monkeypatch.setattr(dictionary_views, "send_dict_entry_view_by_id", show)
 
-    asyncio.run(learning_dictionary.check_dictionary_entry(Bot(), cid, "word-1"))
+    asyncio.run(learning_dictionary.check_dictionary_entry(RecordingBot(sent), cid, "word-1"))
 
     assert rebuilt == [{"force": True, "word_id": "word-1", "max_batches": 1}]
     assert sent == [{"text": "Benadering → Подход"}]
@@ -226,9 +222,6 @@ def test_manual_rebuild_uses_gemini_then_openrouter_instead_of_paid_only(monkeyp
         "breakdown": "существительное · de-слово", "examples": [],
     }]
     calls = []
-
-    async def forbidden_paid(*_args, **_kwargs):
-        raise AssertionError("manual refresh must not depend on OpenRouter-only route")
 
     async def analyze(_prompt, _max_tokens, **kwargs):
         calls.append(kwargs)
@@ -265,7 +258,6 @@ def test_manual_rebuild_uses_gemini_then_openrouter_instead_of_paid_only(monkeyp
 
     monkeypatch.setattr(learning_dictionary.store, "get_list", lambda *_args: words)
     monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
-    monkeypatch.setattr(learning_dictionary.ai, "aopenrouter_paid_json", forbidden_paid)
     monkeypatch.setattr(learning_dictionary.ai, "allm_json", analyze)
 
     rebuilt = asyncio.run(learning_dictionary.rebuild_dictionary_entries(
@@ -291,10 +283,12 @@ def test_manual_rebuild_keeps_showing_saved_card_when_all_ai_is_unavailable(monk
         shown.append((word_id, q))
 
     monkeypatch.setattr(learning_dictionary, "_entry_by_id", lambda *_args: old)
+    monkeypatch.setattr(dictionary_views, "_entry_by_id", lambda *_args: old)
     monkeypatch.setattr(learning_dictionary, "normalize_user_dictionary", lambda _cid: [old])
     monkeypatch.setattr(learning_dictionary.store, "set_list", lambda *_args: None)
     monkeypatch.setattr(learning_dictionary, "rebuild_dictionary_entries", unavailable)
     monkeypatch.setattr(learning_dictionary, "send_dict_entry_view_by_id", show)
+    monkeypatch.setattr(dictionary_views, "send_dict_entry_view_by_id", show)
 
     query = object()
     asyncio.run(learning_dictionary.check_dictionary_entry(

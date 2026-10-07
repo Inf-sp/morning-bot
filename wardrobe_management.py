@@ -1,18 +1,24 @@
 """Closet management and purchase evaluation flows."""
 
-from typing import TYPE_CHECKING
+import logging
+import re
+from datetime import datetime
 
-if TYPE_CHECKING:
-    from wardrobe import (
-        PURCHASE_RECOMMENDATION_VERSION, _PURCHASE_FLAGS, _PURCHASE_REJECT_REASONS,
-        _PURCHASE_VERDICTS, _ZONES_DESC, _back_kb, _build_purchase_message,
-        _build_purchase_suggestions_message, _clean_text, _day_key,
-        _flat_wardrobe_items, _get_cached_look, _kb, _log, _purchase_candidates,
-        _settings, ai, closet_kb, config, datetime, purchase_logic,
-        delete_label, has_wardrobe_items, normalize_parsed_item,
-        public_item_name, re, rotation, secure, send_home, send_item_card,
-        send_wardrobe_zones, store, verify, wardrobe_stats, wardrobe_ui,
-    )
+import ai
+import config
+import recommendation_rotation as rotation
+import secure
+import settings as _settings
+import store
+import verify
+import wardrobe as _wardrobe
+import wardrobe_purchase as purchase_logic
+from ui import wardrobe as wardrobe_ui
+from ui.constants import delete_label
+from wardrobe_model import flat_items as _flat_wardrobe_items
+from wardrobe_model import normalize_parsed_item, public_item_name, wardrobe_stats
+
+_log = logging.getLogger(__name__)
 
 
 def get_wardrobe_gaps(cid):
@@ -53,7 +59,7 @@ async def _parse_items(text):
     try:
         parsed = await ai.allm_json(
             f"Разбери вещи по атрибутам. Зоны и подкатегории (используй ТОЛЬКО эти значения, "
-            f"если не подходит ни одна — subcategory=\"Другое\"): {_ZONES_DESC}\n"
+            f"если не подходит ни одна — subcategory=\"Другое\"): {_wardrobe._ZONES_DESC}\n"
             f"Вещи:\n{secure.wrap_untrusted(text, 'список вещей')}\n"
             "Для каждой вещи верни: zone (одна из зон выше, если не ясно — \"Другое\"), "
             "subcategory (строго из списка для этой зоны), name (естественное русское название: цвет перед "
@@ -83,7 +89,7 @@ async def _parse_items(text):
 
 async def _show_added_items(bot, cid, items):
     if not items:
-        await bot.send_message(chat_id=cid, text="Такая вещь уже есть в шкафу.", reply_markup=closet_kb())
+        await bot.send_message(chat_id=cid, text="Такая вещь уже есть в шкафу.", reply_markup=_wardrobe.closet_kb())
         return
     msg = wardrobe_ui.add_success(items[0]) if len(items) == 1 else wardrobe_ui.add_batch_success(items)
     if len(items) == 1:
@@ -92,7 +98,7 @@ async def _show_added_items(bot, cid, items):
         rows = [[(delete_label(f"Удалить: {public_item_name(item)[:28]}"), f"w_delete_{item['id']}")]
                 for item in items]
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_wardrobe._kb(rows))
 
 async def add_item(bot, cid, text, *, return_to_home=False):
     try:
@@ -100,11 +106,11 @@ async def add_item(bot, cid, text, *, return_to_home=False):
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_wardrobe"); return
     if not items:
-        await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
+        await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_wardrobe._back_kb())
         return
     saved = store.add_wardrobe_items(cid, items)
     if return_to_home and saved:
-        await send_home(bot, cid)
+        await _wardrobe.send_home(bot, cid)
         return
     await _show_added_items(bot, cid, saved)
 
@@ -118,7 +124,7 @@ async def add_item_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=
             image_bytes,
             mime_type,
             f"""Распознай только предметы одежды и аксессуары на фото. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
-Зоны и подкатегории: {_ZONES_DESC}
+Зоны и подкатегории: {_wardrobe._ZONES_DESC}
 Для каждого отчётливо видимого предмета верни zone, subcategory, name, brand, color, color_secondary,
 material, length, warmth (строго лёгкие/обычные/тёплые), fit, season, rain_ok, wind_ok,
 occasions и style. Физические свойства храни полями, не добавляй их в name.
@@ -136,7 +142,7 @@ JSON: {{"items":[{{"zone":"","subcategory":"","name":"","brand":"","color":"","c
         return
     if not items:
         store.pending_input[str(cid)] = "wardrobe_add"
-        await bot.send_message(chat_id=cid, text="Не удалось уверенно распознать вещь. Опиши её одним сообщением.", reply_markup=_back_kb())
+        await bot.send_message(chat_id=cid, text="Не удалось уверенно распознать вещь. Опиши её одним сообщением.", reply_markup=_wardrobe._back_kb())
         return
     saved = store.add_wardrobe_items(cid, items)
     await _show_added_items(bot, cid, saved)
@@ -173,7 +179,7 @@ def _replace_item(cid, item_id, replacement):
 async def edit_item_text(bot, cid, text):
     item_id = store.wardrobe_edit_item.pop(str(cid), None)
     if not item_id:
-        await send_wardrobe_zones(bot, cid)
+        await _wardrobe.send_wardrobe_zones(bot, cid)
         return
     try:
         parsed = await _parse_items(text)
@@ -183,10 +189,10 @@ async def edit_item_text(bot, cid, text):
         await bot.send_message(
             chat_id=cid,
             text="Не удалось изменить вещь. Открой карточку и попробуй ещё раз.",
-            reply_markup=_back_kb(),
+            reply_markup=_wardrobe._back_kb(),
         )
         return
-    await send_item_card(bot, cid, item_id)
+    await _wardrobe.send_item_card(bot, cid, item_id)
 
 
 async def edit_add_preview(bot, cid, text):
@@ -198,7 +204,7 @@ async def edit_add_preview(bot, cid, text):
     if not parsed:
         await bot.send_message(
             chat_id=cid, text="Не удалось распознать исправление.",
-            reply_markup=_back_kb())
+            reply_markup=_wardrobe._back_kb())
         return
     saved = store.add_wardrobe_items(cid, parsed)
     await _show_added_items(bot, cid, saved)
@@ -223,13 +229,13 @@ async def handle_wardrobe_search(bot, cid, query):
     if not matches:
         await bot.send_message(
             chat_id=cid, text="Ничего не нашлось. Попробуй цвет, бренд или категорию.",
-            reply_markup=_kb([[("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")]]),
+            reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
     msg = wardrobe_ui.search_results(query, matches)
     rows = [[(str(item.get("name") or "Вещь")[:48], f"w_item_{item.get('id')}")] for item in matches[:10]]
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_kb(rows))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_wardrobe._kb(rows))
 
 # ---------- шкаф, категории и карточки вещей ----------
 
@@ -237,13 +243,13 @@ async def handle_wardrobe_search(bot, cid, query):
 def _normalize_purchase_check(data, wardrobe=None):
     """Не пропускает неподдерживаемый вердикт и беспричинное «не брать»."""
     data = data if isinstance(data, dict) else {}
-    verdict_key = _clean_text(data.get("verdict")).casefold().rstrip(".!?")
-    verdict = _PURCHASE_VERDICTS.get(verdict_key, "недостаточно данных")
+    verdict_key = _wardrobe._clean_text(data.get("verdict")).casefold().rstrip(".!?")
+    verdict = _wardrobe._PURCHASE_VERDICTS.get(verdict_key, "недостаточно данных")
 
     flag_values = {}
     for key in ("duplicates", "closes_gap"):
-        value = _clean_text(data.get(key)).casefold().rstrip(".!?")
-        flag_values[key] = value if value in _PURCHASE_FLAGS else "недостаточно данных"
+        value = _wardrobe._clean_text(data.get(key)).casefold().rstrip(".!?")
+        flag_values[key] = value if value in _wardrobe._PURCHASE_FLAGS else "недостаточно данных"
 
     try:
         if isinstance(data.get("fits_count"), bool):
@@ -260,9 +266,9 @@ def _normalize_purchase_check(data, wardrobe=None):
     why = data.get("why")
     if isinstance(why, list):
         why = why[0] if why else ""
-    why = _clean_text(why)
-    reject_reason = _clean_text(data.get("not_buy_reason")).casefold()
-    if verdict == "не брать" and (reject_reason not in _PURCHASE_REJECT_REASONS or not why):
+    why = _wardrobe._clean_text(why)
+    reject_reason = _wardrobe._clean_text(data.get("not_buy_reason")).casefold()
+    if verdict == "не брать" and (reject_reason not in _wardrobe._PURCHASE_REJECT_REASONS or not why):
         verdict = "недостаточно данных"
         why = "Нет подтверждённой конкретной причины отказываться от покупки. Нужны дополнительные данные о вещи."
     elif verdict == "недостаточно данных" and not why:
@@ -271,7 +277,7 @@ def _normalize_purchase_check(data, wardrobe=None):
     wear_with = data.get("wear_with")
     if not isinstance(wear_with, list):
         wear_with = []
-    wear_with = [_clean_text(value) for value in wear_with if _clean_text(value)][:3]
+    wear_with = [_wardrobe._clean_text(value) for value in wear_with if _wardrobe._clean_text(value)][:3]
 
     return {
         "verdict": verdict,
@@ -330,7 +336,7 @@ async def check_purchase(bot, cid, text):
             "why": "Не хватило данных о вещи для честной оценки. Попробуй указать цвет, материал и крой.",
             "wear_with": [],
         }
-    text_out, entities = _build_purchase_message(_normalize_purchase_check(d, wardrobe=w))
+    text_out, entities = _wardrobe._build_purchase_message(_normalize_purchase_check(d, wardrobe=w))
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
@@ -338,14 +344,14 @@ async def check_purchase(bot, cid, text):
 
 
 def _purchase_result_kb():
-    return _kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]])
+    return _wardrobe._kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]])
 
 
 # ---------- «💳 Что докупить»: экран 1 (разбор + топ-3) и карточка покупки ----------
 
 
 def _purchase_cache_key(wardrobe):
-    return f"{wardrobe.get('_v', 0)}:{_day_key()}"
+    return f"{wardrobe.get('_v', 0)}:{_wardrobe._day_key()}"
 
 
 def _purchase_state(cid):
@@ -362,16 +368,16 @@ def _build_purchase_cache(cid, wardrobe, ai_items=None):
     facts = purchase_logic.wardrobe_facts(
         wardrobe, cold_season=purchase_logic.is_cold_season(datetime.now(config.TZ).month, lat),
     )
-    look_gap = ((_get_cached_look(cid) or {}).get("look_data") or {}).get("purchase_recommendation") or {}
-    primary = look_gap if look_gap.get("item") and look_gap.get("version") == PURCHASE_RECOMMENDATION_VERSION else None
-    local = _purchase_candidates(wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3)
+    look_gap = ((_wardrobe._get_cached_look(cid) or {}).get("look_data") or {}).get("purchase_recommendation") or {}
+    primary = look_gap if look_gap.get("item") and look_gap.get("version") == _wardrobe.PURCHASE_RECOMMENDATION_VERSION else None
+    local = _wardrobe._purchase_candidates(wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3)
     state = {
         "key": _purchase_cache_key(wardrobe),
         "facts": facts,
         "analysis": purchase_logic.analysis(facts),
         "pool": purchase_logic.rank_candidates(wardrobe, ai_items, local),
         "ai": ai_items,
-        "ai_date": _day_key() if fresh_ai else previous.get("ai_date", ""),
+        "ai_date": _wardrobe._day_key() if fresh_ai else previous.get("ai_date", ""),
         "shown": previous.get("shown") or [],
     }
 
@@ -400,7 +406,7 @@ async def _ai_purchase_ideas(cid, wardrobe, facts):
 {secure.wrap_untrusted(prefs, 'предпочтения')}
 Шкаф:
 {secure.wrap_untrusted(store.wardrobe_to_text(wardrobe), 'гардероб')}
-Зоны и подкатегории: {_ZONES_DESC}
+Зоны и подкатегории: {_wardrobe._ZONES_DESC}
 
 Правила: не предлагай вещи, которые уже есть; закрывай слабые места; называй цвет и тип вещи
 («Белые кожаные кеды»), без брендов и цен. why — одно предложение, почему вещь нужна именно этому
@@ -422,7 +428,7 @@ async def warm_purchase_cache(cid):
     if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
         return
     state = _purchase_state(cid)
-    if state.get("key") == _purchase_cache_key(wardrobe) and state.get("ai_date") == _day_key():
+    if state.get("key") == _purchase_cache_key(wardrobe) and state.get("ai_date") == _wardrobe._day_key():
         return
     facts = purchase_logic.wardrobe_facts(wardrobe, cold_season=purchase_logic.is_cold_season(
         datetime.now(config.TZ).month, (store.get_settings(cid) or {}).get("lat"),
@@ -442,7 +448,7 @@ async def _purchase_reply(bot, cid, q, msg, kb):
             await q.edit_message_text(text=msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("_purchase_reply: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -464,7 +470,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     """Экран 1: разбор шкафа и три самые полезные покупки из кэша."""
     wardrobe = store.load_wardrobe(cid)
     if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
-        kb = _kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "m_wardrobe")]])
+        kb = _wardrobe._kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "m_wardrobe")]])
         await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
     state = _purchase_cache(cid, wardrobe)
@@ -490,7 +496,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     store.pending_input[str(cid)] = "wardrobe_buy"
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = msg.text
-    await _purchase_reply(bot, cid, q, msg, _kb(rows))
+    await _purchase_reply(bot, cid, q, msg, _wardrobe._kb(rows))
 
 
 def _purchase_candidate_by_id(cid, wardrobe, item_id):
@@ -507,7 +513,7 @@ async def show_purchase_card(bot, cid, item_id, q=None):
         await send_purchase_screen(bot, cid, q=q)
         return
     msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
-    kb = _kb([
+    kb = _wardrobe._kb([
         [("✅ Купил — добавить в шкаф", f"w_buy_got:{item_id}")],
         [("❌ Не нужно", f"w_buy_no:{item_id}")],
         [("⬅️ Назад", "w_buy_back")],
@@ -559,7 +565,7 @@ async def ask_purchase_check(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text="Опиши вещь, которую присматриваешь: тип, цвет, материал и крой.",
-        reply_markup=_kb([[("⬅️ Назад", "w_buy")]]),
+        reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_buy")]]),
     )
 
 
@@ -601,50 +607,50 @@ def _normalize_purchase_suggestions(data, item, wardrobe):
     """Оставляет только проверяемые рекомендации и реальные вещи из шкафа."""
     fallback = _local_purchase_suggestions(item, wardrobe)
     data = data if isinstance(data, dict) else {}
-    headline = _clean_text(data.get("headline")) or fallback["headline"]
+    headline = _wardrobe._clean_text(data.get("headline")) or fallback["headline"]
     colors = []
     for entry in data.get("colors") or []:
         if not isinstance(entry, dict):
             continue
-        color = _clean_text(entry.get("color"))
-        reason = _clean_text(entry.get("reason"))
+        color = _wardrobe._clean_text(entry.get("color"))
+        reason = _wardrobe._clean_text(entry.get("reason"))
         if color and reason:
             colors.append({"color": color[:40], "reason": reason[:160]})
     wardrobe_names = [
-        _clean_text(public_item_name(entry))
+        _wardrobe._clean_text(public_item_name(entry))
         for _zone, _subcat, entry in _flat_wardrobe_items(wardrobe)
-        if _clean_text(public_item_name(entry))
+        if _wardrobe._clean_text(public_item_name(entry))
     ]
     outfits = []
     for value in data.get("outfits") or []:
-        outfit = _clean_text(value)
+        outfit = _wardrobe._clean_text(value)
         matches = sum(name.casefold() in outfit.casefold() for name in wardrobe_names)
         if outfit and matches >= min(2, len(wardrobe_names)):
             outfits.append(outfit)
         if len(outfits) == 3:
             break
     return {
-        "item": _clean_text(data.get("item")) or item,
+        "item": _wardrobe._clean_text(data.get("item")) or item,
         "headline": headline[:220],
         "colors": colors[:3] or fallback["colors"],
-        "avoid": _clean_text(data.get("avoid"))[:180],
+        "avoid": _wardrobe._clean_text(data.get("avoid"))[:180],
         "outfits": outfits or fallback["outfits"],
     }
 
 
 async def recommend_purchase(bot, cid, item):
     """Подбирает нужную вещь по полному шкафу: цвет и до трёх реальных луков."""
-    item = _clean_text(item)
+    item = _wardrobe._clean_text(item)
     wardrobe = store.load_wardrobe(cid)
     if not item:
         await bot.send_message(chat_id=cid, text="Напиши, какую вещь ищешь: например «худи».",
                                reply_markup=_purchase_result_kb())
         return
-    if not has_wardrobe_items(cid):
+    if not _wardrobe.has_wardrobe_items(cid):
         await bot.send_message(
             chat_id=cid,
             text="Сначала заполни шкаф — тогда я смогу подобрать цвет и сочетания именно к твоим вещам.",
-            reply_markup=_kb([[("✅ Добавить вещи", "w_fill")],
+            reply_markup=_wardrobe._kb([[("✅ Добавить вещи", "w_fill")],
                               [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
         )
         return
@@ -687,7 +693,7 @@ async def recommend_purchase(bot, cid, item):
     except Exception:
         data = {}
     result = _normalize_purchase_suggestions(data, item, wardrobe)
-    text_out, entities = _build_purchase_suggestions_message(result)
+    text_out, entities = _wardrobe._build_purchase_suggestions_message(result)
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,

@@ -1,5 +1,6 @@
 """Игры: локальные рекомендации, жанры, платформы и проверяемые премьеры."""
 
+import logging
 import asyncio
 import hashlib
 import re
@@ -20,6 +21,9 @@ import secure
 import settings
 import store
 from ui import leisure as leisure_ui
+from ui.navigation import nav_row
+
+_log = logging.getLogger(__name__)
 
 _GAME_PREMIERE_VIEWS = {}
 
@@ -706,10 +710,7 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
             rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Предпочтения", callback_data="game_prefs")])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -798,8 +799,7 @@ async def send_game_set(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="game_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("lz_lib"))
     await _deliver(bot, cid, msg, InlineKeyboardMarkup(rows), q=q)
 
 
@@ -829,8 +829,7 @@ async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
         "❌ Удалить", callback_data=f"vg_setd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
     rows.append([InlineKeyboardButton("✅ Добавить игру", callback_data="as_loveadd_games")])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("vg_set"))
     kb = InlineKeyboardMarkup(rows)
     poster = str(card.get("poster") or "").strip()
     if q is not None and poster:
@@ -843,7 +842,7 @@ async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_game_set_genre: ignored error", exc_info=True)
     if poster:
         try:
             await bot.send_photo(
@@ -852,7 +851,7 @@ async def send_game_set_genre(bot, cid, token, genre_index, page=0, q=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("send_game_set_genre: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
     )
@@ -879,8 +878,7 @@ async def send_game_set_card(bot, cid, token, short_id, genre_index, page):
     msg = leisure_ui.game_set_card(card)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Удалить", callback_data=f"vg_setd:{token}:{short_id}:{genre_index}:{page}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"vg_setg:{token}:{genre_index}:{page}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"vg_setg:{token}:{genre_index}:{page}"),
     ])
     if card.get("poster"):
         try:
@@ -888,7 +886,7 @@ async def send_game_set_card(bot, cid, token, short_id, genre_index, page):
                                  caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_game_set_card: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -936,8 +934,7 @@ async def send_favorite_games_added_card(bot, cid, items):
     msg = leisure_ui.favorite_game_added_card(item)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row("lz_lib"),
     ])
     if item.get("poster"):
         try:
@@ -945,7 +942,7 @@ async def send_favorite_games_added_card(bot, cid, items):
                                  caption_entities=msg.entities, reply_markup=kb)
             return
         except Exception:
-            pass
+            _log.debug("send_favorite_games_added_card: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -989,7 +986,7 @@ async def _show_manual_game_candidate(bot, cid, token, index, *, q=None):
             state["current_index"] = index
             return
         except Exception:
-            pass
+            _log.debug("_show_manual_game_candidate: ignored error", exc_info=True)
     await bot.send_photo(chat_id=cid, photo=card["poster"], caption=msg.text,
                          caption_entities=msg.entities, reply_markup=kb)
     state["current_index"] = index
@@ -1051,10 +1048,7 @@ def _genre_keyboard(board=False):
     prefix = "vg_gb_" if board else "vg_g_"
     buttons = [InlineKeyboardButton(label, callback_data=f"{prefix}{key}") for key, label in GAME_GENRES]
     rows = [[button] for button in buttons]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -1069,7 +1063,7 @@ async def _deliver(bot, cid, msg, markup, *, q=None, status=None):
                                       disable_web_page_preview=True)
             return
         except Exception:
-            pass
+            _log.debug("_deliver: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, disable_web_page_preview=True)
 
@@ -1111,7 +1105,7 @@ async def send_game_recommendation(
             )
             return
         except Exception:
-            pass
+            _log.debug("send_game_recommendation: ignored error", exc_info=True)
     await _deliver(bot, cid, msg, markup, q=q, status=status)
 
 
@@ -1158,10 +1152,7 @@ def _preferences_keyboard(cid):
         ("✅ " if rating == value else "") + f"⭐ {label}",
         callback_data=f"set_game_rating_{value}",
     )] for label, value in _GAME_RATING_OPTIONS])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="vg_set"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("vg_set"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -1464,8 +1455,7 @@ def _game_premiere_view(cid, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"game_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("lz_prem"))
     return msg, InlineKeyboardMarkup(rows), page
 
 

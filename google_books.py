@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import html
 import re
 import time
@@ -14,6 +15,8 @@ import api_usage
 import config
 import provider_runtime
 import util
+
+_log = logging.getLogger(__name__)
 
 
 _BASE_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -136,7 +139,7 @@ def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevanc
                 return []
             timeout = min(timeout, remaining)
     except Exception:
-        pass
+        _log.debug("_search_items: ignored error", exc_info=True)
     started = time.monotonic()
     response = None
     max_attempts = 3

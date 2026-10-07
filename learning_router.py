@@ -4,6 +4,7 @@
 остаётся модулем сценариев и бизнес-логики раздела.
 """
 
+import logging
 import learning
 import learning_dictionary as dictionary
 import dictionary_import
@@ -14,6 +15,8 @@ import store
 import trainer
 import util
 from ui import menu as menu_ui
+
+_log = logging.getLogger(__name__)
 
 
 async def handle_callback(bot, cid, data, run_with_status, q=None):
@@ -105,7 +108,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
         try:
             await q.edit_message_reply_markup(reply_markup=None)
         except Exception:
-            pass
+            _log.debug("handle_action: ignored error", exc_info=True)
         message_id = getattr(getattr(q, "message", None), "message_id", None)
         if store.last_inline_message.get(str(cid)) == message_id:
             store.last_inline_message.pop(str(cid), None)

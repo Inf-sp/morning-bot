@@ -19,7 +19,6 @@ ZONE_PUBLIC_LABELS = {
     "Аксессуары": "Аксессуары",
     "Другое": "Другое",
 }
-WARMTH_VALUES = ("лёгкие", "обычные", "тёплые")
 ATTRIBUTE_SCHEMA_VERSION = 2
 WARMTH_TEMP_RANGE = {"лёгкие": [15, 35], "обычные": [5, 26], "тёплые": [-20, 18]}
 ZONE_COMPAT = {

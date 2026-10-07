@@ -8,6 +8,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import dictionary_import
 from dictionary_model import present_conjugation
+from fakes import RecordingBot
 
 
 def _base_entry(term="vervangen"):
@@ -240,10 +241,6 @@ def test_analysis_failure_still_saves_word_and_shows_safe_fallback(monkeypatch):
     saved = []
     sent = []
 
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
     async def fake_normalize(*_args, **_kwargs):
         return {
             **_base_entry(),
@@ -267,7 +264,7 @@ def test_analysis_failure_still_saves_word_and_shows_safe_fallback(monkeypatch):
         lambda _key, _cid, entry: saved.append(dict(entry)),
     )
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(Bot(), "42", "vervangen", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), "42", "vervangen", "nl"))
 
     assert saved[0]["term"] == "vervangen"
     assert saved[0]["verb_analysis_failed"] is True

@@ -1,6 +1,8 @@
 """Маршрутизация inline callback-кнопок."""
 
 import logging
+from collections.abc import Callable
+from typing import NamedTuple
 
 import access
 import callback_topics
@@ -89,11 +91,388 @@ def _status_stages(data):
         return stages
     return ((0, first), *stages[1:])
 
+
+
+class R(NamedTuple):
+    """Правило маршрута. ``keys`` — строка или кортеж; ``*`` в конце ключа — префикс.
+
+    ``sub`` называет под-роутер, которому уходит callback: его читает routing.py
+    для статической проверки, поэтому ключи и ``sub`` пишутся только литералами.
+    """
+    keys: str | tuple
+    handler: Callable
+    sub: str | None = None
+
+
+class Ctx(NamedTuple):
+    bot: object
+    cid: str
+    q: object
+    data: str
+    status: Callable  # _inline_status: долгий сценарий с индикатором ожидания
+
+
+def _matches(keys, data):
+    keys = (keys,) if isinstance(keys, str) else keys
+    return any(data.startswith(k[:-1]) if k.endswith("*") else data == k for k in keys)
+
+
+def _first(routes, data):
+    return next((route for route in routes if _matches(route.keys, data)), None)
+
+
+def _safe(handler):
+    async def run(c):
+        try:
+            await handler(c)
+        except Exception as e:
+            await verify.safe_error(c.bot, c.cid, e)
+    return run
+
+
+def _acked(handler):
+    async def run(c):
+        await _ack(c.q)
+        await handler(c)
+    return run
+
+
+async def _noop(_c):
+    return None
+
+
+async def _open_collection_route(c):
+    _, collection_id, back = c.data.split(":", 2)
+    await cleanup.open_collection(c.bot, c.cid, collection_id, back=back)
+
+
+async def _close(c):
+    try:
+        await c.q.message.edit_text("Готово.", reply_markup=menu.main_menu_kb())
+    except Exception:
+        _log.debug("_close: ignored error", exc_info=True)
+
+
+async def _main_menu(c):
+    text, entities, kb = menu.main_menu_screen(c.cid)
+    # Главное меню открывается отдельным сообщением: полезная карточка
+    # (рецепт, рекомендация, результат тренировки) остаётся в истории.
+    await c.bot.send_message(
+        chat_id=c.cid, text=text, reply_markup=kb, entities=entities, transient=True,
+    )
+
+
+async def _notify_learning(c):
+    # Слова дня остаются в истории; учебный экран открывается отдельно.
+    trainer.cancel(c.cid)
+    text, entities, kb = menu.menu_screen("m_learn", c.cid)
+    await c.bot.send_message(
+        chat_id=c.cid, text=text, entities=entities, reply_markup=kb, transient=True,
+    )
+
+
+async def _submenu(c):
+    # Навигация по подменю — редактируем сообщение на месте.
+    text, entities, kb = menu.menu_screen(c.data, c.cid)
+    try:
+        await c.q.message.edit_text(text, reply_markup=kb, entities=entities)
+    except Exception:
+        await c.bot.send_message(chat_id=c.cid, text=text, reply_markup=kb, entities=entities)
+
+
+async def _set_city(c):
+    store.pending_input[c.cid] = "setcity"
+    await c.bot.send_message(chat_id=c.cid, text="📍 Напиши название города — переключу на него.")
+
+
+def _find_concerts(country):
+    return lambda c: c.status(lambda _s: leisure_concerts.find_concerts(c.bot, c.cid, country(c)))
+
+
+def _food_menu(meal):
+    return lambda c: c.status(lambda status: menu.send_food_menu(
+        c.bot, c.cid, status=status, refresh=False, meal=meal))
+
+
+# Действия a_<act>; учебные действия сначала получает learning_router.
+ACTIONS = (
+    R("plany", lambda c: c.status(
+        lambda status: myday.send_plany(c.bot, c.cid, force=True, status=status))),
+    R("w_week", lambda c: c.status(
+        lambda status: weather.send_weather(c.bot, c.cid, "week", status=status))),
+    R("w_full", lambda c: c.status(
+        lambda status: weather.send_weather(c.bot, c.cid, "full", status=status))),
+    R("setcity", _set_city),
+    R(("watch", "read", "listen"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
+    R(("watchlist", "watchclean"), lambda c: cleanup.open_collection(
+        c.bot, c.cid, "cinema_favorites", back="lz_lib")),
+    R(("concerts_find", "concerts_nearby", "artist_concerts"), _find_concerts(lambda _c: "home")),
+    R("concerts_search", lambda c: leisure_concerts.prompt_artist_search(c.bot, c.cid)),
+    R("concerts_pick", lambda c: leisure_concerts.concert_pick_country(c.bot, c.cid)),
+    R(("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
+       "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
+       "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"),
+      _find_concerts(lambda c: c.data[2:].split("_")[1])),
+    R("listen_no", lambda c: c.status(lambda _s: leisure_music.listen_dislike(c.bot, c.cid))),
+    R(("food_breakfast", "recipe_breakfast"), _food_menu("breakfast")),
+    R(("food_lunch", "recipe_lunch"), _food_menu("lunch")),
+    R(("food_dinner", "recipe_dinner"), _food_menu("dinner")),
+)
+
+
+async def _action(c):
+    act = c.data[2:]
+    if act != "plany" and await learning_router.handle_action(c.bot, c.cid, c.q, act, c.status):
+        return
+    route = _first(ACTIONS, act)
+    if route:
+        await route.handler(c)
+
+
+async def _yearly_tops(c):
+    _prefix, kind, page = c.data.split(":", 2)
+    if kind not in ("movie", "tv", "book", "game"):
+        return
+    if page == "open":
+        await c.status(lambda status: yearly_tops.send(c.bot, c.cid, kind, status=status))
+    elif page.isdigit():
+        await _ack(c.q)
+        await yearly_tops.show_page(c.q, kind, int(page))
+
+
+def _games(**kwargs):
+    return lambda c: c.status(lambda status: leisure_games.send_game_recommendation(
+        c.bot, c.cid, status=status, **kwargs))
+
+
+def _games_genre(prefix, **kwargs):
+    return lambda c: c.status(lambda status: leisure_games.send_game_recommendation(
+        c.bot, c.cid, status=status, refresh=True, genre=c.data[len(prefix):], **kwargs))
+
+
+def _card_args(c):
+    """token, short_id, genre_index, page из «op:token:id:genre:page»."""
+    _op, token, short_id, genre_index, page = c.data.split(":", 4)
+    return token, short_id, int(genre_index), int(page)
+
+
+def _token_id(c):
+    _op, token, short_id = c.data.split(":", 2)
+    return token, short_id
+
+
+def _genre_args(c):
+    _op, token, genre_index, page = c.data.split(":", 3)
+    return token, int(genre_index), int(page)
+
+
+async def _delete_favorite_movie(c):
+    parts = c.data.split(":")
+    _op, token, short_id = parts[:3]
+    genre_index = int(parts[3]) if len(parts) > 3 else None
+    page = int(parts[4]) if len(parts) > 4 else 0
+    await leisure_movies.delete_favorite_movie(c.bot, c.cid, token, short_id, genre_index, page, q=c.q)
+
+
+def _tail_int(c):
+    return int(c.data.split("_")[-1])
+
+
+def _page(c):
+    return int(c.data.split(":", 1)[1])
+
+
+ROUTES = (
+    R("ob_*", lambda c: onboard.handle_callback(c.bot, c.cid, c.q, c.data), sub="onboard"),
+    R("collection_pick:*", lambda c: personal_collections.handle_collection_callback(
+        c.bot, c.cid, c.q, c.data), sub="personal_collections"),
+    R(("book_add_ok:*", "book_add_next:*"), lambda c: leisure_books.handle_manual_book_add_callback(
+        c.bot, c.cid, c.q, c.data)),
+    R(("game_add_ok:*", "game_add_next:*"), lambda c: leisure_games.handle_manual_game_add_callback(
+        c.bot, c.cid, c.q, c.data)),
+    # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
+    R("fav_*", lambda c: personal_collections.handle_collection_callback(
+        c.bot, c.cid, c.q, c.data), sub="personal_collections"),
+    # answerCallbackQuery уже отправлен в bot.answer_callback: кнопка не крутится до озвучки.
+    R("tts_word:*", lambda c: dictionary_tts.send_pronunciation(c.bot, c.cid, c.data.split(":", 1)[1])),
+    R("ls_*", lambda c: personal_collections.handle_collection_callback(
+        c.bot, c.cid, c.q, c.data), sub="personal_collections"),
+    # Готовка vs личные коллекции.
+    R(("as_food", "as_food_back", "as_fridge_cook"), lambda c: c.status(
+        lambda status: cooking.handle_callback(c.bot, c.cid, c.q, c.data, status=status)), sub="cooking"),
+    R(("as_food*", "as_fridge*", "as_recipe*"), lambda c: cooking.handle_callback(
+        c.bot, c.cid, c.q, c.data), sub="cooking"),
+    R("as_*", lambda c: personal_collections.handle_collection_callback(
+        c.bot, c.cid, c.q, c.data), sub="personal_collections"),
+    # Гардероб: инлайн-кабинет.
+    R("w_look", lambda c: c.status(
+        lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)), sub="wardrobe"),
+    R("w_*", lambda c: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data), sub="wardrobe"),
+    R("colr:*", _open_collection_route),
+    # Настройки обучения и общие настройки.
+    R(("set_learning", "set_learning_dict", "set_learning_dictionary",
+       "toggle_learning_language", "toggle_learning_language_dict",
+       "set_learning_language_*", "set_learning_level_*"),
+      _safe(lambda c: learning_settings.handle_learning_settings_callback(c.bot, c.cid, c.q, c.data))),
+    R(("set_*", "setadd_*", "setdel_*", "adm_*"),
+      _safe(lambda c: settings.handle_callback(c.bot, c.cid, c.data, c.q)), sub="settings"),
+    R("m_close", _close),
+    R("m_settings", lambda c: settings.send_home(c.bot, c.cid, q=c.q)),
+    R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
+    R("m_food_gen", lambda c: c.status(
+        lambda status: cooking.send_recipe_featured(c.bot, c.cid, status=status))),
+    R("m_food_next", lambda c: c.status(
+        lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
+    R("m_menu", _main_menu),
+    # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.
+    R("weather_myday", lambda c: c.status(lambda status: myday.send_plany(c.bot, c.cid, status=status))),
+    R("notify_learning", _notify_learning),
+    # Первый вход в раздел заменяет временное главное меню готовой карточкой;
+    # новый вариант по кнопке под карточкой оставляет исходный результат в истории.
+    R("m_myday", lambda c: c.status(
+        lambda status: myday.send_plany(c.bot, c.cid, status=status), preserve_message=False)),
+    R("m_wardrobe", lambda c: c.status(
+        lambda status: wardrobe.send_home(c.bot, c.cid, status=status), preserve_message=False)),
+    # Главный экран — готовая карточка дня; новый поиск только по m_food_next.
+    R("m_food", lambda c: c.status(
+        lambda status: menu.send_food_menu(c.bot, c.cid, status=status), preserve_message=False)),
+    # Хаб читает только готовые кэши — без статуса ожидания.
+    R("m_leisure", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
+    R("m_*", _submenu),
+    R("a_*", _safe(_action), sub="actions"),
+    R("ex_*", lambda c: learning_router.handle_callback(c.bot, c.cid, c.data, c.status, q=c.q),
+      sub="learning_router"),
+    R("noop", _noop),
+    # View-режим очистки (стабильный id + revision): двоеточие отличает его
+    # от старого позиционного формата с подчёркиванием ниже.
+    R(("clt:*", "clp:*", "cla:*", "clx:*", "cld:*", "cldc:*", "clact:*", "clactc:*",
+       "clcancel:*", "cledit:*"), lambda c: cleanup.handle_view_callback(c.bot, c.cid, c.data, c.q)),
+    R(("clt_*", "clp_*", "cla_*", "cld_*"), lambda c: cleanup.handle_cleanup(c.bot, c.cid, c.data, c.q)),
+    R("worddel_*", lambda c: dictionary.del_word(c.bot, c.cid, int(c.data.split("_")[1]))),
+    # Игра.
+    R("game_again", lambda c: c.status(lambda status: learning_game.send_game(c.bot, c.cid, status=status))),
+    R("game_hint", lambda c: learning_game.game_hint(c.bot, c.cid, c.q)),
+    R("game_reveal", lambda c: learning_game.game_reveal(c.bot, c.cid, c.q)),
+    # Старые кнопки общего экрана «Досуг» ведут в соответствующую категорию.
+    R("leisure_prefs_movie", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
+    R("leisure_prefs_books", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
+    R("leisure_prefs_music", lambda c: leisure_music.send_music_preferences(c.bot, c.cid, c.q)),
+    R("leisure_prefs_movie_favorites", lambda c: cleanup.open_collection(
+        c.bot, c.cid, "cinema_favorites", back="movie_prefs")),
+    R("leisure_prefs_books_favorites", lambda c: cleanup.open_collection(
+        c.bot, c.cid, "books_favorites", back="book_prefs")),
+    R("leisure_prefs_music_favorites", lambda c: cleanup.open_collection(
+        c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
+    R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
+    R("lz_prem", lambda c: leisure_hub.send_premieres_menu(c.bot, c.cid, q=c.q)),
+    R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
+    # Книги.
+    R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
+    R("book_next", lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid))),
+    R("yt:*", _yearly_tops),
+    R("book_premieres", lambda c: c.status(
+        lambda status: leisure_books.send_book_premieres(c.bot, c.cid, status=status))),
+    R("book_premiere_page:*", lambda c: leisure_books.show_book_premiere_page(c.q, _page(c))),
+    R("book_genre_menu", _acked(lambda c: leisure_books.send_book_genre_menu(c.bot, c.cid, c.q))),
+    R("book_g_*", lambda c: c.status(
+        lambda _s: leisure_books.send_book_by_genre(c.bot, c.cid, c.data[len("book_g_"):]))),
+    # Музыка.
+    R("music_reco", lambda c: c.status(lambda _s: leisure_music.send_listen(c.bot, c.cid))),
+    R("music_next", lambda c: c.status(lambda status: leisure_music.listen_next(c.bot, c.cid, status=status))),
+    R("music_archive", lambda c: c.status(
+        lambda status: leisure_music.send_music_task(c.bot, c.cid, "archive", status=status))),
+    R("music_task_*", lambda c: c.status(lambda status: leisure_music.send_music_task(
+        c.bot, c.cid, c.data[len("music_task_"):], status=status))),
+    R("music_genre_menu", _acked(lambda c: leisure_music.send_music_genre_menu(c.bot, c.cid, c.q))),
+    # Игры: «Во что поиграть» — подбор недели; «✨ Другая игра» — vg_next.
+    R("vg_reco", _games()),
+    R("vg_set", lambda c: leisure_games.send_game_set(c.bot, c.cid, q=c.q)),
+    R("vg_setg:*", lambda c: leisure_games.send_game_set_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
+    R("vg_seti:*", lambda c: leisure_games.send_game_set_card(c.bot, c.cid, *_card_args(c))),
+    R("vg_setd:*", lambda c: leisure_games.confirm_game_set_delete(c.bot, c.cid, *_card_args(c), q=c.q)),
+    R("vg_setdok:*", lambda c: leisure_games.delete_game_set_item(c.bot, c.cid, *_token_id(c), q=c.q)),
+    R("vg_board", _games(refresh=True, genre="board")),
+    R("vg_next", _games(refresh=True)),
+    R("vg_next_*", _games_genre("vg_next_")),
+    R("vg_premieres", lambda c: c.status(
+        lambda status: leisure_games.send_game_premieres(c.bot, c.cid, status=status))),
+    R("game_premiere_page:*", lambda c: leisure_games.show_game_premiere_page(c.cid, c.q, _page(c))),
+    R("vg_genres", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q))),
+    R("vg_genres_board", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q, board=True))),
+    R("vg_gb_*", _games_genre("vg_gb_", board=True)),
+    R("vg_g_*", _games_genre("vg_g_")),
+    R("music_g_*", lambda c: c.status(lambda status: leisure_music.send_music_by_genre(
+        c.bot, c.cid, c.data[len("music_g_"):], status=status))),
+    # Избранное кино и книги.
+    R("movie_favorites", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid, q=c.q)),
+    R("mfg:*", lambda c: leisure_movies.send_favorite_movie_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
+    R("mfi:*", lambda c: leisure_movies.send_favorite_movie_card(c.bot, c.cid, *_card_args(c))),
+    R("mfd:*", lambda c: leisure_movies.send_favorite_movie_delete_confirmation(
+        c.bot, c.cid, *_card_args(c), q=c.q)),
+    R("mfdok:*", _delete_favorite_movie),
+    R("book_favorites", lambda c: leisure_books.send_favorite_books(c.bot, c.cid, q=c.q)),
+    R("bfg:*", lambda c: leisure_books.send_favorite_book_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
+    R("bfi:*", lambda c: leisure_books.send_favorite_book_card(c.bot, c.cid, *_card_args(c))),
+    R("bfd:*", lambda c: leisure_books.send_favorite_book_delete_confirmation(
+        c.bot, c.cid, *_card_args(c), q=c.q)),
+    R("bfdok:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_token_id(c), q=c.q)),
+    # Предпочтения.
+    R("book_prefs", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
+    R("game_prefs", lambda c: leisure_games.send_game_preferences(c.bot, c.cid, c.q)),
+    R("bookpref_*", _acked(lambda c: leisure_books.toggle_book_preference(c.bot, c.cid, c.data, c.q))),
+    R("artist_favorites", lambda c: cleanup.open_collection(
+        c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
+    R("music_prefs", lambda c: leisure_music.send_music_preferences(c.bot, c.cid, c.q)),
+    R("music_style_*", _acked(lambda c: leisure_music.toggle_music_style(
+        c.bot, c.cid, c.data[len("music_style_"):], c.q))),
+    R("mpref_*", _acked(lambda c: leisure_movies.toggle_movie_pref(c.bot, c.cid, c.data, c.q))),
+    # Кино: явный запрос всегда получает новый вариант, а не карточку дня из кэша.
+    R("movie_reco", lambda c: c.status(
+        lambda status: leisure_movies.send_current_movie(c.bot, c.cid, status=status))),
+    R("movie_next", lambda c: c.status(
+        lambda status: leisure_movies.send_recos(c.bot, c.cid, "movie", status=status))),
+    R("movie_premieres", lambda c: c.status(
+        lambda status: leisure_movies.send_combined_premieres(c.bot, c.cid, status=status))),
+    R("combined_premiere_page:*", lambda c: leisure_movies.show_combined_premiere_page(c.cid, c.q, _page(c))),
+    R("movie_premiere_page:*", _acked(lambda c: leisure_movies.show_movie_premiere_page(
+        c.cid, c.q, int(c.data.rsplit(":", 1)[1])))),
+    R("series_premieres", lambda c: c.status(
+        lambda status: leisure_movies.send_series_premieres(c.bot, c.cid, status=status))),
+    R("series_premiere_page:*", _acked(lambda c: leisure_movies.show_series_premiere_page(
+        c.cid, c.q, int(c.data.rsplit(":", 1)[1])))),
+    R("movie_genre_menu", _acked(lambda c: leisure_movies.send_movie_genre_menu(c.bot, c.cid, c.q))),
+    R("movie_g_*", lambda c: c.status(
+        lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("movie_g_"):]))),
+    # Реакции на карточки.
+    R("movie_love_*", lambda c: leisure_movies.movie_love(c.bot, c.cid, _tail_int(c), c.q)),
+    R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
+    R("game_love", lambda c: leisure_games.game_love(c.bot, c.cid, c.q)),
+    R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
+    R("movie_no_*", lambda c: c.status(lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c)))),
+    R("book_no_*", lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c)))),
+    # «Продолжить / ещё раз» и «Короче / Глубже» для последнего ответа.
+    R("chat_retry", lambda c: c.status(
+        lambda status: retry_flow.retry_last_response(c.bot, c.cid, status=status))),
+    R(("ans_short", "ans_deep"), lambda c: c.status(lambda _s: retry_flow.reword_last_response(
+        c.bot, c.cid, "short" if c.data == "ans_short" else "deep"))),
+)
+
+# Удалённые разделы и старые главные экраны: (ключи, актуальный callback).
+LEGACY_ALIASES = (
+    (("m_travel*", "a_trav_*"), "m_menu"),
+    (("m_movie", "m_music", "m_books", "m_games", "movie_now_playing"), "m_leisure"),
+)
+
+
+def _legacy_alias(data):
+    return next((target for keys, target in LEGACY_ALIASES if _matches(keys, data)), data)
+
+
 async def handle(update, context, remove_reply_keyboard):
     q = update.callback_query
     cid = str(q.message.chat_id)
-    data = q.data
     bot = context.bot
+    data = _legacy_alias(q.data)
 
     async def _inline_status(call, *, preserve_message=True):
         topic = _status_topic(data)
@@ -122,613 +501,8 @@ async def handle(update, context, remove_reply_keyboard):
     if not access.is_allowed(cid):
         await bot.send_message(chat_id=cid, text="❌ Бот приватный. Попроси владельца прислать инвайт.")
         return
-    # Онбординг новых пользователей
-    if data.startswith("ob_"):
-        await onboard.handle_callback(bot, cid, q, data)
-        return
-    if data.startswith("collection_pick:"):
-        await personal_collections.handle_collection_callback(bot, cid, q, data)
-        return
-    if data.startswith(("book_add_ok:", "book_add_next:")):
-        await leisure_books.handle_manual_book_add_callback(bot, cid, q, data)
-        return
-    if data.startswith(("game_add_ok:", "game_add_next:")):
-        await leisure_games.handle_manual_game_add_callback(bot, cid, q, data)
-        return
-
-    # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
-    if data.startswith("fav_"):
-        await personal_collections.handle_collection_callback(bot, cid, q, data)
-        return
-    if data.startswith("tts_word:"):
-        # answerCallbackQuery запускается заранее в bot.answer_callback, поэтому
-        # кнопка перестаёт крутиться до сетевого запроса озвучки.
-        await dictionary_tts.send_pronunciation(bot, cid, data.split(":", 1)[1])
-        return
-    # Готовка vs личные коллекции
-    if data.startswith("ls_"):
-        await personal_collections.handle_collection_callback(bot, cid, q, data)
-        return
-    if data.startswith("as_"):
-        if data in ("as_food", "as_food_back", "as_fridge_cook"):
-            await _inline_status(
-                lambda status: cooking.handle_callback(bot, cid, q, data, status=status),
-                preserve_message=True)
-            return
-        if data.startswith(("as_food", "as_fridge", "as_recipe")):
-            await cooking.handle_callback(bot, cid, q, data)
-        else:
-            await personal_collections.handle_collection_callback(bot, cid, q, data)
-        return
-    # Гардероб: инлайн-кабинет
-    if data.startswith("w_"):
-        if data == "w_look":
-            await _inline_status(
-                lambda status: wardrobe.handle_callback(bot, cid, q, data, status=status),
-                preserve_message=True)
-        else:
-            await wardrobe.handle_callback(bot, cid, q, data)
-        return
-    if data.startswith("colr:"):
-        _, collection_id, back = data.split(":", 2)
-        await cleanup.open_collection(bot, cid, collection_id, back=back)
-        return
-    # Настройки обучения
-    if data in ("set_learning", "set_learning_dict", "set_learning_dictionary", "toggle_learning_language", "toggle_learning_language_dict"):
-        try:
-            await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    if data.startswith(("set_learning_language_", "set_learning_level_")):
-        try:
-            await learning_settings.handle_learning_settings_callback(bot, cid, q, data)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    # Настройки
-    if data.startswith(("set_", "setadd_", "setdel_", "adm_")):
-        try:
-            await settings.handle_callback(bot, cid, data, q)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-    # Навигация по подменю - редактируем сообщение на месте
-    if data == "m_close":
-        try:
-            await q.message.edit_text("Готово.", reply_markup=menu.main_menu_kb())
-        except Exception:
-            pass
-        return
-    if data == "m_settings":
-        await settings.send_home(bot, cid, q=q); return
-    if data == "m_notes":
-        await settings.send_home(bot, cid); return
-    if data == "m_food_gen":
-        await _inline_status(
-            lambda status: cooking.send_recipe_featured(bot, cid, status=status),
-            preserve_message=True); return
-    if data == "m_food_next":
-        await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
-            preserve_message=True); return
-    if data.startswith(("m_travel", "a_trav_")):
-        data = "m_menu"  # раздел «Поездки» удалён: старые кнопки ведут в главное меню
-    if data in ("m_movie", "m_music", "m_books", "m_games", "movie_now_playing"):
-        data = "m_leisure"  # старые главные экраны Кино/Музыка/Книги/Игры → хаб «Досуг»
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
-
-    if data == "m_menu":
-        text, entities, kb = menu.main_menu_screen(cid)
-        # Главное меню открывается отдельным сообщением: полезная карточка
-        # (рецепт, рекомендация, результат тренировки) остаётся в истории.
-        await bot.send_message(
-            chat_id=cid,
-            text=text,
-            reply_markup=kb,
-            entities=entities,
-            transient=True,
-        )
-        return
-    if data == "weather_myday":
-        # Погодное предупреждение — полезный результат: оставляем его в истории
-        # и открываем «Мой день» отдельным сообщением.
-        await _inline_status(
-            lambda status: myday.send_plany(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data == "notify_learning":
-        # Слова дня остаются в истории; учебный экран открывается отдельно.
-        trainer.cancel(cid)
-        text, entities, kb = menu.menu_screen("m_learn", cid)
-        await bot.send_message(
-            chat_id=cid,
-            text=text,
-            entities=entities,
-            reply_markup=kb,
-            transient=True,
-        )
-        return
-    # Первый вход в раздел заменяет временное главное меню уже подготовленной
-    # персональной карточкой. Новый вариант пользователь запрашивает кнопкой
-    # под карточкой — тогда исходный результат остаётся в истории.
-    if data == "m_myday":
-        await _inline_status(
-            lambda status: myday.send_plany(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_wardrobe":
-        await _inline_status(
-            lambda status: wardrobe.send_home(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_food":
-        # Главный экран — готовая карточка дня; новый поиск только по m_food_next.
-        await _inline_status(
-            lambda status: menu.send_food_menu(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_leisure":
-        # Хаб читает только готовые кэши — без статуса ожидания.
-        await leisure_hub.send_hub(bot, cid, q=q)
-        return
-    if data.startswith("m_"):
-        text, entities, kb = menu.menu_screen(data, cid)
-        try:
-            await q.message.edit_text(text, reply_markup=kb, entities=entities)
-        except Exception:
-            await bot.send_message(
-                chat_id=cid,
-                text=text,
-                reply_markup=kb,
-                entities=entities,
-            )
-        return
-
-    # Действия
-    if data.startswith("a_"):
-        act = data[2:]
-        try:
-            if act == "plany":
-                await _inline_status(
-                    lambda status: myday.send_plany(bot, cid, force=True, status=status),
-                )
-            elif await learning_router.handle_action(bot, cid, q, act, _inline_status):
-                pass
-            elif act == "w_week":
-                await _inline_status(
-                    lambda status: weather.send_weather(bot, cid, "week", status=status),
-                    preserve_message=True,
-                )
-            elif act == "w_full":
-                await _inline_status(
-                    lambda status: weather.send_weather(bot, cid, "full", status=status),
-                    preserve_message=True,
-                )
-            elif act == "setcity":
-                store.pending_input[cid] = "setcity"
-                await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
-            elif act in ("watch", "read", "listen"):
-                await leisure_hub.send_hub(bot, cid, q=q)
-            elif act == "watchlist":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="lz_lib")
-            elif act == "watchclean":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="lz_lib")
-            elif act == "concerts_find":
-                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
-            elif act == "concerts_nearby":
-                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
-            elif act == "concerts_search":
-                await leisure_concerts.prompt_artist_search(bot, cid)
-            elif act == "artist_concerts":
-                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
-            elif act == "concerts_pick":
-                await leisure_concerts.concert_pick_country(bot, cid)
-            elif act in ("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
-                         "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
-                         "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
-                await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
-            elif act == "listen_no":
-                await _inline_status(
-                    lambda _s: leisure_music.listen_dislike(bot, cid),
-                    preserve_message=True,
-                )
-            elif act in ("food_breakfast", "recipe_breakfast"):
-                await _inline_status(
-                    lambda status: menu.send_food_menu(
-                        bot, cid, status=status, refresh=False, meal="breakfast"),
-                    preserve_message=True)
-            elif act in ("food_lunch", "recipe_lunch"):
-                await _inline_status(
-                    lambda status: menu.send_food_menu(
-                        bot, cid, status=status, refresh=False, meal="lunch"),
-                    preserve_message=True)
-            elif act in ("food_dinner", "recipe_dinner"):
-                await _inline_status(
-                    lambda status: menu.send_food_menu(
-                        bot, cid, status=status, refresh=False, meal="dinner"),
-                    preserve_message=True)
-        except Exception as e:
-            await verify.safe_error(bot, cid, e)
-        return
-
-    if data.startswith("ex_"):
-        await learning_router.handle_callback(bot, cid, data, _inline_status, q=q)
-        return
-    # Игра
-    if data == "noop":
-        return
-    if data.startswith(("clt:", "clp:", "cla:", "clx:", "cld:", "cldc:", "clact:", "clactc:", "clcancel:", "cledit:")):
-        # PR3a view-режим (стабильный id + revision) — двоеточие как разделитель
-        # отличает его от старого позиционного формата ниже (символ подчёркивания).
-        # clx:/cldc:/clcancel: — «Удалить все N» и confirm-экран (PR4, P2-2).
-        await cleanup.handle_view_callback(bot, cid, data, q)
-        return
-    if data.startswith(("clt_", "clp_", "cla_", "cld_")):
-        await cleanup.handle_cleanup(bot, cid, data, q)
-        return
-    if data.startswith("worddel_"):
-        await dictionary.del_word(bot, cid, int(data.split("_")[1]))
-        return
-    if data == "game_again":
-        await _inline_status(
-            lambda status: learning_game.send_game(bot, cid, status=status),
-            preserve_message=True)
-        return
-    if data == "game_hint":
-        await learning_game.game_hint(bot, cid, q)
-        return
-    if data == "game_reveal":
-        await learning_game.game_reveal(bot, cid, q)
-        return
-    # Старые кнопки общего экрана «Досуг»: направляем в соответствующую категорию.
-    if data == "leisure_prefs_movie":
-        await leisure_movies.send_movie_prefs(bot, cid, q)
-        return
-    if data == "leisure_prefs_books":
-        await leisure_books.send_book_preferences(bot, cid, q)
-        return
-    if data == "leisure_prefs_music":
-        await leisure_music.send_music_preferences(bot, cid, q)
-        return
-    if data == "leisure_prefs_movie_favorites":
-        await cleanup.open_collection(bot, cid, "cinema_favorites", back="movie_prefs")
-        return
-    if data == "leisure_prefs_books_favorites":
-        await cleanup.open_collection(bot, cid, "books_favorites", back="book_prefs")
-        return
-    if data == "leisure_prefs_music_favorites":
-        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="music_prefs")
-        return
-    if data == "movie_prefs":
-        await leisure_movies.send_movie_prefs(bot, cid, q)
-        return
-    if data == "lz_prem":
-        await leisure_hub.send_premieres_menu(bot, cid, q=q)
-        return
-    if data == "lz_lib":
-        await leisure_hub.send_library_menu(bot, cid, q=q)
-        return
-    if data == "book_reco":
-        await _inline_status(lambda status: leisure_books.send_books_reco(bot, cid, status=status))
-        return
-    if data == "book_next":
-        await _inline_status(
-            lambda _s: leisure_books._advance_book(bot, cid), preserve_message=True)
-        return
-    if data.startswith("yt:"):
-        _prefix, kind, page = data.split(":", 2)
-        if kind not in ("movie", "tv", "book", "game"):
-            return
-        if page == "open":
-            await _inline_status(
-                lambda status: yearly_tops.send(bot, cid, kind, status=status),
-                preserve_message=True,
-            )
-        elif page.isdigit():
-            await _ack(q)
-            await yearly_tops.show_page(q, kind, int(page))
-        return
-    if data == "book_premieres":
-        await _inline_status(
-            lambda status: leisure_books.send_book_premieres(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("book_premiere_page:"):
-        await leisure_books.show_book_premiere_page(q, int(data.split(":", 1)[1]))
-        return
-    if data == "book_genre_menu":
-        await _ack(q)
-        await leisure_books.send_book_genre_menu(bot, cid, q)
-        return
-    if data.startswith("book_g_"):
-        await _inline_status(
-            lambda _s: leisure_books.send_book_by_genre(bot, cid, data[len("book_g_"):]),
-            preserve_message=True,
-        )
-        return
-    if data == "music_reco":
-        await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
-        return
-    if data == "music_next":
-        await _inline_status(
-            lambda status: leisure_music.listen_next(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data == "music_archive":
-        await _inline_status(
-            lambda status: leisure_music.send_music_task(bot, cid, "archive", status=status),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("music_task_"):
-        await _inline_status(
-            lambda status: leisure_music.send_music_task(
-                bot, cid, data[len("music_task_"):], status=status),
-            preserve_message=True,
-        )
-        return
-    if data == "music_genre_menu":
-        await _ack(q)
-        await leisure_music.send_music_genre_menu(bot, cid, q)
-        return
-    if data == "vg_reco":
-        # «Во что поиграть»: подбор недели; «✨ Другая игра» — vg_next.
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data == "vg_set":
-        await leisure_games.send_game_set(bot, cid, q=q)
-        return
-    if data.startswith("vg_setg:"):
-        _op, token, genre_index, page = data.split(":", 3)
-        await leisure_games.send_game_set_genre(bot, cid, token, int(genre_index), int(page), q=q)
-        return
-    if data.startswith("vg_seti:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_games.send_game_set_card(bot, cid, token, short_id, int(genre_index), int(page))
-        return
-    if data.startswith("vg_setd:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_games.confirm_game_set_delete(
-            bot, cid, token, short_id, int(genre_index), int(page), q=q,
-        )
-        return
-    if data.startswith("vg_setdok:"):
-        _op, token, short_id = data.split(":", 2)
-        await leisure_games.delete_game_set_item(bot, cid, token, short_id, q=q)
-        return
-    if data == "vg_board":
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True, genre="board",
-            ),
-            preserve_message=True,
-        )
-        return
-    if data == "vg_next":
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True,
-            ),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("vg_next_"):
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True, genre=data[len("vg_next_"):],
-            ),
-            preserve_message=True,
-        )
-        return
-    if data == "vg_premieres":
-        await _inline_status(
-            lambda status: leisure_games.send_game_premieres(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("game_premiere_page:"):
-        await leisure_games.show_game_premiere_page(cid, q, int(data.split(":", 1)[1]))
-        return
-    if data == "vg_genres":
-        await _ack(q)
-        await leisure_games.send_game_genres(bot, cid, q)
-        return
-    if data == "vg_genres_board":
-        await _ack(q)
-        await leisure_games.send_game_genres(bot, cid, q, board=True)
-        return
-    if data.startswith("vg_gb_"):
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True,
-                genre=data[len("vg_gb_"):], board=True,
-            ),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("vg_g_"):
-        await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True, genre=data[len("vg_g_"):],
-            ),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("music_g_"):
-        await _inline_status(
-            lambda status: leisure_music.send_music_by_genre(bot, cid, data[len("music_g_"):], status=status),
-            preserve_message=True,
-        )
-        return
-    if data == "movie_favorites":
-        await leisure_movies.send_favorite_movies(bot, cid, q=q)
-        return
-    if data.startswith("mfg:"):
-        _op, token, genre_index, page = data.split(":", 3)
-        await leisure_movies.send_favorite_movie_genre(
-            bot, cid, token, int(genre_index), int(page), q=q,
-        )
-        return
-    if data.startswith("mfi:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_movies.send_favorite_movie_card(
-            bot, cid, token, short_id, int(genre_index), int(page),
-        )
-        return
-    if data.startswith("mfd:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_movies.send_favorite_movie_delete_confirmation(
-            bot, cid, token, short_id, int(genre_index), int(page), q=q,
-        )
-        return
-    if data.startswith("mfdok:"):
-        parts = data.split(":")
-        _op, token, short_id = parts[:3]
-        genre_index = int(parts[3]) if len(parts) > 3 else None
-        page = int(parts[4]) if len(parts) > 4 else 0
-        await leisure_movies.delete_favorite_movie(
-            bot, cid, token, short_id, genre_index, page, q=q,
-        )
-        return
-    if data == "book_favorites":
-        await leisure_books.send_favorite_books(bot, cid, q=q)
-        return
-    if data.startswith("bfg:"):
-        _op, token, genre_index, page = data.split(":", 3)
-        await leisure_books.send_favorite_book_genre(
-            bot, cid, token, int(genre_index), int(page), q=q,
-        )
-        return
-    if data.startswith("bfi:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_books.send_favorite_book_card(
-            bot, cid, token, short_id, int(genre_index), int(page),
-        )
-        return
-    if data.startswith("bfd:"):
-        _op, token, short_id, genre_index, page = data.split(":", 4)
-        await leisure_books.send_favorite_book_delete_confirmation(
-            bot, cid, token, short_id, int(genre_index), int(page), q=q,
-        )
-        return
-    if data.startswith("bfdok:"):
-        _op, token, short_id = data.split(":", 2)
-        await leisure_books.delete_favorite_book(bot, cid, token, short_id, q=q)
-        return
-    if data == "book_prefs":
-        await leisure_books.send_book_preferences(bot, cid, q)
-        return
-    if data == "game_prefs":
-        await leisure_games.send_game_preferences(bot, cid, q)
-        return
-    if data.startswith("bookpref_"):
-        await _ack(q)
-        await leisure_books.toggle_book_preference(bot, cid, data, q)
-        return
-    if data == "artist_favorites":
-        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="lz_lib")
-        return
-    if data == "music_prefs":
-        await leisure_music.send_music_preferences(bot, cid, q)
-        return
-    if data.startswith("music_style_"):
-        await _ack(q)
-        await leisure_music.toggle_music_style(bot, cid, data[len("music_style_"):], q)
-        return
-    if data.startswith("mpref_"):
-        await _ack(q)
-        await leisure_movies.toggle_movie_pref(bot, cid, data, q)
-        return
-    if data == "movie_reco":
-        await _inline_status(
-            lambda status: leisure_movies.send_current_movie(bot, cid, status=status),
-            preserve_message=True)
-        return
-    if data == "movie_next":
-        # Явный запрос всегда получает новый вариант, а не карточку дня из кэша.
-        await _inline_status(
-            lambda status: leisure_movies.send_recos(bot, cid, "movie", status=status),
-            preserve_message=True)
-        return
-    if data == "movie_premieres":
-        await _inline_status(
-            lambda status: leisure_movies.send_combined_premieres(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("combined_premiere_page:"):
-        await leisure_movies.show_combined_premiere_page(cid, q, int(data.split(":", 1)[1]))
-        return
-    if data.startswith("movie_premiere_page:"):
-        await _ack(q)
-        await leisure_movies.show_movie_premiere_page(
-            cid, q, int(data.rsplit(":", 1)[1]),
-        )
-        return
-    if data == "series_premieres":
-        await _inline_status(
-            lambda status: leisure_movies.send_series_premieres(bot, cid, status=status),
-            preserve_message=True,
-        )
-        return
-    if data.startswith("series_premiere_page:"):
-        await _ack(q)
-        await leisure_movies.show_series_premiere_page(
-            cid, q, int(data.rsplit(":", 1)[1]),
-        )
-        return
-    if data == "movie_genre_menu":
-        await _ack(q)
-        await leisure_movies.send_movie_genre_menu(bot, cid, q)
-        return
-    if data.startswith("movie_g_"):
-        await _inline_status(
-            lambda _s: leisure_movies.send_movie_by_genre(bot, cid, data[len("movie_g_"):]),
-            preserve_message=True)
-        return
-    if data.startswith("movie_love_"):
-        await leisure_movies.movie_love(bot, cid, int(data.split("_")[-1]), q)
-        return
-    if data.startswith("book_love_"):
-        await leisure_books.book_love(bot, cid, int(data.split("_")[-1]), q)
-        return
-    if data == "game_love":
-        await leisure_games.game_love(bot, cid, q)
-        return
-    if data == "listen_love":
-        await leisure_music.listen_love(bot, cid, q)
-        return
-    if data.startswith("movie_no_"):
-        await _inline_status(
-            lambda _s: leisure_movies.movie_dislike(bot, cid, int(data.split("_")[-1])),
-            preserve_message=True)
-        return
-    if data.startswith("book_no_"):
-        await _inline_status(
-            lambda _s: leisure_books.book_dislike(bot, cid, int(data.split("_")[-1])),
-            preserve_message=True,
-        )
-        return
-    # «Продолжить / ещё раз»
-    if data == "chat_retry":
-        await _inline_status(lambda status: retry_flow.retry_last_response(bot, cid, status=status))
-        return
-    # «Короче / Глубже» - переписать последний ответ
-    if data in ("ans_short", "ans_deep"):
-        await _inline_status(
-            lambda _s: retry_flow.reword_last_response(
-                bot, cid, "short" if data == "ans_short" else "deep",
-            )
-        )
-        return
+    route = _first(ROUTES, data)
+    if route:
+        await route.handler(Ctx(bot, cid, q, data, _inline_status))

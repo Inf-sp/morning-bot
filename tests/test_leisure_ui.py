@@ -13,9 +13,12 @@ import config
 import leisure_books
 import leisure_games
 import leisure_movies
+import movie_discovery
+import movie_recommendation
 import leisure_music
 import movie_engine
 import settings
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -70,14 +73,7 @@ def test_preferences_are_available_in_personal_content_lists():
 
 
 def test_global_preferences_has_all_recommendation_sections():
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(settings.send_preferences(bot, "42"))
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
@@ -87,7 +83,7 @@ def test_global_preferences_has_all_recommendation_sections():
 
 
 def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
-    monkeypatch.setattr(leisure_movies.settings, "get", lambda *_args: "")
+    monkeypatch.setattr(movie_recommendation.settings, "get", lambda *_args: "")
 
     rows = _labels(leisure_movies._movie_prefs_kb("42"))
 
@@ -156,6 +152,9 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
     monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies.movie_engine, "mark_shown", lambda *_args: None)
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {
+        "type_pref": "tv", "recency": "new", "min_rating": 8.0,
+    })
+    monkeypatch.setattr(movie_recommendation, "_movie_prefs", lambda _cid: {
         "type_pref": "tv", "recency": "new", "min_rating": 8.0,
     })
     monkeypatch.setattr(leisure_movies.tmdb, "discover", discover)
@@ -239,6 +238,7 @@ def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch)
     monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
+    monkeypatch.setattr(movie_recommendation, "_movie_prefs", lambda _cid: {})
     monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
     monkeypatch.setattr(
         leisure_movies.tmdb, "discover",
@@ -327,13 +327,7 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
         lambda *_args: ("🎚️ Мои артисты", [("artist-1", "Артист")], "m_music"),
     )
 
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
-    bot = Bot()
+    bot = RecordingBot()
     try:
         asyncio.run(cleanup._render_view(bot, "42", view_id))
     finally:
@@ -362,13 +356,7 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         lambda *_args: ("🎚️ Моё кино", [("movie-1", "Фильм")], "m_movie"),
     )
 
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
-    bot = Bot()
+    bot = RecordingBot()
     try:
         asyncio.run(cleanup._render_view(bot, "42", view_id))
     finally:
@@ -661,13 +649,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
         lambda *_args: ("🎚️ Мои книги", [("book-1", "Книга")], "m_books"),
     )
 
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
-    bot = Bot()
+    bot = RecordingBot()
     try:
         asyncio.run(cleanup._render_view(bot, "42", view_id))
     finally:
@@ -806,16 +788,9 @@ def test_book_genre_menu_does_not_replace_the_recommendation_card():
         async def edit_reply_markup(self, *, reply_markup):
             self.markup = reply_markup
 
-    class Bot:
-        def __init__(self):
-            self.sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
     message = BookMessage()
     query = type("Query", (), {"message": message})()
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(leisure_books.send_book_genre_menu(bot, "42", query))
 
@@ -1094,6 +1069,7 @@ def test_movie_premieres_are_sent_as_one_poster_carousel(monkeypatch):
         "country": "Нидерланды", "cc": "NL",
     })
     monkeypatch.setattr(leisure_movies, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items))
+    monkeypatch.setattr(movie_discovery, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items))
     monkeypatch.setattr(
         leisure_movies.tmdb, "english_poster",
         lambda movie_id, _kind: f"https://image.tmdb.org/poster{movie_id}.jpg",
@@ -1138,6 +1114,10 @@ def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
     })
     monkeypatch.setattr(
         leisure_movies, "get_movie_premieres",
+        lambda _cid: asyncio.sleep(0, result=items),
+    )
+    monkeypatch.setattr(
+        movie_discovery, "get_movie_premieres",
         lambda _cid: asyncio.sleep(0, result=items),
     )
     monkeypatch.setattr(

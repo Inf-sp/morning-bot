@@ -92,10 +92,7 @@ UI_EMOJI = {
 
 # Общие подписи навигации и рекомендаций. Новые экраны используют их вместо
 # локальных вариантов, чтобы подписи не расходились между разделами.
-HOME_LABEL = "#️⃣ Главная"
-BACK_LABEL = "⬅️ Назад"
 PREFERENCES_LABEL = "📝 Предпочтения"
-SETTINGS_LABEL = "🎚️ Настройки"
 
 CUISINE_EMOJI = {
     "european": "🇪🇺",
@@ -140,31 +137,6 @@ COUNTRY_EMOJI = {
     "se": "🇸🇪",
     "dk": "🇩🇰",
     "pt": "🇵🇹",
-}
-
-WEATHER_EMOJI = {
-    "sun": "☀️",
-    "cloud": "☁️",
-    "rain": "🌧️",
-    "storm": "⛈️",
-    "thunderstorm": "🌩️",
-    "snow": "❄️",
-    "fog": "🌫️",
-    "wind": "💨",
-    "temperature": "🌡️",
-    "humidity": "💧",
-    "wind_direction": "🌬️",
-    "heat": "🥵",
-    "cold": "🥶",
-    "tornado": "🌪️",
-    "waves": "🌊",
-}
-
-STATUS_EMOJI = {
-    "ok": UI_EMOJI["status_ok"],
-    "warn": UI_EMOJI["status_warn"],
-    "bad": UI_EMOJI["status_bad"],
-    "unknown": UI_EMOJI["status_unknown"],
 }
 
 

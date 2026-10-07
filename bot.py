@@ -16,7 +16,6 @@ import store
 import callback_topics
 import access
 import menu
-import restaurant_discovery
 import bot_callbacks
 import bot_text
 import myday
@@ -28,10 +27,8 @@ import settings
 import leisure_movies
 import leisure_books
 import leisure_games
-import leisure_music
 import leisure_collection
 import leisure_concerts
-import leisure_hub
 import weather
 import verify
 import secure
@@ -45,8 +42,6 @@ from deploy_report import (
     get_app_version,
     maybe_send_admin_deploy_notification,
 )
-from module_binding import bind_functions as _bind_functions
-import bot_maintenance as _bot_maintenance
 
 _log = logging.getLogger(__name__)
 
@@ -81,13 +76,6 @@ def _claim_home_opening(cid, message_id, data):
         return False
     _RECENT_HOME_OPENINGS[key] = now
     return True
-
-
-def _looks_like_command(text: str) -> bool:
-    """Текст похож на команду, а не на тревогу - не глотать его окном
-    "Дневной разгрузки"."""
-    t = (text or "").strip()
-    return t.startswith("/")
 
 
 async def _remove_reply_kb_once(bot, cid):
@@ -184,7 +172,7 @@ async def answer_callback(update, context):
         try:
             await answer_task
         except Exception:
-            pass
+            _log.debug("answer_callback: ignored error", exc_info=True)
         tracking.finish_action(trace, ok=ok)
         if home_section:
             _log.info("home_open section=%s seconds=%.2f cached=%s", home_section,
@@ -213,7 +201,6 @@ async def message_activity_handler(update, _context):
     cid = getattr(getattr(update, "effective_chat", None), "id", None)
     if cid is not None and access.is_allowed(cid):
         tracking.touch(cid)
-
 
 
 async def document_handler(update, context):
@@ -467,14 +454,15 @@ async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_inactivity_reminders failed for cid=%s", cid)
 
 
-_bind_functions(globals(), _bot_maintenance, [
-    "_run_startup_audits", "job_startup_audits", "job_retry_dictionary_adds",
-    "job_dictionary_maintenance", "job_requested_dictionary_rechecks",
-    "job_normalize_favorite_collections", "job_warm_home_pages", "_schedule_myday_warm_retry",
-])
-job_warm_home_pages = ai.background_job(job_warm_home_pages)
-job_retry_dictionary_adds = ai.background_job(job_retry_dictionary_adds)
-job_requested_dictionary_rechecks = ai.background_job(job_requested_dictionary_rechecks)
+from bot_maintenance import (  # noqa: E402 — after definitions bot_maintenance uses
+    job_retry_dictionary_adds,
+    job_dictionary_maintenance,
+    job_requested_dictionary_rechecks,
+    job_normalize_favorite_collections,
+    job_warm_home_pages,
+    _schedule_myday_warm_retry,
+    _job_options,
+)
 
 
 async def post_init(app):
@@ -542,13 +530,6 @@ async def job_check_polling_lease(context):
         context.application.stop_running()
 
 
-def _job_options(job_id):
-    return {
-        "name": job_id,
-        "job_kwargs": {"id": job_id, "replace_existing": True},
-    }
-
-
 def _build_application():
     request = _RetryingHTTPXRequest(
         connection_pool_size=16,
@@ -590,7 +571,6 @@ def _build_application():
     jq = app.job_queue
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
-    jq.run_once(job_startup_audits, when=2, **_job_options("startup_audits_once"))
     jq.run_once(
         job_refresh_category_news, when=3,
         **_job_options("category_news_refresh_startup"),

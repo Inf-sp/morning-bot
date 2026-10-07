@@ -11,6 +11,7 @@ import igdb
 import open_library
 import tmdb
 from ui import leisure as leisure_ui
+from ui.navigation import nav_row
 
 
 _BOOKS_2025 = (
@@ -112,10 +113,7 @@ def _view(kind, items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"yt:{kind}:{(page + 1) % len(items)}"),
         ])
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("m_leisure"))
     return msg, InlineKeyboardMarkup(rows), page
 
 

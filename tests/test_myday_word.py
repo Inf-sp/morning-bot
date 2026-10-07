@@ -141,21 +141,6 @@ def test_yesterdays_day_cache_never_hides_todays_summary(monkeypatch):
     assert myday._load_day_cache(cid, "2026-07-28") is None
 
 
-def test_quote_fallback_uses_fresh_author_after_favorite_book_was_shown(monkeypatch):
-    def get_list(key, _cid):
-        if key == config.FAVORITE_BOOKS_KEY:
-            return ["Маленький принц"]
-        if key == config.QUOTE_AUTHORS_KEY:
-            return ["Антуан де Сент-Экзюпери"]
-        return []
-
-    monkeypatch.setattr(myday.store, "get_list", get_list)
-
-    quote = myday._book_quote_fallback("quote-fresh-author")
-
-    assert quote["src"] != "Антуан де Сент-Экзюпери"
-
-
 def test_daily_literary_quote_is_cached_as_a_book_quote(monkeypatch):
     saved = []
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
@@ -197,45 +182,3 @@ def test_unseen_quote_from_favorite_book_has_priority(monkeypatch):
     assert quote["id"] == "атомные привычки"
 
 
-def test_quote_uses_a_favorite_artist_when_the_list_is_not_empty(monkeypatch):
-    saved_profiles = []
-    prompt = []
-
-    def get_list(key, _cid):
-        if key == config.FAVORITE_ARTISTS_KEY:
-            return ["Romy"]
-        return []
-
-    monkeypatch.setattr(myday.store, "get_list", get_list)
-    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
-    monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
-    monkeypatch.setattr(
-        myday.store, "mutate_profile",
-        lambda cid, change: saved_profiles.append((cid, change({})[0])),
-    )
-    monkeypatch.setattr(myday.ai, "llm_json", lambda text, *_args, **_kwargs: (
-        prompt.append(text) or {"quote": "Музыка помогает чувствовать связь.", "src": "Romy"}
-    ))
-
-    quote = myday._fetch_quote("artist-quote")
-
-    assert quote["src"] == "Romy"
-    assert "только одного исполнителя из списка" in prompt[0]
-    assert saved_profiles
-
-
-def test_quote_does_not_substitute_another_author_when_favorite_artist_exists(monkeypatch):
-    def get_list(key, _cid):
-        if key == config.FAVORITE_ARTISTS_KEY:
-            return ["Romy"]
-        return []
-
-    monkeypatch.setattr(myday.store, "get_list", get_list)
-    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
-    monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
-    monkeypatch.setattr(myday.store, "mutate_profile", lambda _cid, change: change({})[1])
-    monkeypatch.setattr(myday.ai, "llm_json", lambda *_args, **_kwargs: {
-        "quote": "Музыка помогает чувствовать связь.", "src": "Дэвид Боуи",
-    })
-
-    assert myday._fetch_quote("artist-quote-reject") == {}

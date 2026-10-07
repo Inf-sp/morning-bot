@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
@@ -18,6 +19,8 @@ import config
 import provider_runtime
 import store
 import util
+
+_log = logging.getLogger(__name__)
 
 
 _SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
@@ -97,7 +100,7 @@ def _cache_set(key: str, url: str) -> None:
     try:
         store.mutate_kv(config.YOUTUBE_TRACK_CACHE_KEY, mutate)
     except Exception:
-        pass
+        _log.debug("_cache_set: ignored error", exc_info=True)
     util.ttl_set("youtube_tracks", key, str(url or ""))
 
 
@@ -149,7 +152,7 @@ def _timeout() -> float:
         if remaining is not None:
             timeout = min(timeout, max(0.2, float(remaining)))
     except Exception:
-        pass
+        _log.debug("_timeout: ignored error", exc_info=True)
     return timeout
 
 

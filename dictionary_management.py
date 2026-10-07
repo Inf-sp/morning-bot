@@ -9,7 +9,7 @@ import config
 import store
 from dictionary_model import display_term, normalize_term_case
 from ui.constants import delete_label
-from ui.navigation import back_menu_keyboard
+from ui.navigation import back_menu_keyboard, nav_row
 from ui import dictionary as dict_ui
 
 
@@ -33,8 +33,7 @@ async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
         bot, cid, "Точно удалить это из словаря?", None,
         InlineKeyboardMarkup([
             [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+            nav_row(f"a_dictlang_{lang}"),
         ]), q=q,
     )
 
@@ -250,6 +249,5 @@ def dict_entry_view_kb(entry, page, term_key):
         *delete_row,
         *dictionary._dict_tts_row(entry),
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"a_dictlang_{lang}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        nav_row(f"a_dictlang_{lang}"),
     ])

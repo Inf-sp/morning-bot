@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_games
 import menu
+from fakes import RecordingBot
 
 
 def _labels(markup):
@@ -311,18 +312,12 @@ def test_manual_board_game_label_is_detected_without_ai():
 
 
 def test_game_set_groups_games_like_my_cinema(monkeypatch):
-    class Bot:
-        message = None
-
-        async def send_message(self, **kwargs):
-            self.message = kwargs
-
     monkeypatch.setattr(leisure_games.store, "ensure_list_ids", lambda *_args: [
         {**leisure_games.normalize_favorite_game("Hades"), "id": "hades"},
         {**leisure_games.normalize_favorite_game("Baldur’s Gate 3"), "id": "bg3"},
     ])
 
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(leisure_games.send_game_set(bot, "42"))
 
     assert bot.message["text"] == (

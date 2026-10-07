@@ -55,7 +55,7 @@ class RetryingHTTPXRequest(HTTPXRequest):
             elif endpoint == "sendPoll":
                 update_type = "poll"
         except Exception:
-            pass
+            _log.debug("_request_label: ignored error", exc_info=True)
         return operation, chat_id, update_type
 
     async def do_request(self, *args, **kwargs):

@@ -6,8 +6,6 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
 import ai
 import config
 import learning_data_quality
@@ -22,7 +20,6 @@ from dictionary_model import (
     entry_language,
     entry_term,
     entry_translation,
-    display_term,
     normalize_translation_case,
     language_code as _code,
     normalize_entry,
@@ -48,11 +45,6 @@ from dictionary_management import (
     dict_entry_view_kb as _dict_entry_view_kb,
     move_dict_entry_by_id,
 )
-from ui import dictionary as dict_ui
-from ui.constants import delete_label
-from ui.navigation import back_menu_keyboard
-from module_binding import bind_functions as _bind_functions
-import dictionary_views as _dictionary_views
 
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
@@ -855,20 +847,35 @@ async def migrate_dict_entries_for_srs(cid, lang):
             words[idx]["dictionary_format_version"] = _DICTIONARY_FORMAT_VERSION
     store.set_list(config.DICT_KEY, cid, words)
 
-_DICT_LIST_PAGE_SIZE = _dictionary_views._DICT_LIST_PAGE_SIZE
-_DICT_CATEGORY_ORDER = _dictionary_views._DICT_CATEGORY_ORDER
-_DICT_VISIBLE_CATEGORY_ORDER = _dictionary_views._DICT_VISIBLE_CATEGORY_ORDER
-_DICT_ORIGIN_TO_BACK = dict(_dictionary_views._DICT_ORIGIN_TO_BACK)
-_DICT_BACK_TO_ORIGIN = dict(_dictionary_views._DICT_BACK_TO_ORIGIN)
-_bind_functions(globals(), _dictionary_views, [
-    "_show_screen", "send_dict", "send_dict_lang", "send_dict_category",
-    "send_dict_category_list",
-    "check_dictionary_entry", "request_dictionary_recheck",
-    "process_requested_dictionary_rechecks", "_pending_dictionary_rebuilds",
-    "queue_dictionary_rebuild",
-    "process_dictionary_rebuilds", "send_dict_manage",
-    "send_dict_add_prompt", "_dict_manage_kb", "send_dict_search_prompt",
-    "_dict_tts_row", "_dict_search_kb", "handle_dict_search", "_entry_by_id",
-    "_dictionary_category", "_dict_lang_entries", "send_dict_entry_view",
-    "send_dict_entry_view_by_id",
-])
+
+
+from dictionary_views import (  # noqa: E402 — after definitions dictionary_views uses
+    _DICT_LIST_PAGE_SIZE,
+    _DICT_CATEGORY_ORDER,
+    _DICT_VISIBLE_CATEGORY_ORDER,
+    _DICT_ORIGIN_TO_BACK,
+    _DICT_BACK_TO_ORIGIN,
+    _show_screen,
+    send_dict,
+    send_dict_lang,
+    send_dict_category,
+    send_dict_category_list,
+    check_dictionary_entry,
+    request_dictionary_recheck,
+    process_requested_dictionary_rechecks,
+    _pending_dictionary_rebuilds,
+    queue_dictionary_rebuild,
+    process_dictionary_rebuilds,
+    send_dict_manage,
+    send_dict_add_prompt,
+    _dict_manage_kb,
+    send_dict_search_prompt,
+    _dict_tts_row,
+    _dict_search_kb,
+    handle_dict_search,
+    _entry_by_id,
+    _dictionary_category,
+    _dict_lang_entries,
+    send_dict_entry_view,
+    send_dict_entry_view_by_id,
+)

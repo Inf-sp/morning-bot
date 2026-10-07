@@ -1,5 +1,6 @@
 """Языковая игра-детектив: состояние, генерация, ответы и подсказки."""
 
+import logging
 import asyncio
 import re
 
@@ -10,6 +11,8 @@ import store
 import trainer_grading
 import verify
 from ui import learning as learning_ui
+
+_log = logging.getLogger(__name__)
 
 
 def _code(language):
@@ -465,11 +468,6 @@ def _description_is_guessable(data, lang=None):
     )
 
 
-def _clues_are_guessable(data):
-    """Совместимое имя; новые раунды проверяют DESCRIPTION."""
-    return _description_is_guessable(data)
-
-
 def game_data(clue_lang, recent, attempt=0):
     subject, expected_category = _GAME_REQUEST_FOCUSES[(len(recent) + attempt) % len(_GAME_REQUEST_FOCUSES)]
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
@@ -642,7 +640,7 @@ async def _send_game_result(bot, cid, st, ui, kb):
         try:
             photo = await asyncio.to_thread(travel_photos.find_illustration, query)
         except Exception:
-            pass
+            _log.debug("_send_game_result: ignored error", exc_info=True)
     if (_is_landscape_photo(photo)):
         try:
             await bot.send_photo(
@@ -654,7 +652,7 @@ async def _send_game_result(bot, cid, st, ui, kb):
             )
             return
         except Exception:
-            pass
+            _log.debug("_send_game_result: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
@@ -721,7 +719,7 @@ async def game_hint(bot, cid, q):
         try:
             await q.message.edit_reply_markup(reply_markup=kb)
         except Exception:
-            pass
+            _log.debug("game_hint: ignored error", exc_info=True)
         msg = learning_ui.game_hint(ui, st["hint"])
         await q.message.reply_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
     else:
@@ -736,5 +734,5 @@ async def game_reveal(bot, cid, q):
     try:
         await q.message.edit_reply_markup(reply_markup=None)
     except Exception:
-        pass
+        _log.debug("game_reveal: ignored error", exc_info=True)
     await _finish_game_round(bot, cid, st, ui)

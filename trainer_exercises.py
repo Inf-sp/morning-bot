@@ -145,10 +145,6 @@ def _entry_pos(entry):
     return ""
 
 
-def _value_kind(value):
-    return "phrase" if len(_tokens(value)) > 1 else "word"
-
-
 def _is_sentence_like(value):
     """Короткое словосочетание — не предложение для вариантов Quiz.
 

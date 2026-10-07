@@ -8,6 +8,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_books
 import leisure_movies
+import movie_discovery
 from telegram.error import BadRequest
 
 
@@ -36,7 +37,9 @@ def test_combined_premieres_screen_has_bound_loader(monkeypatch):
         return []
 
     monkeypatch.setattr(leisure_movies, "_movie_premieres_with_posters", movies)
+    monkeypatch.setattr(movie_discovery, "_movie_premieres_with_posters", movies)
     monkeypatch.setattr(leisure_movies, "get_series_premieres", series)
+    monkeypatch.setattr(movie_discovery, "get_series_premieres", series)
 
     asyncio.run(leisure_movies.send_combined_premieres(Bot(), "42"))
 
@@ -58,6 +61,7 @@ def test_combined_premieres_uses_text_when_telegram_rejects_poster(monkeypatch):
         return _combined_items()
 
     monkeypatch.setattr(leisure_movies, "_combined_premieres", combined, raising=False)
+    monkeypatch.setattr(movie_discovery, "_combined_premieres", combined, raising=False)
 
     asyncio.run(leisure_movies.send_combined_premieres(
         Bot(), "42", status=Status(),
@@ -80,6 +84,7 @@ def test_combined_premieres_keeps_card_when_next_poster_is_rejected(monkeypatch)
         return _combined_items()
 
     monkeypatch.setattr(leisure_movies, "_combined_premieres", combined)
+    monkeypatch.setattr(movie_discovery, "_combined_premieres", combined)
 
     asyncio.run(leisure_movies.show_combined_premiere_page("42", Query(), 0))
 

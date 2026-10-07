@@ -1,6 +1,32 @@
 """Personal movie recommendation flow extracted from the movie controller."""
 
+import logging
+import asyncio
+import re
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+import config
+import leisure_movies
+import movie_engine
+import recommendation_stoplist
+import settings
+import store
+import tmdb
+import tracking
+import verify
+from leisure_collection import (
+    canonical_movie_label,
+    content_recommend,
+    movie_title_for_lookup,
+    normalize_movie_items,
+)
 from ui.constants import ui_label
+from ui.navigation import nav_row
+import rich_delivery
+
+_log = logging.getLogger(__name__)
+
 
 def _movie_prefs(cid):
     """Предпочтения кино из настроек → dict для движка (приоритеты, не запреты)."""
@@ -88,7 +114,7 @@ def _candidate_to_card(cid, c, reason=None):
             det = dict(det)  # копия — не мутируем общий кэш tmdb.detail
             tm = det
     except Exception:
-        pass
+        _log.debug("_candidate_to_card: ignored error", exc_info=True)
     if reason is not None:
         tm["reason"] = reason
     else:
@@ -126,13 +152,13 @@ async def _llm_movie_pick(cid, used):
     for _ in range(2):
         try:
             data = await asyncio.to_thread(content_recommend, "movie", str(cid))
-            items = _normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
+            items = leisure_movies._normalize_movie_items(data.get("items", []) if isinstance(data, dict) else [])
         except Exception:
             items = []
         if items:
             break
     if not items:
-        items = _fallback_movie_items(cid)
+        items = leisure_movies._fallback_movie_items(cid)
     if not items:
         return None, None
     remaining = tracking.remaining_action_seconds()
@@ -141,12 +167,12 @@ async def _llm_movie_pick(cid, used):
         return items[0], None
     try:
         picked = await asyncio.wait_for(
-            asyncio.to_thread(_pick_good_movie, items, used, _movie_prefs(cid)), timeout=timeout)
+            asyncio.to_thread(leisure_movies._pick_good_movie, items, used, _movie_prefs(cid)), timeout=timeout)
     except Exception:
         return items[0], None
     if picked[0] is not None:
         return picked
-    fallbacks = _fallback_movie_items(cid)
+    fallbacks = leisure_movies._fallback_movie_items(cid)
     if fallbacks and fallbacks != items:
         remaining = tracking.remaining_action_seconds()
         timeout = min(5.0, remaining - 0.5) if remaining is not None else 5.0
@@ -154,7 +180,7 @@ async def _llm_movie_pick(cid, used):
             return fallbacks[0], None
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(_pick_good_movie, fallbacks, used, _movie_prefs(cid)), timeout=timeout)
+                asyncio.to_thread(leisure_movies._pick_good_movie, fallbacks, used, _movie_prefs(cid)), timeout=timeout)
         except Exception:
             return fallbacks[0], None
     return None, None
@@ -181,24 +207,24 @@ async def _advance_movie(bot, cid):
         if not it:
             label = category["reason"]["label"]
             text = f"В этом жанре «{label}» пока не нашёл нового. Попробуй другой."
-            kb = _movie_genre_menu_kb()
+            kb = leisure_movies._movie_genre_menu_kb()
             await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
             return
     else:
         it, tm = await _tmdb_engine_pick(cid)
         if it is None:
-            used = _movie_used(cid) | {str(x).lower() for x in rec["items"]}
+            used = leisure_movies._movie_used(cid) | {str(x).lower() for x in rec["items"]}
             it, tm = await _llm_movie_pick(cid, used)
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=_movie_home_only_kb()); return
-    disp = _display_title(it, tm)
+            reply_markup=leisure_movies._movie_home_only_kb()); return
+    disp = leisure_movies._display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec["items"].append(disp)
     store.last_recos[str(cid)] = rec
     ni = len(rec["items"]) - 1
-    await _send_movie_card(bot, cid, it, ni, tm=tm, category=category)
+    await leisure_movies._send_movie_card(bot, cid, it, ni, tm=tm, category=category)
 
 
 async def _advance_in_category(cid, category):
@@ -210,7 +236,7 @@ async def _advance_in_category(cid, category):
 
 async def send_movie_genre_menu(bot, cid, q=None):
     text = "Выбери жанр — подберу фильм или сериал под твой вкус внутри него."
-    await _show_menu_over_card(bot, cid, text, _movie_genre_menu_kb(), q)
+    await _show_menu_over_card(bot, cid, text, leisure_movies._movie_genre_menu_kb(), q)
 
 
 async def _show_menu_over_card(bot, cid, text, kb, q):
@@ -220,16 +246,7 @@ async def _show_menu_over_card(bot, cid, text, kb, q):
     (media), edit_text невозможен: снимаем кнопки у старой карточки (чтобы по ней
     нельзя было случайно нажать) и отправляем меню новым сообщением.
     """
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            try:
-                await q.edit_message_reply_markup(reply_markup=None)
-            except Exception:
-                pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 # ---------- экран «Предпочтения кино» ----------
@@ -251,8 +268,7 @@ def _movie_prefs_kb(cid):
     rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="movie_favorites"),
-                 InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("movie_favorites"))
     return InlineKeyboardMarkup(rows)
 
 
@@ -261,12 +277,7 @@ async def send_movie_prefs(bot, cid, q=None):
             "Это приоритеты, а не жёсткие фильтры — я учитываю их при подборе, "
             "но всё равно могу предложить что-то за их пределами.")
     kb = _movie_prefs_kb(cid)
-    if q is not None:
-        try:
-            await q.message.edit_text(text, reply_markup=kb); return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
+    await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def toggle_movie_pref(bot, cid, data, q=None):
@@ -289,7 +300,7 @@ async def toggle_movie_pref(bot, cid, data, q=None):
 
 
 def _genre_label(genre_id):
-    raw_label = dict((gid, lbl) for lbl, gid in _GENRE_MENU).get(genre_id) or tmdb.GENRES.get(genre_id, "")
+    raw_label = dict((gid, lbl) for lbl, gid in leisure_movies._GENRE_MENU).get(genre_id) or tmdb.GENRES.get(genre_id, "")
     return re.sub(r"^\S+\s+", "", raw_label) if raw_label else raw_label  # без ведущего эмодзи кнопки
 
 
@@ -312,7 +323,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
         return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",
-                               reply_markup=_movie_genre_menu_kb())
+                               reply_markup=leisure_movies._movie_genre_menu_kb())
         return
     await _show_discovered(bot, cid, it, tm, category=category)
 
@@ -323,14 +334,14 @@ async def _show_discovered(bot, cid, it, tm, category=None):
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
     и чтобы подбор оставался внутри выбранного жанра."""
     tm = dict(tm or {})
-    disp = _display_title(it, tm)
+    disp = leisure_movies._display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
     rec["items"].append(disp)
     rec["category"] = category
     store.last_recos[str(cid)] = rec
     store.last_source[str(cid)] = "Кино"
-    await _send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm, category=category)
+    await leisure_movies._send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm, category=category)
 
 
 def _passes_genre_gate(c, require_genre_ids=None):

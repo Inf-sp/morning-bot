@@ -282,21 +282,6 @@ def _persistent_cache_save(cache_key, data):
     store.mutate_kv(config.WEATHER_CACHE_KEY, change)
 
 
-def invalidate_weather_cache(lat, lon, days=2):
-    """Удаляет один погодный кэш перед явным ручным обновлением."""
-    days = max(int(days), 2)
-    mem_key = (round(float(lat), 2), round(float(lon), 2), days)
-    cache_key = _weather_cache_key(lat, lon, days)
-    _WX_CACHE.pop(mem_key, None)
-
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data.pop(cache_key, None)
-        return data, None
-
-    store.mutate_kv(config.WEATHER_CACHE_KEY, mutate)
-
-
 def _weather_cache_get(mem_key, cache_key, *, max_age):
     now = time.time()
     hit = _WX_CACHE.get(mem_key)

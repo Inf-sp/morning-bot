@@ -5,12 +5,15 @@ from types import SimpleNamespace
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 
+import ai
 import bot_text
 import routing
 import wardrobe
+import wardrobe_management
 import wardrobe_purchase as purchase
 from ui import wardrobe as wardrobe_ui
 from wardrobe_model import normalize_parsed_item
+from fakes import RecordingBot
 
 _ITEMS = (
     "Серая футболка", "Белая рубашка", "Чёрная футболка", "Оливковая худи",
@@ -29,13 +32,6 @@ def _wardrobe(names=_ITEMS):
         w["zones"].setdefault(item["zone"], {}).setdefault(item["subcategory"], []).append(item)
     return w
 
-
-class Bot:
-    def __init__(self):
-        self.sent = []
-
-    async def send_message(self, **kwargs):
-        self.sent.append(kwargs)
 
 
 class Query:
@@ -56,11 +52,12 @@ def _user(cid, monkeypatch, names=_ITEMS):
     monkeypatch.setattr(wardrobe._settings, "wardrobe_styles", lambda _cid: [])
     monkeypatch.setattr(wardrobe.store, "get_settings", lambda _cid: {"lat": 52.4})
     monkeypatch.setattr(wardrobe, "datetime", _October)
+    monkeypatch.setattr(wardrobe_management, "datetime", _October)
 
     async def no_ai(*_args, **_kwargs):
         raise AssertionError("AI on open")
 
-    monkeypatch.setattr(wardrobe.ai, "allm_json", no_ai)
+    monkeypatch.setattr(ai, "allm_json", no_ai)
 
 
 class _October:
@@ -87,13 +84,13 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
 
 def test_candidates_are_ranked_by_real_new_outfits():
     w = _wardrobe()
-    base = wardrobe.purchase_logic.count_outfits(w)
+    base = purchase.count_outfits(w)
     pool = purchase.rank_candidates(w)
 
     gains = [c["gain"] for c in pool]
     assert gains == sorted(gains, reverse=True)
     assert pool[0]["item"] == "Белые кожаные кеды"
-    after = wardrobe.purchase_logic.count_outfits(purchase._with_item(w, purchase.wardrobe_item(pool[0])))
+    after = purchase.count_outfits(purchase._with_item(w, purchase.wardrobe_item(pool[0])))
     assert pool[0]["gain"] == after - base > 0
 
 
@@ -112,7 +109,7 @@ def test_owned_well_covered_and_rejected_candidates_are_excluded():
 def test_small_wardrobe_asks_to_add_items(monkeypatch):
     cid = "purchase-small"
     _user(cid, monkeypatch, names=_ITEMS[:3])
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(wardrobe.handle_callback(bot, cid, None, "w_buy"))
 
@@ -124,7 +121,7 @@ def test_small_wardrobe_asks_to_add_items(monkeypatch):
 def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     cid = "purchase-screen-one"
     _user(cid, monkeypatch)
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(wardrobe.handle_callback(bot, cid, None, "w_buy"))
 
@@ -151,7 +148,7 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
 def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     cid = "purchase-card"
     _user(cid, monkeypatch)
-    bot, query = Bot(), Query()
+    bot, query = RecordingBot(), Query()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
     first = bot.sent[0]["reply_markup"].inline_keyboard[0][0].callback_data
 
@@ -171,7 +168,7 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
 def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     cid = "purchase-bought"
     _user(cid, monkeypatch)
-    bot, query = Bot(), Query()
+    bot, query = RecordingBot(), Query()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
     old_key = wardrobe._purchase_state(cid)["key"]
     item_id = purchase.item_id("Белые кожаные кеды")
@@ -190,7 +187,7 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
 def test_not_needed_is_persisted_and_replaced(monkeypatch):
     cid = "purchase-rejected"
     _user(cid, monkeypatch)
-    bot, query = Bot(), Query()
+    bot, query = RecordingBot(), Query()
     item_id = purchase.item_id("Белые кожаные кеды")
 
     asyncio.run(wardrobe.handle_callback(bot, cid, query, f"w_buy_no:{item_id}"))
@@ -210,14 +207,14 @@ def test_open_uses_cache_and_night_warm_adds_ai_ideas(monkeypatch):
     calls = []
 
     async def ai_ideas(_prompt, *_args, **_kwargs):
-        calls.append(wardrobe.ai._AI_MODE.get())
+        calls.append(ai._AI_MODE.get())
         return {"items": [{
             "item": "Тёмно-синий пуховик", "zone": "Верхняя одежда", "subcategory": "Пуховики",
             "color": "тёмно-синий", "warmth": "тёплые",
             "why": "Есть только ветровка, а тёплой верхней одежды нет.", "tip": "Бери длину до середины бедра.",
         }]}
 
-    monkeypatch.setattr(wardrobe.ai, "allm_json", ai_ideas)
+    monkeypatch.setattr(ai, "allm_json", ai_ideas)
     asyncio.run(wardrobe.warm_purchase_cache(cid))
     asyncio.run(wardrobe.warm_purchase_cache(cid))
     assert calls == ["background"]
@@ -225,10 +222,10 @@ def test_open_uses_cache_and_night_warm_adds_ai_ideas(monkeypatch):
     async def no_ai(*_args, **_kwargs):
         raise AssertionError("AI on open")
 
-    monkeypatch.setattr(wardrobe.ai, "allm_json", no_ai)
+    monkeypatch.setattr(ai, "allm_json", no_ai)
     rebuilt = []
-    monkeypatch.setattr(wardrobe.purchase_logic, "rank_candidates", lambda *a: rebuilt.append(a) or [])
-    bot, query = Bot(), Query()
+    monkeypatch.setattr(purchase, "rank_candidates", lambda *a: rebuilt.append(a) or [])
+    bot, query = RecordingBot(), Query()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
     asyncio.run(wardrobe.show_purchase_card(bot, cid, purchase.item_id("Тёмно-синий пуховик"), q=query))
 
@@ -259,6 +256,7 @@ def test_old_purchase_callbacks_open_screen_one(monkeypatch):
         opened.append((cid, q))
 
     monkeypatch.setattr(wardrobe, "send_purchase_screen", screen)
+    monkeypatch.setattr(wardrobe_management, "send_purchase_screen", screen)
     for data in ("w_buy_page:2", "w_buy_new:1", "w_buy_new", "w_buy_gap", "w_buy_pick", "w_buy_back"):
         asyncio.run(wardrobe.handle_callback(object(), "42", "q", data))
         assert routing.resolve_callback_handler(data)["handled"]
@@ -271,14 +269,14 @@ def test_unknown_card_id_returns_to_screen_one(monkeypatch):
     _user(cid, monkeypatch)
     query = Query()
 
-    asyncio.run(wardrobe.handle_callback(Bot(), cid, query, "w_buy_i:deadbeef"))
+    asyncio.run(wardrobe.handle_callback(RecordingBot(), cid, query, "w_buy_i:deadbeef"))
 
     assert query.edited[0]["text"].startswith("💳 Что докупить")
     wardrobe.store.pending_input.pop(cid, None)
 
 
 def test_purchase_check_button_waits_for_item_description():
-    bot = Bot()
+    bot = RecordingBot()
 
     asyncio.run(wardrobe.handle_callback(bot, "purchase-check", None, "w_check"))
 
@@ -298,12 +296,13 @@ def test_free_text_after_screen_one_gets_personal_answer(monkeypatch):
         return False
 
     monkeypatch.setattr(wardrobe, "recommend_purchase", recommend)
+    monkeypatch.setattr(wardrobe_management, "recommend_purchase", recommend)
     monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
     monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_match)
     monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_match)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_match)
-    bot = Bot()
+    bot = RecordingBot()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=cid), message=SimpleNamespace(text="зелёная худи"))

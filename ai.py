@@ -20,6 +20,7 @@ import config
 import provider_runtime
 import store
 import secure
+import tracking
 
 _log = logging.getLogger(__name__)
 _GEMINI_RATE_LOCK = threading.Lock()
@@ -52,10 +53,6 @@ _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
     "assistant", "food", "cooking", "recipe", "wardrobe", "leisure", "learning",
 )
-_PUBLIC_AI_FALLBACK_MODULES = frozenset({
-    "learning", "learning_game", "learning_trainer", "trainer",
-    "learning_dictionary", "learning_dict_add", "learning_srs_migration", "dictionary_import",
-})
 
 GROQ_SIMPLE = "groq_simple"
 GROQ_STANDARD = "groq_standard"
@@ -194,14 +191,13 @@ def _run_with_deadline(module, budget_seconds, call):
     else:
         budget = float(budget_seconds or _budget_for_module(module))
         try:
-            import tracking
             if not budget_seconds and tracking.current_action() is not None:
                 budget = min(budget, LIVE_INTERACTIVE_BUDGET_SECONDS)
             action_remaining = tracking.remaining_action_seconds()
             if action_remaining is not None:
                 budget = min(budget, action_remaining)
         except Exception:
-            pass
+            _log.debug("_run_with_deadline: ignored error", exc_info=True)
     if budget <= 0.2:
         raise _deadline_error()
     token = _ACTIVE_DEADLINE.set(time.monotonic() + budget)
@@ -271,8 +267,6 @@ def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
                        latency_ms: int = 0, failure: str = "", cache_hit: bool = False) -> None:
     """Короткий технический след AI-попытки без текста запроса или ответа."""
     try:
-        import tracking
-
         trace = tracking.current_action()
         origin = "Пользователь" if trace is not None else "Фон"
         actor = str(getattr(trace, "cid", "") or "") if trace is not None else ""
@@ -303,49 +297,7 @@ def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
         # AI-вызовы идут из нескольких потоков: атомарная запись не теряет строки.
         store.mutate_kv(config.AI_TRAFFIC_LOG_KEY, change)
     except Exception:
-        pass
-
-
-def ai_traffic_summary(period_seconds=24 * 3600, limit=5) -> dict:
-    """Сводка попыток для админки: кто и какой раздел создаёт нагрузку."""
-    try:
-        cutoff = time.time() - max(60, int(period_seconds or 0))
-        rows = [
-            row for row in (store._load(config.AI_TRAFFIC_LOG_KEY) or {}).get("log", [])
-            if int(row.get("ts") or 0) >= cutoff
-        ]
-    except Exception:
-        rows = []
-    grouped = {}
-    providers = {}
-    peaks = {}
-    for row in rows:
-        key = (str(row.get("origin") or "Фон"), str(row.get("section") or "Система"),
-               str(row.get("actor") or ""))
-        item = grouped.setdefault(key, {
-            "origin": key[0], "section": key[1], "actor": key[2],
-            "attempts": 0, "failed": 0, "cache_hits": 0,
-        })
-        item["attempts"] += 1
-        item["failed"] += 0 if row.get("ok") else 1
-        item["cache_hits"] += 1 if row.get("cache_hit") else 0
-        provider = str(row.get("provider") or "")
-        if provider and provider != "cache":
-            providers[provider] = providers.get(provider, 0) + 1
-        bucket = int(row.get("ts") or 0) // 300 * 300
-        peak = peaks.setdefault(bucket, {"ts": bucket, "attempts": 0, "failed": 0})
-        peak["attempts"] += 1
-        peak["failed"] += 0 if row.get("ok") else 1
-    sources = sorted(grouped.values(), key=lambda item: (-item["attempts"], -item["failed"]))
-    peak = max(peaks.values(), key=lambda item: (item["attempts"], item["failed"]), default=None)
-    return {
-        "total": len(rows),
-        "failed": sum(1 for row in rows if not row.get("ok")),
-        "cache_hits": sum(1 for row in rows if row.get("cache_hit")),
-        "providers": dict(sorted(providers.items(), key=lambda item: -item[1])),
-        "sources": sources[:max(1, int(limit or 1))],
-        "peak": peak,
-    }
+        _log.debug("_record_ai_attempt: ignored error", exc_info=True)
 
 
 _AI_CACHE_MAX = 300
@@ -455,7 +407,7 @@ def _cache_set(key: str, value):
 
         store.mutate_kv(config.AI_RESPONSE_CACHE_KEY, change)
     except Exception:
-        pass
+        _log.debug("_cache_set: ignored error", exc_info=True)
 
 
 def _cache_delete(key: str):
@@ -467,7 +419,7 @@ def _cache_delete(key: str):
 
         store.mutate_kv(config.AI_RESPONSE_CACHE_KEY, change)
     except Exception:
-        pass
+        _log.debug("_cache_delete: ignored error", exc_info=True)
 
 
 def _parse_retry_seconds(headers=None, body="") -> int | None:
@@ -476,7 +428,7 @@ def _parse_retry_seconds(headers=None, body="") -> int | None:
         if val > 0:
             return val
     except Exception:
-        pass
+        _log.debug("_parse_retry_seconds: ignored error", exc_info=True)
     text = body or ""
     try:
         data = json.loads(text)
@@ -487,7 +439,7 @@ def _parse_retry_seconds(headers=None, body="") -> int | None:
                 if m:
                     return int(m.group(1))
     except Exception:
-        pass
+        _log.debug("_parse_retry_seconds: ignored error", exc_info=True)
     m = re.search(r"retry(?: after|Delay)?[^\d]{0,20}(\d+)\s*s", text, re.I)
     return int(m.group(1)) if m else None
 
@@ -507,11 +459,6 @@ def _provider_model_name(provider: str) -> str:
     if provider == "cf":
         return config.CF_MODEL
     return ""
-
-
-def _json_preview(raw: str, limit: int = 320) -> str:
-    text = secure.redact(str(raw or "")).strip()
-    return text[:limit]
 
 
 def _extract_json_text(raw: str) -> str:
@@ -567,10 +514,6 @@ def _gemini_cooldown_error():
     )
 
 
-def get_gemini_rate_limit_stats(period_days=1) -> dict:
-    return api_usage.gemini_state(period_days)
-
-
 def _cooldown_phrase(seconds: int) -> str:
     seconds = max(0, int(seconds or 0))
     if seconds < 90:
@@ -581,7 +524,6 @@ def _cooldown_phrase(seconds: int) -> str:
 
 def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = False):
     try:
-        import tracking
         state = api_usage.gemini_state(1)
         scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
         cooldown_until = int(getattr(err, "cooldown_until", None) or state.get("cooldown_until") or 0)
@@ -608,7 +550,7 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
             service="Gemini", fallback="автоматический резерв" if fallback else "",
         )
     except Exception:
-        pass
+        _log.debug("_log_gemini_limit: ignored error", exc_info=True)
 
 def _is_json_validation_error(status_code, body="") -> bool:
     if int(status_code or 0) != 400:
@@ -641,7 +583,7 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
             try:
                 provider_runtime.record_result(service, ok, **kwargs)
             except Exception:
-                pass
+                _log.debug("record_usage: ignored error", exc_info=True)
 
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=timeout)
@@ -734,7 +676,7 @@ def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_s
             try:
                 provider_runtime.record_result(service, ok, **details)
             except Exception:
-                pass
+                _log.debug("record: ignored error", exc_info=True)
 
     try:
         response = requests.post(
@@ -767,12 +709,12 @@ def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_s
     try:
         response.close()
     except Exception:
-        pass
+        _log.debug("_stream_post: ignored error", exc_info=True)
     retry_after = None
     try:
         retry_after = int(response.headers.get("Retry-After") or 0) or None
     except Exception:
-        pass
+        _log.debug("_stream_post: ignored error", exc_info=True)
     raise LLMProviderError(
         name, f"{name} {status_code}: {body}", status_code=status_code,
         temporary=_is_temporary_status(status_code), error_type="http_error",
@@ -887,7 +829,7 @@ def _stream_openai_chat(url, headers, payload, timeout, provider, emit, *, usage
         try:
             response.close()
         except Exception:
-            pass
+            _log.debug("_stream_openai_chat: ignored error", exc_info=True)
 
 def _as_text(x):
     if isinstance(x, str):
@@ -1112,22 +1054,6 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
         return None
 
 
-async def aopenrouter_paid_json(prompt, max_tokens=1200, *, model=None, result_validator=None):
-    """Прямой оплачиваемый OpenRouter-вызов для явного пользовательского действия."""
-    selected = model or config.OPENROUTER_DICTIONARY_MODEL
-    raw = await asyncio.to_thread(
-        _openrouter_plain_text_fallback,
-        prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown.",
-        max_tokens, 0.4, "manual_action", "paid_direct",
-        "json", False, (selected,),
-    )
-    if not raw:
-        raise LLMProviderError("openrouter", "empty paid response", temporary=True)
-    parsed = _parse_json_response(raw)
-    if result_validator is not None and not result_validator(parsed):
-        raise LLMProviderError("openrouter", "invalid paid response", temporary=True)
-    return parsed
-
 def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text",
               model=None, provider="groq"):
     if not config.GROQ_API_KEY:
@@ -1310,11 +1236,7 @@ def _friendly(errs):
 
 def _reserve_gemini_for_action() -> bool:
     """Gemini may produce at most one response for one user action."""
-    try:
-        import tracking
-        return tracking.consume_provider_budget("gemini", limit=1)
-    except Exception:
-        return True
+    return tracking.consume_provider_budget("gemini", limit=1)
 
 # Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
 # попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
@@ -1322,7 +1244,6 @@ AI_ORDER = ("gemini", "groq", "cf", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
-UTILITY_ORDER = SIMPLE_ORDER
 DEFAULT_ORDER = STANDARD_ORDER
 CHAT_ORDER = STANDARD_ORDER
 GRAMMAR_ORDER = STANDARD_ORDER
@@ -1434,20 +1355,15 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
-    try:
-        import tracking
-        primary = order[0] if order else ""
-        requested_tier = (
+    primary = order[0] if order else ""
+    tracking.annotate_ai_route(
+        requested_tier=(
             "complex" if primary in ("gemini", GROQ_COMPLEX)
             else "simple" if primary in (GROQ_SIMPLE, "cf")
             else "standard"
-        )
-        tracking.annotate_ai_route(
-            requested_tier=requested_tier,
-            primary=primary,
-        )
-    except Exception:
-        pass
+        ),
+        primary=primary,
+    )
     cache_ttl = _cache_ttl(module, response_mode)
     cache_key = _cache_key(
         order, prompt, max_tokens, temperature, module, response_mode,
@@ -1457,11 +1373,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     if cached:
         if _is_cacheable_response(cached, response_mode):
             _record_ai_attempt("cache", "", module, ok=True, cache_hit=True)
-            try:
-                import tracking
-                tracking.annotate_action(provider="cache", cache_hit=True)
-            except Exception:
-                pass
+            tracking.annotate_action(provider="cache", cache_hit=True)
             return cached
         # Ранее закэширован ответ, который не парсится как JSON (баг, уже
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
@@ -1518,13 +1430,9 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 name, _provider_model_name(name), module, ok=False,
                 failure=str(unavailable),
             )
-            try:
-                import tracking
-                tracking.record_ai_failure(
-                    name, str(getattr(unavailable, "status_code", "") or getattr(unavailable, "error_type", "")),
-                )
-            except Exception:
-                pass
+            tracking.record_ai_failure(
+                name, str(getattr(unavailable, "status_code", "") or getattr(unavailable, "error_type", "")),
+            )
             failed_providers.append(name)
             errs.append(f"{name}:{unavailable}")
             if _is_temporary_exception(unavailable):
@@ -1555,11 +1463,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                             name, _provider_model_name(name), module, ok=False,
                             latency_ms=ms, failure="invalid structured response",
                         )
-                        try:
-                            import tracking
-                            tracking.record_ai_failure(name, "invalid_response")
-                        except Exception:
-                            pass
+                        tracking.record_ai_failure(name, "invalid_response")
                         failed_providers.append(name)
                         errs.append(f"{name}:invalid structured response")
                         temporary_errs.append((name, LLMProviderError(
@@ -1579,14 +1483,10 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                     rate_limit_logged = True
                 if _is_cacheable_response(out, response_mode):
                     _cache_set(cache_key, out)
-                try:
-                    import tracking
-                    tracking.annotate_action(
-                        provider=name,
-                        fallback="provider" if failed_providers else "",
-                    )
-                except Exception:
-                    pass
+                tracking.annotate_action(
+                    provider=name,
+                    fallback="provider" if failed_providers else "",
+                )
                 return out
             _record_ai_attempt(
                 name, _provider_model_name(name), module, ok=False,
@@ -1598,13 +1498,9 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 name, _provider_model_name(name), module, ok=False,
                 latency_ms=ms, failure=str(e) or type(e).__name__,
             )
-            try:
-                import tracking
-                tracking.record_ai_failure(
-                    name, str(getattr(e, "status_code", "") or getattr(e, "error_type", "") or type(e).__name__),
-                )
-            except Exception:
-                pass
+            tracking.record_ai_failure(
+                name, str(getattr(e, "status_code", "") or getattr(e, "error_type", "") or type(e).__name__),
+            )
             failed_providers.append(name)
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
@@ -1639,11 +1535,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 rate_limit_logged = True
             if _is_cacheable_response(out, response_mode):
                 _cache_set(cache_key, out)
-            try:
-                import tracking
-                tracking.annotate_action(provider="openrouter", fallback="provider")
-            except Exception:
-                pass
+            tracking.annotate_action(provider="openrouter", fallback="provider")
             return out
         _record_ai_attempt("openrouter", config.OPENROUTER_MODEL, module, ok=False,
                            latency_ms=fallback_ms, failure="fallback failed")
@@ -1656,11 +1548,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         api_usage.record_gemini_fallback(target="local", reason="all_providers_failed")
         _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
     _friendly_msg = _friendly(errs)
-    try:
-        import tracking
-        tracking.annotate_action(fallback="local")
-    except Exception:
-        pass
+    tracking.annotate_action(fallback="local")
     # Сбои конкретных провайдеров уже записаны provider_runtime как единые
     # системные инциденты. Не создаём вторую ошибку раздела с тем же сбоем.
     raise Exception(_friendly_msg)
@@ -1946,95 +1834,17 @@ def _log_free_chat_route(*, served_by="", outcome=""):
     )
 
 
-def _chat_chain_impl(history, cid=None):
-    system = _chat_system(cid)
-    errs = []
-    failed_providers = []
-    try:
-        import tracking
-        tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
-    except Exception:
-        pass
-    breaker_skip = _breaker_skip_set(CHAT_ORDER)
-    for provider_index, p in enumerate(CHAT_ORDER):
-        remaining = _remaining_seconds()
-        if remaining is not None and remaining < _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS:
-            errs.append("chain:deadline")
-            break
-        unavailable = _provider_is_unavailable(p, skip=breaker_skip)
-        if unavailable is not None:
-            _record_ai_attempt(p, _provider_model_name(p), "assistant", ok=False,
-                               failure=str(unavailable))
-            failed_providers.append(p)
-            errs.append(f"{p}:{unavailable}")
-            continue
-        try:
-            attempt_started = time.time()
-            later_reserve = _reserve_for_later_providers(
-                CHAT_ORDER, provider_index,
-                FallbackPolicy(fallback_allowed=True, privacy_level="personal"),
-            )
-            usable = (
-                max(_MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS, remaining - later_reserve)
-                if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p]
-            )
-            attempt_timeout = min(_FREE_CHAT_PROVIDER_TIMEOUTS[p], usable)
-            out = _as_text(_chat(p, history, system, timeout_cap=attempt_timeout))
-            if out and out.strip():
-                _record_ai_attempt(
-                    p, _provider_model_name(p), "assistant", ok=True,
-                    latency_ms=int((time.time() - attempt_started) * 1000),
-                )
-                for failed in failed_providers:
-                    provider_runtime.activate_fallback(
-                        _monitor_name(failed), _monitor_name(p), reason="request",
-                    )
-                try:
-                    import tracking
-                    tracking.annotate_action(
-                        provider=p,
-                        fallback="provider" if failed_providers else "",
-                    )
-                except Exception:
-                    pass
-                _log_free_chat_route(served_by=p, outcome="success")
-                return out
-            _record_ai_attempt(
-                p, _provider_model_name(p), "assistant", ok=False,
-                latency_ms=int((time.time() - attempt_started) * 1000), failure="empty response",
-            )
-        except Exception as e:
-            _record_ai_attempt(p, _provider_model_name(p), "assistant", ok=False,
-                               latency_ms=int((time.time() - attempt_started) * 1000),
-                               failure=str(e) or type(e).__name__)
-            failed_providers.append(p)
-            _mark_cooldown(p, e)
-            errs.append(f"{p}:{e}")
-    try:
-        import tracking
-        tracking.annotate_action(fallback="local")
-    except Exception:
-        pass
-    _log_free_chat_route(outcome="failed")
-    raise Exception(_friendly(errs))
-
-
-def _chat_chain_stream_impl(history, cid=None, emit=None):
-    """Free-chat route with SSE before the first visible provider output.
+def _chat_chain_impl(history, cid=None, emit=None):
+    """Free-chat route; with ``emit`` it streams SSE before the first visible output.
 
     A provider may be replaced only before it has yielded text. Once the user
     has seen a delta, swapping models would make two unrelated answers appear
     as one; that case ends with a short retry prompt instead.
     """
     system = _chat_system(cid)
-    emit = emit or (lambda _delta: None)
     errs = []
     failed_providers = []
-    try:
-        import tracking
-        tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
-    except Exception:
-        pass
+    tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
 
     breaker_skip = _breaker_skip_set(CHAT_ORDER)
     for provider_index, p in enumerate(CHAT_ORDER):
@@ -2071,7 +1881,10 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
                 if remaining is not None else _FREE_CHAT_PROVIDER_TIMEOUTS[p]
             )
             attempt_timeout = min(_FREE_CHAT_PROVIDER_TIMEOUTS[p], usable)
-            out = _as_text(_chat_stream(p, history, system, send_delta, timeout_cap=attempt_timeout))
+            if emit is None:
+                out = _as_text(_chat(p, history, system, timeout_cap=attempt_timeout))
+            else:
+                out = _as_text(_chat_stream(p, history, system, send_delta, timeout_cap=attempt_timeout))
             if out and out.strip():
                 _record_ai_attempt(
                     p, _provider_model_name(p), "assistant", ok=True,
@@ -2081,13 +1894,9 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                try:
-                    import tracking
-                    tracking.annotate_action(
-                        provider=p, fallback="provider" if failed_providers else "",
-                    )
-                except Exception:
-                    pass
+                tracking.annotate_action(
+                    provider=p, fallback="provider" if failed_providers else "",
+                )
                 _log_free_chat_route(served_by=p, outcome="success")
                 return out
             _record_ai_attempt(
@@ -2119,11 +1928,7 @@ def _chat_chain_stream_impl(history, cid=None, emit=None):
             failed_providers.append(p)
             _mark_cooldown(p, error)
             errs.append(f"{p}:{error}")
-    try:
-        import tracking
-        tracking.annotate_action(fallback="local")
-    except Exception:
-        pass
+    tracking.annotate_action(fallback="local")
     _log_free_chat_route(outcome="failed")
     raise Exception(_friendly(errs))
 
@@ -2140,30 +1945,18 @@ def chat_chain_stream(history, cid=None, emit=None, budget_seconds=None):
     return _run_with_deadline(
         "assistant",
         budget_seconds or FREE_CHAT_BUDGET_SECONDS,
-        lambda: _chat_chain_stream_impl(history, cid, emit),
+        lambda: _chat_chain_impl(history, cid, emit or (lambda _delta: None)),
     )
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---
-async def allm(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, route=None, module="",
-               fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-               response_mode: ResponseMode = "plain_text", fallback_policy=None,
-               allow_personal_openrouter=False, budget_seconds=None, cache_context=None):
-    return await asyncio.to_thread(
-        llm, prompt, max_tokens, temperature, order, tier, module, route,
-        fallback_allowed, privacy_level, response_mode, fallback_policy,
-        allow_personal_openrouter, budget_seconds, cache_context,
-    )
+async def allm(*args, **kwargs):
+    return await asyncio.to_thread(llm, *args, **kwargs)
 
-async def allm_json(prompt, max_tokens=1200, order=None, tier=None, route=None, module="",
-                    fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
-                    allow_personal_openrouter=False, fallback_policy=None,
-                    budget_seconds=None, cache_context=None, result_validator=None):
-    return await asyncio.to_thread(
-        llm_json, prompt, max_tokens, order, tier, module, route,
-        fallback_allowed, privacy_level, allow_personal_openrouter, fallback_policy,
-        budget_seconds, cache_context, result_validator,
-    )
+
+async def allm_json(*args, **kwargs):
+    return await asyncio.to_thread(llm_json, *args, **kwargs)
+
 
 async def achat_chain(history, cid=None, budget_seconds=FREE_CHAT_BUDGET_SECONDS):
     return await asyncio.to_thread(chat_chain, history, cid, budget_seconds)

@@ -1,39 +1,31 @@
 """Структурный (AST-based) резолвер маршрутизации callback_data.
 
 Не исполняет ни один handler и не импортирует telegram/config/store — читает
-исходный текст bot_callbacks.py и под-роутеров, строит дерево реальных
-if/elif-условий маршрутизации в том порядке, в котором их видит `handle`, и отвечает
+литеральную таблицу ROUTES в bot_callbacks.py и if-ветки под-роутеров и отвечает
 на вопрос "к какому handler'у (файл + функция) уйдёт этот конкретный
 callback_data", либо "ни к какому" (orphan).
 
 Это НЕ замена ручному чтению кода — это дешёвая, воспроизводимая проверка,
-которую можно гонять в тестах и CI. Используется вместо (не вместе с)
-verify.audit_callbacks(), у которой было структурное слепое пятно: она
-собирала все "data ==" / "data.startswith" условия по всем файлам в одно
-плоское множество, из-за чего верхнеуровневый `data.startswith(("set_", ...))`
-в bot_callbacks.py засчитывался как "обработано", даже если внутри settings.handle_callback
-ветки для конкретного callback_data не было.
+которую можно гонять в тестах и CI. В отличие от плоского поиска всех
+"data ==" / "data.startswith" по файлам, верхнеуровневый
+`data.startswith(("set_", ...))` не засчитывается как "обработано", если внутри
+settings.handle_callback ветки для конкретного callback_data нет.
 """
 import ast
 import os
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Файл верхнего роутера и под-роутеры, куда он передаёт управление.
-# Ключ - имя под-роутера, которое встречается в вызове (X.handle_callback и т.п.),
-# значение - (файл, имя_функции).
+# Под-роутеры, которым таблица ROUTES передаёт callback (поле ``sub``):
+# имя -> (файл, функция).
 _SUBROUTERS = {
     "onboard": ("onboard.py", "handle_callback"),
     "settings": ("settings.py", "handle_callback"),
     "wardrobe": ("wardrobe_router.py", "handle_callback"),
-    "myday": ("myday.py", "handle_callback"),
     "cooking": ("cooking.py", "handle_callback"),
     "learning_router": ("learning_router.py", "handle_callback"),
     "personal_collections": ("personal_collections.py", "handle_collection_callback"),
-    "cleanup": ("cleanup.py", "handle_cleanup"),
 }
-# Личные коллекции используют отдельный callback-роутер.
-_COLLECTIONS_ROUTER = ("personal_collections.py", "handle_collection_callback")
 
 
 def _read_source(filename):
@@ -118,193 +110,74 @@ def _match_condition(test, subject_name):
     return None
 
 
-def _walk_if_chain(node, subject_name):
-    """Генератор (kind, values, body, orelse) для if/elif-цепочки, начиная с node
-    (ast.If). Каждый elif в Python AST - это вложенный If в orelse одного элемента."""
-    cur = node
-    while isinstance(cur, ast.If):
-        m = _match_condition(cur.test, subject_name)
-        if m is not None:
-            kind, values = m
-            yield kind, values, cur.body
-        if len(cur.orelse) == 1 and isinstance(cur.orelse[0], ast.If):
-            cur = cur.orelse[0]
-        else:
-            break
+def _literal_keys(node):
+    keys = _const_str(node)
+    return (keys,) if keys is not None else tuple(sorted(_str_tuple(node)))
 
 
-def _direct_subrouter_call(stmts):
-    """Ищет вызов callback-роутера в
-    операторах, не спускаясь во вложенные if (вложенность разбирает вызывающая
-    сторона — _body_calls_subrouter)."""
-    for stmt in stmts:
-        if isinstance(stmt, ast.If):
-            continue
-        for n in ast.walk(stmt):
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
-                if n.func.attr in ("handle_callback", "handle_collection_callback", "handle_action") and isinstance(n.func.value, ast.Name):
-                    return n.func.value.id
-    return None
+def _matches(keys, data):
+    return any(data.startswith(k[:-1]) if k.endswith("*") else data == k for k in keys)
 
 
-def _body_calls_subrouter(body, callback_data, subject_name="data"):
-    """Определяет, какой под-роутер реально получит `callback_data`, учитывая
-    возможный вложенный if/else внутри тела ветки (например `as_*` дальше делится
-    на cooking.py и settings.py по более узкому префиксу).
-
-    Возвращает имя модуля (например "settings") или None, если тело не делегирует
-    ни одному под-роутеру для этого конкретного callback_data."""
-    # Сначала: есть ли вложенный if/else, разбивающий этот же subject дальше?
-    for stmt in body:
-        if isinstance(stmt, ast.If):
-            m = _match_condition(stmt.test, subject_name)
-            if m is not None:
-                kind, values = m
-                matched = (
-                    (kind == "exact" and callback_data in values)
-                    or (kind == "prefix" and any(callback_data.startswith(p) for p in values))
-                )
-                if matched:
-                    sub = _direct_subrouter_call(stmt.body)
-                    if sub is not None:
-                        return sub
-                    # совпало, но внутри нет прямого вызова — рекурсия на случай
-                    # более глубокой вложенности
-                    nested = _body_calls_subrouter(stmt.body, callback_data, subject_name)
-                    if nested is not None:
-                        return nested
-                    continue
-                else:
-                    # не совпало с if-веткой — переходим в else
-                    sub = _direct_subrouter_call(stmt.orelse)
-                    if sub is not None:
-                        return sub
-                    nested = _body_calls_subrouter(stmt.orelse, callback_data, subject_name)
-                    if nested is not None:
-                        return nested
-                    continue
-    # Нет вложенного if по subject — просто ищем прямой вызов на верхнем уровне.
-    return _direct_subrouter_call(body)
+def _table(tree, name):
+    """Читает литеральную таблицу ``NAME = (R(keys, handler, sub=...), ...)``."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            rows = []
+            for call in node.value.elts:
+                sub = next((_const_str(k.value) for k in call.keywords if k.arg == "sub"), None)
+                rows.append((_literal_keys(call.args[0]), sub))
+            return rows
+    raise RuntimeError(f"{name} не найдена в bot_callbacks.py — резолвер рассинхронизирован с кодом")
 
 
-def _extract_act_prefix_rules(body):
-    """Внутри `if data.startswith("a_"): act = data[2:]; try: if act == "x": ...`
-    вытаскивает elif-цепочку по имени `act` и переводит её обратно в правила по `data`
-    (с восстановленным префиксом "a_")."""
-    rules = []
-    # Ищем `act = data[2:]` чтобы подтвердить срез, затем ищем if/elif-цепочку по act
-    # внутри try/except или напрямую в теле.
-    for stmt in body:
-        if isinstance(stmt, ast.Try):
-            inner = stmt.body
-        else:
-            inner = [stmt]
-        for s in inner:
-            if isinstance(s, ast.If):
-                for kind, values, _sub_body in _walk_if_chain(s, "act"):
-                    prefixed = {"a_" + v for v in values}
-                    rules.append((kind, prefixed))
-    return rules
-
-
-def _handled_by_toplevel(callback_data, tree):
-    """Проходит по всем if/elif верхнего уровня функции handle в порядке
-    объявления. Возвращает (True, subrouter_module_or_None) на первом совпадении,
-    либо (False, None), если ни одна ветка не совпала."""
-    fn = _find_function(tree, "handle")
-    if fn is None:
-        raise RuntimeError("handle не найдена в bot_callbacks.py — резолвер рассинхронизирован с кодом")
-
-    for stmt in fn.body:
-        if not isinstance(stmt, ast.If):
-            continue
-        m = _match_condition(stmt.test, "data")
-        if m is None:
-            continue
-        kind, values = m
-        matched = (
-            (kind == "exact" and callback_data in values)
-            or (kind == "prefix" and any(callback_data.startswith(p) for p in values))
-        )
-        if not matched:
-            continue
-        # Особый случай a_<act>: часть действий делегирована
-        # локальному роутеру learning, остальные остаются в bot_callbacks.py.
-        if kind == "prefix" and "a_" in values:
-            learning_tree = ast.parse(_read_source("learning_router.py"))
-            learning_action = _find_function(learning_tree, "handle_action")
-            if (learning_action is not None
-                    and _sub_router_handles(callback_data[2:], learning_action, "act")):
-                return True, "learning_router"
-            act_rules = _extract_act_prefix_rules(stmt.body)
-            for act_kind, act_values in act_rules:
-                act_matched = (
-                    (act_kind == "exact" and callback_data in act_values)
-                    or (act_kind == "prefix" and any(callback_data.startswith(p) for p in act_values))
-                )
-                if act_matched:
-                    return True, None
-            # data.startswith("a_") совпал, но конкретного act-правила нет —
-            # это НЕ обработано (тело падает в try/except без действия для этого act).
-            return False, None
-        sub = _body_calls_subrouter(stmt.body, callback_data)
-        if sub is not None:
-            return True, sub
-        return True, None
-    return False, None
+def _legacy_alias(tree, data):
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "LEGACY_ALIASES" for t in node.targets):
+            for pair in node.value.elts:
+                keys, target = pair.elts
+                if _matches(_literal_keys(keys), data):
+                    return _const_str(target)
+    return data
 
 
 def resolve_callback_handler(callback_data: str):
     """Определяет, какой handler реально обработает данный callback_data.
 
     Возвращает dict {"handled": bool, "module": str|None, "detail": str} —
-    "module" - под-роутер (settings/wardrobe/myday/learning_router/cleanup/onboard),
-    None если обработка целиком в bot_callbacks.py, либо None+handled=False, если callback
-    не совпал ни с одной веткой ни на одном уровне.
+    "module" — "bot_callbacks.py" или "файл:функция" под-роутера.
 
-    Не исполняет ни один handler - только структурно проходит AST bot_callbacks.py и,
-    при необходимости, под-роутера, куда bot_callbacks.py передаёт управление.
+    Не исполняет ни один handler: читает литеральные таблицы ROUTES/ACTIONS
+    bot_callbacks.py и, при необходимости, if-ветки под-роутера.
     """
-    callback_src = _read_source("bot_callbacks.py")
-    callback_tree = ast.parse(callback_src)
-
-    handled_top, sub_module = _handled_by_toplevel(callback_data, callback_tree)
-    if not handled_top:
-        return {"handled": False, "module": None, "detail": "no matching branch in bot_callbacks.handle"}
-    if sub_module is None:
+    tree = ast.parse(_read_source("bot_callbacks.py"))
+    data = _legacy_alias(tree, callback_data)
+    sub = next((sub for keys, sub in _table(tree, "ROUTES") if _matches(keys, data)), False)
+    if sub is False:
+        return {"handled": False, "module": None, "detail": "no matching route in bot_callbacks.ROUTES"}
+    if sub == "actions":
+        act = data[2:]
+        learning_action = _find_function(ast.parse(_read_source("learning_router.py")), "handle_action")
+        if act != "plany" and _sub_router_handles(act, learning_action, "act"):
+            return {"handled": True, "module": "learning_router.py:handle_action",
+                    "detail": "matched inside sub-router"}
+        if any(_matches(keys, act) for keys, _sub in _table(tree, "ACTIONS")):
+            return {"handled": True, "module": "bot_callbacks.py", "detail": "handled directly in callback router"}
+        return {"handled": False, "module": None, "detail": "no matching action in bot_callbacks.ACTIONS"}
+    if sub is None:
         return {"handled": True, "module": "bot_callbacks.py", "detail": "handled directly in callback router"}
 
-    # Личные коллекции обрабатывают fav_/ls_/as_ (кроме предметных веток),
-    # настройки — set_/setadd_/setdel_.
-    file_name, func_name = _resolve_subrouter_target(sub_module, callback_data, callback_tree)
-    sub_src = _read_source(file_name)
-    sub_tree = ast.parse(sub_src)
-    fn = _find_function(sub_tree, func_name)
+    file_name, func_name = _SUBROUTERS[sub]
+    fn = _find_function(ast.parse(_read_source(file_name)), func_name)
     if fn is None:
-        return {"handled": False, "module": sub_module,
+        return {"handled": False, "module": sub,
                 "detail": f"{file_name}:{func_name} not found — resolver out of sync"}
-
-    routed_value = callback_data[2:] if func_name == "handle_action" and callback_data.startswith("a_") else callback_data
-    subject_name = "act" if func_name == "handle_action" else "data"
-    if _sub_router_handles(routed_value, fn, subject_name):
+    if _sub_router_handles(data, fn):
         return {"handled": True, "module": f"{file_name}:{func_name}", "detail": "matched inside sub-router"}
     return {"handled": False, "module": f"{file_name}:{func_name}",
             "detail": "reached sub-router but no matching branch inside it"}
-
-
-def _resolve_subrouter_target(sub_module, callback_data, _callback_tree):
-    if sub_module == "learning_router" and callback_data.startswith("a_"):
-        return "learning_router.py", "handle_action"
-    if sub_module != "settings":
-        return _SUBROUTERS[sub_module]
-    # Callback router distinguishes personal collections from Settings.
-    if callback_data.startswith(("fav_", "ls_")):
-        return _COLLECTIONS_ROUTER
-    if callback_data.startswith("as_") and not callback_data.startswith(
-        ("as_food", "as_fridge", "as_recipe")
-    ):
-        return _COLLECTIONS_ROUTER
-    return _SUBROUTERS["settings"]
 
 
 def _sub_router_handles(callback_data, fn, subject_name="data"):

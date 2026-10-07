@@ -1,29 +1,20 @@
 import asyncio
-import hashlib
-import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
 import category_news
-import recommendation_rotation as rotation
 import store
-import ai
 import weather
 import util
-import verify
-import secure
 import settings as _settings
 from ui import wardrobe as wardrobe_ui
 from ui.constants import delete_label, ui_label
 from wardrobe_model import (
-    ZONE_ORDER,
     ZONE_SUBCATS,
     flat_items as _flat_wardrobe_items,
     has_rain_outerwear as _has_rain_outerwear,
-    normalize_parsed_item,
     public_zone_name,
     public_item_name,
     wardrobe_stats,
@@ -40,19 +31,8 @@ from wardrobe_outfit import (
     save_outfit_feedback,
 )
 from wardrobe_migration import migrate_item_attrs
-from module_binding import bind_functions as _bind_functions
-import wardrobe_management as _wardrobe_management
-import wardrobe_router as _wardrobe_router
-import wardrobe_purchase as purchase_logic
 
 _log = logging.getLogger(__name__)
-_MANAGEMENT_DEPENDENCIES = (ai, secure, normalize_parsed_item)
-
-if TYPE_CHECKING:
-    from wardrobe_management import (
-        _find_item, add_item, add_wardrobe_gap, get_wardrobe_gaps,
-        warm_purchase_cache,
-    )
 
 WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 12
@@ -112,69 +92,6 @@ def _back_kb():
 
 def _day_key():
     return datetime.now(config.TZ).date().isoformat()
-
-
-def _weather_decision(weather_ctx, variant=0):
-    """Коротко называет условия, которые меняют выбор одежды.
-
-    Вариант меняется между новыми образами, чтобы одинаковая погода не
-    превращалась в один и тот же застывший текст.
-    """
-    if not weather_ctx or weather_ctx.get("tmax") is None:
-        return ""
-    try:
-        variant = max(0, int(variant))
-    except (TypeError, ValueError):
-        variant = 0
-
-    def choose(options):
-        return options[variant % len(options)]
-
-    has_rain = weather_ctx.get("has_rain")
-    strong_wind = weather_ctx.get("strong_wind")
-    hot = weather_ctx.get("hot")
-    warm = weather_ctx.get("warm")
-
-    if has_rain and hot:
-        return choose((
-            "Тепло, возможен дождь — пригодится лёгкая защита.",
-            "Тёплый день с дождём — выбери закрытую обувь и защищённый слой.",
-        ))
-    if has_rain and strong_wind:
-        return choose((
-            "Прохладно, ветрено и возможен дождь — нужен защищённый слой.",
-            "Сегодня лучше прикрыться от ветра и дождя.",
-        ))
-    if has_rain:
-        return choose((
-            "Возможен дождь — лучше выбрать закрытую обувь.",
-            "Возьми вещь, которая не боится короткого дождя.",
-        ))
-    if strong_wind and hot:
-        return choose((
-            "Тепло, но ветрено — пригодится лёгкий слой.",
-            "Жарко, но порывисто — оставь лёгкую защиту от ветра.",
-        ))
-    if strong_wind:
-        return choose((
-            "Прохладно и ветрено — нужен дополнительный слой.",
-            "Ветер усилит прохладу — добавь лёгкий верхний слой.",
-        ))
-    if hot:
-        return choose((
-            "Жарко и сухо — выбирай лёгкие ткани.",
-            "Солнечный тёплый день — пусть вещи дышат и не перегружают образ.",
-        ))
-    if warm:
-        return choose((
-            "Тепло и сухо — достаточно лёгких слоёв.",
-            "Мягкая погода — выбирай дышащие вещи без лишнего утепления.",
-            "Днём комфортно — лёгкого верха будет достаточно.",
-        ))
-    return choose((
-        "Прохладно — нужен дополнительный слой.",
-        "Свежо — собери образ с тёплым верхним слоем.",
-    ))
 
 
 def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode):
@@ -414,18 +331,6 @@ def _get_cached_look(cid):
     if "purchase_recommendation" not in look_data or look_data.get("purchase_recommendation") is None:
         return None
     return cached
-
-
-def get_cached_outfit_items(cid):
-    """Названия вещей из актуального образа дня для других пользовательских карточек."""
-    cached = _get_cached_look(cid)
-    if not cached:
-        return []
-    return [
-        _clean_text(_item_name(item))
-        for item in (cached.get("look_data") or {}).get("items", [])
-        if _clean_text(_item_name(item))
-    ]
 
 
 def get_cached_outfit_summary(cid):
@@ -821,7 +726,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="set_pref_style",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("m_wardrobe"))
     msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)
     kb = InlineKeyboardMarkup(rows)
     # Экран шкафа служебный. Отправляем его отдельно, чтобы карточка образа,
@@ -853,15 +758,9 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
             InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"w_cat_{zone_slug}_{(page + 1) % pages}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="w_closet"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
+    rows.append(nav_row("w_closet"))
     kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def send_item_card(bot, cid, item_id, q=None):
@@ -876,13 +775,7 @@ async def send_item_card(bot, cid, item_id, q=None):
         [(delete_label("Удалить"), f"w_delete_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
     ])
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 async def send_delete_confirmation(bot, cid, item_id, q=None):
@@ -895,13 +788,7 @@ async def send_delete_confirmation(bot, cid, item_id, q=None):
         [(delete_label("Удалить"), f"w_deleteok_{item_id}"), ("Отмена", f"w_item_{item_id}")],
         [("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Главная", "m_menu")],
     ])
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 _PURCHASE_VERDICTS = {
@@ -917,14 +804,44 @@ _PURCHASE_REJECT_REASONS = {
     "material_or_season", "price_vs_utility", "poor_condition",
 }
 
-_bind_functions(globals(), _wardrobe_management, [
-    "get_wardrobe_gaps", "add_wardrobe_gap", "_local_text_item", "_parse_items", "_show_added_items",
-    "add_item", "add_item_settings", "add_item_photo", "_find_item", "_replace_item", "edit_item_text",
-    "edit_add_preview", "handle_wardrobe_search", "_normalize_purchase_check", "check_purchase",
-    "_purchase_result_kb", "_purchase_cache_key", "_purchase_state", "_build_purchase_cache",
-    "_purchase_cache", "_ai_purchase_ideas", "warm_purchase_cache", "_purchase_reply",
-    "_remember_purchase_batch", "send_purchase_screen", "_purchase_candidate_by_id",
-    "show_purchase_card", "buy_purchase", "reject_purchase", "ask_purchase_check",
-    "_local_purchase_suggestions", "_normalize_purchase_suggestions", "recommend_purchase",
-])
-_bind_functions(globals(), _wardrobe_router, ["ingest", "handle_callback"])
+from wardrobe_management import (  # noqa: E402 — wardrobe_management uses names defined above
+    get_wardrobe_gaps,
+    add_wardrobe_gap,
+    _local_text_item,
+    _parse_items,
+    _show_added_items,
+    add_item,
+    add_item_settings,
+    add_item_photo,
+    _find_item,
+    _replace_item,
+    edit_item_text,
+    edit_add_preview,
+    handle_wardrobe_search,
+    _normalize_purchase_check,
+    check_purchase,
+    _purchase_result_kb,
+    _purchase_cache_key,
+    _purchase_state,
+    _build_purchase_cache,
+    _purchase_cache,
+    _ai_purchase_ideas,
+    warm_purchase_cache,
+    _purchase_reply,
+    _remember_purchase_batch,
+    send_purchase_screen,
+    _purchase_candidate_by_id,
+    show_purchase_card,
+    buy_purchase,
+    reject_purchase,
+    ask_purchase_check,
+    _local_purchase_suggestions,
+    _normalize_purchase_suggestions,
+    recommend_purchase,
+)
+from wardrobe_router import (  # noqa: E402 — wardrobe_router uses names defined above
+    ingest,
+    handle_callback,
+)
+import rich_delivery
+from ui.navigation import nav_row

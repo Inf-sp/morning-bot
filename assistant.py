@@ -10,6 +10,7 @@ import util
 import verify
 import research
 import rich_delivery
+import menu
 import myday
 import secure
 from ui import assistant as assistant_ui
@@ -382,7 +383,7 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
     elif action == "concerts":
         await leisure_concerts.find_concerts(no_kb_bot, cid, "home")
     elif action == "learn":
-        text, entities, kb = __import__("menu").menu_screen("m_learn", cid)
+        text, entities, kb = menu.menu_screen("m_learn", cid)
         await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
     elif action == "dictionary":
         await dictionary.send_dict(no_kb_bot, cid)

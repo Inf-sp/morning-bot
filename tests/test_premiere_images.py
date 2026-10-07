@@ -7,6 +7,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import leisure_books
 import leisure_games
 import leisure_movies
+import movie_discovery
 
 
 class Bot:
@@ -45,6 +46,9 @@ def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
     })
     monkeypatch.setattr(
         leisure_movies, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items),
+    )
+    monkeypatch.setattr(
+        movie_discovery, "get_movie_premieres", lambda _cid: asyncio.sleep(0, result=items),
     )
     monkeypatch.setattr(
         leisure_movies.tmdb, "english_poster",

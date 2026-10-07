@@ -11,7 +11,7 @@ import util
 import verify
 from ui import text as text_ui
 from ui import food as food_ui
-from ui.navigation import back_menu_keyboard
+from ui.navigation import back_menu_keyboard, nav_row
 import menu
 from response_delivery import (
     back_keyboard as _back_kb,
@@ -39,7 +39,6 @@ from recipe_generation import (
     _gen_leftovers_recipe_batch,
     _gen_recipe,
     _gen_recipe_batch,
-    _home_meal_for_hour,
     _normalize_queue_recipe,
     _recipe_matches_meal,
     _queue_recipe_presentable,
@@ -335,10 +334,7 @@ async def send_recipe_cuisines(bot, cid):
     import settings
     rows = [[InlineKeyboardButton(label, callback_data=f"as_food_cuisine_{code}")]
             for code, label in settings.CUISINE_OPTIONS]
-    rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_food_gen"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ])
+    rows.append(nav_row("m_food_gen"))
     await bot.send_message(
         chat_id=cid, text="🎭 Выбери кухню", reply_markup=InlineKeyboardMarkup(rows), transient=True,
     )

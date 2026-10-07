@@ -44,7 +44,7 @@ async def _show(bot, cid, msg, q=None):
             )
             return
         except Exception:
-            pass
+            _log.debug("_show: ignored error", exc_info=True)
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
         disable_web_page_preview=True,
