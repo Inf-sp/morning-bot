@@ -32,6 +32,7 @@ def sent(monkeypatch):
 
     monkeypatch.setattr(ExtBot, "_post", fake_post)
     monkeypatch.setattr(telegram_runtime, "_buttons_enhanced", True)
+    monkeypatch.setattr(telegram_runtime, "_button_level", 2)
     return calls
 
 
@@ -51,13 +52,37 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
 
-def test_rejected_styles_fall_back_to_plain_keyboard(sent):
+def test_rejected_disabled_field_keeps_colors_and_no_emoji(sent, monkeypatch):
+    monkeypatch.setattr(telegram_runtime, "_button_level", 2)
+    calls = []
+
+    async def fake_post(self, endpoint, data=None, **_kwargs):
+        calls.append(data)
+        rows = (data.get("reply_markup") or {}).get("inline_keyboard", []) \
+            if isinstance(data.get("reply_markup"), dict) else []
+        if any("disabled" in button for row in rows for button in row):
+            raise BadRequest("Bad Request: can't parse inline keyboard button: disabled")
+        return True
+
+    monkeypatch.setattr(ExtBot, "_post", fake_post)
     bot = telegram_runtime.MenuCleanupBot("1:x")
-    bot._reject = "Bad Request: can't parse inline keyboard button"
 
     assert asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": _markup()})) is True
+    rows = calls[-1]["reply_markup"]["inline_keyboard"]
+    buttons = {button["text"]: button for row in rows for button in row}
+    assert buttons["Удалить"]["style"] == "danger"
+    assert buttons["2/5"]["callback_data"] == "noop"
+    assert telegram_runtime._button_level == 1
+
+
+def test_non_keyboard_error_goes_straight_to_original_request(sent):
+    bot = telegram_runtime.MenuCleanupBot("1:x")
+    bot._reject = "Bad Request: wrong file identifier/HTTP URL specified"
+
+    assert asyncio.run(bot._post("sendPhoto", {"chat_id": 1, "reply_markup": _markup()})) is True
+    assert len(sent) == 2
     assert isinstance(sent[-1]["reply_markup"], InlineKeyboardMarkup)
-    assert telegram_runtime._buttons_enhanced is False
+    assert telegram_runtime._button_level == 2
 
 
 def test_not_modified_error_is_not_retried(sent):

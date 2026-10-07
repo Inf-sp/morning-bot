@@ -89,10 +89,15 @@ class RetryingHTTPXRequest(HTTPXRequest):
 # Отметки выбора («✅ Комедия», «❌ Не добавлять») не трогаем — только глаголы.
 _ADD_RE = re.compile(r"^✅\s*((?:Добавить|Создать)\b.*)$", re.S)
 _DELETE_RE = re.compile(r"^❌\s*((?:Удалить|Очистить|Убрать)\b.*)$", re.S)
-_buttons_enhanced = True  # выключается до рестарта, если Telegram отклонит новые поля
+# Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
+# эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта,
+# но эмодзи у «Добавить/Удалить» не возвращаются никогда.
+_KEYBOARD_ERRORS = ("button", "keyboard", "reply markup", "reply_markup", "style", "disabled")
+_buttons_enhanced = True  # совместимость: False — уже только текстовый уровень
+_button_level = 2
 
 
-def _enhance_markup(markup):
+def _enhance_markup(markup, level=2):
     """Inline-клавиатура по контракту кнопок из AGENTS.md, либо None без изменений.
 
     «Добавить» — зелёная, без эмодзи и всегда в верхнем ряду; «Удалить» — красная
@@ -106,7 +111,7 @@ def _enhance_markup(markup):
     add_rows = set()
     for index, row in enumerate(rows):
         for button in row:
-            if button.get("callback_data") == "noop":
+            if level >= 2 and button.get("callback_data") == "noop":
                 button.pop("callback_data")
                 button["disabled"] = {}
                 changed = True
@@ -116,7 +121,8 @@ def _enhance_markup(markup):
                 match = pattern.match(text)
                 if match:
                     button["text"] = match.group(1).strip()
-                    button.setdefault("style", style)
+                    if level >= 1:
+                        button.setdefault("style", style)
                     changed = True
                     if style == "success":
                         add_rows.add(index)
@@ -130,20 +136,32 @@ class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
     async def _post(self, endpoint, data=None, *, api_kwargs=None, **kwargs):
-        global _buttons_enhanced
+        global _buttons_enhanced, _button_level
         data = {**(data or {}), **(api_kwargs or {})}
-        enhanced = _enhance_markup(data.get("reply_markup")) if _buttons_enhanced else None
-        if enhanced is None:
-            return await super()._post(endpoint, data, **kwargs)
-        try:
-            return await super()._post(endpoint, {**data, "reply_markup": enhanced}, **kwargs)
-        except BadRequest as error:
-            if "not modified" in str(error).casefold():
-                raise
-            result = await super()._post(endpoint, data, **kwargs)
-            _buttons_enhanced = False
-            _log.warning("Telegram rejected button styles; plain keyboards until restart: %s", error)
+        start = _button_level if _buttons_enhanced else 0
+        last_error = None
+        for level in range(start, -1, -1):
+            enhanced = _enhance_markup(data.get("reply_markup"), level)
+            if enhanced is None:
+                return await super()._post(endpoint, data, **kwargs)
+            try:
+                result = await super()._post(endpoint, {**data, "reply_markup": enhanced}, **kwargs)
+            except BadRequest as error:
+                if "not modified" in str(error).casefold():
+                    raise
+                last_error = error
+                if not any(marker in str(error).casefold() for marker in _KEYBOARD_ERRORS):
+                    break  # ошибка не про кнопки — сразу исходный запрос
+                continue
+            if level < start:
+                _button_level = level
+                _log.warning(
+                    "Telegram rejected button fields; button level %s until restart: %s",
+                    level, last_error,
+                )
             return result
+        # Даже текстовый уровень не прошёл — ошибка не в кнопках: исходный запрос.
+        return await super()._post(endpoint, data, **kwargs)
 
     @staticmethod
     def _without_link_preview(kwargs):
