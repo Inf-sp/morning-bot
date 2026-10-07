@@ -1372,7 +1372,9 @@ def _remove_card_placeholder(cid, lang, term):
 def _requeue_card_placeholders(cid):
     """Старые заготовки без перевода уходят в очередь и пересобираются в фоне."""
     for item in store.get_list(config.DICT_KEY, cid):
-        if _is_card_placeholder(item):
+        # Фразы в словарь больше не добавляются: старая заготовка-фраза остаётся
+        # архивом и не уходит в очередь, иначе фон без спроса просит выбрать перевод.
+        if _is_card_placeholder(item) and is_dictionary_word(_entry_term(item)):
             _queue_dictionary_analysis(cid, _entry_term(item), _dict_lang(item))
 
 
@@ -1499,6 +1501,10 @@ async def process_queued_dictionary_adds(bot, cids, limit=10):
             if processed >= limit:
                 return processed
             if not isinstance(item, dict) or float(item.get("next_at") or 0) > now:
+                continue
+            if not is_dictionary_word(_clean_raw_user_term(item.get("term", ""))):
+                # Фраза из старой очереди: молча снимаем, карточку для неё не собрать.
+                _remove_queued_dictionary_analysis(cid, item.get("id"))
                 continue
             processed += 1
             term = _lower_dutch_initial(item.get("term", ""), item.get("lang"))
