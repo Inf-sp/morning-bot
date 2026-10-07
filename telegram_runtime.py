@@ -89,6 +89,7 @@ class RetryingHTTPXRequest(HTTPXRequest):
 # Отметки выбора («✅ Комедия», «❌ Не добавлять») не трогаем — только глаголы.
 _ADD_RE = re.compile(r"^✅\s*((?:Добавить|Создать)\b.*)$", re.S)
 _DELETE_RE = re.compile(r"^❌\s*((?:Удалить|Очистить|Убрать)\b.*)$", re.S)
+_REFRESH_RE = re.compile(r"^✨\s*(Обновить)$")
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
 # эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта,
 # но эмодзи у «Добавить/Удалить» не возвращаются никогда.
@@ -117,7 +118,9 @@ def _enhance_markup(markup, level=2):
                 changed = True
                 continue
             text = str(button.get("text") or "")
-            for pattern, style in ((_ADD_RE, "success"), (_DELETE_RE, "danger")):
+            for pattern, style in (
+                (_ADD_RE, "success"), (_DELETE_RE, "danger"), (_REFRESH_RE, "primary"),
+            ):
                 match = pattern.match(text)
                 if match:
                     button["text"] = match.group(1).strip()

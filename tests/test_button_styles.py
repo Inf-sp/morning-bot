@@ -92,3 +92,16 @@ def test_not_modified_error_is_not_retried(sent):
     with pytest.raises(BadRequest):
         asyncio.run(bot._post("editMessageText", {"chat_id": 1, "reply_markup": _markup()}))
     assert len(sent) == 1 and telegram_runtime._buttons_enhanced is True
+
+
+def test_refresh_button_is_blue_without_emoji(sent):
+    bot = telegram_runtime.MenuCleanupBot("1:x")
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Обновить", callback_data="w_look")],
+        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
+    ])
+    asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
+
+    rows = sent[0]["reply_markup"]["inline_keyboard"]
+    assert rows[0][0]["text"] == "Обновить" and rows[0][0]["style"] == "primary"
+    assert rows[1][0]["text"] == "✨ Другой фильм" and "style" not in rows[1][0]
