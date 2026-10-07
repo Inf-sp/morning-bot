@@ -511,3 +511,29 @@ def test_live_check_failure_is_friendly_and_has_no_secrets(monkeypatch):
     Response.status_code = 200
     assert service_monitor.live_check("groq")["status"] == "ok"
     assert provider_runtime.get_state("groq")["status"] == provider_runtime.OK
+
+
+def test_live_database_check_uses_its_own_connection_latency(monkeypatch):
+    """Админская проверка меряет сам запрос, а не очередь на общем соединении."""
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    monkeypatch.setattr(service_monitor.storage_driver, "query_latency", lambda: 0.09)
+    monkeypatch.setattr(
+        service_monitor, "probe", lambda _service: (_ for _ in ()).throw(AssertionError("shared ping")),
+    )
+
+    row = service_monitor.live_check("database")
+
+    assert (row["status"], row["seconds"]) == ("ok", 0.09)
+
+
+def test_live_database_check_failure_is_friendly(monkeypatch):
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+
+    def broken():
+        raise RuntimeError("could not connect to server: postgresql://user:secret@host")
+
+    monkeypatch.setattr(service_monitor.storage_driver, "query_latency", broken)
+
+    row = service_monitor.live_check("database")
+
+    assert (row["status"], row["detail"]) == ("fail", "нет подключения")

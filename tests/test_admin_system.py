@@ -115,8 +115,7 @@ def test_admin_card_refresh_menu_has_all_cards():
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [row[0].text for row in markup[:-1]] == [
-        "☀️ Мой день", "🧵 Гардероб", "🥣 Готовка", "🧠 Обучение",
-        "✈️ Поездки", "🎬 Кино", "🎧 Музыка", "📚 Книги", "👾 Игры",
+        "☀️ Мой день", "🧵 Гардероб", "🥣 Готовка", "🧠 Обучение", "🍿 Досуг",
     ]
     assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
 
@@ -131,10 +130,10 @@ def test_admin_refresh_card_reports_success(monkeypatch):
     monkeypatch.setattr(admin, "_refresh_card_cache", refresh)
     bot = _Bot()
 
-    asyncio.run(admin.refresh_card(bot, "42", "games"))
+    asyncio.run(admin.refresh_card(bot, "42", "leisure"))
 
-    assert calls == [("42", "games")]
-    assert "✅ 👾 Игры обновлена." in bot.sent[0]["text"]
+    assert calls == [("42", "leisure")]
+    assert "✅ 🍿 Досуг обновлена." in bot.sent[0]["text"]
 
 
 def test_logs_have_only_clear_and_navigation_rows(monkeypatch):

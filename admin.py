@@ -300,11 +300,7 @@ _REFRESH_CARDS = (
     ("wardrobe", "🧵 Гардероб"),
     ("cooking", "🥣 Готовка"),
     ("learning", "🧠 Обучение"),
-    ("travel", "✈️ Поездки"),
-    ("cinema", "🎬 Кино"),
-    ("music", "🎧 Музыка"),
-    ("books", "📚 Книги"),
-    ("games", "👾 Игры"),
+    ("leisure", "🍿 Досуг"),
 )
 
 
@@ -334,30 +330,15 @@ async def _refresh_card_cache(cid, key):
         import learning
         learning.reset_daily_material_cache(cid)
         return await asyncio.to_thread(learning.warm_home_cache, cid)
-    if key == "travel":
-        import travel
-        return await travel.warm_home_cache(cid, refresh=True)
-    if key == "cinema":
-        import leisure_movies
-        await leisure_movies.get_local_now_playing(cid, limit=20, refresh=True)
-        return await leisure_movies.warm_movie_premieres_cache(cid)
-    if key == "music":
+    if key == "leisure":
         import leisure_concerts
-        import leisure_music
+        import leisure_hub
+        import leisure_movies
         leisure_concerts.invalidate_user_concerts_cache(cid)
-        store.mutate_kv(config.MUSIC_HOME_CACHE_KEY, lambda data: (
-            {k: v for k, v in (data or {}).items() if str(k) != str(cid)}, None,
-        ))
-        return await leisure_music.warm_music_home_cache(cid)
-    if key == "books":
-        import leisure_books
-        return await leisure_books.warm_books_home_cache(cid, refresh=True)
-    if key == "games":
-        import leisure_games
-        await leisure_games.get_game_premieres(cid, refresh=True, seasonal=True)
-        return await leisure_games.warm_games_home_cache(cid)
+        await leisure_movies.warm_movie_premieres_cache(cid)
+        return await leisure_hub.warm_hub_cache(cid)
     if key == "myday":
-        for dependency in ("wardrobe", "cooking", "learning", "travel", "cinema", "music", "books", "games"):
+        for dependency in ("wardrobe", "cooking", "learning", "leisure"):
             await _refresh_card_cache(cid, dependency)
         import myday
         myday.reset_day_cache(cid)

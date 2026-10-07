@@ -112,9 +112,8 @@ def _view(kind, items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"yt:{kind}:{(page + 1) % len(items)}"),
         ])
-    back = "m_movie" if kind in ("movie", "tv") else f"m_{'books' if kind == 'book' else 'games'}"
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data=back),
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return msg, InlineKeyboardMarkup(rows), page

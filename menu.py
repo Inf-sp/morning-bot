@@ -19,10 +19,9 @@ def main_menu_kb():
     return menu_ui.main_menu_kb()
 
 
-_MAIN_MENU_CALLBACKS = {
-    "m_myday", "m_wardrobe", "m_food", "m_learn", "m_travel",
-    "m_movie", "m_music", "m_books", "m_games", "m_settings",
-}
+# Общие кнопки текущего и старого (с Кино/Музыкой/Книгами/Играми) главного меню:
+# старые меню в истории чата тоже распознаются.
+_MAIN_MENU_CALLBACKS = {"m_myday", "m_wardrobe", "m_food", "m_learn", "m_settings"}
 
 
 def is_main_menu_markup(markup):

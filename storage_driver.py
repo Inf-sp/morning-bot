@@ -142,6 +142,25 @@ def ping():
     return bool(row and row[0] == 1)
 
 
+def query_latency():
+    """Время SELECT 1 на отдельном соединении — для админской проверки.
+
+    Общее соединение занято под локом другими записями, поэтому ping через него
+    меряет очередь, а не базу. Возвращает секунды одного запроса.
+    """
+    import psycopg2
+
+    connection = psycopg2.connect(config.DATABASE_URL, connect_timeout=_CONNECT_TIMEOUT)
+    try:
+        with connection.cursor() as cursor:
+            started = time.monotonic()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            return time.monotonic() - started
+    finally:
+        connection.close()
+
+
 def _invalidate_connection():
     global _connection
 

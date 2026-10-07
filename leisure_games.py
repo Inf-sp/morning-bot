@@ -19,7 +19,6 @@ import recommendation_rotation as rotation
 import secure
 import settings
 import store
-import monthly_rebuses
 from ui import leisure as leisure_ui
 
 _GAME_PREMIERE_VIEWS = {}
@@ -64,8 +63,6 @@ _GAME_RATING_OPTIONS = (
     ("8.0+", "8.0"),
     ("8.5+", "8.5"),
 )
-
-_GAME_DAILY_CONTENT = monthly_rebuses.local_pool("games")
 
 _GAME_CATALOG = (
     {
@@ -688,28 +685,29 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
     return _decorate_game(item, cid, genre=genre, board=board)
 
 
-def _game_home_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎮 Во что поиграть", callback_data="vg_reco")],
-        [InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")],
-        [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-
-
 def _game_keyboard(*, no_match=False, genre=None, board=False):
     rows = []
     if board or genre == "board":
+        board_genre = genre if genre and genre != "board" else None
+        if not no_match:
+            rows.append([InlineKeyboardButton(
+                "✨ Другая игра", callback_data=f"vg_gb_{board_genre}" if board_genre else "vg_board",
+            )])
         # Настолки: доступен подбор по жанру внутри настольного режима.
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres_board")])
     else:
+        if not no_match:
+            rows.append([InlineKeyboardButton(
+                "✨ Другая игра", callback_data=f"vg_next_{genre}" if genre else "vg_next",
+            )])
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
+        rows.append([InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")])
         if not no_match:
             rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Предпочтения", callback_data="game_prefs")])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)
@@ -800,7 +798,7 @@ async def send_game_set(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="game_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     await _deliver(bot, cid, msg, InlineKeyboardMarkup(rows), q=q)
 
@@ -938,7 +936,7 @@ async def send_favorite_games_added_card(bot, cid, items):
     msg = leisure_ui.favorite_game_added_card(item)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мой набор игр", callback_data="vg_set")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     if item.get("poster"):
@@ -1054,7 +1052,7 @@ def _genre_keyboard(board=False):
     buttons = [InlineKeyboardButton(label, callback_data=f"{prefix}{key}") for key, label in GAME_GENRES]
     rows = [[button] for button in buttons]
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)
@@ -1074,38 +1072,6 @@ async def _deliver(bot, cid, msg, markup, *, q=None, status=None):
             pass
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, disable_web_page_preview=True)
-
-
-async def send_games_home(bot, cid, *, q=None, status=None):
-    items = await get_game_premieres(cid, seasonal=True)
-    if not items:
-        items = await get_game_premieres(cid, refresh=True, seasonal=True)
-    today = datetime.now(config.TZ).date()
-    _season_start, _season_end, season = _game_season(today)
-    daily = monthly_rebuses.cached_for_day("games", today, _GAME_DAILY_CONTENT)
-    home_items = []
-    items = _rotated_season_items(items, today)
-    for source in items[:3]:
-        item = dict(source)
-        item["trailer_url"] = str(item.get("trailer_url") or "").strip() or (
-            _youtube_trailer_search_url(item.get("title"))
-        )
-        home_items.append(item)
-    msg = leisure_ui.game_home_screen(
-        None, home_items, daily, day=today, year=today.year, season=season,
-    )
-    # Главный экран — текст без постера.
-    await _deliver(bot, cid, msg, _game_home_keyboard(), q=q, status=status)
-
-
-async def warm_games_home_cache(cid):
-    """Готовит сезонную витрину и дневной ребус без отправки сообщения."""
-    items = await get_game_premieres(cid, seasonal=True)
-    if not has_seasonal_premieres_cache(cid):
-        items = await get_game_premieres(cid, refresh=True, seasonal=True) or items
-    today = datetime.now(config.TZ).date()
-    daily = await monthly_rebuses.for_day("games", today, _GAME_DAILY_CONTENT)
-    return bool(items or daily)
 
 
 async def send_game_recommendation(
@@ -1362,11 +1328,20 @@ def _premiere_signature(cid, start_date, end_date):
     return f"{_platform_signature(cid)}:{start_date.isoformat()}:{end_date.isoformat()}"
 
 
-def has_seasonal_premieres_cache(cid):
-    """Есть ли свежая сезонная витрина главного экрана (без сети)."""
+def cached_season_premieres(cid, *, allow_stale=True):
+    """Сезонная витрина игр из кэша (до 3 на день, по кругу); без сети. None — кэша нет."""
     today = datetime.now(config.TZ).date()
     start_date, end_date, _season = _game_season(today)
-    return _premiere_cache_get(_premiere_signature(cid, start_date, end_date), today) is not None
+    items = _premiere_cache_get(
+        _premiere_signature(cid, start_date, end_date), today, allow_stale=allow_stale,
+    )
+    if items is None:
+        return None
+    return [
+        {**item, "trailer_url": str(item.get("trailer_url") or "").strip()
+         or _youtube_trailer_search_url(item.get("title"))}
+        for item in _rotated_season_items(items, today)
+    ]
 
 
 async def get_game_premieres(cid, *, refresh=False, seasonal=False):
@@ -1489,7 +1464,7 @@ def _game_premiere_view(cid, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"game_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_games"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return msg, InlineKeyboardMarkup(rows), page
 

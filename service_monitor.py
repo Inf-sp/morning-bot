@@ -463,6 +463,11 @@ def live_check(service: str) -> dict:
         return result("skip", detail="лимит исчерпан")
     if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
         return result("skip", detail="лимит исчерпан")
+    if service == "database":
+        try:
+            return result("ok", storage_driver.query_latency())
+        except Exception:
+            return result("fail", detail="нет подключения")
     started = time.monotonic()
     ok = probe(service)
     seconds = time.monotonic() - started

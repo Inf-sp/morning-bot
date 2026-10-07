@@ -111,10 +111,3 @@ def test_old_youtube_cache_link_opens_in_youtube_music_without_a_request(monkeyp
         "https://music.youtube.com/watch?v=oldvideo123"
     )
 
-
-def test_daily_music_content_has_no_day_track(monkeypatch):
-    monkeypatch.setattr(leisure_music, "_load_music_legend", lambda _day: {})
-
-    result = asyncio.run(leisure_music._daily_music_content("42"))
-
-    assert "vibe" not in result

@@ -1032,7 +1032,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
         rows.append([InlineKeyboardButton("✅ Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(_concert_country_label(cc, cname), callback_data="a_concerts_pick")])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     kb = InlineKeyboardMarkup(rows)
@@ -1117,25 +1117,13 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     )
 
 
-async def _build_weekly_events_msg(cid):
-    """Компактная пятничная подборка из готовых премьерных кэшей."""
-    from datetime import datetime, timedelta
-
-    s = store.get_settings(cid)
-    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
-    period_start = datetime.now(config.TZ).date()
-    period_end = period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
-    today_str = period_start.isoformat()
-    date_to_str = period_end.isoformat()
-
-    # Концерты уже прогреты отдельным пятничным заданием. В момент рассылки не
-    # запускаем Ticketmaster заново: объединяем персональный и месячный кэши.
-    personal_events = _concerts_cache_get(cid, cc) or []
-    popular_events = _popular_events_cache_get(cc, period_start) or []
-    concert_items, existing = [], set()
-    for event in [*personal_events, *popular_events]:
+def concert_items_between(events, start, end, limit):
+    """Строки афиши {title, date, genre, url} без дублей, по дате; только кэш, без сети."""
+    start_str, end_str = start.isoformat(), end.isoformat()
+    items, existing = [], set()
+    for event in events or []:
         date_str = event.get("dates", {}).get("start", {}).get("localDate", "")
-        if not (today_str <= date_str <= date_to_str):
+        if not (start_str <= date_str <= end_str):
             continue
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
         city = str((venue.get("city") or {}).get("name") or "").strip()
@@ -1144,14 +1132,44 @@ async def _build_weekly_events_msg(cid):
         if not title or key in existing:
             continue
         existing.add(key)
-        concert_items.append({
+        items.append({
             "title": title,
             "date": date_str,
             "genre": _concert_genre(event),
             "url": str(event.get("url") or "").strip(),
         })
-    concert_items.sort(key=lambda item: item.get("date") or "9999-99-99")
-    concert_items = concert_items[:_WEEKLY_CONCERT_LIMIT]
+    items.sort(key=lambda item: item.get("date") or "9999-99-99")
+    return items[:limit]
+
+
+def cached_favorite_concerts(cid, limit):
+    """Ближайшие концерты любимых артистов из персонального кэша; без сети."""
+    from datetime import datetime, timedelta
+
+    cc = (store.get_settings(cid).get("cc") or "NL").upper()
+    today = datetime.now(config.TZ).date()
+    events = _concerts_cache_get(cid, cc) or []
+    return concert_items_between(
+        events, today, today + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS), limit,
+    )
+
+
+async def _build_weekly_events_msg(cid):
+    """Компактная пятничная подборка из готовых премьерных кэшей."""
+    from datetime import datetime, timedelta
+
+    s = store.get_settings(cid)
+    cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
+    period_start = datetime.now(config.TZ).date()
+    period_end = period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
+
+    # Концерты уже прогреты отдельным пятничным заданием. В момент рассылки не
+    # запускаем Ticketmaster заново: объединяем персональный и месячный кэши.
+    personal_events = _concerts_cache_get(cid, cc) or []
+    popular_events = _popular_events_cache_get(cc, period_start) or []
+    concert_items = concert_items_between(
+        [*personal_events, *popular_events], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
+    )
 
     results = await asyncio.gather(
         leisure_movies.get_movie_premieres(cid),

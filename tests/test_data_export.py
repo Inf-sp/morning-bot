@@ -23,7 +23,6 @@ def test_export_choice_has_clear_categories_and_navigation():
         ["📤 Мой холодильник"],
         ["📤 Мой словарь"],
         ["📤 Любимое"],
-        ["📤 Поездки"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -55,7 +54,7 @@ def test_text_export_is_readable_and_hides_internal_fields(monkeypatch):
     assert "• Помидоры — Овощи" in text
     assert "• Immers → ведь" in text
     assert "• Кино: Arrival" in text
-    assert "• Исландия" in text
+    assert "Исландия" not in text and "Поездки" not in text
     assert "• Старая заметка" in text
     assert "secret-id" not in text
     assert "srs_level" not in text

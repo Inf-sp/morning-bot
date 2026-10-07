@@ -1009,8 +1009,8 @@ async def handle_callback(bot, cid, data, q=None):
         import menu
         await menu.send_food_menu(bot, cid, q=q)
     elif data == "set_travel":
-        import travel
-        await travel.send_home(bot, cid, q=q)
+        # Раздел «Поездки» удалён: старая кнопка ведёт в настройки.
+        await send_home(bot, cid)
     elif data == "set_fridge":
         import fridge
         await fridge.send_fridge(bot, cid, back="set_food")

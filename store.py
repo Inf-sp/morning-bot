@@ -505,7 +505,7 @@ _PER_USER_KEYS = {
     config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
     config.LEGACY_COUNTRIES_KEY, config.FAVORITE_BOOKS_KEY, config.FAVORITE_GAMES_KEY,
     config.BOOK_RECO_CACHE_KEY,
-    config.MOVIE_RECO_CACHE_KEY, config.MOVIE_NOW_PLAYING_CACHE_KEY,
+    config.MOVIE_RECO_CACHE_KEY,
     config.SAVED_COUNTRIES_KEY, config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY,
     config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY,
     config.THOUGHTS_KEY,
@@ -518,6 +518,8 @@ _PER_USER_KEYS = {
     # аккаунта, но обычный код их больше не читает и не записывает.
     "content_records.json", "notes.json", "language_review.json", "thought_reviews.json",
     "data_refresh_backups.json", "lagom.json", "motiv_lagom_seen.json",
+    # Старые главные экраны Кино/Музыки (заменены хабом «Досуг»).
+    "movie_now_playing_cache.json", "local_cinema_cache.json", "music_home_cache.json",
 }
 # При удалении профиля очищаем и старые физические ключи, иначе ленивый перенос
 # мог бы снова восстановить уже удалённые пользовательские данные.
@@ -560,7 +562,6 @@ pending_input = runtime_state.pending_input
 last_inline_message = runtime_state.last_inline_message
 transient_message = runtime_state.transient_message
 last_recos = runtime_state.last_recos
-suggested_countries = runtime_state.suggested_countries
 last_action = runtime_state.last_action
 last_answer = runtime_state.last_answer
 last_recipe = runtime_state.last_recipe

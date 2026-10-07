@@ -55,7 +55,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now morning-bot-update.t
 
 - `bot.py`, `bot_callbacks.py` — вход и маршрутизация.
 - Feature-модули (`myday.py`, `wardrobe.py`, `cooking.py`, `learning*.py`,
-  `leisure_*.py`, `travel.py`) — сценарии и бизнес-логика.
+  `leisure_*.py`) — сценарии и бизнес-логика.
 - `ui/*.py` — только текст, форматирование и кнопки; без store, AI, сети и решений.
 - `store.py`, `storage_driver.py`, `repositories.py` — хранение.
 - `provider_runtime.py`, `ai.py` — централизованный выбор AI, fallback, cooldown,
@@ -120,14 +120,8 @@ LLM нужен для персонализации, свободного тек�
 
 ```text
 ☀️ Мой день
-🧵 Гардероб
-🥣 Готовка
-🧠 Обучение
-✈️ Поездки
-🎬 Кино
-🎧 Музыка
-📚 Книги
-👾 Игры
+🧵 Гардероб   | 🥣 Готовка
+🧠 Обучение   | 🍿 Досуг
 🎚️ Настройки
 ```
 
@@ -147,11 +141,11 @@ LLM нужен для персонализации, свободного тек�
 | Детектив | `docs/game.md` |
 | Словарь | `docs/dictionary.md` |
 | Живой язык | `docs/live-language.md` |
+| Досуг (хаб) | `docs/leisure.md` |
 | Кино | `docs/movie.md` |
 | Книги | `docs/book.md` |
 | Музыка / концерты | `docs/music.md` |
 | Игры | `docs/games.md` |
-| Поездки | `docs/travel.md` |
 | Настройки | `docs/settings.md` |
 | Ассистент | `docs/assistant.md` |
 | Админ | `docs/admin.md` |

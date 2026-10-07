@@ -11,7 +11,6 @@ from .news import append_weekly_news
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
 UI_FOOD = ui_label("food", "").strip()
-UI_TRAVEL = ui_label("travel", "").strip()
 UI_SETTINGS = ui_label("settings", "").strip()
 
 
@@ -49,9 +48,7 @@ def main_menu_rows():
     return [
         [(ui_label("myday", "Мой день"), "m_myday")],
         [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
-        [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("travel", "Поездки"), "m_travel")],
-        [(ui_label("cinema", "Кино"), "m_movie"), (ui_label("music", "Музыка"), "m_music")],
-        [(ui_label("books", "Книги"), "m_books"), ("👾 Игры", "m_games")],
+        [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("leisure", "Досуг"), "m_leisure")],
         [(ui_label("settings", "Настройки"), "m_settings")],
     ]
 
@@ -67,7 +64,7 @@ def welcome(name: str = ""):
     b.bold(greeting)
     b.newline()
     b.spacer()
-    b.line("Подберу образ по погоде, найду рецепт из продуктов дома, помогу с языком или спланирую поездку.")
+    b.line("Подберу образ по погоде, найду рецепт из продуктов дома, помогу с языком или подскажу, что посмотреть.")
     b.spacer()
     b.line("Выбирай раздел в меню или просто пиши мне здесь 💬")
     return b.build()
@@ -109,48 +106,6 @@ _SCREENS = {
         [
             [("🍳 Что приготовить", "m_food_gen")],
             [("🎚️ Мой холодильник", "as_fridge_home")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
-    "m_travel": (
-        UI_TRAVEL,
-        "Поездки",
-        "Предложу направление с понятным маршрутом и главными причинами поехать именно туда.",
-        [
-            [("🧳 Другая страна", "a_trav_no")],
-            [("🎚️ Мой чемодан", "a_trav_countries_0")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
-    "m_music": (
-        "🎧",
-        "Музыка",
-        "Подберу артиста под твой вкус, а концерты и любимых исполнителей оставлю рядом.",
-        [
-            [("✨ Подобрать новую музыку", "music_reco")],
-            [("🎫 Концерты", "a_concerts_find")],
-            [("🎚️ Мои артисты", "artist_favorites")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
-    "m_movie": (
-        "🎬",
-        "Кино",
-        "Подберу фильм или сериал под твой вкус, покажу ближайшие премьеры в твоей стране.",
-        [
-            [("✨ Подобрать новое кино", "movie_reco")],
-            [("🎟️ Премьеры фильмов", "movie_premieres")],
-            [("🎚️ Моё кино", "movie_favorites")],
-            [("#️⃣ Главная", "m_menu")],
-        ],
-    ),
-    "m_books": (
-        "📚",
-        "Книги",
-        "Подберу книгу под твой вкус и покажу свежие премьеры месяца.",
-        [
-            [("🆕 Премьеры", "book_premieres")],
-            [("🎚️ Мои книги", "book_favorites")],
             [("#️⃣ Главная", "m_menu")],
         ],
     ),

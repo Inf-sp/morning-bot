@@ -1,24 +1,14 @@
-"""Cinema home, local listings and premiere discovery."""
+"""Cinema premieres discovery and the daily movie rebus."""
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from leisure_movies import (
         InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto,
-        _BIRTHDAY_FALLBACKS, _CINEMA_BIRTHDAY_CACHE_VERSION,
-        _CINEMA_BIRTHDAY_LOCK, _CINEMA_REBUSES, _MONTHS,
-        _MOVIE_PREMIERES_CACHE_VERSION, _log, _movie_prefs,
-        _cache_movie, asyncio, config, datetime, get_current_movie, leisure_ui, local_cinema,
-        movie_title_for_lookup, quote_plus, requests, store, time, timedelta, tmdb,
+        _CINEMA_REBUSES, _MONTHS, _MOVIE_PREMIERES_CACHE_VERSION,
+        asyncio, config, datetime, leisure_ui, monthly_rebuses,
+        movie_title_for_lookup, store, timedelta, tmdb,
     )
-
-
-def _movie_home_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🍿 Что посмотреть", callback_data="movie_reco")],
-        [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
 
 
 def _movie_country_label(name, cc=""):
@@ -45,223 +35,10 @@ def _movie_country_label(name, cc=""):
     return by_cc.get(cc, config.DEFAULT_CITY.get("country", "Нидерланды"))
 
 
-def _movie_service_language(cid=None):
-    """Язык регионального каталога без русской машинной локализации."""
-    cc = str(store.get_settings(cid).get("cc") or "NL").upper() if cid is not None else "NL"
-    return {
-        "FR": "fr-FR",
-        "DE": "de-DE",
-        "ES": "es-ES",
-        "IT": "it-IT",
-        "NL": "nl-NL",
-    }.get(cc, "en-US")
-
-
-def _movie_city(cid):
-    return str(store.get_settings(cid).get("city") or config.DEFAULT_CITY.get("name") or "").strip()
-
-
-def _local_movie_score(item, prefs):
-    """Качество и вкус ранжируют только уже подтверждённые городские сеансы."""
-    rating = float(item.get("rating") or 0)
-    votes = int(item.get("vote_count") or 0)
-    popularity = float(item.get("popularity") or 0)
-    genre_ids = set(item.get("genre_ids") or [])
-    preferred = set(prefs.get("genres") or [])
-    score = rating * 12 + min(votes, 2000) ** 0.5 + min(popularity, 100) * 0.15
-    if preferred.intersection(genre_ids):
-        score += 18
-    return score
-
-
 def _now_playing_week_key():
     today = datetime.now(config.TZ).date()
     year, week, _weekday = today.isocalendar()
     return f"{year}-W{week:02d}"
-
-
-def _previous_now_playing_week_key():
-    previous = datetime.now(config.TZ).date() - timedelta(days=7)
-    year, week, _weekday = previous.isocalendar()
-    return f"{year}-W{week:02d}"
-
-
-def _now_playing_catalog_get(cid, city, *, allow_previous=False):
-    data = store._load(config.MOVIE_NOW_PLAYING_CACHE_KEY) or {}
-    entry = data.get(str(cid)) if isinstance(data, dict) else None
-    allowed_weeks = {_now_playing_week_key()}
-    if allow_previous:
-        allowed_weeks.add(_previous_now_playing_week_key())
-    if (not isinstance(entry, dict)
-            or entry.get("city") != city
-            or entry.get("week") not in allowed_weeks):
-        return None
-    items = entry.get("items")
-    if not isinstance(items, list) or not items:
-        return None
-    return [dict(item) for item in items if isinstance(item, dict)]
-
-
-def _now_playing_catalog_set(cid, city, items):
-    records = [dict(item) for item in (items or []) if isinstance(item, dict)]
-    if not records:
-        return None
-
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[str(cid)] = {
-            "city": city,
-            "week": _now_playing_week_key(),
-            "items": records,
-        }
-        return data, None
-
-    store.mutate_kv(config.MOVIE_NOW_PLAYING_CACHE_KEY, mutate)
-    return records
-
-
-def _regional_now_playing_item(movie):
-    """Нормализует подтверждённый театральный релиз TMDb для витрины."""
-    release_date = getattr(movie, "release_date", None)
-    return {
-        "id": getattr(movie, "id", None),
-        "title": str(getattr(movie, "title", "") or "").strip(),
-        "name_en": str(getattr(movie, "original_title", "") or "").strip(),
-        "year": getattr(release_date, "year", 0) or 0,
-        "rating": getattr(movie, "rating", None),
-        "vote_count": int(getattr(movie, "vote_count", 0) or 0),
-        "popularity": float(getattr(movie, "popularity", 0) or 0),
-        "genre_ids": [],
-        "genres": list(getattr(movie, "genres", None) or []),
-        "overview": str(getattr(movie, "overview", "") or "").strip(),
-    }
-
-
-async def get_local_now_playing(cid, *, limit=20, refresh=False):
-    """Локальная афиша → TMDB metadata → полезная сортировка.
-
-    Не используем национальный ``now_playing`` как запасной вариант: без местной
-    афиши нельзя утверждать, что фильм идёт в городе пользователя.
-    """
-    city = _movie_city(cid)
-    prefs = _movie_prefs(cid)
-    items = None if refresh else _now_playing_catalog_get(cid, city)
-    if items is None:
-        previous_items = (
-            None if refresh else
-            _now_playing_catalog_get(cid, city, allow_previous=True)
-        )
-        listed = await asyncio.to_thread(local_cinema.get_city_movies, cid, city, refresh=refresh)
-        if listed:
-            items = []
-            for local in listed[:30]:
-                meta = await asyncio.to_thread(tmdb.search_id, local.title, "movie") if config.TMDB_API_KEY else None
-                if meta:
-                    year = int(meta.get("year") or 0)
-                    # Старая картина не становится новинкой только из-за повторного показа.
-                    if year and year < datetime.now(config.TZ).year - 1:
-                        continue
-                    item = dict(meta)
-                    item["title"] = item.get("name") or local.title
-                    item["genres"] = [tmdb.GENRES.get(g, "") for g in item.get("genre_ids") or [] if tmdb.GENRES.get(g)]
-                else:
-                    item = {"title": local.title, "genres": list(local.genres), "rating": None,
-                            "vote_count": 0, "popularity": 0, "genre_ids": []}
-                items.append(item)
-        else:
-            cc = str(store.get_settings(cid).get("cc") or "NL").upper()
-            regional = await asyncio.to_thread(
-                tmdb.get_now_playing, cc, _movie_service_language(cid), max_results=20,
-            )
-            items = [
-                _regional_now_playing_item(movie)
-                for movie in regional
-                if str(getattr(movie, "title", "") or "").strip()
-            ]
-        has_featured = bool(_featured_now_playing(items, require_overview=True))
-        if not has_featured and previous_items:
-            items = previous_items
-        else:
-            _now_playing_catalog_set(cid, city, items)
-    items.sort(key=lambda item: _local_movie_score(item, prefs), reverse=True)
-    return items[:max(1, int(limit or 20))]
-
-
-async def send_movie_home(bot, cid, q=None, status=None):
-    """Открывает витрину с недельным прокатом; подбор запускается отдельной кнопкой."""
-    await send_movie_now_playing(bot, cid, q=q, status=status)
-
-
-def _featured_now_playing(items, *, require_overview=False):
-    """На витрину попадают только достаточно известные картины из проката."""
-    featured = []
-    for item in items or []:
-        if require_overview and not str(item.get("overview") or "").strip():
-            continue
-        try:
-            rating = float(item.get("rating") or 0)
-            votes = int(item.get("vote_count") or 0)
-        except (AttributeError, TypeError, ValueError):
-            continue
-        if rating >= 6.5 and votes >= 100:
-            featured.append(item)
-    return sorted(
-        featured,
-        key=lambda item: (
-            float(item.get("popularity") or 0),
-            int(item.get("vote_count") or 0),
-            float(item.get("rating") or 0),
-        ),
-        reverse=True,
-    )
-
-
-def _youtube_trailer_search_url(item):
-    query = " ".join(str(value or "").strip() for value in (
-        item.get("title"), item.get("name_en"), item.get("year"), "official trailer",
-    ) if str(value or "").strip())
-    return f"https://www.youtube.com/results?search_query={quote_plus(query)}" if query else ""
-
-
-async def _with_trailer_urls(items):
-    """Добавляет ссылку на проверенный трейлер, не смешивая сеть с UI-рендером.
-
-    Уже сохранённый ночным прогревом трейлер берётся без запроса к TMDB.
-    """
-    async def enrich(source):
-        item = dict(source or {})
-        if not str(item.get("trailer_url") or "").strip():
-            trailer = await asyncio.to_thread(tmdb.trailer_url, item.get("id"), "movie")
-            item["trailer_url"] = trailer or _youtube_trailer_search_url(item)
-        return item
-
-    return list(await asyncio.gather(*(enrich(source) for source in items or [])))
-
-
-async def _recommendation_with_trailer(tm):
-    """Дополняет основную рекомендацию проверенным трейлером для ссылки с названия."""
-    if not isinstance(tm, dict):
-        return tm
-    enriched = dict(tm)
-    if str(enriched.get("trailer_url") or "").strip():
-        return enriched
-    trailer = ""
-    tm_id = enriched.get("id")
-    kind = enriched.get("kind")
-    if tm_id and kind in ("movie", "tv"):
-        try:
-            trailer = await asyncio.to_thread(tmdb.trailer_url, tm_id, kind)
-        except Exception:
-            trailer = ""
-    if not trailer:
-        trailer = _youtube_trailer_search_url({
-            "title": enriched.get("name"),
-            "name_en": enriched.get("name_en"),
-            "year": enriched.get("year"),
-        })
-    if trailer:
-        enriched["trailer_url"] = trailer
-    return enriched
 
 
 def _daily_rebus(day):
@@ -272,172 +49,6 @@ def _daily_rebus(day):
 def daily_movie_rebus(day):
     """Публичный локальный ребус дня для компактных витрин без сетевого запроса."""
     return _daily_rebus(day)
-
-
-def _cinema_birthday_cache_get(day):
-    data = store._load(config.CINEMA_DAILY_CACHE_KEY)
-    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
-    if not isinstance(entry, dict):
-        return None
-    if entry.get("version") != _CINEMA_BIRTHDAY_CACHE_VERSION:
-        return None
-    birthday = entry.get("birthday")
-    return dict(birthday) if isinstance(birthday, dict) else {}
-
-
-def _cinema_birthday_cache_set(day, birthday):
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {
-            "version": _CINEMA_BIRTHDAY_CACHE_VERSION,
-            "ts": time.time(),
-            "birthday": dict(birthday or {}),
-        }
-        return data, None
-
-    store.mutate_kv(config.CINEMA_DAILY_CACHE_KEY, mutate)
-
-
-def _cinema_birthday_role(value):
-    role = str(value or "").casefold()
-    if "режисс" in role or "director" in role:
-        return "режиссёр"
-    if "актрис" in role or "actress" in role:
-        return "актриса"
-    if "актёр" in role or "actor" in role:
-        return "актёр"
-    return "кинематографист"
-
-
-def _load_cinema_birthday(day):
-    """Находит известного именинника кино и кэширует один результат для всех пользователей.
-
-    Wikidata вызывается только при первом открытии экрана в новую дату. Если источник
-    временно недоступен, показываем только заранее подтверждённый fallback для этой даты,
-    а не приписываем день рождения случайному человеку.
-    """
-    cached = _cinema_birthday_cache_get(day)
-    if cached is not None:
-        return cached
-    with _CINEMA_BIRTHDAY_LOCK:
-        cached = _cinema_birthday_cache_get(day)
-        if cached is not None:
-            return cached
-        query = """
-            SELECT ?person ?personLabel ?birth ?occupationLabel ?notableWorkLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
-              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
-              VALUES ?occupation { wd:Q2526255 wd:Q33999 wd:Q10800557 }
-              OPTIONAL { ?person wdt:P800 ?notableWork. }
-              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
-              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
-            }
-            ORDER BY DESC(?sitelinks)
-            LIMIT 1
-        """ % (day.month, day.day)
-        birthday = None
-        try:
-            response = requests.get(
-                "https://query.wikidata.org/sparql",
-                params={"query": query, "format": "json"},
-                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
-                timeout=6,
-            )
-            response.raise_for_status()
-            bindings = response.json().get("results", {}).get("bindings", [])
-            if bindings:
-                item = bindings[0]
-                name = str((item.get("personLabel") or {}).get("value") or "").strip()
-                role = _cinema_birthday_role((item.get("occupationLabel") or {}).get("value"))
-                if name:
-                    work = str((item.get("notableWorkLabel") or {}).get("value") or "").strip()
-                    birthday = {"name": name, "role": role}
-                    birth = str((item.get("birth") or {}).get("value") or "").strip()
-                    if birth:
-                        birthday["birth"] = birth
-                    if work:
-                        birthday["fact"] = f"Одна из заметных работ — «{work}»."
-        except Exception as error:
-            _log.info("cinema birthday lookup unavailable: %s", type(error).__name__)
-        birthday = birthday or _BIRTHDAY_FALLBACKS.get((day.month, day.day)) or {}
-        _cinema_birthday_cache_set(day, birthday)
-        return dict(birthday)
-
-
-async def _daily_cinema_content(*, cached_only=False):
-    """Ребус и именинник дня; ``cached_only`` — только готовые данные без сети и AI."""
-    today = datetime.now(config.TZ).date()
-    if cached_only:
-        birthday = _cinema_birthday_cache_get(today)
-        return {
-            "rebus": monthly_rebuses.cached_for_day("movies", today, _CINEMA_REBUSES),
-            "birthday": birthday if birthday is not None
-            else dict(_BIRTHDAY_FALLBACKS.get((today.month, today.day)) or {}),
-        }
-    return {
-        "rebus": await monthly_rebuses.for_day("movies", today, _CINEMA_REBUSES),
-        "birthday": await asyncio.to_thread(_load_cinema_birthday, today),
-    }
-
-
-async def send_movie_now_playing(bot, cid, q=None, status=None):
-    import category_news
-    city = _movie_city(cid)
-    now = datetime.now(config.TZ)
-    local_movies = await get_local_now_playing(cid, limit=20)
-    featured = _featured_now_playing(local_movies, require_overview=True)
-    featured = featured[:3]
-    now_playing = await _with_trailer_urls(featured)
-    msg = leisure_ui.movie_now_playing_screen(
-        city, now_playing, news=category_news.cached_line("movie"), day=now.date(),
-    )
-    kb = _movie_home_kb()
-    if status is not None:
-        await status.replace(
-            msg.text, entities=msg.entities, reply_markup=kb,
-            disable_web_page_preview=True,
-        )
-        return
-    if q is not None:
-        try:
-            await q.message.edit_text(
-                msg.text, entities=msg.entities, reply_markup=kb,
-                disable_web_page_preview=True,
-            )
-            return
-        except Exception:
-            pass
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
-        disable_web_page_preview=True,
-    )
-
-
-async def warm_movie_home_cache(cid):
-    """Готовит недельный прокат, дневную рекомендацию, рубрики и трейлеры без сообщений.
-
-    Трейлеры сохраняются в кэшах проката и рекомендации, поэтому открытие
-    витрины не ходит в TMDB.
-    """
-    items = await get_local_now_playing(cid, limit=20)
-    featured = _featured_now_playing(items, require_overview=True)[:3]
-    if any(not str(item.get("trailer_url") or "").strip() for item in featured):
-        trailers = {
-            (item.get("id"), item.get("title")): item["trailer_url"]
-            for item in await _with_trailer_urls(featured)
-        }
-        city = _movie_city(cid)
-        catalog = _now_playing_catalog_get(cid, city)
-        if catalog:
-            _now_playing_catalog_set(cid, city, [
-                {**item, "trailer_url": trailers[(item.get("id"), item.get("title"))]}
-                if (item.get("id"), item.get("title")) in trailers else item
-                for item in catalog
-            ])
-    await _daily_cinema_content()
-    item, tm = await get_current_movie(cid)
-    if item and isinstance(tm, dict) and not str(tm.get("trailer_url") or "").strip():
-        _cache_movie(cid, item, await _recommendation_with_trailer(tm))
-    return True
 
 
 async def warm_movie_premieres_cache(cid):
@@ -585,7 +196,7 @@ def _movie_premieres_view(cid, items, page=0):
             InlineKeyboardButton("▶️", callback_data=f"movie_premiere_page:{(page + 1) % len(items)}"),
         ])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return msg, InlineKeyboardMarkup(rows), page
@@ -708,7 +319,7 @@ def _series_premieres_view(items, page=0):
             InlineKeyboardButton("▶️", callback_data=f"series_premiere_page:{(page + 1) % len(items)}"),
         ])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return msg, InlineKeyboardMarkup(rows), page
@@ -768,7 +379,7 @@ def _combined_premieres_view(items, page=0):
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"combined_premiere_page:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return msg, InlineKeyboardMarkup(rows), page
 

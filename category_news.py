@@ -19,7 +19,7 @@ import store
 
 _log = logging.getLogger(__name__)
 _SCHEMA_VERSION = 1
-_CATEGORIES = ("wardrobe", "food", "movie", "travel")
+_CATEGORIES = ("wardrobe", "food")
 _MAX_AGE_DAYS = 10
 _MIN_IMPORTANCE = 75
 _MIN_CONFIDENCE = 70
@@ -60,34 +60,6 @@ _POLICIES = {
             "science.org", "cell.com", "thelancet.com", "nejm.org", "wur.nl",
         ),
     },
-    "movie": {
-        "query": (
-            "most important film cinema industry festival distribution major release news "
-            "this week"
-        ),
-        "focus": (
-            "a major festival decision, confirmed release or consequential industry change; "
-            "reject casting rumours, gossip and minor promotional teasers"
-        ),
-        "primary_domains": (
-            "festival-cannes.com", "berlinale.de", "labiennale.org", "oscars.org",
-            "sundance.org", "bafta.org",
-        ),
-    },
-    "travel": {
-        "query": (
-            "most important Netherlands Europe travel visa transport new route conservation "
-            "destination discovery news this week"
-        ),
-        "focus": (
-            "entry rules, a useful new route, major infrastructure, safety, conservation or "
-            "a verified scientific discovery tied to a destination; reject destination listicles"
-        ),
-        "primary_domains": (
-            "government.nl", "europa.eu", "consilium.europa.eu", "iata.org",
-            "eurostar.com", "ns.nl", "schiphol.nl", "klm.com",
-        ),
-    },
 }
 
 _REJECT_RE = re.compile(
@@ -100,8 +72,7 @@ _SOURCE_NAMES = {
     "bbc.co.uk": "BBC", "theguardian.com": "The Guardian", "nature.com": "Nature",
     "science.org": "Science", "who.int": "WHO", "efsa.europa.eu": "EFSA",
     "ec.europa.eu": "European Commission", "eur-lex.europa.eu": "EUR-Lex",
-    "festival-cannes.com": "Festival de Cannes", "berlinale.de": "Berlinale",
-    "labiennale.org": "La Biennale di Venezia", "eurostar.com": "Eurostar",
+    "eurostar.com": "Eurostar",
     "schiphol.nl": "Schiphol", "government.nl": "Government of the Netherlands",
 }
 
@@ -219,7 +190,7 @@ def _editor_prompt(rows_by_category):
 
 Верни JSON:
 {{"categories":{{"wardrobe":[{{"text_ru":"...","importance":0,"confidence":0,
-"evidence_ids":["wardrobe:0","wardrobe:1"]}}],"food":[],"movie":[],"travel":[]}}}}
+"evidence_ids":["wardrobe:0","wardrobe:1"]}}],"food":[]}}}}
 """
 
 

@@ -285,12 +285,8 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
         ("wardrobe", "00:00"),
         ("cooking", "00:05"),
         ("learning", "00:10"),
-        ("travel", "00:15"),
-        ("cinema", "00:20"),
-        ("music", "00:25"),
-        ("books", "00:30"),
-        ("games", "00:35"),
-        ("myday", "00:40"),
+        ("leisure", "00:15"),
+        ("myday", "00:20"),
     )
 
 
@@ -343,19 +339,12 @@ def test_myday_final_warm_repairs_dependencies_in_order(monkeypatch):
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", async_call("wardrobe"))
     monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", sync("cooking", {"name": "Roest"}))
     monkeypatch.setattr(bot.learning, "warm_home_cache", sync("learning"))
-    monkeypatch.setattr(bot.travel, "warm_home_cache", async_call("travel"))
-    monkeypatch.setattr(bot.leisure_movies, "warm_movie_home_cache", async_call("cinema"))
-    monkeypatch.setattr(bot.leisure_music, "warm_music_home_cache", async_call("music"))
-    monkeypatch.setattr(bot.leisure_books, "warm_books_home_cache", async_call("books"))
-    monkeypatch.setattr(bot.leisure_games, "warm_games_home_cache", async_call("games"))
+    monkeypatch.setattr(bot.leisure_hub, "warm_hub_cache", async_call("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", async_call("myday"))
 
     asyncio.run(bot.job_warm_home_pages(Context()))
 
-    assert calls == [
-        "wardrobe", "cooking", "learning", "travel", "cinema",
-        "music", "books", "games", "myday",
-    ]
+    assert calls == ["wardrobe", "cooking", "learning", "leisure", "myday"]
 
 
 def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
@@ -390,11 +379,7 @@ def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", wardrobe)
     monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", cooking)
     monkeypatch.setattr(bot.learning, "warm_home_cache", lambda _cid: True)
-    monkeypatch.setattr(bot.travel, "warm_home_cache", lambda _cid: asyncio.sleep(0, result=True))
-    monkeypatch.setattr(bot.leisure_movies, "warm_movie_home_cache", lambda _cid: asyncio.sleep(0, result=True))
-    monkeypatch.setattr(bot.leisure_music, "warm_music_home_cache", lambda _cid: asyncio.sleep(0, result=True))
-    monkeypatch.setattr(bot.leisure_books, "warm_books_home_cache", lambda _cid: asyncio.sleep(0, result=True))
-    monkeypatch.setattr(bot.leisure_games, "warm_games_home_cache", lambda _cid: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(bot.leisure_hub, "warm_hub_cache", lambda _cid: asyncio.sleep(0, result=True))
     monkeypatch.setattr(bot.myday, "warm_day_cache", myday)
 
     asyncio.run(bot.job_warm_home_pages(Context()))

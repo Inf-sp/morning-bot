@@ -15,7 +15,6 @@ _LEGACY_SOURCES = (
     (config.BOOK_SEEN_KEY, "book", "seen"),
     (config.MUSIC_DISLIKE_KEY, "artist", "hidden"),
     (config.MUSIC_SEEN_KEY, "artist", "seen"),
-    (config.TRAVEL_DISLIKE_KEY, "country", "hidden"),
 )
 
 

@@ -4,7 +4,6 @@ import pytest
 
 import api_usage
 import config
-import research
 import storage_driver
 import store
 
@@ -155,14 +154,6 @@ def test_usage_prune_drops_stale_minute_buckets():
         f"minute:requests:{api_usage._bucket('minute', now)}": 1,
         f"day:requests:{api_usage._bucket('day', old)}": 7,
     }
-
-
-def test_country_facts_without_currencies(monkeypatch):
-    monkeypatch.setattr(research.country_catalog, "country_data", lambda *_a, **_k: {
-        "country_code": "XX", "capital": "C", "currencies": [],
-    })
-
-    assert research.country_facts("X")["currency"] == ""
 
 
 def test_legacy_flat_wardrobe_is_migrated_without_crashing():

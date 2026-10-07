@@ -308,7 +308,7 @@ async def send_movie_by_genre(bot, cid, genre_id):
             _discover_pick, cid, [genre_id], _movie_prefs(cid),
             require_genre_ids=[genre_id], reason=reason)
     except Exception as e:
-        await verify.safe_error(bot, cid, e, back="m_movie")
+        await verify.safe_error(bot, cid, e, back="m_leisure")
         return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",

@@ -1,7 +1,6 @@
 """Маршрутизация inline callback-кнопок."""
 
 import logging
-import re
 
 import access
 import callback_topics
@@ -15,6 +14,7 @@ import learning_router
 import leisure_books
 import leisure_concerts
 import leisure_games
+import leisure_hub
 import leisure_movies
 import leisure_music
 import menu
@@ -25,7 +25,6 @@ import personal_collections
 import settings
 import store
 import trainer
-import travel
 import util
 import verify
 import wardrobe
@@ -66,24 +65,14 @@ def _status_stages(data):
         return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
     elif data.startswith(("game", "a_game")):
         return progress("🕵️ Ищу загадку...", "📖 Проверяю текст...", "🧩 Собираю загадку...")
-    elif data.startswith(("vg_", "m_games")):
+    elif data.startswith("vg_"):
         return progress("👾 Ищу игру...", "🎮 Сверяю платформы...", "📝 Готовлю карточку...")
     elif data.startswith(("a_dict", "word_")):
         return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "📝 Готовлю карточку...")
     elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
         first = "🧠 Ищу задание..."
-    elif re.fullmatch(r"a_trav_country_[A-Z0-9]+_\d+", data):
-        return progress("🗺️ Открываю страну...", "🔍 Собираю факты...", "📝 Готовлю карточку страны...")
-    elif data.startswith(("a_trav_", "m_travel")):
-        first = "✈️ Ищу поездку..."
     elif data == "m_wardrobe":
         first = "⏳ Ищу образ..."
-    elif data == "m_movie":
-        first = "🎬 Ищу кино..."
-    elif data == "m_books":
-        first = "📚 Ищу книгу..."
-    elif data == "m_music":
-        first = "🎧 Ищу музыку..."
     elif data in ("a_plany", "m_myday", "weather_myday"):
         return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
     elif data in ("a_w_full", "a_w_week"):
@@ -96,8 +85,6 @@ def _status_stages(data):
         first = "🧠 Ищу задание..."
     elif topic == "leisure":
         first = "✨ Ищу рекомендацию..."
-    elif topic == "travel":
-        first = "✈️ Ищу поездку..."
     else:
         return stages
     return ((0, first), *stages[1:])
@@ -225,6 +212,10 @@ async def handle(update, context, remove_reply_keyboard):
         await _inline_status(
             lambda status: menu.send_food_menu(bot, cid, status=status, refresh=True),
             preserve_message=True); return
+    if data.startswith(("m_travel", "a_trav_")):
+        data = "m_menu"  # раздел «Поездки» удалён: старые кнопки ведут в главное меню
+    if data in ("m_movie", "m_music", "m_books", "m_games", "movie_now_playing"):
+        data = "m_leisure"  # старые главные экраны Кино/Музыка/Книги/Игры → хаб «Досуг»
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
 
@@ -282,35 +273,9 @@ async def handle(update, context, remove_reply_keyboard):
             preserve_message=False,
         )
         return
-    if data == "m_travel":
-        await _inline_status(
-            lambda status: travel.send_home(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_movie":
-        await _inline_status(
-            lambda status: leisure_movies.send_movie_home(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_books":
-        await _inline_status(
-            lambda status: leisure_books.send_books_home(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_music":
-        await _inline_status(
-            lambda status: leisure_music.send_music_home(bot, cid, status=status),
-            preserve_message=False,
-        )
-        return
-    if data == "m_games":
-        await _inline_status(
-            lambda status: leisure_games.send_games_home(bot, cid, status=status),
-            preserve_message=False,
-        )
+    if data == "m_leisure":
+        # Хаб читает только готовые кэши — без статуса ожидания.
+        await leisure_hub.send_hub(bot, cid, q=q)
         return
     if data.startswith("m_"):
         text, entities, kb = menu.menu_screen(data, cid)
@@ -348,50 +313,12 @@ async def handle(update, context, remove_reply_keyboard):
             elif act == "setcity":
                 store.pending_input[cid] = "setcity"
                 await bot.send_message(chat_id=cid, text="📍 Напиши название города — переключу на него.")
-            elif act == "trav_go":
-                await _inline_status(
-                    lambda status: travel.send_go(bot, cid, status=status, region_key=""),
-                    preserve_message=True,
-                )
-            elif act == "trav_regions":
-                await travel.send_regions(bot, cid)
-            elif act.startswith("trav_region_"):
-                region_key = act.removeprefix("trav_region_")
-                if region_key == "any":
-                    region_key = ""
-                await _inline_status(
-                    lambda status: travel.send_go(bot, cid, status=status, region_key=region_key),
-                    preserve_message=True,
-                )
-            elif act == "trav_no":
-                await _inline_status(
-                    lambda status: travel.travel_dislike(bot, cid, status=status),
-                    preserve_message=True,
-                )
-            elif act == "trav_plan":
-                await _inline_status(lambda _s: travel.send_plan(bot, cid))
-            elif act == "trav_fav":
-                await _inline_status(lambda status: travel.travel_fav(bot, cid, status=status))
-            elif re.fullmatch(r"trav_country_[A-Z0-9]+_\d+", act):
-                await _inline_status(
-                    lambda status: travel.handle_country_callback(bot, cid, q, act, status=status),
-                    preserve_message=True,
-                )
-            elif act.startswith("trav_countries") or act.startswith("trav_country_"):
-                await travel.handle_country_callback(bot, cid, q, act)
-            elif act == "trav_transport":
-                await travel.send_home(bot, cid, q)
-            elif act.startswith("trav_mode_"):
-                await travel.send_home(bot, cid, q)
-            elif act == "watch":
-                await _inline_status(
-                    lambda status: leisure_movies.send_movie_home(bot, cid, q, status=status))
-            elif act == "read":
-                await _inline_status(lambda status: leisure_books.send_books_home(bot, cid, q, status=status))
+            elif act in ("watch", "read", "listen"):
+                await leisure_hub.send_hub(bot, cid, q=q)
             elif act == "watchlist":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="lz_lib")
             elif act == "watchclean":
-                await cleanup.open_collection(bot, cid, "cinema_favorites", back="m_movie")
+                await cleanup.open_collection(bot, cid, "cinema_favorites", back="lz_lib")
             elif act == "concerts_find":
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, "home"))
             elif act == "concerts_nearby":
@@ -406,8 +333,6 @@ async def handle(update, context, remove_reply_keyboard):
                          "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
                          "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"):
                 await _inline_status(lambda _s: leisure_concerts.find_concerts(bot, cid, act.split("_")[1]))
-            elif act == "listen":
-                await _inline_status(lambda status: leisure_music.send_music_home(bot, cid, q, status=status))
             elif act == "listen_no":
                 await _inline_status(
                     lambda _s: leisure_music.listen_dislike(bot, cid),
@@ -483,8 +408,18 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "movie_prefs":
         await leisure_movies.send_movie_prefs(bot, cid, q)
         return
+    if data == "lz_prem":
+        await leisure_hub.send_premieres_menu(bot, cid, q=q)
+        return
+    if data == "lz_lib":
+        await leisure_hub.send_library_menu(bot, cid, q=q)
+        return
     if data == "book_reco":
         await _inline_status(lambda status: leisure_books.send_books_reco(bot, cid, status=status))
+        return
+    if data == "book_next":
+        await _inline_status(
+            lambda _s: leisure_books._advance_book(bot, cid), preserve_message=True)
         return
     if data.startswith("yt:"):
         _prefix, kind, page = data.split(":", 2)
@@ -521,6 +456,12 @@ async def handle(update, context, remove_reply_keyboard):
     if data == "music_reco":
         await _inline_status(lambda _s: leisure_music.send_listen(bot, cid))
         return
+    if data == "music_next":
+        await _inline_status(
+            lambda status: leisure_music.listen_next(bot, cid, status=status),
+            preserve_message=True,
+        )
+        return
     if data == "music_archive":
         await _inline_status(
             lambda status: leisure_music.send_music_task(bot, cid, "archive", status=status),
@@ -539,10 +480,9 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_music.send_music_genre_menu(bot, cid, q)
         return
     if data == "vg_reco":
+        # «Во что поиграть»: подбор недели; «✨ Другая игра» — vg_next.
         await _inline_status(
-            lambda status: leisure_games.send_game_recommendation(
-                bot, cid, status=status, refresh=True,
-            ),
+            lambda status: leisure_games.send_game_recommendation(bot, cid, status=status),
             preserve_message=True,
         )
         return
@@ -697,7 +637,7 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_books.toggle_book_preference(bot, cid, data, q)
         return
     if data == "artist_favorites":
-        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="m_music")
+        await cleanup.open_collection(bot, cid, "music_favorite_artists", back="lz_lib")
         return
     if data == "music_prefs":
         await leisure_music.send_music_preferences(bot, cid, q)
@@ -711,6 +651,12 @@ async def handle(update, context, remove_reply_keyboard):
         await leisure_movies.toggle_movie_pref(bot, cid, data, q)
         return
     if data == "movie_reco":
+        await _inline_status(
+            lambda status: leisure_movies.send_current_movie(bot, cid, status=status),
+            preserve_message=True)
+        return
+    if data == "movie_next":
+        # Явный запрос всегда получает новый вариант, а не карточку дня из кэша.
         await _inline_status(
             lambda status: leisure_movies.send_recos(bot, cid, "movie", status=status),
             preserve_message=True)
@@ -740,11 +686,6 @@ async def handle(update, context, remove_reply_keyboard):
         await _ack(q)
         await leisure_movies.show_series_premiere_page(
             cid, q, int(data.rsplit(":", 1)[1]),
-        )
-        return
-    if data == "movie_now_playing":
-        await _inline_status(
-            lambda status: leisure_movies.send_movie_now_playing(bot, cid, q, status=status),
         )
         return
     if data == "movie_genre_menu":

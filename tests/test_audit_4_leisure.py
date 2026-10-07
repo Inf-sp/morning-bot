@@ -73,7 +73,7 @@ def test_legacy_games_collection_callback_opens_games_list(monkeypatch):
 
     asyncio.run(personal_collections.handle_collection_callback(object(), "42", None, "as_love_games"))
 
-    assert calls == [("games_favorites", "m_games")]
+    assert calls == [("games_favorites", "lz_lib")]
 
 
 def test_legacy_stoplist_is_kept_when_saving_merged_stoplist_fails(monkeypatch):

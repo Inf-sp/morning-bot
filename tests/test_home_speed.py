@@ -36,72 +36,6 @@ def test_cached_restaurant_is_served_without_weather_search_or_ai(monkeypatch):
     assert restaurant_discovery.get_restaurant("42")["name"] == "Roest"
 
 
-def test_cached_movie_home_uses_saved_trailers_and_daily_content(monkeypatch):
-    sent = []
-
-    class Bot:
-        async def send_message(self, **kwargs):
-            sent.append(kwargs)
-
-    async def local_movies(_cid, *, limit):
-        return [{"id": 7, "title": "Фильм", "genres": ["drama"], "rating": 7.5,
-                 "vote_count": 500, "popularity": 90, "overview": "Сюжет",
-                 "trailer_url": "https://www.youtube.com/watch?v=saved"}]
-
-    async def current(_cid):
-        return {"title": "Фильм"}, {"id": 7, "kind": "movie",
-                                    "trailer_url": "https://www.youtube.com/watch?v=reco"}
-
-    monkeypatch.setattr(leisure_movies, "get_local_now_playing", local_movies)
-    monkeypatch.setattr(leisure_movies, "get_current_movie", current)
-    monkeypatch.setattr(leisure_movies, "_movie_city", lambda _cid: "Алкмар")
-    monkeypatch.setattr(leisure_movies.tmdb, "trailer_url", _boom)
-    monkeypatch.setattr(leisure_movies.requests, "get", _boom)
-    monkeypatch.setattr(leisure_movies.monthly_rebuses, "for_day", _boom)
-    monkeypatch.setattr(leisure_movies, "_cinema_birthday_cache_get", lambda _day: None)
-
-    asyncio.run(leisure_movies.send_movie_now_playing(Bot(), "42"))
-
-    assert "Фильм" in sent[0]["text"]
-
-
-def test_books_warm_keeps_current_weekly_showcase(monkeypatch):
-    calls = []
-
-    async def weekly(*, refresh=False):
-        calls.append(refresh)
-        return []
-
-    async def daily(*, refresh=False):
-        return {}
-
-    monkeypatch.setattr(leisure_books, "get_weekly_new_books", weekly)
-    monkeypatch.setattr(leisure_books, "_daily_book_content", daily)
-    monkeypatch.setattr(leisure_books, "_weekly_book_cache_get", lambda **_kw: [{}, {}, {}])
-
-    asyncio.run(leisure_books.warm_books_home_cache("42"))
-
-    assert calls == [False]
-
-
-def test_games_warm_builds_missing_seasonal_showcase(monkeypatch):
-    calls = []
-
-    async def premieres(_cid, *, refresh=False, seasonal=False):
-        calls.append(refresh)
-        return [{"title": "Game"}] if refresh else []
-
-    async def rebus(*_args, **_kwargs):
-        return {}
-
-    monkeypatch.setattr(leisure_games, "get_game_premieres", premieres)
-    monkeypatch.setattr(leisure_games, "has_seasonal_premieres_cache", lambda _cid: False)
-    monkeypatch.setattr(leisure_games.monthly_rebuses, "for_day", rebus)
-
-    assert asyncio.run(leisure_games.warm_games_home_cache("42")) is True
-    assert calls == [False, True]
-
-
 def _patch_warm_steps(monkeypatch, calls, probe=None):
     def step(name, is_async=True):
         if is_async:
@@ -124,11 +58,7 @@ def _patch_warm_steps(monkeypatch, calls, probe=None):
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", step("wardrobe"))
     monkeypatch.setattr(bot.restaurant_discovery, "get_restaurant", step("cooking", False))
     monkeypatch.setattr(bot.learning, "warm_home_cache", step("learning", False))
-    monkeypatch.setattr(bot.travel, "warm_home_cache", step("travel"))
-    monkeypatch.setattr(bot.leisure_movies, "warm_movie_home_cache", step("cinema"))
-    monkeypatch.setattr(bot.leisure_music, "warm_music_home_cache", step("music"))
-    monkeypatch.setattr(bot.leisure_books, "warm_books_home_cache", step("books"))
-    monkeypatch.setattr(bot.leisure_games, "warm_games_home_cache", step("games"))
+    monkeypatch.setattr(bot.leisure_hub, "warm_hub_cache", step("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", step("myday"))
 
 
@@ -147,12 +77,12 @@ class _Context:
 def test_retry_warm_rebuilds_only_sections_without_today_cache(monkeypatch):
     calls = []
     _patch_warm_steps(monkeypatch, calls)
-    missing = {"travel", "myday"}
+    missing = {"leisure", "myday"}
     monkeypatch.setattr(bot.home_cache, "is_ready", lambda section, _cid: section not in missing)
 
     asyncio.run(bot.job_warm_home_pages(_Context("retry")))
 
-    assert calls == ["travel", "myday"]
+    assert calls == ["leisure", "myday"]
 
 
 def test_retry_warm_is_noop_when_all_caches_exist(monkeypatch):
@@ -208,16 +138,16 @@ def test_home_open_stats_line_uses_today_latency_journal(monkeypatch):
     now = datetime(2026, 10, 6, 12, 0, tzinfo=config.TZ)
     today = now.timestamp() - 3600
     rows = [
-        {"ts": today, "action": "m_movie", "duration_ms": 3100},
+        {"ts": today, "action": "m_leisure", "duration_ms": 3100},
         {"ts": today, "action": "m_myday", "duration_ms": 400},
         {"ts": today, "action": "m_wardrobe", "duration_ms": 300},
         {"ts": today, "action": "movie_reco", "duration_ms": 9000},
-        {"ts": now.timestamp() - 86400, "action": "m_books", "duration_ms": 9000},
+        {"ts": now.timestamp() - 86400, "action": "m_leisure", "duration_ms": 9000},
     ]
     monkeypatch.setattr(tracking, "get_action_latencies", lambda limit=100: rows)
 
     assert home_cache.today_open_stats_line(now) == (
-        "⏱ Разделы сегодня: медиана 0,4 с · худший 3,1 с (Кино)"
+        "⏱ Разделы сегодня: медиана 0,4 с · худший 3,1 с (Досуг)"
     )
 
 

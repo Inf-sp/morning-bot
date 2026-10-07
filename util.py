@@ -59,11 +59,6 @@ class StatusManager:
             (2, "🎯 Учитываю предпочтения..."),
             (6, "📝 Готовлю карточку..."),
         ),
-        "travel": (
-            (0, "✈️ Ищу поездку..."),
-            (2, "🗺️ Сверяю маршрут..."),
-            (6, "📍 Готовлю план..."),
-        ),
     }
 
     def __init__(self, bot, cid=None, message=None, parse_mode=None, mode="message", stages=None,

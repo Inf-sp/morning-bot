@@ -114,11 +114,7 @@ async def job_warm_home_pages(context):
             ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
             ("cooking", lambda: asyncio.to_thread(restaurant_discovery.get_restaurant, cid)),
             ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
-            ("travel", lambda: travel.warm_home_cache(cid)),
-            ("cinema", lambda: leisure_movies.warm_movie_home_cache(cid)),
-            ("music", lambda: leisure_music.warm_music_home_cache(cid)),
-            ("books", lambda: leisure_books.warm_books_home_cache(cid)),
-            ("games", lambda: leisure_games.warm_games_home_cache(cid)),
+            ("leisure", lambda: leisure_hub.warm_hub_cache(cid)),
             ("myday", lambda: myday.warm_day_cache(cid, bot=context.bot)),
         )
         if scheduled_section and not finalizing_myday and not retry_missing:

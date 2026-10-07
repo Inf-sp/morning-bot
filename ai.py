@@ -50,7 +50,7 @@ _FREE_CHAT_PROVIDER_TIMEOUTS = {
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
-    "assistant", "food", "cooking", "recipe", "wardrobe", "travel", "leisure", "learning",
+    "assistant", "food", "cooking", "recipe", "wardrobe", "leisure", "learning",
 )
 _PUBLIC_AI_FALLBACK_MODULES = frozenset({
     "learning", "learning_game", "learning_trainer", "trainer",
@@ -352,7 +352,6 @@ _AI_CACHE_MAX = 300
 _AI_CACHE_TTLS = {
     "food": 24 * 3600,
     "leisure": 18 * 3600,
-    "travel": 18 * 3600,
     "wardrobe": 18 * 3600,
     "learning_explain": 14 * 86400,
     "learning_dict_add": 30 * 86400,
@@ -1368,8 +1367,6 @@ MODULE_POLICY = {
     "recipe_generation": FOOD_ORDER,
     "wardrobe": LEISURE_ORDER,
     "wardrobe_migration": LEISURE_ORDER,
-    "travel": LEISURE_ORDER,
-    "travel_facts10": LEISURE_ORDER,
     "leisure": LEISURE_ORDER,
     "leisure_movies": LEISURE_ORDER,
     "leisure_music": LEISURE_ORDER,

@@ -213,8 +213,8 @@ _SECTION_BY_MODULE = {
     "research": "Поиск", "assistant": "Ассистент", "leisure_movies": "Кино",
     "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",
-    "gtts": "Озвучка", "dictionary_tts": "Озвучка", "travel": "Поездка",
-    "travel_photos": "Поездка",
+    "gtts": "Озвучка", "dictionary_tts": "Озвучка",
+    "travel_photos": "Фото",
     "settings": "Настройки",
     "menu": "Меню", "bot_callbacks": "Меню", "bot": "Бот",
 }

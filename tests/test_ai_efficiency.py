@@ -14,10 +14,10 @@ import tracking
 
 def test_cache_key_does_not_change_when_provider_order_changes():
     first = ai._cache_key(
-        ("gemini", "cf"), "same prompt", 300, 0.2, "travel", "json",
+        ("gemini", "cf"), "same prompt", 300, 0.2, "leisure", "json",
     )
     fallback = ai._cache_key(
-        ("cf", "groq"), "same prompt", 300, 0.2, "travel", "json",
+        ("cf", "groq"), "same prompt", 300, 0.2, "leisure", "json",
     )
 
     assert first == fallback
@@ -25,23 +25,23 @@ def test_cache_key_does_not_change_when_provider_order_changes():
 
 def test_cache_key_ignores_action_id_and_prompt_whitespace():
     compact = ai._cache_key(
-        ("gemini", "cf"), "Выбери страну", 300, 0.2, "travel", "json",
+        ("gemini", "cf"), "Выбери страну", 300, 0.2, "leisure", "json",
     )
     formatted = ai._cache_key(
-        ("cf", "groq"), "  Выбери\n\n страну  ", 300, 0.2, "travel", "json",
+        ("cf", "groq"), "  Выбери\n\n страну  ", 300, 0.2, "leisure", "json",
     )
 
-    first = tracking.start_action("42", "Поездка", "first")
+    first = tracking.start_action("42", "Досуг", "first")
     try:
         first_action_key = ai._cache_key(
-            ("gemini",), "Выбери страну", 300, 0.2, "travel", "json",
+            ("gemini",), "Выбери страну", 300, 0.2, "leisure", "json",
         )
     finally:
         tracking.finish_action(first)
-    second = tracking.start_action("42", "Поездка", "second")
+    second = tracking.start_action("42", "Досуг", "second")
     try:
         second_action_key = ai._cache_key(
-            ("gemini",), "Выбери страну", 300, 0.2, "travel", "json",
+            ("gemini",), "Выбери страну", 300, 0.2, "leisure", "json",
         )
     finally:
         tracking.finish_action(second)
@@ -59,15 +59,15 @@ def test_structured_cache_key_uses_scenario_not_prompt_text():
     }
 
     direct = ai._cache_key(
-        ("gemini",), "Исландия", 300, 0.2, "travel", "json",
+        ("gemini",), "Исландия", 300, 0.2, "leisure", "json",
         cache_context=context,
     )
     requested = ai._cache_key(
-        ("cf",), "Расскажи про Исландию", 300, 0.2, "travel", "json",
+        ("cf",), "Расскажи про Исландию", 300, 0.2, "leisure", "json",
         cache_context=dict(reversed(list(context.items()))),
     )
     other_country = ai._cache_key(
-        ("gemini",), "Исландия", 300, 0.2, "travel", "json",
+        ("gemini",), "Исландия", 300, 0.2, "leisure", "json",
         cache_context={**context, "country": "FI"},
     )
 
@@ -78,7 +78,7 @@ def test_structured_cache_key_uses_scenario_not_prompt_text():
 def test_utility_routes_start_with_gemini():
     for module in (
         "learning", "learning_trainer", "learning_dict_add", "trainer",
-        "dictionary_import", "wardrobe_utility", "travel_utility",
+        "dictionary_import", "wardrobe_utility",
     ):
         assert ai._resolve(None, None, module=module) == ai.AI_ORDER
 
@@ -200,7 +200,7 @@ def test_all_central_routes_use_the_single_ai_chain():
 
 
 def test_final_card_routes_keep_gemini_as_the_single_premium_primary():
-    for module in ("travel", "food", "wardrobe"):
+    for module in ("leisure", "food", "wardrobe"):
         assert ai._resolve(None, None, module=module)[0] == "gemini"
 
 
@@ -215,7 +215,7 @@ def test_every_central_text_ai_route_has_a_reserve_provider():
 
 
 def test_all_premium_recommendations_have_a_cache_ttl():
-    for module in ("travel", "food", "wardrobe"):
+    for module in ("leisure", "food", "wardrobe"):
         assert ai._cache_ttl(module, "json") > 0
 
 
@@ -226,7 +226,7 @@ def test_cache_hit_does_not_check_gemini_cooldown(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError("cooldown checked before cache")),
     )
 
-    assert ai.llm_json("same", module="travel") == {"ok": True}
+    assert ai.llm_json("same", module="leisure") == {"ok": True}
 
 
 def test_gemini_does_not_retry_a_rate_limit(monkeypatch):
@@ -280,7 +280,7 @@ def test_one_action_can_use_gemini_only_once(monkeypatch):
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or "first")
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args: calls.append("groq") or "second")
 
-    trace = tracking.start_action("42", "Поездка", "travel", budget_seconds=10)
+    trace = tracking.start_action("42", "Досуг", "leisure", budget_seconds=10)
     try:
         assert ai.llm("one", order=("gemini", "groq")) == "first"
         assert ai.llm("two", order=("gemini", "groq")) == "second"
@@ -304,7 +304,7 @@ def test_unavailable_gemini_does_not_consume_action_budget(monkeypatch):
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or "g")
     monkeypatch.setattr(ai, "_gen_groq", lambda *_args: calls.append("groq") or "q")
 
-    trace = tracking.start_action("42", "Поездка", "travel", budget_seconds=10)
+    trace = tracking.start_action("42", "Досуг", "leisure", budget_seconds=10)
     try:
         assert ai.llm("one", order=("gemini", "groq")) == "q"
         unavailable["gemini"] = False
@@ -353,7 +353,7 @@ def test_parallel_calls_reserve_one_gemini_slot_atomically():
                 pass
             return value
 
-    trace = tracking.start_action("42", "Поездка", "parallel", budget_seconds=10)
+    trace = tracking.start_action("42", "Досуг", "parallel", budget_seconds=10)
     trace.provider_calls = RaceDict()
     def reserve(_i):
         token = tracking._current_action.set(trace)
@@ -394,9 +394,9 @@ def test_premium_fallback_keeps_action_statistics(monkeypatch):
         lambda *_args, **_kwargs: calls.append("openrouter") or '{"ok":true}',
     )
 
-    trace = tracking.start_action("42", "Поездка", "country", budget_seconds=10)
+    trace = tracking.start_action("42", "Досуг", "country", budget_seconds=10)
     try:
-        assert ai.llm_json("country", module="travel") == {"ok": True}
+        assert ai.llm_json("country", module="leisure") == {"ok": True}
     finally:
         tracking.finish_action(trace)
 
@@ -426,14 +426,14 @@ def test_second_action_uses_cached_premium_answer_without_gemini(monkeypatch):
     monkeypatch.setattr(ai, "_reorder_for_cooldown", lambda order, **_k: order)
     monkeypatch.setattr(ai, "_gen_gemini", lambda *_args: calls.append("gemini") or '{"ok":true}')
 
-    first = tracking.start_action("42", "Поездка", "first", budget_seconds=10)
+    first = tracking.start_action("42", "Досуг", "first", budget_seconds=10)
     try:
-        assert ai.llm_json("country", module="travel") == {"ok": True}
+        assert ai.llm_json("country", module="leisure") == {"ok": True}
     finally:
         tracking.finish_action(first)
-    second = tracking.start_action("42", "Поездка", "second", budget_seconds=10)
+    second = tracking.start_action("42", "Досуг", "second", budget_seconds=10)
     try:
-        assert ai.llm_json("country", module="travel") == {"ok": True}
+        assert ai.llm_json("country", module="leisure") == {"ok": True}
     finally:
         tracking.finish_action(second)
 

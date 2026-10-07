@@ -7,7 +7,6 @@ import logging
 import random
 import re
 import secrets
-import threading
 import time
 from datetime import date, datetime, timedelta
 from urllib.parse import quote_plus
@@ -19,10 +18,8 @@ import ai
 import config
 import google_books
 import open_library
-import monthly_rebuses
 import recommendation_stoplist
 import recommendation_rotation as rotation
-import research
 import secure
 import inclusive_recommendations
 import settings
@@ -34,10 +31,6 @@ from leisure_collection import plain_label
 
 
 _log = logging.getLogger(__name__)
-_BOOK_DAILY_LOCK = threading.Lock()
-_BOOK_BIRTHDAY_CACHE_VERSION = 2
-
-
 _BOOK_GENRES = [
     ("fantasy", "Фэнтези", "Fantasy"),
     ("scifi", "Фантастика", "Science fiction"),
@@ -50,7 +43,6 @@ _BOOK_GENRES = [
 ]
 _PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("3.5", "3.5"), ("4.0", "4.0"), ("4.5", "4.5")]
-_WEEKLY_SHOWCASE_VERSION = 7
 _BOOK_PREMIERES_CACHE_VERSION = 2
 _FAVORITE_BOOK_VIEW_TTL = 24 * 3600
 _favorite_book_views = {}
@@ -66,15 +58,6 @@ _BOOK_CATEGORY_RU = {
     "juvenile fiction": "Детская литература",
 }
 
-_BOOK_REBUSES = monthly_rebuses.local_pool("books")
-_BOOK_BIRTHDAY_FALLBACKS = {
-    (8, 4): {
-        "name": "Кнут Гамсун",
-        "birth": "1859-08-04",
-        "detail": "норвежский писатель и лауреат Нобелевской премии по литературе",
-        "fact": "«Голод» стал литературным прорывом Гамсуна и одним из первых современных норвежских романов.",
-    },
-}
 _PREMIERE_SUMMARIES = {
     "onyx storm": "Вайолет ищет союзников, пока война всё ближе к её дому.",
     "great big beautiful life": "Две писательницы соперничают за право рассказать историю затворницы с тёмным прошлым.",
@@ -270,59 +253,12 @@ def _book_matches_preferences(item, cid):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другая книга", callback_data="book_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Мои книги", callback_data=f"book_love_{i}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
-
-
-def books_home_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📖 Что почитать", callback_data="book_reco")],
-        [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-
-
-async def send_books_home(bot, cid, q=None, status=None):
-    """Открывает ежедневную литературную витрину; подбор книги остаётся по кнопке."""
-    daily_book, items = await asyncio.gather(
-        _daily_book_content(),
-        get_weekly_new_books(),
-    )
-    _start, _end, season = _book_season()
-    today = datetime.now(config.TZ).date()
-    msg = leisure_ui.weekly_books_screen(
-        _book_city(cid), daily_book, items, day=today, season=season,
-    )
-    kb = books_home_keyboard()
-    if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=kb,
-                             disable_web_page_preview=True)
-        return
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb,
-                                      disable_web_page_preview=True)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
-                           disable_web_page_preview=True)
-
-
-async def warm_books_home_cache(cid, *, refresh=False):
-    """Готовит данные литературной витрины без персональной рекомендации.
-
-    Недельная подборка общая для всех: внешний поиск только при её отсутствии,
-    поэтому повторный прогрев за неделю не ходит в Google Books.
-    """
-    await asyncio.gather(
-        _daily_book_content(refresh=True),
-        get_weekly_new_books(refresh=refresh or _weekly_book_cache_get() is None),
-    )
-    return True
 
 
 def _favorite_book_value(record):
@@ -745,7 +681,7 @@ async def handle_manual_book_add_callback(bot, cid, q, data):
 def _favorite_book_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мои книги", callback_data="book_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -896,7 +832,7 @@ async def send_favorite_books(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="book_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -1030,96 +966,6 @@ async def warm_book_premieres_cache():
     return True
 
 
-def _book_birthday_cache_get(day):
-    data = store._load(config.BOOK_DAILY_CACHE_KEY)
-    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
-    if not isinstance(entry, dict):
-        return None
-    if entry.get("version") != _BOOK_BIRTHDAY_CACHE_VERSION:
-        return None
-    birthday = entry.get("birthday")
-    return dict(birthday) if isinstance(birthday, dict) else {}
-
-
-def _book_birthday_cache_set(day, birthday):
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {
-            "version": _BOOK_BIRTHDAY_CACHE_VERSION,
-            "ts": time.time(),
-            "birthday": dict(birthday or {}),
-        }
-        return data, None
-
-    store.mutate_kv(config.BOOK_DAILY_CACHE_KEY, mutate)
-
-
-def _book_birthday_detail(role):
-    value = str(role or "").casefold()
-    if "поэт" in value or "poet" in value:
-        return "поэт"
-    if "писательниц" in value or "writer" in value or "author" in value:
-        return "писатель"
-    return "автор"
-
-
-def _load_book_birthday(day):
-    """Один проверенный литературный именинник на день для всех пользователей."""
-    cached = _book_birthday_cache_get(day)
-    if cached is not None:
-        return cached
-    with _BOOK_DAILY_LOCK:
-        cached = _book_birthday_cache_get(day)
-        if cached is not None:
-            return cached
-        fallback = _BOOK_BIRTHDAY_FALLBACKS.get((day.month, day.day))
-        if fallback:
-            _book_birthday_cache_set(day, fallback)
-            return dict(fallback)
-        query = """
-            SELECT ?personLabel ?birth ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
-              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
-              VALUES ?occupation { wd:Q49757 wd:Q36180 wd:Q482980 }
-              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
-              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
-            }
-            ORDER BY DESC(?sitelinks)
-            LIMIT 1
-        """ % (day.month, day.day)
-        try:
-            response = requests.get(
-                "https://query.wikidata.org/sparql",
-                params={"query": query, "format": "json"},
-                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
-                timeout=6,
-            )
-            response.raise_for_status()
-            bindings = response.json().get("results", {}).get("bindings", [])
-            if bindings:
-                item = bindings[0]
-                name = str((item.get("personLabel") or {}).get("value") or "").strip()
-                if name:
-                    birthday = {
-                        "name": name,
-                        "detail": _book_birthday_detail(
-                            (item.get("occupationLabel") or {}).get("value")),
-                    }
-                    birth = str((item.get("birth") or {}).get("value") or "").strip()
-                    if birth:
-                        birthday["birth"] = birth
-                    _book_birthday_cache_set(day, birthday)
-                    return birthday
-        except Exception as error:
-            _log.info("book birthday lookup unavailable: %s", type(error).__name__)
-        _book_birthday_cache_set(day, {})
-        return {}
-
-
-def _book_city(cid):
-    settings_data = store.get_settings(cid)
-    return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
-
-
 def _premiere_summary(item):
     title = str((item or {}).get("title") or "").casefold().strip()
     known = _PREMIERE_SUMMARIES.get(title)
@@ -1158,65 +1004,6 @@ def _with_book_url(item):
     return result
 
 
-def _books_with_premiere_summaries(items):
-    prepared = []
-    for item in items or []:
-        if not isinstance(item, dict):
-            continue
-        summary = _premiere_summary(item)
-        if not summary:
-            continue
-        prepared.append({
-            **dict(item),
-            "summary": summary,
-            "url": _book_showcase_url(item),
-        })
-    return prepared
-
-
-def _complete_weekly_book_showcase(primary, reserve, *, limit=3):
-    """Добирает витрину проверенными книгами и не пропускает строки без описания."""
-    selected, seen = [], set()
-    for item in [*(primary or []), *(reserve or [])]:
-        if not isinstance(item, dict) or not _premiere_summary(item):
-            continue
-        identity = (
-            _normalized_isbn(item.get("isbn"))
-            or "|".join(str(item.get(key) or "").strip().casefold() for key in ("title", "author"))
-        )
-        if not identity or identity in seen:
-            continue
-        seen.add(identity)
-        selected.append(dict(item))
-        if len(selected) >= limit:
-            break
-    return selected
-
-
-async def _daily_book_content(*, refresh=False):
-    today = datetime.now(config.TZ).date()
-    week_anchor = today - timedelta(days=today.weekday())
-    if refresh:
-        rebus = await monthly_rebuses.for_day("books", today, _BOOK_REBUSES)
-        birthday = await asyncio.to_thread(_load_book_birthday, week_anchor)
-    else:
-        rebus = monthly_rebuses.cached_for_day("books", today, _BOOK_REBUSES)
-        birthday = _book_birthday_cache_get(week_anchor)
-        if birthday is None:
-            birthday = dict(_BOOK_BIRTHDAY_FALLBACKS.get(
-                (week_anchor.month, week_anchor.day),
-            ) or {})
-    return {
-        "rebus": rebus,
-        "birthday": birthday,
-    }
-
-def _book_week_key() -> str:
-    current = datetime.now(config.TZ).date()
-    year, week, _weekday = current.isocalendar()
-    return f"{year}-W{week:02d}"
-
-
 def _book_season(today=None):
     today = today or datetime.now(config.TZ).date()
     if today.month in (12, 1, 2):
@@ -1228,33 +1015,6 @@ def _book_season(today=None):
     if today.month in (6, 7, 8):
         return date(today.year, 6, 1), date(today.year, 8, 31), "лета"
     return date(today.year, 9, 1), date(today.year, 11, 30), "осени"
-
-
-def _weekly_book_cache_get(*, allow_stale=False):
-    entry = store._load(config.BOOK_WEEKLY_CACHE_KEY)
-    season_start, _season_end, _season = _book_season()
-    if (not isinstance(entry, dict) or entry.get("season") != season_start.isoformat()
-            or entry.get("version") != _WEEKLY_SHOWCASE_VERSION):
-        return None
-    if not allow_stale and entry.get("week") != _book_week_key():
-        return None
-    items = entry.get("items")
-    # Пустая витрина не должна блокировать новый поиск на весь день: после
-    # обновления логики она может заполниться новинками месяца или бестселлерами.
-    if not isinstance(items, list) or len(items) < 3:
-        return None
-    prepared = _books_with_premiere_summaries(items)
-    return prepared[:3] if len(prepared) >= 3 else None
-
-
-def _weekly_book_cache_set(items):
-    season_start, _season_end, _season = _book_season()
-    store._save(config.BOOK_WEEKLY_CACHE_KEY, {
-        "version": _WEEKLY_SHOWCASE_VERSION,
-        "week": _book_week_key(),
-        "season": season_start.isoformat(),
-        "items": [dict(item) for item in (items or []) if isinstance(item, dict)],
-    })
 
 
 def _release_date(value: str) -> date | None:
@@ -1279,59 +1039,6 @@ def _released_recently(value: str, *, days=180) -> bool:
     return bool(released and today - timedelta(days=days) <= released <= today)
 
 
-_REEDITION_MARKERS = (
-    "new edition", "revised edition", "anniversary edition", "reissue",
-    "movie tie-in", "paperback edition", "ebook edition", "новое издание",
-    "переиздание", "юбилейное издание", "мягкая обложка",
-)
-
-
-def _normalized_isbn(value):
-    return re.sub(r"[^0-9X]", "", str(value or "").upper())
-
-
-def _normal_book_cover(value):
-    url = str(value or "").strip()
-    lowered = url.casefold()
-    return url.startswith(("https://", "http://")) and not any(
-        marker in lowered for marker in ("placeholder", "no-cover", "nocover")
-    )
-
-
-def _is_reedition(item):
-    text = " ".join(str(item.get(field) or "") for field in (
-        "title", "subtitle", "description",
-    )).casefold()
-    return any(marker in text for marker in _REEDITION_MARKERS)
-
-
-def _weekly_book_score(item, *, today=None):
-    """Оценивает только проверяемые новинки последних 90 дней."""
-    today = today or datetime.now(config.TZ).date()
-    released = _release_date(item.get("published_date"))
-    author = str(item.get("author") or "").strip()
-    isbn = _normalized_isbn(item.get("isbn"))
-    if (not released or not today - timedelta(days=90) <= released <= today
-            or not author or not isbn or not _normal_book_cover(item.get("cover_url"))
-            or _is_reedition(item)):
-        return None
-    try:
-        rating = float(item.get("rating") or 0)
-        ratings_count = int(item.get("ratings_count") or 0)
-    except (TypeError, ValueError):
-        rating, ratings_count = 0, 0
-    score = 30 + 10  # новинка и нормальная обложка
-    if ratings_count >= 500:
-        score += 15  # автор уже заметен по читательскому следу книги
-    if rating >= 4.0:
-        score += 15
-    if ratings_count >= 100:
-        score += 10
-    if item.get("publisher_date_confirmed"):
-        score += 20
-    return score
-
-
 def _verified_season_releases(today=None):
     """Оставляет из ручно проверенного резерва только текущий сезон."""
     season_start, season_end, _season = _book_season(today)
@@ -1340,144 +1047,6 @@ def _verified_season_releases(today=None):
         if (released := _release_date(item.get("published_date")))
         and season_start <= released <= season_end
     ]
-
-
-async def get_weekly_new_books(*, refresh=False):
-    if not refresh:
-        cached = _weekly_book_cache_get()
-        if cached is not None:
-            return cached
-        stale = _weekly_book_cache_get(allow_stale=True)
-        if stale:
-            return stale
-        fallback = _complete_weekly_book_showcase(
-            [], _rank_weekly_books(_verified_season_releases()),
-        )
-        return _books_with_premiere_summaries(fallback)
-    stale = _weekly_book_cache_get(allow_stale=True)
-    candidates = await asyncio.to_thread(google_books.search_new_releases, 40)
-    prepared = []
-    for item in candidates:
-        if isinstance(item, dict):
-            prepared.append({
-                **item,
-                "publisher_date_confirmed": bool(
-                    item.get("publisher") and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(item.get("published_date") or ""))
-                ),
-            })
-    if len(_books_with_premiere_summaries(_rank_weekly_books(prepared))) < 3:
-        prepared.extend(await _publisher_book_candidates())
-    if len(_books_with_premiere_summaries(_rank_weekly_books(prepared))) < 3:
-        prepared.extend(await _open_library_book_candidates())
-    items = _complete_weekly_book_showcase(
-        _rank_weekly_books(prepared),
-        _rank_weekly_books(_verified_season_releases()),
-    )
-    if len(items) < 3 and stale:
-        return stale
-    items = _books_with_premiere_summaries(items)
-    if items:
-        _weekly_book_cache_set(items)
-    return items
-
-
-async def _open_library_book_candidates():
-    """Независимый fallback без API-ключа и без LLM."""
-    try:
-        return await asyncio.to_thread(
-            open_library.search_recent_releases, datetime.now(config.TZ).date(), 60,
-        )
-    except Exception:
-        return []
-
-
-def _rank_weekly_books(candidates):
-    by_isbn = {}
-    for item in candidates or []:
-        if not isinstance(item, dict):
-            continue
-        isbn = _normalized_isbn(item.get("isbn"))
-        score = _weekly_book_score(item)
-        if score is None:
-            continue
-        row = (score, _release_date(item.get("published_date")), dict(item))
-        if isbn not in by_isbn or row[:2] > by_isbn[isbn][:2]:
-            by_isbn[isbn] = row
-    ranked = list(by_isbn.values())
-    ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
-    return [item for _score, _released, item in ranked]
-
-
-async def _publisher_book_candidates():
-    """Добирает издательские анонсы через Tavily и сверяет издания в Google Books."""
-    today = datetime.now(config.TZ).date()
-    start = today - timedelta(days=90)
-    domains = (
-        "penguinrandomhouse.com", "harpercollins.com", "simonandschuster.com",
-        "macmillan.com", "hachettebookgroup.com",
-    )
-    query = (
-        f"new books published {start.isoformat()} to {today.isoformat()} "
-        "official publisher release date author ISBN"
-    )
-    results = await asyncio.to_thread(
-        research.tavily_search, query, 10, domains, scenario="book_releases",
-    )
-    if not results:
-        return []
-    source = json.dumps(results, ensure_ascii=False)[:12000]
-    prompt = (
-        "Извлеки из материалов официальных издательств книги, впервые опубликованные "
-        f"с {start.isoformat()} по {today.isoformat()}. Не включай переиздания, paperback/ebook "
-        "старых книг и не додумывай данные. Верни JSON: "
-        '{"books":[{"title":"","author":"","published_date":"YYYY-MM-DD",'
-        '"publisher":"","isbn":"","description_ru":"одно короткое предложение на русском",'
-        '"source_url":""}]}. Описание составляй только по материалу источника.\n'
-        + secure.wrap_untrusted(source, "результаты поиска по сайтам издательств")
-    )
-    try:
-        payload = await asyncio.to_thread(
-            ai.llm_json, prompt, 1200, tier="leisure", module="leisure_books",
-        )
-    except Exception:
-        return []
-    verified = []
-    for extracted in (payload.get("books") if isinstance(payload, dict) else None) or []:
-        if not isinstance(extracted, dict):
-            continue
-        title = str(extracted.get("title") or "").strip()
-        author = str(extracted.get("author") or "").strip()
-        if not title or not author:
-            continue
-        try:
-            volume = await asyncio.to_thread(google_books.find_volume, title, author=author)
-        except Exception:
-            volume = None
-        if not volume:
-            isbn = _normalized_isbn(extracted.get("isbn"))
-            cover_url = await asyncio.to_thread(open_library.cover_for_isbn, isbn)
-            if not isbn or not cover_url:
-                continue
-            volume = {
-                "title": title, "author": author, "isbn": isbn,
-                "cover_url": cover_url,
-                "info_link": str(extracted.get("source_url") or ""),
-            }
-        item = {
-            **volume,
-            "title": str(volume.get("title") or title).strip(),
-            "author": str(volume.get("author") or author).strip(),
-            "published_date": str(extracted.get("published_date") or volume.get("published_date") or ""),
-            "publisher": str(extracted.get("publisher") or volume.get("publisher") or ""),
-            "isbn": str(volume.get("isbn") or extracted.get("isbn") or ""),
-            "publisher_date_confirmed": True,
-            "publisher_source_url": str(extracted.get("source_url") or ""),
-        }
-        description_ru = " ".join(str(extracted.get("description_ru") or "").split()).strip()
-        if description_ru:
-            item["description"] = description_ru
-        verified.append(item)
-    return verified
 
 
 def _book_premieres_cache_get(today, *, allow_stale=False):
@@ -1609,7 +1178,7 @@ def _book_premieres_view(items, page=0):
             InlineKeyboardButton("▶️", callback_data=f"book_premiere_page:{(page + 1) % len(items)}"),
         ])
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="lz_prem"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return msg, InlineKeyboardMarkup(rows), page
@@ -1657,7 +1226,7 @@ def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_books"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 

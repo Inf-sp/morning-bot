@@ -28,12 +28,11 @@ def _profile_store(monkeypatch):
     return profiles
 
 
-def test_main_menu_shows_all_four_entertainment_categories():
-    labels = _labels(menu.main_menu_kb())
-
-    assert labels[-3:] == [
-        ["🎬 Кино", "🎧 Музыка"],
-        ["📚 Книги", "👾 Игры"],
+def test_main_menu_has_single_leisure_hub():
+    assert _labels(menu.main_menu_kb()) == [
+        ["☀️ Мой день"],
+        ["🧵 Гардероб", "🥣 Готовка"],
+        ["🧠 Обучение", "🍿 Досуг"],
         ["🎚️ Настройки"],
     ]
 
@@ -107,10 +106,12 @@ def test_board_genre_card_keyboard_is_board_style_without_set_button():
     ]
 
     assert labels == [
+        ["✨ Другая игра"],
         ["🎭 По жанру"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
-    assert callbacks[0] == "vg_genres_board"
+    assert callbacks[:2] == ["vg_gb_strategy", "vg_genres_board"]
+    assert callbacks[-2] == "m_leisure"
     assert all("Мой набор игр" not in line for lines in labels for line in lines)
 
 
@@ -156,75 +157,6 @@ def test_game_recommendation_prefers_selected_period_and_rating(monkeypatch):
     assert item["rating"] >= 8.5
 
 
-def test_game_home_matches_movie_style_and_keeps_board_games_separate(monkeypatch):
-    _profile_store(monkeypatch)
-    monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(leisure_games.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
-
-    async def premieres(_cid, **_kwargs):
-        return [{
-            "title": "Example Game",
-            "genre": "приключение",
-            "platform_label": "💻 ПК",
-            "url": "https://example.com/game",
-            "trailer_url": "https://www.youtube.com/watch?v=game",
-        }]
-
-    monkeypatch.setattr(leisure_games, "get_game_premieres", premieres)
-
-    class Status:
-        call = None
-
-        async def replace(self, text, **kwargs):
-            self.call = (text, kwargs)
-
-    status = Status()
-    asyncio.run(leisure_games.send_games_home(object(), "42", status=status))
-
-    today = datetime.now(leisure_games.config.TZ).date()
-    expected_date = leisure_games.leisure_ui._format_date_label(today)
-    assert f"👾 Игровой дайджест · {expected_date}" in status.call[0]
-    assert "Свежие релизы:" in status.call[0]
-    assert "Угадай игру:" not in status.call[0]
-    assert "💡 Интересно:" in status.call[0]
-    assert _labels(status.call[1]["reply_markup"]) == [
-        ["🎮 Во что поиграть"],
-        ["🎲 Настолки"],
-        ["🎚️ Мой набор игр"],
-        ["#️⃣ Главная"],
-    ]
-
-
-def test_game_home_shows_three_linked_releases_with_genres_and_platforms():
-    items = [{
-        "title": f"Игра {index}",
-        "genre": "RPG",
-        "platform_label": "💻 ПК · 🎮 PS5",
-        "summary": "Короткое описание игры.",
-        "url": f"https://example.com/{index}",
-        "trailer_url": f"https://www.youtube.com/watch?v=game{index}",
-    } for index in range(4)]
-
-    message = leisure_games.leisure_ui.game_home_screen("Alkmaar", items, {
-        "emoji": "🧙 🚪 3️⃣",
-        "answer": "Baldur’s Gate 3",
-        "fact": "Игровой факт.",
-    }, day=date(2026, 8, 25), year=2026)
-
-    assert message.text.startswith("👾 Игровой дайджест · 25 августа\n\nСвежие релизы:")
-    assert "Игра 0 (RPG · ПК, PS5) · Короткое описание игры." in message.text
-    assert "💻" not in message.text
-    assert "🎮" not in message.text
-    assert message.text.count("• Игра ") == 3
-    assert "• Игра 0 (RPG · ПК, PS5) · Короткое описание игры." in message.text
-    assert "Игра 3" not in message.text
-    assert "Угадай игру:" not in message.text
-    assert {
-        entity.url for entity in message.entities if entity.type == "text_link"
-    } == {f"https://www.youtube.com/watch?v=game{index}" for index in range(3)}
-    assert not any(entity.type == "spoiler" for entity in message.entities)
-
-
 def test_game_home_youtube_fallback_searches_for_official_game_trailer():
     assert leisure_games._youtube_trailer_search_url("Example Game") == (
         "https://www.youtube.com/results?search_query="
@@ -246,13 +178,6 @@ def test_board_game_name_links_to_youtube_trailer_search():
         "https://www.youtube.com/results?search_query="
         "%D0%9A%D0%B0%D1%81%D0%BA%D0%B0%D0%B4%D0%B8%D1%8F+game+official+trailer"
     ]
-
-
-def test_daily_game_rebus_has_two_facts_without_revealing_answer():
-    for rebus in leisure_games._GAME_DAILY_CONTENT:
-        fact = rebus["fact"]
-        assert fact.count(".") == 2
-        assert rebus["answer"].casefold() not in fact.casefold()
 
 
 def test_game_season_uses_three_calendar_months_and_handles_leap_winter():
@@ -277,34 +202,6 @@ def test_season_games_rotate_when_more_than_three_are_available():
     assert first != second
 
 
-def test_game_home_is_text_without_poster(monkeypatch):
-    sent = []
-    items = [{
-        "title": "Новая игра",
-        "genre": "приключение",
-        "platform_label": "💻 ПК",
-        "url": "https://example.com/game",
-        "poster": "https://images.igdb.com/new-game.jpg",
-    }]
-
-    class Bot:
-        async def send_photo(self, **kwargs):
-            sent.append(("photo", kwargs))
-
-        async def send_message(self, **kwargs):
-            sent.append(("message", kwargs))
-
-    monkeypatch.setattr(
-        leisure_games, "get_game_premieres",
-        lambda _cid, **_kwargs: asyncio.sleep(0, result=items),
-    )
-    monkeypatch.setattr(leisure_games.store, "get_settings", lambda _cid: {"city": "Алкмар"})
-
-    asyncio.run(leisure_games.send_games_home(Bot(), "42"))
-
-    assert [kind for kind, _kwargs in sent] == ["message"]
-
-
 def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     _profile_store(monkeypatch)
     monkeypatch.setattr(leisure_games.settings, "get", lambda *_args, **_kwargs: [])
@@ -323,7 +220,9 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
 
     assert "👾 Игра для тебя" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
+        ["✨ Другая игра"],
         ["🎭 По жанру"],
+        ["🎲 Настолки"],
         ["✅ Добавить в Мой набор игр"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -350,6 +249,7 @@ def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch)
     assert "🎲 Настолка для тебя" in status.call[0]
     labels = _labels(status.call[1]["reply_markup"])
     assert labels == [
+        ["✨ Другая игра"],
         ["🎭 По жанру"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]

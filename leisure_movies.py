@@ -4,12 +4,8 @@ import asyncio
 import logging
 import re
 import secrets
-import threading
 import time
 from datetime import datetime, timedelta
-from urllib.parse import quote_plus
-
-import requests
 
 import config
 import store
@@ -20,7 +16,6 @@ import recommendation_stoplist
 import inclusive_recommendations
 import verify
 import tracking
-import local_cinema
 import monthly_rebuses
 from util import _MONTHS
 from ui import leisure as leisure_ui
@@ -37,13 +32,10 @@ import movie_recommendation as _movie_recommendation
 
 _log = logging.getLogger(__name__)
 _DISCOVERY_DEPENDENCIES = (
-    InputMediaPhoto, time, timedelta, quote_plus, requests, local_cinema, _MONTHS,
-    movie_title_for_lookup,
+    InputMediaPhoto, time, timedelta, _MONTHS, movie_title_for_lookup,
 )
 
 
-_CINEMA_BIRTHDAY_LOCK = threading.Lock()
-_CINEMA_BIRTHDAY_CACHE_VERSION = 3
 _MOVIE_PREMIERES_CACHE_VERSION = 5
 _FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
 _favorite_movie_views = {}
@@ -72,14 +64,6 @@ def _favorite_movie_genre(metadata):
     }
     return next((aliases[genre] for genre in genres if genre in aliases), "Драма")
 _CINEMA_REBUSES = monthly_rebuses.local_pool("movies")
-_BIRTHDAY_FALLBACKS = {
-    (8, 4): {
-        "name": "Грета Гервиг",
-        "birth": "1983-08-04",
-        "role": "режиссёр и актриса",
-        "fact": "«Леди Бёрд» принесла ей две номинации на «Оскар».",
-    },
-}
 
 def _display_title(it, tm):
     """Название, которое реально показано пользователю (TMDb если есть, иначе от LLM)."""
@@ -98,7 +82,7 @@ def _movie_home_only_kb():
 def _favorite_movie_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -203,7 +187,7 @@ async def send_favorite_movies(bot, cid, q=None):
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="movie_prefs",
     )])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -343,11 +327,12 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
+        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Моё кино", callback_data=f"movie_love_{i}")],
     ]
     rows.append([
-        InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+        InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ])
     return InlineKeyboardMarkup(rows)
@@ -366,7 +351,7 @@ def _movie_genre_menu_kb():
                for label, gid in _GENRE_MENU]
     for button in buttons:
         rows.append([button])
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_movie"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -687,7 +672,26 @@ async def send_recos(bot, cid, kind, status=None):
     await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
 
 
-# Discovery, daily cinema and premieres live in movie_discovery.py.
+async def send_current_movie(bot, cid, status=None):
+    """«Что посмотреть»: готовая карточка дня из ночного прогрева.
+
+    Без кэша — обычный живой подбор, который сам кэширует карточку на день.
+    «✨ Другой фильм» (movie_next) всегда идёт живым путём ``send_recos``.
+    """
+    cached = _cached_movie(cid)
+    it, tm = cached if cached else (None, None)
+    if not it or not tm:
+        await send_recos(bot, cid, "movie", status=status)
+        return
+    disp = _display_title(it, tm)
+    movie_engine.mark_shown(cid, disp)
+    store.last_recos[str(cid)] = {"kind": "movie", "items": [disp]}
+    store.last_source[str(cid)] = "Кино"
+    store.last_answer[str(cid)] = f"{disp} - {it.get('hook', '')}"
+    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
+
+
+# Daily rebus and premieres live in movie_discovery.py.
 
 _INCLUSIVE_MOVIE_TITLES = _movie_recommendation._INCLUSIVE_MOVIE_TITLES
 _PREF_TYPE = _movie_recommendation._PREF_TYPE
@@ -704,4 +708,4 @@ _bind_functions(globals(), _movie_recommendation, [
 ])
 
 
-_bind_functions(globals(), _movie_discovery, ["_movie_home_kb","_movie_country_label","_movie_service_language","_movie_city","_local_movie_score","_now_playing_week_key","_previous_now_playing_week_key","_now_playing_catalog_get","_now_playing_catalog_set","_regional_now_playing_item","get_local_now_playing","send_movie_home","_featured_now_playing","_youtube_trailer_search_url","_with_trailer_urls","_recommendation_with_trailer","_daily_rebus","daily_movie_rebus","_cinema_birthday_cache_get","_cinema_birthday_cache_set","_cinema_birthday_role","_load_cinema_birthday","_daily_cinema_content","send_movie_now_playing","warm_movie_home_cache","warm_movie_premieres_cache","_movie_premieres_cache_get","_movie_premieres_cache_set","_movie_premiere_item","get_movie_premieres","_movie_premieres_view","_movie_premieres_with_posters","send_movie_premieres","show_movie_premiere_page","get_series_premieres","_series_premieres_view","send_series_premieres","show_series_premiere_page","_combined_premieres","_combined_premieres_view","send_combined_premieres","show_combined_premiere_page"])
+_bind_functions(globals(), _movie_discovery, ["_movie_country_label","_now_playing_week_key","_daily_rebus","daily_movie_rebus","warm_movie_premieres_cache","_movie_premieres_cache_get","_movie_premieres_cache_set","_movie_premiere_item","get_movie_premieres","_movie_premieres_view","_movie_premieres_with_posters","send_movie_premieres","show_movie_premiere_page","get_series_premieres","_series_premieres_view","send_series_premieres","show_series_premiere_page","_combined_premieres","_combined_premieres_view","send_combined_premieres","show_combined_premiere_page"])

@@ -1,14 +1,10 @@
 """Музыкальные рекомендации и управление любимыми артистами."""
 
 import asyncio
-from copy import deepcopy
 import logging
-import threading
-import time
 from datetime import datetime
 from urllib.parse import quote_plus
 
-import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
@@ -18,16 +14,11 @@ import recommendation_rotation as rotation
 import secure
 import settings
 import store
-import monthly_rebuses
 import youtube_tracks
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
 
 _log = logging.getLogger(__name__)
-_MUSIC_DAILY_LOCK = threading.Lock()
-_MUSIC_LEGEND_CACHE_VERSION = 2
-_MUSIC_HOME_CACHE_VERSION = 1
-_MUSIC_HOME_LOCKS = {}
 _BACKGROUND_TASKS = set()
 
 
@@ -72,14 +63,6 @@ def group_favorite_artist_items(cid, items):
         ),
     )
 
-_MUSIC_REBUSES = monthly_rebuses.local_pool("music")
-_MUSIC_LEGEND_FALLBACKS = {
-    (8, 4): {
-        "name": "Луи Армстронг",
-        "birth": "1901-08-04",
-        "detail": "трубач и певец, определивший язык сольного джаза",
-    },
-}
 _MUSIC_TASKS = {
     "focus": (
         {"title": "Грузить мозг (фокус)", "track": "Introvert", "artist": "Little Simz",
@@ -318,7 +301,7 @@ def _favorite_artist_style_labels(cid):
 def _favorite_artist_added_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -342,18 +325,11 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другой артист", callback_data="music_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
         [InlineKeyboardButton("✅ Добавить в Мои артисты", callback_data="listen_love")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-
-
-def music_home_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎸 Что послушать", callback_data="music_reco")],
-        [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
@@ -401,158 +377,6 @@ async def _attach_track_links(data):
     return data
 
 
-def _music_legend_cache_get(day):
-    data = store._load(config.MUSIC_DAILY_CACHE_KEY)
-    entry = data.get(day.isoformat()) if isinstance(data, dict) else None
-    if not isinstance(entry, dict) or entry.get("version") != _MUSIC_LEGEND_CACHE_VERSION:
-        return None
-    legend = entry.get("legend") if isinstance(entry, dict) else None
-    return dict(legend) if isinstance(legend, dict) else None
-
-
-def _music_legend_cache_set(day, legend):
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[day.isoformat()] = {
-            "version": _MUSIC_LEGEND_CACHE_VERSION,
-            "ts": time.time(),
-            "legend": dict(legend or {}),
-        }
-        return data, None
-
-    store.mutate_kv(config.MUSIC_DAILY_CACHE_KEY, mutate)
-
-
-def _music_legend_detail(role):
-    value = str(role or "").casefold()
-    if "певиц" in value or "singer" in value:
-        return "певица"
-    if "певец" in value or "vocalist" in value:
-        return "певец"
-    if "композитор" in value or "composer" in value:
-        return "композитор"
-    return "музыкант"
-
-
-def _load_music_legend(day):
-    """Один именинник из музыки на день; запрос общий и не повторяется для каждого чата."""
-    cached = _music_legend_cache_get(day)
-    if cached is not None:
-        return cached
-    with _MUSIC_DAILY_LOCK:
-        cached = _music_legend_cache_get(day)
-        if cached is not None:
-            return cached
-        fallback = _MUSIC_LEGEND_FALLBACKS.get((day.month, day.day))
-        if fallback:
-            _music_legend_cache_set(day, fallback)
-            return dict(fallback)
-        query = """
-            SELECT ?personLabel ?birth ?occupationLabel (wikibase:sitelinks(?person) AS ?sitelinks) WHERE {
-              ?person wdt:P31 wd:Q5; wdt:P569 ?birth; wdt:P106 ?occupation.
-              VALUES ?occupation { wd:Q639669 wd:Q177220 wd:Q36834 }
-              FILTER(MONTH(?birth) = %d && DAY(?birth) = %d)
-              SERVICE wikibase:label { bd:serviceParam wikibase:language \"ru,en\". }
-            }
-            ORDER BY DESC(?sitelinks)
-            LIMIT 1
-        """ % (day.month, day.day)
-        try:
-            response = requests.get(
-                "https://query.wikidata.org/sparql",
-                params={"query": query, "format": "json"},
-                headers={"Accept": "application/sparql-results+json", "User-Agent": "morning-bot/1.0"},
-                timeout=6,
-            )
-            response.raise_for_status()
-            bindings = response.json().get("results", {}).get("bindings", [])
-            if bindings:
-                item = bindings[0]
-                name = str((item.get("personLabel") or {}).get("value") or "").strip()
-                if name:
-                    legend = {
-                        "name": name,
-                        "detail": _music_legend_detail((item.get("occupationLabel") or {}).get("value")),
-                    }
-                    birth = str((item.get("birth") or {}).get("value") or "").strip()
-                    if birth:
-                        legend["birth"] = birth
-                    _music_legend_cache_set(day, legend)
-                    return legend
-        except Exception as error:
-            _log.info("music legend lookup unavailable: %s", type(error).__name__)
-        _music_legend_cache_set(day, {})
-        return {}
-
-# Artist vitrine fact helper
-_ARTIST_FACT_CACHE = {}
-_ARTIST_FACT_LOCK = threading.Lock()
-_ARTIST_FACT_WIKI_UA = {"User-Agent": "morning-bot/1.0"}
-
-
-def _clean_artist_fact(value):
-    text = " ".join(str(value or "").split()).strip()
-    if len(text) > 220:
-        text = text[:219].rstrip() + "..."
-    if text and text[-1] not in ".!?":
-        text += "."
-    return text
-
-
-def _local_artist_fact(name):
-    normalized = str(name or "").strip().casefold()
-    if not normalized:
-        return ""
-    for items in _LOCAL_ARTIST_FALLBACKS.values():
-        for item in items:
-            if str(item.get("artist") or "").strip().casefold() == normalized:
-                return _clean_artist_fact(item.get("fact"))
-    return ""
-
-
-def _artist_wiki_fact(name):
-    query = " ".join(str(name or "").split()).strip()
-    if not query:
-        return ""
-    for lang in ("ru", "en"):
-        try:
-            url = "https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + quote_plus(query)
-            response = requests.get(url, headers=_ARTIST_FACT_WIKI_UA, timeout=6)
-            if response.status_code != 200:
-                continue
-            data = response.json()
-            extract = " ".join(str(data.get("extract") or "").split()).strip()
-            if extract:
-                return _clean_artist_fact(extract.partition(". ")[0])
-        except Exception as error:
-            _log.info("artist wiki fact lookup unavailable for %r: %s", name, type(error).__name__)
-    return ""
-
-
-def _artist_fact(name):
-    normalized = str(name or "").strip().casefold()
-    if not normalized:
-        return ""
-    with _ARTIST_FACT_LOCK:
-        if normalized in _ARTIST_FACT_CACHE:
-            return _ARTIST_FACT_CACHE[normalized]
-        fact = _local_artist_fact(name) or _artist_wiki_fact(name)
-        _ARTIST_FACT_CACHE[normalized] = fact
-        return fact
-
-
-def _music_city(cid):
-    settings_data = store.get_settings(cid)
-    return str(settings_data.get("city") or config.DEFAULT_CITY.get("name") or "").strip()
-
-
-async def _daily_music_content(cid):
-    today = datetime.now(config.TZ).date()
-    return {
-        "rebus": await monthly_rebuses.for_day("music", today, _MUSIC_REBUSES),
-    }
-
-
 def _task_for_today(key):
     choices = _MUSIC_TASKS.get(key) or ()
     if not choices:
@@ -563,7 +387,7 @@ def _task_for_today(key):
 
 def _music_task_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -579,151 +403,6 @@ async def send_music_task(bot, cid, key, *, status=None):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_music_task_keyboard())
 
 
-def _music_home_context(cid):
-    settings_data = store.get_settings(cid)
-    return {
-        "city": _music_city(cid),
-        "country": str(settings_data.get("cc") or "NL").upper(),
-        "artists": sorted(artist.casefold() for artist in _ensure_artists(cid)),
-    }
-
-
-def _music_home_cache_get(cid):
-    data = store._load(config.MUSIC_HOME_CACHE_KEY)
-    entry = data.get(str(cid)) if isinstance(data, dict) else None
-    if not isinstance(entry, dict):
-        return None
-    if (
-        entry.get("version") != _MUSIC_HOME_CACHE_VERSION
-        or entry.get("date") != datetime.now(config.TZ).date().isoformat()
-        or entry.get("context") != _music_home_context(cid)
-        or not isinstance(entry.get("daily_music"), dict)
-        or not isinstance(entry.get("concerts"), list)
-    ):
-        return None
-    return {
-        "city": str(entry.get("city") or _music_city(cid)),
-        "daily_music": deepcopy(entry["daily_music"]),
-        "concerts": deepcopy(entry["concerts"]),
-    }
-
-
-def _music_home_cache_set(cid, value):
-    context = _music_home_context(cid)
-
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[str(cid)] = {
-            "version": _MUSIC_HOME_CACHE_VERSION,
-            "date": datetime.now(config.TZ).date().isoformat(),
-            "context": context,
-            "city": value["city"],
-            "daily_music": deepcopy(value["daily_music"]),
-            "concerts": deepcopy(value["concerts"]),
-        }
-        return data, None
-
-    store.mutate_kv(config.MUSIC_HOME_CACHE_KEY, mutate)
-
-
-async def _music_home_data(cid):
-    cached = _music_home_cache_get(cid)
-    if cached is not None:
-        return cached
-    lock = _MUSIC_HOME_LOCKS.setdefault(str(cid), asyncio.Lock())
-    async with lock:
-        cached = _music_home_cache_get(cid)
-        if cached is not None:
-            return cached
-        daily_music, concerts = await asyncio.gather(
-            _daily_music_content(cid), _weekly_concerts(cid),
-        )
-        value = {
-            "city": _music_city(cid),
-            "daily_music": daily_music,
-            "concerts": concerts,
-        }
-        _music_home_cache_set(cid, value)
-        return deepcopy(value)
-
-
-async def send_music_home(bot, cid, q=None, status=None):
-    """Открывает ежедневную музыкальную витрину; артиста выбирают отдельной кнопкой."""
-    home = await _music_home_data(cid)
-    msg = leisure_ui.music_week_screen(
-        home["city"], home["daily_music"], home["concerts"],
-        day=datetime.now(config.TZ).date(),
-    )
-    kb = music_home_keyboard()
-    if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
-        return
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
-
-
-async def warm_music_home_cache(cid):
-    """Готовит данные музыкальной витрины без запроса персональной рекомендации."""
-    await _music_home_data(cid)
-    return True
-
-
-async def _weekly_concerts(cid):
-    """Ближайшие подтверждённые концерты любимых артистов из общей цепочки поиска."""
-    import leisure_concerts
-    from util import _MONTHS
-
-    settings_data = store.get_settings(cid)
-    cc = str(settings_data.get("cc") or "NL").upper()
-    country = str(settings_data.get("country") or cc).strip()
-    artists = leisure_concerts._ensure_artists(cid)
-    if not artists or not config.TICKETMASTER_API_KEY:
-        return []
-    events = leisure_concerts._concerts_cache_get(cid, cc)
-    if events is None:
-        events = await leisure_concerts._fetch_concerts(artists, cc, country, cid=cid)
-        leisure_concerts._concerts_cache_set(cid, cc, events)
-
-    today = datetime.now(config.TZ).date().isoformat()
-    rows, seen = [], set()
-    for event in sorted(
-        events,
-        key=lambda item: leisure_concerts._event_date(item) or "9999-99-99",
-    ):
-        artist = str(event.get("_artist") or "").strip()
-        event_date = str(((event.get("dates") or {}).get("start") or {}).get("localDate") or "")
-        venue = (((event.get("_embedded") or {}).get("venues") or [{}])[0])
-        city = str(((venue.get("city") or {}).get("name") or "")).strip()
-        key = (artist.casefold(), event_date, city.casefold())
-        if not artist or (event_date and event_date < today) or key in seen:
-            continue
-        seen.add(key)
-        try:
-            year, month, day = event_date.split("-")
-            date_label = f"{int(day)} {_MONTHS[int(month) - 1]}"
-            if int(year) != datetime.now(config.TZ).year:
-                date_label += f" {year}"
-        except (ValueError, IndexError):
-            date_label = event_date
-        rows.append({
-            "artist": artist,
-            "date": date_label,
-            "place": city,
-            "context": leisure_concerts._concert_context(event),
-            "url": str(event.get("url") or "").strip(),
-        })
-        if len(rows) >= 5:
-            break
-    if rows:
-        rows[0]["artist_fact"] = _artist_fact(rows[0]["artist"])
-    return rows
-
-
 def _music_genre(key):
     for genre_key, label, prompt_name in _MUSIC_GENRES:
         if genre_key == key:
@@ -736,7 +415,7 @@ def _music_genre_menu_kb(cid):
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
     rows = [[button] for button in buttons]
-    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -813,7 +492,7 @@ async def send_music_preferences(bot, cid, q=None):
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📝 Предпочтения", callback_data="music_prefs")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_music"),
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
@@ -848,6 +527,13 @@ async def listen_dislike(bot, cid, *, status=None):
         recommendation_stoplist.add(cid, "artist", rec["items"][0], "hidden")
     _invalidate_artist(cid)
     await send_listen(bot, cid, category=category, force=bool(category), status=status)
+
+async def listen_next(bot, cid, *, status=None):
+    """«✨ Другой артист»: новый живой подбор без скрытия текущего артиста."""
+    rec = store.last_recos.get(str(cid))
+    category = rec.get("category") if isinstance(rec, dict) else None
+    await send_listen(bot, cid, category=category, force=True, status=status)
+
 
 def _item_text(item):
     """Текст элемента списка: элемент может быть строкой или {"id":..., "value": строка}

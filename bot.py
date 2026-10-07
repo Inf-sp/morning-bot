@@ -31,7 +31,7 @@ import leisure_games
 import leisure_music
 import leisure_collection
 import leisure_concerts
-import travel
+import leisure_hub
 import weather
 import verify
 import secure
@@ -60,12 +60,8 @@ _HOME_WARM_SCHEDULE = (
     ("wardrobe", "00:00"),
     ("cooking", "00:05"),
     ("learning", "00:10"),
-    ("travel", "00:15"),
-    ("cinema", "00:20"),
-    ("music", "00:25"),
-    ("books", "00:30"),
-    ("games", "00:35"),
-    ("myday", "00:40"),
+    ("leisure", "00:15"),
+    ("myday", "00:20"),
 )
 # Повторы ночного прогрева: перестраивают только разделы без кэша на сегодня.
 _HOME_WARM_RETRY_TIMES = ("03:00", "06:00")
@@ -159,7 +155,7 @@ async def answer_callback(update, context):
         await q.answer()
         return
     topic = bot_callbacks._status_topic(data) or "Меню"
-    budget = 15 if topic in {"myday", "wardrobe", "food", "leisure", "travel"} else 10
+    budget = 15 if topic in {"myday", "wardrobe", "food", "leisure"} else 10
     trace = tracking.start_action(cid, topic, data or "callback", budget_seconds=budget)
     home_section = home_cache.SECTION_BY_CALLBACK.get(data)
     opened_at = time.monotonic()

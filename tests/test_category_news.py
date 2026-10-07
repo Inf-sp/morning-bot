@@ -10,9 +10,7 @@ from telegram import MessageEntity
 import category_news
 import bot as bot_module
 import config
-from ui import leisure as leisure_ui
 from ui import menu as menu_ui
-from ui import travel as travel_ui
 from ui import wardrobe as wardrobe_ui
 
 
@@ -40,16 +38,7 @@ def test_all_home_renderers_append_one_linked_weekly_news_line():
         {"main_accent": "Спокойная палитра связывает комплект."}, news=news,
     )
     food = menu_ui.restaurant_menu({}, news=news)
-    movie = leisure_ui.movie_now_playing_screen(
-        "Алкмар", [{"title": "Фильм", "genres": ["drama"]}], news=news,
-    )
-    travel = travel_ui.home_screen({
-        "emoji": "🚆", "transport_title": "Поезд", "intro": "Маршрут на день.",
-        "from": "Алкмар", "to": "Утрехт", "route": ["Центр", "Музей"],
-        "tip": "Проверь время отправления.",
-    }, news=news)
-
-    for message in (wardrobe, food, movie, travel):
+    for message in (wardrobe, food):
         assert (
             "📰 На неделе: EFSA обновила рекомендации по безопасному хранению продуктов."
         ) in message.text

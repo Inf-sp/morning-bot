@@ -15,13 +15,11 @@ _log = logging.getLogger(__name__)
 
 SECTION_BY_CALLBACK = {
     "m_myday": "myday", "m_wardrobe": "wardrobe", "m_food": "cooking",
-    "m_learn": "learning", "m_travel": "travel", "m_movie": "cinema",
-    "m_music": "music", "m_books": "books", "m_games": "games",
+    "m_learn": "learning", "m_leisure": "leisure",
 }
 SECTION_LABELS = {
     "myday": "Мой день", "wardrobe": "Гардероб", "cooking": "Готовка",
-    "learning": "Обучение", "travel": "Поездки", "cinema": "Кино",
-    "music": "Музыка", "books": "Книги", "games": "Игры",
+    "learning": "Обучение", "leisure": "Досуг",
 }
 
 
@@ -35,34 +33,9 @@ def _cooking(cid):
     return bool(restaurant_discovery.cached_restaurant_preview(cid))
 
 
-def _travel(cid):
-    import travel
-    return travel.cached_home_idea(cid) is not None
-
-
-def _cinema(cid):
-    import leisure_movies
-    today = datetime.now(config.TZ).date()
-    return (
-        leisure_movies._now_playing_catalog_get(cid, leisure_movies._movie_city(cid)) is not None
-        and leisure_movies._cached_movie(cid) is not None
-        and leisure_movies._cinema_birthday_cache_get(today) is not None
-    )
-
-
-def _music(cid):
-    import leisure_music
-    return leisure_music._music_home_cache_get(cid) is not None
-
-
-def _books(_cid):
-    import leisure_books
-    return leisure_books._weekly_book_cache_get() is not None
-
-
-def _games(cid):
-    import leisure_games
-    return leisure_games.has_seasonal_premieres_cache(cid)
+def _leisure(cid):
+    import leisure_hub
+    return leisure_hub.is_ready(cid)
 
 
 def _myday(cid):
@@ -73,8 +46,7 @@ def _myday(cid):
 
 _CHECKS = {
     "wardrobe": _wardrobe, "cooking": _cooking, "learning": lambda _cid: True,
-    "travel": _travel, "cinema": _cinema, "music": _music, "books": _books,
-    "games": _games, "myday": _myday,
+    "leisure": _leisure, "myday": _myday,
 }
 
 

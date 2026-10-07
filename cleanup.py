@@ -35,16 +35,15 @@ _views = {}  # view_id -> {"ctx", "revision", "selected_ids", "page", "back", "c
 # lv_<key>/lvls_<key> (Любимое) и hid_<key> (Скрытое) — один и тот же набор
 # storage-ключей по суффиксу key, см. также _ctx_items/_cleanup_delete (старый
 # путь) выше — держать в синхроне при изменении набора категорий.
-_LOVE_STORE_KEYS = {"movies": config.FAVORITE_MOVIES_KEY, "countries": config.SAVED_COUNTRIES_KEY,
+_LOVE_STORE_KEYS = {"movies": config.FAVORITE_MOVIES_KEY,
                     "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}
 _PERSONAL_COLLECTION_BACK = {
-    "movies": "m_movie",
-    "books": "m_books",
-    "artists": "m_music",
-    "countries": "m_travel",
+    "movies": "lz_lib",
+    "books": "lz_lib",
+    "artists": "lz_lib",
 }
 _HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
-                      "artists": config.MUSIC_DISLIKE_KEY, "countries": config.TRAVEL_DISLIKE_KEY}
+                      "artists": config.MUSIC_DISLIKE_KEY}
 _SEEN_STORE_KEYS = {"movies": config.MOVIE_SEEN_KEY, "books": config.BOOK_SEEN_KEY,
                     "artists": config.MUSIC_SEEN_KEY}
 
@@ -69,7 +68,7 @@ def _collection(id, owner, title, storage_key, item_type, back, actions,
 COLLECTIONS = {
     "cinema_favorites": _collection(
         "cinema_favorites", "cinema", "🎚️ Моё кино", config.FAVORITE_MOVIES_KEY, "movie",
-        "m_movie", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+        "lz_lib", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить фильм", "as_loveadd_movies"),
         menu_button=("📝 Предпочтения", "movie_prefs"),
@@ -77,14 +76,14 @@ COLLECTIONS = {
         allow_edit=False),
     "cinema_watched": _collection(
         "cinema_watched", "cinema", f"{ui_label('seen', 'Смотрел')} · {ui_label('cinema', 'Кино')}", config.MOVIE_SEEN_KEY, "movie",
-        "m_movie", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
+        "lz_lib", [{"id": "remove", "label": "Убрать из просмотренного", "confirm": False}]),
     "cinema_hidden": _collection(
         "cinema_hidden", "cinema", f"Скрытое · {ui_label('cinema', 'Кино')}", config.MOVIE_BLACKLIST_KEY, "movie",
-        "m_movie", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "lz_lib", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "books_favorites": _collection(
         "books_favorites", "books", "🎚️ Мои книги", config.FAVORITE_BOOKS_KEY, "book",
-        "m_books", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
+        "lz_lib", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить книгу", "as_loveadd_books"),
         menu_button=("📝 Предпочтения", "book_prefs"),
@@ -92,14 +91,14 @@ COLLECTIONS = {
         allow_edit=False),
     "books_read": _collection(
         "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
-        "m_books", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
+        "lz_lib", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
     "books_hidden": _collection(
         "books_hidden", "books", f"Скрытое · {ui_label('books', 'Книги')}", config.BOOK_BLACKLIST_KEY, "book",
-        "m_books", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "lz_lib", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
     "music_favorite_artists": _collection(
         "music_favorite_artists", "music", "🎚️ Мои артисты", config.FAVORITE_ARTISTS_KEY, "artist",
-        "m_music", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
+        "lz_lib", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить артиста", "as_loveadd_artists"),
         menu_button=("📝 Предпочтения", "music_prefs"),
@@ -107,19 +106,11 @@ COLLECTIONS = {
         allow_edit=False),
     "music_hidden_artists": _collection(
         "music_hidden_artists", "music", "Скрытые артисты", config.MUSIC_DISLIKE_KEY, "artist",
-        "m_music", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
+        "lz_lib", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "music_seen_artists": _collection(
         "music_seen_artists", "music", f"{ui_label('seen', 'Уже знаю')} · {ui_label('music', 'Музыка')}", config.MUSIC_SEEN_KEY, "artist",
-        "m_music", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
+        "lz_lib", [{"id": "remove", "label": "Убрать из знакомого", "confirm": False}]),
 
-    "travel_saved_countries": _collection(
-        "travel_saved_countries", "travel", "🎚️ Мой чемодан", config.SAVED_COUNTRIES_KEY, "country",
-        "m_travel", [{"id": "remove", "label": "Убрать страны", "confirm": False},
-                     {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✅ Добавить страну", "as_loveadd_countries")),
-    "travel_hidden_countries": _collection(
-        "travel_hidden_countries", "travel", "Скрытые страны", config.TRAVEL_DISLIKE_KEY, "country",
-        "m_travel", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
     "fridge_items": _collection(
         "fridge_items", "food", ui_label("products", "Продукты"), config.FRIDGE_KEY, "product",
         "as_fridge", [{"id": "remove", "label": "Удалить продукты", "confirm": True}]),
@@ -132,13 +123,9 @@ _COLLECTION_ALIASES = {
     "lvls_books": "books_favorites",
     "lv_artists": "music_favorite_artists",
     "lvls_artists": "music_favorite_artists",
-    "travel_favorite_countries": "travel_saved_countries",
-    "lv_countries": "travel_saved_countries",
-    "lvls_countries": "travel_saved_countries",
     "hid_movies": "cinema_hidden",
     "hid_books": "books_hidden",
     "hid_artists": "music_hidden_artists",
-    "hid_countries": "travel_hidden_countries",
     "wl": "cinema_favorites",
     "fridge": "fridge_items",
 }
@@ -203,7 +190,6 @@ def _view_store_key(ctx):
 
 _VIEW_ADD_LABEL = {
     "movies": "✅ Добавить фильм",
-    "countries": "✅ Добавить страну",
     "artists": "✅ Добавить артиста",
     "books": "✅ Добавить книгу",
 }
@@ -312,7 +298,7 @@ def _ctx_items(cid, ctx):
     if ctx == "wl":
         key = config.FAVORITE_MOVIES_KEY
         title = "🍿 Чистка: посмотреть"
-        back = "m_movie"
+        back = "lz_lib"
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(key, cid))]
         return title, items, back
     if ctx.startswith("kast_"):
@@ -327,7 +313,7 @@ def _ctx_items(cid, ctx):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = _LOVE_STORE_KEYS.get(key)
-        title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", "countries": f"{ui_label('countries', 'Чистка: страны')}",
+        title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", 
                  "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
@@ -335,7 +321,7 @@ def _ctx_items(cid, ctx):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
         title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
-                 "artists": "Скрытое: музыканты", "countries": "Скрытое: страны"}.get(key, "Скрытое")
+                 "artists": "Скрытое: музыканты"}.get(key, "Скрытое")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
     if ctx == "fridge":
@@ -408,11 +394,9 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "✅ Добавить фильм",
-        "lv_countries": "✅ Добавить страну",
         "lv_artists": "✅ Добавить артиста",
         "lv_books": "✅ Добавить книгу",
         "lvls_movies": "✅ Добавить фильм",
-        "lvls_countries": "✅ Добавить страну",
         "lvls_artists": "✅ Добавить артиста",
         "lvls_books": "✅ Добавить книгу",
     }
@@ -519,7 +503,7 @@ def _view_items(ctx, cid):
         is_leisure = ctx.startswith("lvls_")
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = _LOVE_STORE_KEYS.get(key)
-        title = {"movies": ui_label("cinema", "Чистка: фильмы"), "countries": ui_label("countries", "Чистка: страны"),
+        title = {"movies": ui_label("cinema", "Чистка: фильмы"), 
                  "artists": ui_label("music", "Чистка: музыканты"), "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
@@ -528,7 +512,7 @@ def _view_items(ctx, cid):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
         title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
-                 "artists": "Скрытое: музыканты", "countries": "Скрытое: страны"}.get(key, "Скрытое")
+                 "artists": "Скрытое: музыканты"}.get(key, "Скрытое")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, f"as_love_{key}"
@@ -558,7 +542,7 @@ def _view_items(ctx, cid):
     if ctx == "wl":
         key = config.FAVORITE_MOVIES_KEY
         title = "🍿 Чистка: посмотреть"
-        back = "m_movie"
+        back = "lz_lib"
         records = store.ensure_list_ids(key, cid)
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, back
@@ -589,7 +573,6 @@ def _hidden_key_for_collection(ctx):
         "cinema_favorites": config.MOVIE_BLACKLIST_KEY,
         "books_favorites": config.BOOK_BLACKLIST_KEY,
         "music_favorite_artists": config.MUSIC_DISLIKE_KEY,
-        "travel_saved_countries": config.TRAVEL_DISLIKE_KEY,
     }.get(canonical)
 
 
@@ -601,8 +584,6 @@ def _stoplist_kind_for_collection(ctx):
         return "book"
     if canonical.startswith("music_"):
         return "artist"
-    if canonical.startswith("travel_"):
-        return "country"
     return None
 
 

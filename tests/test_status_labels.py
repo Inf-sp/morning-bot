@@ -4,6 +4,8 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+import pytest
+
 import bot_callbacks
 
 
@@ -44,7 +46,8 @@ def test_movie_recommendation_keeps_main_screen_while_loading(monkeypatch):
     assert calls[-1] == ("stop", True)
 
 
-def test_main_game_recommendation_button_requests_a_fresh_game(monkeypatch):
+@pytest.mark.parametrize("data, refresh", [("vg_reco", None), ("vg_next", True)])
+def test_game_buttons_open_weekly_pick_and_other_requests_fresh(monkeypatch, data, refresh):
     calls = []
 
     class Status:
@@ -68,8 +71,9 @@ def test_main_game_recommendation_button_requests_a_fresh_game(monkeypatch):
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
 
     class Query:
-        data = "vg_reco"
         message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+
+    Query.data = data
 
     class Update:
         callback_query = Query()
@@ -79,7 +83,7 @@ def test_main_game_recommendation_button_requests_a_fresh_game(monkeypatch):
 
     asyncio.run(bot_callbacks.handle(Update(), Context(), None))
 
-    assert calls[0] == ("42", True)
+    assert calls[0] == ("42", refresh)
 
 
 def test_weather_warning_opens_myday_without_replacing_the_warning(monkeypatch):
@@ -167,17 +171,16 @@ def test_inline_status_starts_with_action_specific_text():
         "music_g_indie": "🎧 Ищу музыку...",
         "listen_no": "🎧 Ищу музыку...",
         "a_concerts_nl": "🎫 Ищу концерт...",
-        "a_trav_go": "✈️ Ищу поездку...",
         "game_again": "🕵️ Ищу загадку...",
         "a_watch": "🎬 Ищу кино...",
         "a_read": "📚 Ищу книгу...",
         "a_listen": "🎧 Ищу музыку...",
         "m_food": "🍽️ Ищу место...",
         "m_wardrobe": "⏳ Ищу образ...",
-        "m_movie": "🎬 Ищу кино...",
-        "m_books": "📚 Ищу книгу...",
-        "m_music": "🎧 Ищу музыку...",
-        "m_games": "👾 Ищу игру...",
+        "movie_next": "🎬 Ищу кино...",
+        "book_next": "📚 Ищу книгу...",
+        "music_next": "🎧 Ищу музыку...",
+        "vg_next": "👾 Ищу игру...",
         "m_myday": "☀️ Собираю мой день...",
     }
 
@@ -190,11 +193,9 @@ def test_long_main_screens_have_a_specific_tracking_topic():
         "m_myday": "myday",
         "m_wardrobe": "wardrobe",
         "m_food": "food",
-        "m_movie": "leisure",
-        "m_books": "leisure",
-        "m_music": "leisure",
-        "m_games": "leisure",
-        "m_travel": "travel",
+        "m_leisure": "leisure",
+        "lz_prem": "leisure",
+        "lz_lib": "leisure",
         "notify_learning": "learning",
     }
 
@@ -205,7 +206,7 @@ def test_long_main_screens_have_a_specific_tracking_topic():
 def test_long_inline_actions_have_three_distinct_progress_stages():
     for data in (
         "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",
-        "listen_no", "music_g_indie", "a_concerts_nl", "a_trav_go", "a_trav_country_NL_0",
+        "listen_no", "music_g_indie", "a_concerts_nl",
         "a_dictadd_smart_nl", "ex_next_task", "m_myday",
     ):
         stages = bot_callbacks._status_stages(data)
@@ -213,39 +214,22 @@ def test_long_inline_actions_have_three_distinct_progress_stages():
         assert len({text for _delay, text in stages}) == 3
 
 
-def test_saved_country_card_keeps_travel_list_visible_while_loading(monkeypatch):
-    calls = []
+def test_removed_travel_callbacks_open_main_menu(monkeypatch):
+    sent = []
 
-    class Status:
-        mode = "inline"
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
 
-        async def stop(self, delete=True):
-            calls.append(("stop", delete))
-
-    async def start_inline(q, bot=None, cid=None, stages=None, preserve_message=False):
-        calls.append(("start_inline", stages[0][1], preserve_message))
-        return Status()
-
-    async def handle_country_callback(bot, cid, q, act, status=None):
-        calls.append(("country", cid, act, status))
-
-    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
-    monkeypatch.setattr(bot_callbacks.travel, "handle_country_callback", handle_country_callback)
     monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.menu, "main_menu_screen", lambda _cid: ("menu", [], "kb"))
 
-    class Query:
-        data = "a_trav_country_NL_0"
-        message = type("Message", (), {"chat_id": "42", "message_id": 7})()
+    for data in ("m_travel", "a_trav_go", "a_trav_country_NL_0", "a_trav_countries_0"):
+        query = type("Query", (), {
+            "data": data, "message": type("Message", (), {"chat_id": "42", "message_id": 7})(),
+        })()
+        update = type("Update", (), {"callback_query": query})()
+        asyncio.run(bot_callbacks.handle(update, type("Context", (), {"bot": Bot()})(), None))
 
-    class Update:
-        callback_query = Query()
-
-    class Context:
-        bot = object()
-
-    asyncio.run(bot_callbacks.handle(Update(), Context(), None))
-
-    assert calls[0] == ("start_inline", "🗺️ Открываю страну...", True)
-    assert calls[1] == ("country", "42", "trav_country_NL_0", calls[1][3])
-    assert calls[1][3].mode == "inline"
-    assert calls[-1] == ("stop", True)
+    assert [(m["text"], m["reply_markup"]) for m in sent] == [("menu", "kb")] * 4
+    assert bot_callbacks._status_topic("a_trav_go") is None

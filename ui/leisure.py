@@ -2,9 +2,10 @@ import html
 import re
 from datetime import date, datetime
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
-from .news import append_weekly_news
 from .text import ru_plural
 
 
@@ -20,16 +21,6 @@ def clip(text, limit=450):
     return (cut[:sp] if sp > 0 else cut).rstrip(" ,.;:—-") + "…"
 
 
-def _safe_rebus_fact(rebus, *candidates):
-    """Не показывает факт, если он напрямую раскрывает скрытый ответ ребуса."""
-    answer = " ".join(_clean_external_text((rebus or {}).get("answer")).casefold().split()).strip("«»\"'")
-    for value in candidates:
-        fact = _strip_external_label(value, "интересно", "факт")
-        if fact and (not answer or answer not in fact.casefold()):
-            return fact
-    return ""
-
-
 def _clean_external_text(value):
     text = html.unescape(str(value or ""))
     text = text.replace("\ufffd", "")
@@ -37,18 +28,6 @@ def _clean_external_text(value):
     text = re.sub(r"[*_`]+", "", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
-
-
-def _strip_external_label(value, *labels):
-    text = _clean_external_text(value)
-    if not text:
-        return ""
-    pattern = r"^(?:[^\wА-Яа-яЁё]+)?(?:" + "|".join(re.escape(label) for label in labels) + r")\s*:\s*"
-    return re.sub(pattern, "", text, count=1, flags=re.I).strip()
-
-
-def _clean_quoted_title(value):
-    return _clean_external_text(value).strip("«»\"'“”„ ")
 
 
 def _pluralize_titles(n):
@@ -272,72 +251,6 @@ def board_game_card(data):
     return b.build_stripped()
 
 
-def game_home_screen(city, items, daily, *, day=None, year=None, season="лета"):
-    daily = daily or {}
-    day = day if isinstance(day, date) else date.today()
-    b = MessageBuilder()
-    b.text_line("👾 ")
-    b.bold(f"Игровой дайджест · {_format_date_label(day)}")
-    b.newline()
-
-    b.spacer()
-    b.bold("Свежие релизы:")
-    b.newline()
-    rows = [item for item in list(items or []) if str(item.get("title") or "").strip()][:3]
-    if rows:
-        for item in rows:
-            b.text_line("• ")
-            title = str(item.get("title") or "").strip()
-            url = str(item.get("trailer_url") or item.get("url") or "").strip()
-            if url:
-                b.link(title, url)
-            else:
-                b.bold(title)
-            genre = str(item.get("genre") or "").strip()
-            platforms = _plain_game_platforms(item.get("platform_label"))
-            meta = " · ".join(value for value in (genre, platforms) if value)
-            if meta:
-                b.text_line(f" ({meta})")
-            summary = clip(str(item.get("summary") or item.get("description") or ""), 140)
-            if summary:
-                if summary[-1] not in ".!?…":
-                    summary += "."
-                b.text_line(f" · {summary}")
-            b.newline()
-    else:
-        b.line("Пока не удалось подтвердить ближайшие релизы.")
-
-    fact = ""
-    if rows:
-        source = next((item for item in rows if str(item.get("fact") or "").strip()), rows[0])
-        title = str(source.get("title") or "").strip()
-        note = str(
-            source.get("fact") or source.get("summary") or source.get("description") or ""
-        ).strip()
-        if note:
-            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
-        elif title:
-            genre = str(source.get("genre") or "").strip()
-            platforms = _plain_game_platforms(source.get("platform_label"))
-            detail = " · ".join(value for value in (genre, platforms) if value)
-            fact = f"«{title}» — {detail}." if detail else f"В витрине сегодня — «{title}»."
-    if fact:
-        b.spacer()
-        b.bold("💡 Интересно:")
-        b.text_line(" ")
-        b.line(fact)
-    return b.build_stripped()
-
-
-def _plain_game_platforms(value):
-    labels = []
-    for raw in re.split(r"\s*[·,]\s*", str(value or "")):
-        label = re.sub(r"^[^0-9A-Za-zА-Яа-яЁё]+", "", raw).strip()
-        if label and label not in labels:
-            labels.append(label)
-    return ", ".join(labels)
-
-
 def game_genres_screen():
     b = MessageBuilder()
     b.section("🎭 Жанр игры")
@@ -433,52 +346,6 @@ def yearly_top_screen(kind, year, item):
     return b.build_stripped()
 
 
-def movie_now_playing_screen(city, now_playing, *, news=None, day=None):
-    """Ежедневная кино-витрина: только локальный прокат без подписи блока."""
-    day = day if isinstance(day, date) else date.today()
-    b = MessageBuilder()
-    b.text_line("🎬 ")
-    b.bold(f"Кино сегодня · {_format_today_label(day)}")
-    b.newline()
-    b.spacer()
-    cinema = _movie_now_playing_lines(now_playing)[:3]
-    if cinema:
-        for movie in cinema:
-            b.text_line("• ")
-            trailer_url = str(_item_value(movie, "trailer_url", "") or "").strip()
-            title = _clean_quoted_title(_item_value(movie, "title", ""))
-            label = f"«{title}»"
-            if trailer_url:
-                b.link(label, trailer_url)
-            else:
-                b.text_line(label)
-            genres = _movie_genres_for_line(movie)
-            if genres:
-                b.text_line(f" ({genres})")
-            overview = _movie_premiere_summary(
-                _clean_external_text(_item_value(movie, "overview", "")), limit=150,
-            )
-            if overview:
-                if overview[-1] not in ".!?…":
-                    overview += "."
-                b.text_line(f" · {overview}")
-            b.newline()
-    else:
-        b.line("Пока не удалось подтвердить актуальные показы.")
-    append_weekly_news(b, news)
-    return b.build_stripped()
-
-
-def _movie_now_playing_lines(now_playing) -> list[dict]:
-    entries = []
-    for item in now_playing or []:
-        title = _clean_quoted_title(_item_value(item, "title", ""))
-        if not title:
-            continue
-        entries.append(item)
-    return entries
-
-
 def _movie_genres_for_line(movie) -> str:
     raw_genres = _item_value(movie, "genres")
     if isinstance(raw_genres, str):
@@ -569,7 +436,6 @@ def movie_card(item, tm):
 
 _MONTHS_RU = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
               "июля", "августа", "сентября", "октября", "ноября", "декабря"]
-_WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
 def _clip_title(s, limit=40):
@@ -874,53 +740,6 @@ def favorite_movies_added_card(titles):
     return b.build_stripped()
 
 
-def weekly_books_screen(city, daily_book, items, *, day=None, season=""):
-    """Недельная литературная витрина без рейтингов и служебных подписей."""
-    day = day if isinstance(day, date) else date.today()
-    b = MessageBuilder()
-    b.text_line("📚 ")
-    b.bold(f"Литературный вайб · {_format_date_label(day)}")
-    b.newline()
-
-    premieres = _book_premiere_items(items)
-    b.spacer()
-    b.bold("Свежие релизы:")
-    if premieres:
-        b.newline()
-        for premiere in premieres:
-            _write_book_premiere(b, premiere, compact=True)
-    else:
-        b.text_line(" ")
-        b.line("Пока не удалось подтвердить заметные новинки.")
-
-    fact = ""
-    if premieres:
-        source = next((
-            item for item in premieres if str(_item_value(item, "fact", "") or "").strip()
-        ), premieres[0])
-        title = str(_item_value(source, "title", "") or "").strip()
-        author = str(_item_value(source, "author", "") or "").strip()
-        note = str(_item_value(source, "fact", "") or "").strip()
-        if note:
-            fact = note if title.casefold() in note.casefold() else f"«{title}»: {note}"
-        elif title and author:
-            fact = f"Автор книги «{title}» — {author}."
-        else:
-            summary = str(
-                _item_value(source, "summary", "") or _item_value(source, "vibe", "") or ""
-            ).strip()
-            if title and summary:
-                fact = f"«{title}»: {summary}"
-            elif title:
-                fact = f"В свежей литературной витрине — «{title}»."
-    if fact and premieres:
-        b.spacer()
-        b.bold("💡 Интересно:")
-        b.text_line(" ")
-        b.line(fact)
-    return b.build_stripped()
-
-
 def movie_premieres_screen(country, date_range, items):
     """Подпись карточки премьеры кино."""
     b = MessageBuilder()
@@ -1077,16 +896,6 @@ def book_premieres_screen(month, items):
     return b.build_stripped()
 
 
-def _book_premiere_items(items) -> list:
-    entries = []
-    for item in list(items or [])[:3]:
-        title = str(_item_value(item, "title", "") or "").strip()
-        if not title:
-            continue
-        entries.append(item)
-    return entries
-
-
 def _write_book_premiere(
     builder: MessageBuilder, item, *, compact=False, summary_limit=310,
 ) -> None:
@@ -1196,58 +1005,6 @@ def _book_premiere_date(item):
     return _format_date_label(value, include_year=True)
 
 
-def music_week_screen(_city, daily_music, concerts, *, day=None):
-    """Короткая витрина Музыки с ближайшими концертами и ребусом."""
-    day = day or datetime.now().date()
-    b = MessageBuilder()
-    b.text_line("🎧 ")
-    b.bold(f"Музыка рядом · {_format_date_label(day)}")
-    b.newline()
-
-    b.spacer()
-    events = [item for item in concerts or [] if _item_value(item, "artist")][:5]
-    b.bold("В ближайшее время:")
-    if events:
-        b.newline()
-        for event in events:
-            artist = str(_item_value(event, "artist", "") or "").strip()
-            date = str(_item_value(event, "date", "") or "").strip()
-            place = str(_item_value(event, "place", "") or "").strip()
-            context = _concert_context_text(_item_value(event, "context", ""))
-            url = str(_item_value(event, "url", "") or "").strip()
-            details = " · ".join(value for value in (
-                _lower_initial(context), date, place,
-            ) if value)
-            b.text_line("• ")
-            if url:
-                b.link(artist, url)
-            else:
-                b.text_line(artist)
-            if details:
-                b.text_line(f" ({details})")
-            b.newline()
-    else:
-        b.line(" Пока нет подтверждённых ближайших выступлений.")
-
-    fact = str((_item_value(events[0], "artist_fact", "") if events else "") or "").strip()
-    if events and not fact:
-        first = events[0]
-        artist = str(_item_value(first, "artist", "") or "").strip()
-        date = str(_item_value(first, "date", "") or "").strip()
-        place = str(_item_value(first, "place", "") or "").strip()
-        detail = " · ".join(value for value in (date, place) if value)
-        fact = (
-            f"{artist}: ближайшее подтверждённое выступление — {detail}."
-            if detail else f"{artist} входит в ближайшую концертную афишу."
-        )
-    if fact:
-        b.spacer()
-        b.bold("💡 Интересно:")
-        b.text_line(" ")
-        b.line(fact)
-    return b.build_stripped()
-
-
 def music_activity_screen(task):
     """Небольшая карточка одного трека под выбранное занятие."""
     task = task or {}
@@ -1268,11 +1025,6 @@ def music_activity_screen(task):
 
 def _concert_context_text(event) -> str:
     return str(event.get("context") if isinstance(event, dict) else event or "").strip()
-
-
-def _lower_initial(value):
-    value = str(value or "")
-    return value[:1].lower() + value[1:] if value else ""
 
 
 def concerts_list(place_label, events, empty_hint=""):
@@ -1330,10 +1082,6 @@ def _format_date_label(day: date, *, include_year: bool = False) -> str:
     return text
 
 
-def _format_today_label(day: date) -> str:
-    return f"{_WEEKDAY_SHORT[day.weekday()]}, {_format_date_label(day)}"
-
-
 def _weekly_rating(value, count, scale) -> str:
     try:
         rating = float(value or 0)
@@ -1360,67 +1108,139 @@ def _weekly_item(builder: MessageBuilder, title, url="", meta=()) -> None:
     builder.newline()
 
 
+def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
+    if rows:
+        b.section(title)
+    for item in rows:
+        movie_id = _item_value(item, "id", "")
+        url = str(_item_value(item, "trailer_url", "") or "").strip()
+        if not url and movie_id:
+            url = f"https://www.themoviedb.org/movie/{movie_id}"
+        genres = _movie_genres_for_line(item).replace(", ", " · ")
+        rating = _weekly_rating(
+            _item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10,
+        )
+        _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url, (genres, rating))
+    return bool(rows)
+
+
+def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    rows = [item for item in list(items or []) if item.get("title")][:limit]
+    if rows:
+        b.section(title)
+    for item in rows:
+        day = _parse_event_date(item.get("date"))
+        date_label = _format_date_label(day, include_year=day.year != date.today().year) if day else ""
+        _weekly_item(b, item.get("title"), item.get("url"), (item.get("genre"), date_label))
+    return bool(rows)
+
+
+def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
+    if rows:
+        b.section(title)
+    for item in rows:
+        rating = _weekly_rating(
+            _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
+        )
+        _weekly_item(
+            b, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
+            (_book_premiere_genres(item), rating),
+        )
+    return bool(rows)
+
+
+def _game_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    rows = [item for item in list(items or []) if item.get("title")][:limit]
+    if rows:
+        b.section(title)
+    for item in rows:
+        _weekly_item(
+            b, item.get("title"), item.get("trailer_url") or item.get("url"),
+            (item.get("genre"), item.get("date_label"), item.get("platform_label")),
+        )
+    return bool(rows)
+
+
+def _event_sections(b: MessageBuilder, sections) -> bool:
+    """Пишет блоки (заголовок, writer, items, limit); пустой блок скрыт."""
+    added = [writer(b, title, items, limit) for title, writer, items, limit in sections]
+    return any(added)
+
+
 def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
     """Одна строка на событие; для концертов — до шести ближайших афиш."""
     b = MessageBuilder()
     b.title("🎲 Ближайшие события")
-
-    sections_added = 0
-    movie_rows = [item for item in list(movies or []) if _item_value(item, "title", "")][:3]
-    if movie_rows:
-        b.section("🎬 Кино")
-        sections_added += 1
-        for item in movie_rows:
-            movie_id = _item_value(item, "id", "")
-            url = str(_item_value(item, "trailer_url", "") or "").strip()
-            if not url and movie_id:
-                url = f"https://www.themoviedb.org/movie/{movie_id}"
-            genres = _movie_genres_for_line(item).replace(", ", " · ")
-            rating = _weekly_rating(
-                _item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10,
-            )
-            _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url, (genres, rating))
-
-    concert_rows = [item for item in list(concerts or []) if item.get("title")][:6]
-    if concert_rows:
-        b.section("🎫 Концерты")
-        sections_added += 1
-        for item in concert_rows:
-            day = _parse_event_date(item.get("date"))
-            date_label = _format_date_label(day, include_year=day.year != date.today().year) if day else ""
-            _weekly_item(
-                b, item.get("title"), item.get("url"), (item.get("genre"), date_label),
-            )
-
-    book_rows = [item for item in list(books or []) if _item_value(item, "title", "")][:3]
-    if book_rows:
-        b.section("📚 Книги")
-        sections_added += 1
-        for item in book_rows:
-            rating = _weekly_rating(
-                _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
-            )
-            _weekly_item(
-                b,
-                f"«{_item_value(item, 'title', '')}»",
-                _item_value(item, "url", ""),
-                (_book_premiere_genres(item), rating),
-            )
-
-    game_rows = [item for item in list(games or []) if item.get("title")][:3]
-    if game_rows:
-        b.section("👾 Игры")
-        sections_added += 1
-        for item in game_rows:
-            _weekly_item(
-                b, item.get("title"), item.get("trailer_url") or item.get("url"),
-                (item.get("genre"), item.get("date_label"), item.get("platform_label")),
-            )
-
-    if not sections_added:
+    if not _event_sections(b, (
+        ("🎬 Кино", _movie_event_rows, movies, 3),
+        ("🎫 Концерты", _concert_event_rows, concerts, 6),
+        ("📚 Книги", _book_event_rows, books, 3),
+        ("👾 Игры", _game_event_rows, games, 3),
+    )):
         b.line("Пока нет подтверждённых премьер и событий.")
     return b.build_stripped()
 
 
+LEISURE_HUB_LIMIT = 3
+
+
+def leisure_hub_screen(concerts, movies, books, games, reply_markup=None) -> MessageSpec:
+    """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты."""
+    b = MessageBuilder()
+    b.title(ui_label("leisure", "Досуг"))
+    if not _event_sections(b, (
+        ("🎫 Концерты", _concert_event_rows, concerts, LEISURE_HUB_LIMIT),
+        ("🎟️ Премьеры кино", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
+        ("📚 Новые книги", _book_event_rows, books, LEISURE_HUB_LIMIT),
+        ("👾 Новые игры", _game_event_rows, games, LEISURE_HUB_LIMIT),
+    )):
+        b.line("Выбери, что посмотреть, почитать, поиграть или послушать.")
+    return b.build_stripped(reply_markup=reply_markup)
+
+
 def plain_from_html(text):
     return re.sub(r"<[^>]+>", "", text or "")
+
+
+def _column_kb(rows):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in rows])
+
+
+def leisure_hub_kb():
+    return _column_kb((
+        ("🎬 Что посмотреть", "movie_reco"),
+        ("📚 Что почитать", "book_reco"),
+        ("👾 Во что поиграть", "vg_reco"),
+        ("🎧 Что послушать", "music_reco"),
+        ("🆕 Премьеры и концерты", "lz_prem"),
+        ("🎚️ Моя библиотека", "lz_lib"),
+        ("#️⃣ Главная", "m_menu"),
+    ))
+
+
+def leisure_premieres_menu() -> MessageSpec:
+    b = MessageBuilder()
+    b.title("🆕 Премьеры и концерты")
+    b.line("Свежие релизы и ближайшие концерты любимых артистов.")
+    return b.build_stripped(reply_markup=_column_kb((
+        ("🎟️ Премьеры кино", "movie_premieres"),
+        ("🆕 Премьеры книг", "book_premieres"),
+        ("🆕 Премьеры игр", "vg_premieres"),
+        ("🎫 Концерты", "a_concerts_find"),
+        ("⬅️ Назад", "m_leisure"),
+    )))
+
+
+def leisure_library_menu() -> MessageSpec:
+    b = MessageBuilder()
+    b.title("🎚️ Моя библиотека")
+    b.line("Любимое кино, книги, игры и артисты — по ним подбираю рекомендации.")
+    return b.build_stripped(reply_markup=_column_kb((
+        ("🎬 Кино", "movie_favorites"),
+        ("📚 Книги", "book_favorites"),
+        ("👾 Игры", "vg_set"),
+        ("🎧 Музыка", "artist_favorites"),
+        ("⬅️ Назад", "m_leisure"),
+    )))

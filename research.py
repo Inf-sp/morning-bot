@@ -1,30 +1,25 @@
-"""Research-first: слой доверенных данных (Wikipedia, Wikidata, локальные факты о странах).
+"""Research-first: слой доверенных данных (Wikidata, веб-поиск).
 
 Принцип: сначала получить факты из источника, затем дать их LLM как источник истины -
 вместо «уверенной фантазии». Источники бесплатные, без ключей. TTL-кеш по образцу
 weather._WX_CACHE.
 """
-import json
 import logging
-import random
 import re
 import time
-from pathlib import Path
 
 import requests
 
 _log = logging.getLogger(__name__)
-import util
 import config
 import tracking
 import api_usage
 import provider_runtime
-import country_catalog
 
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
 _ENGLISH_SEARCH_SCENARIOS = {
-    "restaurant_local", "concert_specific", "game_releases", "book_releases",
+    "restaurant_local", "concert_specific", "game_releases",
 }
 _ENGLISH_PLACE_NAMES = {
     "нидерланды": "Netherlands", "алкмар": "Alkmaar", "амстердам": "Amsterdam",
@@ -61,122 +56,6 @@ def english_search_query(query: str, scenario: str = "") -> str:
         else:
             parts.append(replacement)
     return re.sub(r"\s+", " ", "".join(parts)).strip()
-
-# ================= WIKIPEDIA =================
-def _wiki_ru_title(name):
-    """Русский заголовок статьи через langlink из англ. Википедии (точнее ловит место)."""
-    try:
-        r = requests.get("https://en.wikipedia.org/w/api.php", params={
-            "action": "query", "format": "json", "prop": "langlinks",
-            "lllang": "ru", "lllimit": 1, "redirects": 1, "titles": name,
-        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(10))
-        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
-            if "missing" in p:
-                continue
-            for ll in (p.get("langlinks") or []):
-                return ll.get("*") or ll.get("title") or ""
-    except Exception:
-        pass
-    return ""
-
-
-def _wiki_search_en(name):
-    """English Wikipedia title через opensearch — работает с русскими именами городов."""
-    try:
-        r = requests.get("https://en.wikipedia.org/w/api.php", params={
-            "action": "opensearch", "search": name, "limit": 1,
-            "format": "json", "namespace": 0
-        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(8))
-        arr = r.json()
-        return arr[1][0] if len(arr) > 1 and arr[1] else ""
-    except Exception:
-        return ""
-
-
-def wiki_summary(title, lang):
-    """Интро статьи по точному заголовку - только реальный текст Википедии."""
-    try:
-        r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params={
-            "action": "query", "format": "json", "prop": "extracts",
-            "exintro": 1, "explaintext": 1, "redirects": 1, "titles": title,
-        }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(10))
-        for p in (r.json().get("query", {}).get("pages", {}) or {}).values():
-            if "missing" in p:
-                continue
-            extract = (p.get("extract") or "").strip()
-            if extract:
-                return extract
-    except Exception:
-        pass
-    return ""
-
-def _clean_wiki(s):
-    """Чистит артефакты explaintext: языковые пометки, пустые скобки, сноски."""
-    s = re.sub(r"\(\s*(?:нид|англ|МФА|лат|нем|фр|Dutch|IPA)\.?[^)]*\)", "", s)
-    s = re.sub(r"\[[^\]]*\]", "", s)
-    s = re.sub(r"\(\s*\)", "", s)
-    s = re.sub(r"\s+", " ", s)
-    s = re.sub(r"\s+([.,;:!?])", r"\1", s)
-    return s.strip()
-
-_BUREAUCRATIC = re.compile(
-    r'\b(classif(?:ied|ication)|global\s+city|gawc|gamma\s*\+?|tier|'
-    r'member(?:ship)?\s+of|ranked\s+(?:as|in)|ranking|network\s+of|'
-    r'designation|listed\s+as|status\s+of|organisation|organization|'
-    r'association\s+of|index(?:ed)?|municipal(?:ity|ities))\b',
-    re.I
-)
-
-def _is_dubious_record(s):
-    """Предложения с конкретными историческими рекордами (температуры, даты) неверифицируемы для конкретного города."""
-    sl = s.lower()
-    has_superlative = bool(re.search(r'\bсам(?:ый|ая|ое|ые)\b|\bнаибол', sl))
-    has_temp_number = bool(re.search(r'[-−]\s*\d+[,.]?\d*\s*(?:°|градус)', sl))
-    has_record = bool(re.search(r'\bрекорд', sl))
-    return (has_superlative and has_temp_number) or has_record
-
-def _extract_sents(extract):
-    """Предложения из вики-интро: чистим, фильтруем дефинитивные и дубиозные."""
-    if not extract:
-        return []
-    clean = _clean_wiki(extract)
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if len(s.strip()) > 40]
-    # Дефинитивные: "X — город..." (рус) и "X is a city..." (англ)
-    sents = [s for s in sents if not re.match(r"^.{0,60}[—–\-]", s)]
-    sents = [s for s in sents if not re.match(r"^.{0,80}\bis\s+a(?:n)?\s+\w+", s, re.I)]
-    sents = [s for s in sents if not _is_dubious_record(s)]
-    sents = [s for s in sents if not _BUREAUCRATIC.search(s)]
-    return sents
-
-def wiki_sentences(name):
-    """Список кандидатов-предложений из RU + EN Википедии (до 8 штук)."""
-    if not name:
-        return []
-    all_sents, seen = [], set()
-
-    # 1) RU Wikipedia
-    ru_title = name if re.search(r"[А-Яа-яЁё]", name) else _wiki_ru_title(name)
-    if ru_title:
-        for s in _extract_sents(wiki_summary(ru_title, "ru")):
-            if s not in seen:
-                all_sents.append(s); seen.add(s)
-
-    # 2) EN Wikipedia — обычно богаче для европейских городов
-    en_title = _wiki_search_en(name)
-    if en_title:
-        for s in _extract_sents(wiki_summary(en_title, "en")):
-            if s not in seen:
-                all_sents.append(s); seen.add(s)
-
-    return all_sents[:8]
-
-def wiki_fact(name):
-    """Реальный факт о месте/стране из Википедии. Источник правды - Wikipedia, без LLM."""
-    sents = wiki_sentences(name)
-    if not sents:
-        return ""
-    return random.choice(sents)
-
 
 # ================= WIKIDATA =================
 _WDF_CACHE = {}   # name -> (ts, dict[str,str])
@@ -270,88 +149,14 @@ def wikidata_city_facts(name: str) -> dict:
     return facts
 
 
-# ================= COUNTRY FACTS =================
-_COUNTRY_TRAVEL_PROFILES_PATH = Path(__file__).parent / "data" / "travel_country_profiles.json"
-
-
-def _load_country_travel_profiles():
-    """Загружает готовый запас карточек; сбой данных не ломает остальные сценарии."""
-    try:
-        rows = json.loads(_COUNTRY_TRAVEL_PROFILES_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        _log.error("travel country profiles could not be loaded: %s", exc)
-        return {}
-    return {
-        str(code).upper(): dict(profile)
-        for code, profile in rows.items()
-        if isinstance(profile, dict) and len(str(code)) == 2
-    }
-
-
-# Готовые редакторские карточки с источниками — основной локальный резерв при
-# недоступности AI. Каталог расширяется данными, не условиями в рендере.
-_COUNTRY_TRAVEL_FACTS = _load_country_travel_profiles()
-
-def country_facts(name, *, allow_fallback=True):
-    """Проверенные факты из local dataset; редкий miss дополняется best-effort fallback."""
-    row = country_catalog.country_data(name, allow_fallback=allow_fallback)
-    if not row:
-        return {}
-    currencies = row.get("currencies") or [""]
-    currency = currencies[0].get("code", "") if isinstance(currencies[0], dict) else str(currencies[0])
-    return {
-        "cc": row.get("country_code", ""), "capital": row.get("capital", ""),
-        "languages": list(row.get("languages") or []), "region": row.get("region", ""),
-        "currency": currency,
-    }
-
-
-def country_travel_facts(name):
-    """Проверяемые практические поля карточки страны, если они есть в каталоге."""
-    # Для готового профиля достаточно локального ISO-кода. Не ждём внешний
-    # fallback общего справочника перед чтением уже сохранённой карточки.
-    code = str(country_catalog.country_code(name) or util.cc_of(name) or "").upper()
-    facts = _COUNTRY_TRAVEL_FACTS.get(code) or {}
-    return {key: (list(value) if isinstance(value, list) else value)
-            for key, value in facts.items()}
-
-def facts_block(d):
-    """Строка-граундинг для промпта из фактов о стране."""
-    if not d:
-        return ""
-    parts = []
-    if d.get("capital"):
-        parts.append(f"столица: {d['capital']}")
-    if d.get("languages"):
-        parts.append("язык(и): " + ", ".join(d["languages"][:4]))
-    if d.get("region"):
-        parts.append(f"регион: {d['region']}")
-    if d.get("currency"):
-        parts.append(f"валюта: {d['currency']}")
-    return "; ".join(parts)
-
-def country_lookup(query, *, allow_fallback=True):
-    """Resolve a country through the local dataset; remote fallback is optional."""
-    row = country_catalog.country_data(query, allow_fallback=allow_fallback)
-    if not row:
-        return None
-    return {
-        "iso": row.get("country_code", ""), "official": row.get("official_name", ""),
-        "name_ru": row.get("name", ""), "name_en": row.get("name", ""),
-        "name_nl": row.get("name", ""),
-    }
-
-
 # ================= TAVILY =================
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
 _TAVILY_SCENARIOS = {
     "explicit_research": {"ttl": 24 * 3600, "economy": True, "advanced": False},
     "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
-    "travel_current": {"ttl": 24 * 3600, "economy": False, "advanced": False},
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
-    "book_releases": {"ttl": 7 * 86400, "economy": True, "advanced": False},
     "restaurant_local": {"ttl": 7 * 86400, "economy": True, "advanced": False},
     "category_news": {"ttl": 6 * 3600, "economy": True, "advanced": False},
 }

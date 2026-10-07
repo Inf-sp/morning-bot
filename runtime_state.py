@@ -13,7 +13,6 @@ pending_input = {}
 last_inline_message = {}
 transient_message = {}
 last_recos = {}
-suggested_countries = {}
 last_action = {}
 last_answer = {}
 last_recipe = {}

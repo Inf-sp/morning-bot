@@ -146,7 +146,7 @@ def test_callback_ack_runs_in_parallel_with_handler(monkeypatch):
 
 @pytest.mark.parametrize(
     "callback_data",
-    ("m_myday", "m_wardrobe", "m_food", "m_movie", "m_books", "m_music", "m_games", "m_travel"),
+    ("m_myday", "m_wardrobe", "m_food"),
 )
 def test_duplicate_long_main_screen_taps_start_one_action(monkeypatch, callback_data):
     calls = []
@@ -155,7 +155,7 @@ def test_duplicate_long_main_screen_taps_start_one_action(monkeypatch, callback_
 
     class Query:
         data = callback_data
-        message = type("Message", (), {"chat_id": "travel-user", "message_id": 17})()
+        message = type("Message", (), {"chat_id": "home-user", "message_id": 17})()
 
         async def answer(self):
             return None

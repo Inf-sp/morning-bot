@@ -151,8 +151,7 @@ def _norm(x):
 def dedupe_lists():
     """Разовая чистка: убирает повторы в личных коллекциях."""
     changed_any = normalize_favorite_collections()
-    keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
-            config.SAVED_COUNTRIES_KEY]
+    keys = [config.FAVORITE_BOOKS_KEY, config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY]
     for key in keys:
         data = store._load(key)
         changed = False

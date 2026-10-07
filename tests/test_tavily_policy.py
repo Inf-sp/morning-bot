@@ -36,15 +36,15 @@ def test_only_explicit_research_phrase_enables_chat_web_search():
     assert not research.requires_explicit_web_search("Посоветуй фильм на вечер")
 
 
-def test_economy_mode_keeps_explicit_research_but_skips_optional_travel(monkeypatch):
+def test_economy_mode_keeps_explicit_research_but_skips_optional_scenario(monkeypatch):
     monkeypatch.setattr(research.api_usage, "tavily_budget", lambda: {"mode": "economy"})
     monkeypatch.setattr(research.provider_runtime, "tavily_monthly_quota_exhausted", lambda: False)
     events = []
     monkeypatch.setattr(research.api_usage, "record_tavily_event", lambda scenario, event, **_kw: events.append((scenario, event)))
 
     assert research._tavily_allowed("explicit_research")
-    assert not research._tavily_allowed("travel_current")
-    assert ("travel_current", "skipped_policy") in events
+    assert not research._tavily_allowed("concert_specific")
+    assert ("concert_specific", "skipped_policy") in events
 
 
 def test_advanced_search_requires_explicit_advanced_scenario(monkeypatch):

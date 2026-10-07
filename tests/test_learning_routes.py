@@ -73,19 +73,16 @@ def test_my_dictionary_opens_from_learning_menu(monkeypatch):
     assert calls == [(Context.bot, "42", "nl", 0, "m_learn", Update.callback_query)]
 
 
-def test_navigation_audit_recognizes_all_travel_saved_country_callbacks():
+def test_removed_travel_callbacks_still_resolve_to_a_handler():
     callbacks = (
-        "a_trav_countries_0",
-        "a_trav_country_add",
-        "a_trav_country_NL_0",
-        "a_trav_country_del_NL_0",
-        "a_trav_country_yes_NL_0",
+        "m_travel", "a_trav_go", "a_trav_no", "a_trav_countries_0",
+        "a_trav_country_add", "a_trav_country_NL_0", "a_trav_country_del_NL_0",
     )
 
     assert all(routing.resolve_callback_handler(data)["handled"] for data in callbacks)
 
 
-def test_cooking_learning_and_travel_menu_callbacks_are_routable():
+def test_cooking_and_learning_menu_callbacks_are_routable():
     callbacks = {
         "cooking": (
             "m_food", "m_food_next", "as_food", "as_food_back",
@@ -101,12 +98,6 @@ def test_cooking_learning_and_travel_menu_callbacks_are_routable():
             "a_dictcatdel_nl_2_0_word", "a_dictcatdelok_nl_2_0_word",
             "a_dictedit_nl", "a_dictviewid_0_word", "set_learning", "set_learning_dict", "set_learning_dictionary",
             "toggle_learning_language", "toggle_learning_language_dict", "set_learning_global", "set_learning_language_nl", "set_learning_language_en_dict", "set_learning_language_en_dict_home", "set_learning_language_none", "set_learning_language_nl_settings", "set_learning_level_easy", "set_learning_level_easy_dict",
-        ),
-        "travel": (
-            "m_travel", "a_trav_go", "a_trav_no", "a_trav_plan", "a_trav_fav",
-            "a_trav_countries_0", "a_trav_country_add",
-            "a_trav_country_NL_0", "a_trav_country_del_NL_0",
-            "a_trav_country_yes_NL_0", "a_trav_transport", "a_trav_mode_train",
         ),
         "music": (
             "music_reco", "music_genre_menu", "music_g_indie",

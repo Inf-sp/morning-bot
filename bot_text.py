@@ -16,7 +16,6 @@ import store
 import tracking
 import trainer
 import trainer_session
-import travel
 import wardrobe
 import weather
 
@@ -102,8 +101,6 @@ async def handle(update, context, remove_reply_keyboard):
             await onboard.handle_city(bot, cid, text); return
         if kind == "setcity":
             await weather.set_city_text(bot, cid, text); return
-        if kind == "trav_country_add":
-            await travel.add_visited_country(bot, cid, text); return
         if kind == "concert_artist_search":
             import leisure_concerts
             await leisure_concerts.find_artist_concerts(bot, cid, text); return

@@ -41,8 +41,6 @@ def _item_text(item):
 
 
 def _love_items(cid, key):
-    if key == "countries":
-        return [_item_text(item) for item in store.get_list(config.SAVED_COUNTRIES_KEY, cid)]
     collection = _COLLECTIONS.get(key)
     if collection is None:
         return []
@@ -63,7 +61,7 @@ def _unique_items(values):
 
 _EXPORT_LABELS = {
     "all": "Все данные", "wardrobe": "Мой шкаф", "fridge": "Мой холодильник",
-    "dictionary": "Мой словарь", "favorites": "Любимое", "travel": "Поездки",
+    "dictionary": "Мой словарь", "favorites": "Любимое",
 }
 
 
@@ -165,7 +163,6 @@ def _export_text(cid, kind="all"):
         "fridge": ("Мой холодильник", _fridge_lines(cid)),
         "dictionary": ("Мой словарь", _dictionary_lines(cid)),
         "favorites": ("Любимое", _favorite_sections(cid)),
-        "travel": ("Поездки", _named_items(store.get_list(config.SAVED_COUNTRIES_KEY, cid))),
     }
     if kind == "all":
         parts.extend(_section("Настройки", _settings_lines(cid)))
@@ -207,11 +204,6 @@ async def export_data(bot, cid, kind="all"):
 
 
 async def love_add_start(bot, cid, key, origin="base"):
-    if key == "countries":
-        import travel
-
-        await travel.send_country_add_prompt(bot, cid)
-        return
     if key not in _COLLECTIONS:
         import settings
 
@@ -325,11 +317,6 @@ async def confirm_collection_choice(bot, cid, q, token, index):
 
 
 async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
-    if key == "countries":
-        import travel
-
-        await travel.add_visited_country(bot, cid, text)
-        return
     collection = _COLLECTIONS.get(key)
     if collection is None:
         import settings
@@ -431,16 +418,10 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
         return
     import cleanup
 
-    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music", "games": "m_games"}[key]
-    await cleanup.open_collection(bot, cid, collection_id, back=back)
+    await cleanup.open_collection(bot, cid, collection_id, back="lz_lib")
 
 
 async def _open_legacy_collection(bot, cid, key):
-    if key == "countries":
-        import travel
-
-        await travel.send_countries(bot, cid)
-        return
     collection = _COLLECTIONS.get(key)
     if collection is None:
         import settings
@@ -449,8 +430,7 @@ async def _open_legacy_collection(bot, cid, key):
         return
     import cleanup
 
-    back = {"movies": "m_movie", "books": "m_books", "artists": "m_music", "games": "m_games"}[key]
-    await cleanup.open_collection(bot, cid, collection[1], back=back)
+    await cleanup.open_collection(bot, cid, collection[1], back="lz_lib")
 
 
 async def handle_collection_callback(bot, cid, q, data):
@@ -463,7 +443,11 @@ async def handle_collection_callback(bot, cid, q, data):
         await send_export_choice(bot, cid, q)
         return
     if data.startswith("as_export_"):
-        await export_data(bot, cid, data.removeprefix("as_export_"))
+        kind = data.removeprefix("as_export_")
+        if kind in _EXPORT_LABELS:
+            await export_data(bot, cid, kind)
+        else:  # кнопка удалённого раздела из старого сообщения
+            await send_export_choice(bot, cid, q)
         return
     if data.startswith("ls_loveadd_"):
         await love_add_start(bot, cid, data[len("ls_loveadd_"):], origin="leisure")

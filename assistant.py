@@ -138,7 +138,6 @@ _INTENT_MAP = [
     (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
     (("что почитать", "почитать", "книгу", "книжку"), "book"),
     (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
-    (("куда поехать", "путешест", "поездка", "отпуск", "маршрут"), "travel"),
     (("концерт", "мероприят", "событи", "афиша", "выступлен"), "concerts"),
     (("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "де/хет", "de/het"), "learn"),
     (("словар", "лексик", "перевод", "какое слово", "слово дня"), "dictionary"),
@@ -162,12 +161,11 @@ _LOVE_CATEGORIES = [
     (re.compile(r"\b(фильм|сериал|кино)\b", re.I), "movies", "Кино"),
     (re.compile(r"\b(книг[ауи]?|книжк[ауи]?)\b", re.I), "books", "Мои книги"),
     (re.compile(r"\b(музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b", re.I), "artists", "Мои музыканты"),
-    (re.compile(r"\b(стран[ауы]?)\b", re.I), "countries", "Мои страны"),
 ]
 
 _LOVE_CATEGORY_KEY_RE = re.compile(
     r"\b(?:фильм[а-я]*|сериал[а-я]*|кино|книг[а-я]*|книжк[а-я]*|"
-    r"музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*|стран[а-я]*)\b",
+    r"музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b",
     re.I,
 )
 
@@ -202,17 +200,13 @@ def _detect_love_add(text: str):
 
 
 async def try_add_love_from_chat(bot, cid, text):
-    """Перехватывает «добавь в любимые фильм/книгу/музыканта/страну X» из чата."""
+    """Перехватывает «добавь в любимые фильм/книгу/музыканта X» из чата."""
     import config
     import store as _store
     detected = _detect_love_add(text)
     if not detected:
         return False
     store_key, folder_label, title = detected
-    if store_key == "countries":
-        import travel
-        await travel.add_visited_country(bot, cid, title)
-        return True
     from leisure_collection import movie_title_for_lookup, normalize_movie_items, plain_label
 
     if store_key == "movies":
@@ -228,7 +222,6 @@ async def try_add_love_from_chat(bot, cid, text):
         "movies": config.FAVORITE_MOVIES_KEY,
         "books": config.FAVORITE_BOOKS_KEY,
         "artists": config.FAVORITE_ARTISTS_KEY,
-        "countries": config.SAVED_COUNTRIES_KEY,
     }
     existing = {
         (movie_title_for_lookup(x) if store_key == "movies" else
@@ -353,7 +346,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
     import leisure_movies
     import myday
     import settings
-    import travel
     import wardrobe
     import fridge
     import leisure_concerts
@@ -387,8 +379,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await leisure_movies.send_recos(no_kb_bot, cid, "book")
     elif action == "music":
         await leisure_music.send_listen(no_kb_bot, cid)
-    elif action == "travel":
-        await travel.send_go(no_kb_bot, cid)
     elif action == "concerts":
         await leisure_concerts.find_concerts(no_kb_bot, cid, "home")
     elif action == "learn":
