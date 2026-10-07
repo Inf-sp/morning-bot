@@ -375,8 +375,7 @@ def test_game_set_genre_switches_posters_in_the_same_card(monkeypatch):
 
     assert edited[0]["media"].media == "two.jpg"
     assert "Hades II" in edited[0]["media"].caption
-    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
-    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
+    assert _labels(edited[0]["reply_markup"])[:2] == [["❌ Удалить"], ["◀️", "2/2", "▶️"]]
 
 
 def test_game_recommendation_with_poster_is_sent_as_photo(monkeypatch):

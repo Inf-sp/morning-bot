@@ -220,7 +220,8 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
     assert bot.message["text"].startswith("🇳🇱 Существительные · 2/21")
     assert "Word1 → Слово 1" in bot.message["text"]
     assert ["◀️", "2 / 21", "▶️"] in _labels(bot.message["reply_markup"])
-    navigation = bot.message["reply_markup"].inline_keyboard[0]
+    navigation = bot.message["reply_markup"].inline_keyboard[1]
+    assert bot.message["reply_markup"].inline_keyboard[0][0].text == "❌ Удалить"
     assert navigation[0].callback_data == "a_dictcat_nl_2_0"
     assert navigation[2].callback_data == "a_dictcat_nl_2_2"
 

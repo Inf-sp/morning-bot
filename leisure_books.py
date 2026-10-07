@@ -853,7 +853,8 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"bfg:{token}:{genre_index}:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton(
+    # «❌ Удалить» — первой строкой, над листанием.
+    rows.insert(0, [InlineKeyboardButton(
         "❌ Удалить", callback_data=f"bfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
     rows.append([InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")])

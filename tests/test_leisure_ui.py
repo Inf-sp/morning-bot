@@ -463,8 +463,7 @@ def test_favorite_movie_genre_switches_posters_in_the_same_card():
 
     assert edited[0]["media"].media == "second.jpg"
     assert "Второй" in edited[0]["media"].caption
-    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
-    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
+    assert _labels(edited[0]["reply_markup"])[:2] == [["❌ Удалить"], ["◀️", "2/2", "▶️"]]
 
 
 def test_favorite_movies_use_only_six_main_genres():
@@ -628,8 +627,7 @@ def test_favorite_book_genre_switches_covers_in_the_same_card():
 
     assert edited[0]["media"].media == "two.jpg"
     assert "Вторая" in edited[0]["media"].caption
-    assert _labels(edited[0]["reply_markup"])[0] == ["◀️", "2/2", "▶️"]
-    assert _labels(edited[0]["reply_markup"])[1] == ["❌ Удалить"]
+    assert _labels(edited[0]["reply_markup"])[:2] == [["❌ Удалить"], ["◀️", "2/2", "▶️"]]
 
 
 def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):

@@ -117,18 +117,19 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     entry = entries[page]
     msg = dict_ui.dict_category_entry(category, page, len(entries), entry)
     rows = []
-    if len(entries) > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page - 1) % len(entries)}"),
-            InlineKeyboardButton(f"{page + 1} / {len(entries)}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % len(entries)}"),
-        ])
+    # «❌ Удалить» — первой строкой, над листанием.
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
+    if len(entries) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page - 1) % len(entries)}"),
+            InlineKeyboardButton(f"{page + 1} / {len(entries)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"a_dictcat_{lang}_{category_index}_{(page + 1) % len(entries)}"),
+        ])
     rows.extend(_dict_tts_row(entry))
     rows.append([InlineKeyboardButton(
         "🔢 Показать списком",

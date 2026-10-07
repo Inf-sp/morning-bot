@@ -193,7 +193,8 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
             InlineKeyboardButton(f"{page + 1}/{len(items)}", callback_data="noop"),
             InlineKeyboardButton("▶️", callback_data=f"mfg:{token}:{genre_index}:{(page + 1) % len(items)}"),
         ])
-    rows.append([InlineKeyboardButton(
+    # «❌ Удалить» — первой строкой, над листанием.
+    rows.insert(0, [InlineKeyboardButton(
         "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
     rows.append([InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")])
