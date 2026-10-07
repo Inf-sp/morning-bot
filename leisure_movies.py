@@ -371,6 +371,7 @@ def _movie_genre_menu_kb():
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0
+_DISCOVER_PAGES = 8
 
 _MOVIE_FALLBACKS = [
     {"title": "Решение уйти", "title_en": "Decision to Leave", "hook": "изящный детектив с холодной романтикой и сильной режиссурой"},
@@ -570,29 +571,48 @@ async def get_current_movie(cid):
     return it, tm
 
 async def _discover_movie_pick(cid, prefs):
-    """Свежий качественный фильм из TMDb discover без AI."""
+    """Свежий качественный фильм из TMDb discover без AI.
+
+    Первая страница discover — всего 20 популярных фильмов; у активного
+    пользователя они быстро уходят в «показанные», поэтому листаем дальше.
+    """
     requested_kind = prefs.get("type_pref") or "movie"
     excluded = movie_engine._excluded_norms(cid)
+    hard_excluded = movie_engine._excluded_norms(cid, include_shown=False)
     requested_kinds = [requested_kind]
     if prefs.get("type_pref"):
         requested_kinds.append("tv" if requested_kind == "movie" else "movie")
-    candidates = []
+    min_rating = max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING))
+    repeats = []
+    tm = None
     for candidate_kind in requested_kinds:
-        try:
-            candidates = await asyncio.to_thread(
-                tmdb.discover, candidate_kind, None,
-                max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING)), 2000)
-        except Exception:
-            candidates = []
-        candidates = [movie for movie in candidates
-                      if movie_engine._norm(movie.get("name")) not in excluded
-                      and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
-        if candidates:
+        for page in range(1, _DISCOVER_PAGES + 1):
+            try:
+                items = await asyncio.to_thread(
+                    tmdb.discover, candidate_kind, None, min_rating, 2000, page=page)
+            except Exception:
+                items = []
+            if not items:
+                break
+            items = [movie for movie in items
+                     if int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT
+                     and movie_engine._norm(movie.get("name")) not in hard_excluded]
+            fresh = [movie for movie in items
+                     if movie_engine._norm(movie.get("name")) not in excluded]
+            if fresh:
+                tm = movie_engine.rank(fresh, {
+                    "genres": {}, "countries": {}, "kind_pref": None,
+                }, prefs)[0]
+                break
+            repeats.extend(items)
+        if tm:
             break
-    candidates = movie_engine.rank(candidates, {
-        "genres": {}, "countries": {}, "kind_pref": None,
-    }, prefs)
-    tm = candidates[0] if candidates else None
+    if not tm and repeats:
+        # Всё свежее уже показано: давно показанный лучше, чем ошибка.
+        shown = [movie_engine._norm(value)
+                 for value in store.get_list(config.MOVIE_SHOWN_KEY, cid)]
+        order = {name: index for index, name in enumerate(shown)}
+        tm = min(repeats, key=lambda movie: order.get(movie_engine._norm(movie.get("name")), -1))
     if not tm:
         return None, None
     return {"title": tm.get("name", ""),
@@ -645,6 +665,10 @@ async def send_recos(bot, cid, kind, status=None):
             tm = await _lookup_movie_tm(it)
     # Без данных TMDb карточка выходит пустой («Название» + сырой hook) — не показываем.
     if not it or not tm:
+        _log.warning(
+            "movie reco: no TMDb-backed pick (tmdb_key=%s, llm_item=%s)",
+            bool(config.TMDB_API_KEY), bool(it),
+        )
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
             reply_markup=_movie_home_only_kb()); return

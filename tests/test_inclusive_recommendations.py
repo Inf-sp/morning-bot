@@ -55,7 +55,7 @@ def test_due_movie_pick_respects_selected_content_type(monkeypatch):
         "Moonlight": {"name": "Лунный свет", "name_en": "Moonlight", "kind": "movie", "rating": 7.4},
         "Heartstopper": {"name": "Трепет сердца", "name_en": "Heartstopper", "kind": "tv", "rating": 8.5},
     }
-    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid: set())
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies.tmdb, "lookup_title", lambda title: found.get(title))
 
     item, tm = asyncio.run(leisure_movies._inclusive_movie_pick(

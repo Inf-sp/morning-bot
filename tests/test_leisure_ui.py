@@ -155,7 +155,7 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
     async def deliver(_bot, _cid, item, _index, tm=None, **_kwargs):
         delivered.append((item, tm))
 
-    def discover(kind, _genres, min_rating, year):
+    def discover(kind, _genres, min_rating, year, page=1):
         requested.update(kind=kind, min_rating=min_rating, year=year)
         return [{
             "id": 7, "name": "Новый сериал", "kind": "tv", "rating": 8.2,
@@ -163,7 +163,7 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
         }]
 
     monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
-    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid: set())
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies.movie_engine, "mark_shown", lambda *_args: None)
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {
         "type_pref": "tv", "recency": "new", "min_rating": 8.0,
@@ -247,7 +247,7 @@ def test_movie_recommendation_replaces_localized_poster_with_english_one(monkeyp
 def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch):
     monkeypatch.setattr(leisure_movies, "_cached_movie", lambda _cid: None)
     monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
-    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid: set())
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
     monkeypatch.setattr(leisure_movies.config, "TMDB_API_KEY", "test-key")
     monkeypatch.setattr(
