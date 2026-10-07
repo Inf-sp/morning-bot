@@ -76,7 +76,7 @@ def _as_float(v):
         return None
 
 
-async def _tmdb_engine_pick(cid, prefs=None):
+async def _tmdb_engine_pick(cid, prefs=None, timeout=None):
     """Возвращает (it, tm) из TMDb-движка или (None, None), если данных мало.
 
     tm — нормализованный TMDb-dict кандидата (совместим с карточкой), дополненный
@@ -85,7 +85,11 @@ async def _tmdb_engine_pick(cid, prefs=None):
     if prefs is None:
         prefs = _movie_prefs(cid)
     try:
-        cands, taste = await asyncio.to_thread(movie_engine.recommend, cid, prefs)
+        # С холодным кэшем движок делает десятки TMDb-запросов; без лимита он
+        # съедает весь бюджет действия, и резерву уже нечем подобрать фильм.
+        cands, taste = await asyncio.wait_for(
+            asyncio.to_thread(movie_engine.recommend, cid, prefs), timeout=timeout,
+        )
     except Exception:
         return None, None
     if not cands:

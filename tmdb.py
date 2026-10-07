@@ -72,11 +72,17 @@ def _get(path, params, timeout=12, language=None):
             timeout = min(float(timeout), remaining)
     except Exception:
         _log.debug("_get: ignored error", exc_info=True)
-    request_params = {"api_key": config.TMDB_API_KEY, "language": language or _LANG}
+    key = config.TMDB_API_KEY.strip()
+    # v4 Read Access Token (JWT «eyJ…») работает только заголовком, v3-ключ — параметром.
+    bearer = key.startswith("eyJ")
+    request_params = {"language": language or _LANG} if bearer else {
+        "api_key": key, "language": language or _LANG,
+    }
     request_params.update(params or {})
+    headers = {"Authorization": f"Bearer {key}"} if bearer else None
     try:
         response = requests.get(
-            f"{_BASE}{path}", params=request_params, timeout=timeout,
+            f"{_BASE}{path}", params=request_params, timeout=timeout, headers=headers,
         )
         ok = 200 <= response.status_code < 300
         api_usage.record_request(

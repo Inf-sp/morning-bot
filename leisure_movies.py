@@ -330,6 +330,8 @@ def _movie_genre_menu_kb():
 
 MIN_TMDB_RATING = 7.0
 _DISCOVER_PAGES = 8
+# Сколько секунд бюджета оставить резерву (discover + постер), если движок не успел.
+_RESERVE_SECONDS = 6.0
 
 _MOVIE_FALLBACKS = [
     {"title": "Решение уйти", "title_en": "Decision to Leave", "hook": "изящный детектив с холодной романтикой и сильной режиссурой"},
@@ -613,7 +615,9 @@ async def send_recos(bot, cid, kind, status=None):
     elif not seen:
         it, tm = await _discover_movie_pick(cid, prefs)
     else:
-        it, tm = await _tmdb_engine_pick(cid)
+        remaining = tracking.remaining_action_seconds()
+        engine_timeout = max(1.0, remaining - _RESERVE_SECONDS) if remaining is not None else None
+        it, tm = await _tmdb_engine_pick(cid, timeout=engine_timeout)
         if it is None:
             # Быстрый TMDB-резерв до медленного LLM-пути.
             it, tm = await _discover_movie_pick(cid, prefs)

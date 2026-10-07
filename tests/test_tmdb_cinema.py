@@ -35,8 +35,8 @@ def test_get_calls_tmdb_and_returns_json(monkeypatch):
         def json(self):
             return {"results": [{"id": 7}]}
 
-    def fake_get(url, *, params, timeout):
-        seen.update(url=url, params=params, timeout=timeout)
+    def fake_get(url, *, params, timeout, headers=None):
+        seen.update(url=url, params=params, timeout=timeout, headers=headers)
         return Response()
 
     monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "test-key")
@@ -50,6 +50,13 @@ def test_get_calls_tmdb_and_returns_json(monkeypatch):
     assert seen["params"]["api_key"] == "test-key"
     assert seen["params"]["query"] == "Arrival"
     assert seen["timeout"] == 3
+    assert seen["headers"] is None
+
+    monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "eyJv4-token")
+    tmdb._get("/search/multi", {"query": "Arrival"}, timeout=3)
+
+    assert "api_key" not in seen["params"]
+    assert seen["headers"] == {"Authorization": "Bearer eyJv4-token"}
 
 
 def test_english_poster_ignores_localized_and_language_neutral_images(monkeypatch):
