@@ -470,7 +470,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     """Экран 1: разбор шкафа и три самые полезные покупки из кэша."""
     wardrobe = store.load_wardrobe(cid)
     if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
-        kb = _wardrobe._kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "m_wardrobe")]])
+        kb = _wardrobe._kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "w_closet")]])
         await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
     state = _purchase_cache(cid, wardrobe)
@@ -501,7 +501,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     if len(pool) > len(batch):
         rows.append([("✨ Другие варианты", "w_buy_more")])
     rows.append([("🔎 Стоит ли покупать…", "w_check")])
-    rows.append([("⬅️ Назад", "m_wardrobe")])
+    rows.append([("⬅️ Назад", "w_closet")])
     store.pending_input[str(cid)] = "wardrobe_buy"
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = msg.text
