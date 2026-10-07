@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
-from urllib.parse import quote_plus
 import config
 import category_news
 import recommendation_rotation as rotation
@@ -44,6 +43,7 @@ from wardrobe_migration import migrate_item_attrs
 from module_binding import bind_functions as _bind_functions
 import wardrobe_management as _wardrobe_management
 import wardrobe_router as _wardrobe_router
+import wardrobe_purchase as purchase_logic
 
 _log = logging.getLogger(__name__)
 _MANAGEMENT_DEPENDENCIES = (ai, secure, normalize_parsed_item)
@@ -51,7 +51,7 @@ _MANAGEMENT_DEPENDENCIES = (ai, secure, normalize_parsed_item)
 if TYPE_CHECKING:
     from wardrobe_management import (
         _find_item, add_item, add_wardrobe_gap, get_wardrobe_gaps,
-        recommend_missing_purchase, send_purchase_hub,
+        warm_purchase_cache,
     )
 
 WARDROBE_WIND_LAYER_MS = 6
@@ -404,11 +404,6 @@ def _build_purchase_suggestions_message(data):
     return msg.text, msg.entities
 
 
-def _build_purchase_recommendation_message(item):
-    msg = wardrobe_ui.purchase_recommendation_card(item)
-    return msg.text, msg.entities
-
-
 def _get_cached_look(cid):
     cached = store.get_valid_wardrobe_daylook(cid)   # ссылочная целостность (version+id)
     if not cached or cached.get("date") != _day_key():   # день — бизнес-правило «раз в день»
@@ -500,9 +495,12 @@ class _WarmCacheStatus:
 
 async def warm_home_cache(cid):
     """Собирает образ дня в кэш без отправки пользователю."""
-    if _get_cached_look(cid):
-        return True
-    await send_looks(None, cid, status=_WarmCacheStatus())
+    if not _get_cached_look(cid):
+        await send_looks(None, cid, status=_WarmCacheStatus())
+    try:
+        await warm_purchase_cache(cid)  # после образа: он меняет версию шкафа
+    except Exception:
+        _log.warning("wardrobe purchase warm failed cid=%s", cid, exc_info=True)
     # Для пустого шкафа постоянная карточка не нужна; сам прогрев всё равно успешен.
     return bool(_get_cached_look(cid) or not store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
 
@@ -919,5 +917,14 @@ _PURCHASE_REJECT_REASONS = {
     "material_or_season", "price_vs_utility", "poor_condition",
 }
 
-_bind_functions(globals(), _wardrobe_management, ["get_wardrobe_gaps","add_wardrobe_gap","_local_text_item","_parse_items","_show_added_items","add_item","add_item_settings","add_item_photo","_find_item","_replace_item","edit_item_text","edit_add_preview","handle_wardrobe_search","_normalize_purchase_check","check_purchase","_purchase_hub_kb","_purchase_result_kb","send_purchase_hub","_missing_purchase_candidates","_purchase_photo_audience","_purchase_card_details","_purchase_carousel_kb","_purchase_carousel_signature","_purchase_carousel_candidates","show_purchase_page","recommend_missing_purchase","recommend_another_purchase","_local_purchase_suggestions","_normalize_purchase_suggestions","recommend_purchase"])
+_bind_functions(globals(), _wardrobe_management, [
+    "get_wardrobe_gaps", "add_wardrobe_gap", "_local_text_item", "_parse_items", "_show_added_items",
+    "add_item", "add_item_settings", "add_item_photo", "_find_item", "_replace_item", "edit_item_text",
+    "edit_add_preview", "handle_wardrobe_search", "_normalize_purchase_check", "check_purchase",
+    "_purchase_result_kb", "_purchase_cache_key", "_purchase_state", "_build_purchase_cache",
+    "_purchase_cache", "_ai_purchase_ideas", "warm_purchase_cache", "_purchase_reply",
+    "_remember_purchase_batch", "send_purchase_screen", "_purchase_candidate_by_id",
+    "show_purchase_card", "buy_purchase", "reject_purchase", "ask_purchase_check",
+    "_local_purchase_suggestions", "_normalize_purchase_suggestions", "recommend_purchase",
+])
 _bind_functions(globals(), _wardrobe_router, ["ingest", "handle_callback"])

@@ -1,17 +1,14 @@
 """Closet management and purchase evaluation flows."""
 
-import hashlib
-import json
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from wardrobe import (
-        _PURCHASE_FLAGS, _PURCHASE_REJECT_REASONS, _PURCHASE_VERDICTS,
-        _ZONES_DESC, _back_kb, _build_purchase_message,
-        _build_purchase_recommendation_message, _build_purchase_suggestions_message, _clean_text,
-        _flat_wardrobe_items, _get_cached_look, _kb, _log,
-        _purchase_candidate, _settings, ai, closet_kb, config,
+        PURCHASE_RECOMMENDATION_VERSION, _PURCHASE_FLAGS, _PURCHASE_REJECT_REASONS,
+        _PURCHASE_VERDICTS, _ZONES_DESC, _back_kb, _build_purchase_message,
+        _build_purchase_suggestions_message, _clean_text, _day_key,
+        _flat_wardrobe_items, _get_cached_look, _kb, _log, _purchase_candidates,
+        _settings, ai, closet_kb, config, datetime, purchase_logic,
         delete_label, has_wardrobe_items, normalize_parsed_item,
         public_item_name, re, rotation, secure, send_home, send_item_card,
         send_wardrobe_zones, store, verify, wardrobe_stats, wardrobe_ui,
@@ -337,290 +334,232 @@ async def check_purchase(bot, cid, text):
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
-        reply_markup=_kb([[("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]))
-
-
-def _purchase_hub_kb():
-    return _kb([
-        [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
-    ])
+        reply_markup=_purchase_result_kb())
 
 
 def _purchase_result_kb():
-    return _kb([
-        [("✨ Подобрать другую вещь", "w_buy_gap")],
-        [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")],
-    ])
+    return _kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]])
 
 
-async def send_purchase_hub(bot, cid):
-    """Совместимость со старыми маршрутами: сразу запускает подбор покупки."""
-    await recommend_missing_purchase(bot, cid)
+# ---------- «💳 Что докупить»: экран 1 (разбор + топ-3) и карточка покупки ----------
 
 
-def _missing_purchase_candidates(cid, wardrobe, *, exclude_names=None):
-    """Берёт актуальный пробел из образа и добирает ещё две полезные покупки."""
-    cached = _get_cached_look(cid) or {}
-    recommended = (cached.get("look_data") or {}).get("purchase_recommendation") or {}
-    primary = recommended if (
-        _clean_text(recommended.get("item")) and _clean_text(recommended.get("reason"))
-        and recommended.get("version") == PURCHASE_RECOMMENDATION_VERSION
-    ) else None
-    candidates = _purchase_candidates(
-        wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3,
-        exclude_names=exclude_names,
+def _purchase_cache_key(wardrobe):
+    return f"{wardrobe.get('_v', 0)}:{_day_key()}"
+
+
+def _purchase_state(cid):
+    state = (store.get_profile(cid) or {}).get(purchase_logic.PROFILE_KEY)
+    return state if isinstance(state, dict) else {}
+
+
+def _build_purchase_cache(cid, wardrobe, ai_items=None):
+    """Пересобирает разбор и кандидатов без сети: AI-идеи берутся из прошлого кэша."""
+    previous = _purchase_state(cid)
+    fresh_ai = ai_items is not None
+    ai_items = ai_items if fresh_ai else [x for x in previous.get("ai") or [] if isinstance(x, dict)]
+    lat = (store.get_settings(cid) or {}).get("lat")
+    facts = purchase_logic.wardrobe_facts(
+        wardrobe, cold_season=purchase_logic.is_cold_season(datetime.now(config.TZ).month, lat),
     )
-    enriched = [_purchase_card_details(candidate, wardrobe) for candidate in candidates]
-    return sorted(
-        enriched,
-        key=lambda candidate: (
-            int(candidate.get("priority") or 0),
-            int(candidate.get("combinations_count") or 0),
-        ),
-        reverse=True,
-    )
-
-
-def _purchase_photo_audience(cid):
-    """Определяет тип фотопоиска только при достаточно надёжном сигнале профиля."""
-    if config.CHAT_ID and str(cid) == str(config.CHAT_ID):
-        return "male"
-    profile = store.get_profile(cid) or {}
-    explicit = _clean_text(profile.get("gender")).casefold()
-    if explicit in {"male", "man", "m", "мужской", "мужчина"}:
-        return "male"
-    if explicit in {"female", "woman", "f", "женский", "женщина"}:
-        return "female"
-    name = _clean_text(profile.get("name")).casefold().split(" ", 1)[0]
-    male_names = {
-        "vladimir", "владимир", "alexander", "александр", "alexey", "алексей",
-        "andrey", "андрей", "anton", "антон", "dmitry", "дмитрий", "ivan", "иван",
-        "maxim", "максим", "mikhail", "михаил", "nikita", "никита", "oleg", "олег",
-        "pavel", "павел", "sergey", "сергей", "yuri", "юрий", "denis", "денис",
+    look_gap = ((_get_cached_look(cid) or {}).get("look_data") or {}).get("purchase_recommendation") or {}
+    primary = look_gap if look_gap.get("item") and look_gap.get("version") == PURCHASE_RECOMMENDATION_VERSION else None
+    local = _purchase_candidates(wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3)
+    state = {
+        "key": _purchase_cache_key(wardrobe),
+        "facts": facts,
+        "analysis": purchase_logic.analysis(facts),
+        "pool": purchase_logic.rank_candidates(wardrobe, ai_items, local),
+        "ai": ai_items,
+        "ai_date": _day_key() if fresh_ai else previous.get("ai_date", ""),
+        "shown": previous.get("shown") or [],
     }
-    return "male" if name in male_names else "neutral"
 
-
-def _purchase_card_details(item, wardrobe):
-    """Дополняет GAP-рекомендацию реальными сочетаниями из шкафа."""
-    item = dict(item or {})
-    by_zone = {}
-    for zone, _subcategory, entry in _flat_wardrobe_items(wardrobe):
-        name = _clean_text(public_item_name(entry))
-        if name:
-            by_zone.setdefault(_clean_text(zone), []).append(name)
-
-    category = _clean_text(item.get("category")).casefold()
-    if category in {"низ", "брюки", "джинсы"}:
-        first, second = by_zone.get("Верх", []), by_zone.get("Обувь", [])
-        tip = "Выбирай посадку, которая не спорит с объёмом твоего верха."
-    elif category == "обувь":
-        first, second = by_zone.get("Верх", []), by_zone.get("Низ", [])
-        tip = "Проверь посадку и материал: пара должна подходить для твоей обычной погоды."
-    else:
-        first, second = by_zone.get("Верх", []), by_zone.get("Низ", [])
-        if not first:
-            first = by_zone.get("Платья", [])
-        tip = "Выбирай свободную посадку, чтобы вещь легко работала вторым слоем."
-
-    combinations = [(left, right) for left in first for right in second if left != right]
-    item["outfits"] = [f"{left} + {right}" for left, right in combinations[:3]]
-    item["combinations_count"] = len(combinations)
-    item["gap_reason"] = _clean_text(item.get("reason"))
-    item["choice_tip"] = tip
-    return item
-
-
-def _purchase_carousel_kb(page, count):
-    rows = [[("✨ Обновить", f"w_buy_new:{page}")]]
-    rows.append([("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")])
-    return _kb(rows)
-
-
-def _purchase_carousel_signature(cid, wardrobe):
-    return hashlib.sha256(json.dumps({
-        "wardrobe": wardrobe,
-        "styles": _settings.wardrobe_styles(cid),
-    }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()[:24]
-
-
-def _purchase_carousel_candidates(cid, wardrobe, *, reset=False, exclude_names=None):
-    """Фиксирует вещи карусели для стабильного листания рекомендаций."""
-    signature = _purchase_carousel_signature(cid, wardrobe)
-    profile = store.get_profile(cid) or {}
-    cached = profile.get("wardrobe_purchase_carousel") or {}
-    if (not reset and cached.get("signature") == signature
-            and isinstance(cached.get("items"), list) and cached["items"]):
-        return [dict(item) for item in cached["items"] if isinstance(item, dict)]
-    name_key = lambda value: _clean_text(value).casefold()
-    explicit_excluded = rotation.markers(exclude_names or [], key=name_key)
-    rejected = profile.get("wardrobe_purchase_rejections") or {}
-    rejected_names = rejected.get("items") or []
-    rejected_markers = rotation.markers(rejected_names, key=name_key)
-    shown = profile.get("wardrobe_purchase_seen") or {}
-    shown_names = shown.get("items") or []
-    excluded = set(explicit_excluded)
-    excluded.update(rejected_markers)
-    excluded.update(rotation.markers(shown_names, key=name_key))
-    items = _missing_purchase_candidates(cid, wardrobe, exclude_names=excluded)
-    cycle_reset = False
-    if not items and shown_names:
-        # После полного круга начинаем новый, но не возвращаем текущую карточку
-        # первой и никогда не оживляем явно отклонённые варианты.
-        cycle_excluded = set(explicit_excluded)
-        cycle_excluded.update(rejected_markers)
-        cycle_excluded.add(name_key(shown_names[-1]))
-        items = _missing_purchase_candidates(
-            cid, wardrobe, exclude_names=cycle_excluded,
-        )
-        cycle_reset = bool(items)
-    if not items:
-        reserves = [
-            ("Универсальный верхний слой", "Верхняя одежда"),
-            ("Фактурный трикотажный джемпер", "Верх"),
-            ("Прямые брюки нейтрального цвета", "Низ"),
-            ("Минималистичные кожаные кеды", "Обувь"),
-            ("Компактная сумка на каждый день", "Аксессуары"),
-        ]
-        reserve_key = lambda value: name_key(value[0] if isinstance(value, tuple) else value)
-        reserve_history = [*shown_names, *(exclude_names or [])]
-        available = rotation.candidates_for_cycle(
-            [item for item in reserves if reserve_key(item) not in rejected_markers],
-            reserve_history,
-            current=(reserve_history or [None])[-1], key=reserve_key,
-        )
-        if not available:
-            # Все резервные варианты отклонены — сбрасываем rejected-фильтр
-            # и выбираем следующий в цикле (без уже показанного последним).
-            available = rotation.candidates_for_cycle(
-                reserves, reserve_history,
-                current=(reserve_history or [None])[-1], key=reserve_key,
-            )
-        if available:
-            name, category = available[0]
-            items = [{
-                "item": name,
-                "category": category,
-                "style": "Базовый",
-                "season": "Межсезонье",
-                "reason": "добавит шкафу новый слой и увеличит число сочетаний с уже имеющимися вещами",
-                "version": PURCHASE_RECOMMENDATION_VERSION,
-            }]
-
-    def change(current):
-        if cycle_reset:
-            current["wardrobe_purchase_seen"] = {"items": []}
-        current["wardrobe_purchase_carousel"] = {
-            "signature": signature,
-            "items": [dict(item) for item in items],
-            "seen_items": sorted(excluded),
-        }
-        return current, None
+    def change(profile):
+        profile.pop("wardrobe_purchase_carousel", None)  # старый формат карусели
+        profile[purchase_logic.PROFILE_KEY] = state
+        return profile, None
 
     store.mutate_profile(cid, change)
-    return items
+    return state
 
 
-async def show_purchase_page(
-        bot, cid, page=0, q=None, reset_candidates=False, exclude_names=None):
-    wardrobe = store.load_wardrobe(cid)
-    candidates = _purchase_carousel_candidates(
-        cid, wardrobe, reset=reset_candidates, exclude_names=exclude_names,
+def _purchase_cache(cid, wardrobe):
+    state = _purchase_state(cid)
+    if state.get("key") == _purchase_cache_key(wardrobe) and isinstance(state.get("pool"), list):
+        return state
+    return _build_purchase_cache(cid, wardrobe)
+
+
+async def _ai_purchase_ideas(cid, wardrobe, facts):
+    """AI предлагает вещи структурно; числа и текст карточки собирает код."""
+    prefs = _settings.wardrobe_prefs_context(cid)
+    prompt = f"""Ты персональный стилист. Предложи 6 конкретных вещей, которые стоит докупить к реальному шкафу.
+Факты, посчитанные кодом (числа не меняй и не добавляй новых): {purchase_logic.ai_facts_text(facts, purchase_logic.analysis(facts))}
+Предпочтения:
+{secure.wrap_untrusted(prefs, 'предпочтения')}
+Шкаф:
+{secure.wrap_untrusted(store.wardrobe_to_text(wardrobe), 'гардероб')}
+Зоны и подкатегории: {_ZONES_DESC}
+
+Правила: не предлагай вещи, которые уже есть; закрывай слабые места; называй цвет и тип вещи
+(«Белые кожаные кеды»), без брендов и цен. why — одно предложение, почему вещь нужна именно этому
+шкафу, только по фактам и вещам выше. tip — один практичный совет по выбору этой вещи.
+JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}"""
+    data = await ai.allm_json(
+        prompt, 900, tier="smart", module="wardrobe",
+        cache_context={
+            "scenario": "wardrobe_purchase_ideas", "wardrobe": wardrobe, "preferences": prefs,
+            "facts": facts, "language": "ru", "schema_version": 1,
+        },
     )
-    if not candidates:
-        # Полный сброс seen + rejections, чтобы экран всегда показывал рекомендацию
-        def full_reset(current):
-            current["wardrobe_purchase_seen"] = {"items": []}
-            current["wardrobe_purchase_rejections"] = {"items": []}
-            current.pop("wardrobe_purchase_carousel", None)
-            return current, None
-        store.mutate_profile(cid, full_reset)
-        candidates = _purchase_carousel_candidates(cid, wardrobe, reset=True)
-    if not candidates:
+    return [item for item in (data or {}).get("items") or [] if isinstance(item, dict)][:8]
+
+
+async def warm_purchase_cache(cid):
+    """Ночной прогрев: AI-идеи раз в день, затем локальный пересчёт +N."""
+    wardrobe = store.load_wardrobe(cid)
+    if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
         return
-    page = max(0, min(int(page), len(candidates) - 1))
-    item = candidates[page]
+    state = _purchase_state(cid)
+    if state.get("key") == _purchase_cache_key(wardrobe) and state.get("ai_date") == _day_key():
+        return
+    facts = purchase_logic.wardrobe_facts(wardrobe, cold_season=purchase_logic.is_cold_season(
+        datetime.now(config.TZ).month, (store.get_settings(cid) or {}).get("lat"),
+    ))
+    try:
+        with ai.background_mode():
+            ai_items = await _ai_purchase_ideas(cid, wardrobe, facts)
+    except Exception:
+        _log.warning("wardrobe purchase: AI ideas unavailable cid=%s", cid, exc_info=True)
+        ai_items = None
+    _build_purchase_cache(cid, wardrobe, ai_items=ai_items)
 
-    def remember_page(current):
-        carousel = current.get("wardrobe_purchase_carousel") or {}
-        if isinstance(carousel, dict):
-            carousel = dict(carousel)
-            carousel["page"] = page
-            current["wardrobe_purchase_carousel"] = carousel
-        history = current.get("wardrobe_purchase_seen") or {}
-        current["wardrobe_purchase_seen"] = {
-            "items": rotation.remember(
-                history.get("items") or [], _clean_text(item.get("item")),
-                limit=50, key=lambda value: _clean_text(value).casefold(),
-            ),
-        }
-        return current, None
 
-    store.mutate_profile(cid, remember_page)
-    card_item = _purchase_card_details(item, wardrobe)
-    if not card_item.get("product_url"):
-        query = quote_plus(_clean_text(item.get("item")))
-        card_item["product_url"] = f"https://www.google.com/search?tbm=shop&q={query}"
-    text_out, entities = _build_purchase_recommendation_message(card_item)
-    store.last_source[str(cid)] = "Гардероб · Что докупить"
-    store.last_answer[str(cid)] = text_out
-    kb = _purchase_carousel_kb(page, len(candidates))
+async def _purchase_reply(bot, cid, q, msg, kb):
     if q is not None:
         try:
-            await q.edit_message_text(
-                text=text_out, entities=entities, reply_markup=kb,
-            )
+            await q.edit_message_text(text=msg.text, entities=msg.entities, reply_markup=kb)
             return
         except Exception:
             pass
-        try:
-            await q.delete_message()
-        except Exception:
-            pass
-    await bot.send_message(chat_id=cid, text=text_out, entities=entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def recommend_missing_purchase(bot, cid):
-    """Показывает первую из трёх персональных покупок текстовой карточкой."""
-    if not has_wardrobe_items(cid):
-        await bot.send_message(
-            chat_id=cid,
-            text="Сначала заполни шкаф — тогда я смогу понять, каких вещей не хватает именно тебе.",
-            reply_markup=_kb([[("✅ Добавить вещи", "w_fill")],
-                              [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]]),
-        )
+def _remember_purchase_batch(cid, batch, cycle_reset=False):
+    def change(profile):
+        seen = [] if cycle_reset else (profile.get("wardrobe_purchase_seen") or {}).get("items") or []
+        for candidate in batch:
+            seen = rotation.remember(seen, candidate["item"], limit=50, key=purchase_logic.item_key)
+        profile["wardrobe_purchase_seen"] = {"items": seen}
+        state = profile.get(purchase_logic.PROFILE_KEY)
+        if isinstance(state, dict):
+            profile[purchase_logic.PROFILE_KEY] = {**state, "shown": [c["id"] for c in batch]}
+        return profile, None
+
+    store.mutate_profile(cid, change)
+
+
+async def send_purchase_screen(bot, cid, q=None, *, more=False):
+    """Экран 1: разбор шкафа и три самые полезные покупки из кэша."""
+    wardrobe = store.load_wardrobe(cid)
+    if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
+        kb = _kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "m_wardrobe")]])
+        await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
-    store.pending_input[str(cid)] = "wardrobe_buy"
-    await show_purchase_page(bot, cid, 0, reset_candidates=True)
-
-
-async def recommend_another_purchase(bot, cid, q=None, page=None):
-    """Запоминает отвергнутую карточку и подбирает новую без её возврата."""
+    state = _purchase_cache(cid, wardrobe)
     profile = store.get_profile(cid) or {}
-    cached = profile.get("wardrobe_purchase_carousel") or {}
-    items = [item for item in (cached.get("items") or []) if isinstance(item, dict)]
-    try:
-        selected_page = int(cached.get("page", 0) if page is None else page)
-    except (TypeError, ValueError):
-        selected_page = 0
-    selected_page = max(0, min(selected_page, len(items) - 1)) if items else 0
-    rejected_name = _clean_text(items[selected_page].get("item")) if items else ""
+    pool = purchase_logic.visible_pool(state["pool"], purchase_logic.rejected_names(profile))
+    cycle_reset = False
+    if more:
+        batch, cycle_reset = purchase_logic.next_batch(
+            pool, (profile.get("wardrobe_purchase_seen") or {}).get("items") or [], state.get("shown"),
+        )
+    else:
+        batch = pool[:purchase_logic.BATCH_SIZE]
+    _remember_purchase_batch(cid, batch, cycle_reset)
+    msg = wardrobe_ui.purchase_screen({
+        **state["analysis"],
+        "picks": [{"name": c["item"], "gain": c["gain"]} for c in batch],
+    })
+    rows = [[(f"{index}. {c['item'][:40]}", f"w_buy_i:{c['id']}")] for index, c in enumerate(batch, 1)]
+    if len(pool) > len(batch):
+        rows.append([("✨ Другие варианты", "w_buy_more")])
+    rows.append([("🔎 Стоит ли покупать…", "w_check")])
+    rows.append([("⬅️ Назад", "m_wardrobe")])
+    store.pending_input[str(cid)] = "wardrobe_buy"
+    store.last_source[str(cid)] = "Гардероб · Что докупить"
+    store.last_answer[str(cid)] = msg.text
+    await _purchase_reply(bot, cid, q, msg, _kb(rows))
 
-    if rejected_name:
-        def remember_rejection(current):
-            history = current.get("wardrobe_purchase_rejections") or {}
-            current["wardrobe_purchase_rejections"] = {
-                "items": rotation.remember(
-                    history.get("items") or [], rejected_name,
-                    limit=50, key=lambda value: _clean_text(value).casefold(),
-                ),
-            }
-            return current, None
+
+def _purchase_candidate_by_id(cid, wardrobe, item_id):
+    state = _purchase_cache(cid, wardrobe)
+    candidate = next((c for c in state["pool"] if c.get("id") == item_id), None)
+    return state, candidate
+
+
+async def show_purchase_card(bot, cid, item_id, q=None):
+    """Экран 2: почему вещь нужна, +N образов и готовые сочетания."""
+    wardrobe = store.load_wardrobe(cid)
+    state, candidate = _purchase_candidate_by_id(cid, wardrobe, item_id)
+    if not candidate:
+        await send_purchase_screen(bot, cid, q=q)
+        return
+    msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
+    kb = _kb([
+        [("✅ Купил — добавить в шкаф", f"w_buy_got:{item_id}")],
+        [("❌ Не нужно", f"w_buy_no:{item_id}")],
+        [("⬅️ Назад", "w_buy_back")],
+    ])
+    store.last_source[str(cid)] = "Гардероб · Что докупить"
+    store.last_answer[str(cid)] = msg.text
+    await _purchase_reply(bot, cid, q, msg, kb)
+
+
+async def buy_purchase(bot, cid, item_id, q=None):
+    """«✅ Купил»: вещь сохраняется обычным добавлением, разбор пересчитывается."""
+    wardrobe = store.load_wardrobe(cid)
+    _state, candidate = _purchase_candidate_by_id(cid, wardrobe, item_id)
+    if not candidate:
+        await send_purchase_screen(bot, cid, q=q)
+        return
+    saved = store.add_wardrobe_items(cid, [purchase_logic.wardrobe_item(candidate)])
+
+    def invalidate(profile):
+        state = profile.get(purchase_logic.PROFILE_KEY)
+        if isinstance(state, dict):
+            profile[purchase_logic.PROFILE_KEY] = {**state, "key": ""}
+        return profile, None
+
+    store.mutate_profile(cid, invalidate)
+    await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_added(candidate["item"], bool(saved)), None)
+    await send_purchase_screen(bot, cid)
+
+
+async def reject_purchase(bot, cid, item_id, q=None):
+    """«❌ Не нужно»: вещь навсегда уходит в историю отказов."""
+    wardrobe = store.load_wardrobe(cid)
+    _state, candidate = _purchase_candidate_by_id(cid, wardrobe, item_id)
+    if candidate:
+        def remember_rejection(profile):
+            profile["wardrobe_purchase_rejections"] = {"items": rotation.remember(
+                purchase_logic.rejected_names(profile), candidate["item"],
+                limit=50, key=purchase_logic.item_key,
+            )}
+            return profile, None
 
         store.mutate_profile(cid, remember_rejection)
-    await show_purchase_page(
-        bot, cid, 0, q=q, reset_candidates=True,
-        exclude_names=[rejected_name] if rejected_name else None,
+    await send_purchase_screen(bot, cid, q=q)
+
+
+async def ask_purchase_check(bot, cid):
+    """«🔎 Стоит ли покупать…»: ждём описание вещи для проверки покупки."""
+    store.pending_input[str(cid)] = "wardrobe_check"
+    await bot.send_message(
+        chat_id=cid,
+        text="Опиши вещь, которую присматриваешь: тип, цвет, материал и крой.",
+        reply_markup=_kb([[("⬅️ Назад", "w_buy")]]),
     )
 
 
@@ -699,7 +638,7 @@ async def recommend_purchase(bot, cid, item):
     wardrobe = store.load_wardrobe(cid)
     if not item:
         await bot.send_message(chat_id=cid, text="Напиши, какую вещь ищешь: например «худи».",
-                               reply_markup=_purchase_hub_kb())
+                               reply_markup=_purchase_result_kb())
         return
     if not has_wardrobe_items(cid):
         await bot.send_message(

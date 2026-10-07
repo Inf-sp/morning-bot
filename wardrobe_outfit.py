@@ -339,6 +339,85 @@ def outfit_style_score(items, style):
     return score
 
 
+# ---------- подсчёт образов шкафа (для «💳 Что докупить») ----------
+# Два представительных дня: тёплый (без верхней одежды) и холодный (верхняя
+# одежда обязательна). Жёсткие фильтры — те же, что у подбора образа дня.
+_COUNT_DAYS = (({"tmax": 22, "warm": True}, False), ({"tmax": 2}, True))
+_MAX_BRIGHT_COLORS = 2  # как _color_penalty: три ярких цвета — уже не образ
+
+
+def _bright_count(item):
+    return min(_MAX_BRIGHT_COLORS + 1, sum(not _is_neutral_color(c) for c in (item.get("colors") or [])))
+
+
+def _count_pools(w, weather_ctx, cold):
+    candidates = select_outfit_candidates(w, weather_ctx)
+    pools = [
+        [it for it in candidates.get("Верх", []) if outfit_role(it) not in ("layer", "outerwear")],
+        candidates.get("Низ", []),
+        candidates.get("Обувь", []),
+    ]
+    if cold:
+        pools.append([it for it in candidates.get("Верхняя одежда", []) if outfit_role(it) == "outerwear"])
+    return pools
+
+
+def count_outfits(w):
+    """Точное число полных образов шкафа: верх + низ + обувь (+ верхняя одежда
+    в холод) без конфликта по погоде и не больше двух ярких цветов.
+
+    Считается по гистограмме ярких цветов, без перебора комбинаций, поэтому
+    результат точный и для большого шкафа.
+    """
+    total = 0
+    for weather_ctx, cold in _COUNT_DAYS:
+        dist = {0: 1}
+        for pool in _count_pools(w, weather_ctx, cold):
+            nxt = {}
+            for bright, count in dist.items():
+                for item in pool:
+                    value = bright + _bright_count(item)
+                    if value <= _MAX_BRIGHT_COLORS:
+                        nxt[value] = nxt.get(value, 0) + count
+            dist = nxt
+        total += sum(dist.values())
+    return total
+
+
+def outfits_with_item(w, item, limit=3):
+    """До ``limit`` готовых образов с новой вещью: только реальные вещи шкафа.
+
+    Возвращает списки остальных вещей комплекта; разные образы по возможности
+    не повторяют одни и те же вещи.
+    """
+    import itertools
+
+    role = outfit_role(item)
+    zone = item.get("zone")
+    cold = role == "outerwear"
+    pools = _count_pools(w, _COUNT_DAYS[1 if cold else 0][0], cold)
+    slot = {"Низ": 1, "Обувь": 2}.get(zone)
+    if cold:
+        slot = 3
+    elif zone == "Верх" and role not in ("layer", "outerwear"):
+        slot = 0
+    if slot is not None:
+        pools[slot] = [item]
+    extra = 0 if slot is not None else _bright_count(item)
+    valid = [
+        [it for it in combo if it is not item]
+        for combo in itertools.islice(itertools.product(*pools), 2000)
+        if sum(_bright_count(it) for it in combo) + extra <= _MAX_BRIGHT_COLORS
+    ]
+    found, used = [], set()
+    while valid and len(found) < limit:
+        best = min(valid, key=lambda others: len({id(it) for it in others} & used))
+        valid.remove(best)
+        used |= {id(it) for it in best}
+        found.append([public_item_name(it) for it in best])
+    return found
+
+
 def choose_outfit_style(items, selected_styles):
     """Главный стиль комплекта; при равенстве сохраняет порядок настроек."""
     selected = [style for style in (selected_styles or []) if str(style).strip()]

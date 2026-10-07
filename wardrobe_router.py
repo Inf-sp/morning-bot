@@ -94,28 +94,24 @@ async def handle_callback(bot, cid, q, data, status=None):
         await send_home(bot, cid, q=q)
         return
     if data == "w_buy":
-        await recommend_missing_purchase(bot, cid)
+        await send_purchase_screen(bot, cid)
         return
-    if data.startswith("w_buy_page:"):
-        page = data.partition(":")[2]
-        await show_purchase_page(bot, cid, int(page) if page.isdigit() else 0, q=q)
+    if data == "w_buy_more":
+        await send_purchase_screen(bot, cid, q=q, more=True)
         return
-    if data == "w_buy_new" or data.startswith("w_buy_new:"):
-        page = data.partition(":")[2]
-        await recommend_another_purchase(
-            bot, cid, q=q, page=int(page) if page.isdigit() else None,
-        )
+    if data.startswith("w_buy_i:"):
+        await show_purchase_card(bot, cid, data.partition(":")[2], q=q)
         return
-    if data == "w_buy_pick":
-        store.pending_input[str(cid)] = "wardrobe_buy"
-        await bot.send_message(
-            chat_id=cid,
-            text="Что ищем? Например: «худи», «зелёная худи» или «ботинки на осень».",
-            reply_markup=_kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
-        )
+    if data.startswith("w_buy_got:"):
+        await buy_purchase(bot, cid, data.partition(":")[2], q=q)
         return
-    if data == "w_buy_gap":
-        await recommend_missing_purchase(bot, cid)
+    if data.startswith("w_buy_no:"):
+        await reject_purchase(bot, cid, data.partition(":")[2], q=q)
+        return
+    if data.startswith("w_buy"):
+        # «⬅️ Назад» из карточки и старые кнопки прежних экранов
+        # (w_buy_page:*, w_buy_new*, w_buy_gap, w_buy_pick) ведут на экран 1.
+        await send_purchase_screen(bot, cid, q=q)
         return
     if data == "w_check":
-        await send_purchase_hub(bot, cid)
+        await ask_purchase_check(bot, cid)

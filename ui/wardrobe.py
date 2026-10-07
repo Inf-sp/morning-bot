@@ -1,5 +1,6 @@
 from .builder import MessageBuilder
 from .news import append_weekly_news
+from .text import ru_plural
 from wardrobe_model import public_zone_name, zone_of
 
 
@@ -268,85 +269,88 @@ def purchase_suggestions_card(data):
     return b.build_stripped()
 
 
-def purchase_recommendations_card(items):
-    """Три пробела гардероба и приглашение уточнить покупку через чат."""
-    b = MessageBuilder()
-    b.section("💳 Что докупить")
-    b.spacer()
-    b.bold("Рекомендую добавить в гардероб:")
-    b.newline()
-    for item in list(items or [])[:3]:
-        name = _clean_text(item.get("item"))
-        if not name:
-            continue
-        b.text_line("• ")
-        b.bold(name)
-        meta = " · ".join(
-            value for value in (
-                _clean_text(item.get("category")),
-                _clean_text(item.get("style")),
-                _clean_text(item.get("season")),
-            ) if value
-        )
-        if meta:
-            b.text_line(f" ({meta})")
-        reason = _finish_dot(item.get("reason"))
-        if reason:
-            b.text_line(f" · {_upper_first(reason)}")
-        b.newline()
+def _outfits_word(n):
+    return ru_plural(n, "образ", "образа", "образов")
 
+
+def purchase_screen(data):
+    """Экран 1 «💳 Что докупить»: разбор шкафа и самые полезные покупки.
+
+    data: {total, outfits, strengths[], weaknesses[], picks[{name, gain}]}
+    """
+    data = data or {}
+    b = MessageBuilder()
+    b.title("💳 Что докупить")
+    total = int(data.get("total") or 0)
+    outfits = int(data.get("outfits") or 0)
+    b.line(f"👔 Твой шкаф · {total} {_pluralize_items(total)} · {outfits} {_outfits_word(outfits)}")
+    strengths = [_clean_text(x) for x in data.get("strengths") or [] if _clean_text(x)]
+    weaknesses = [_clean_text(x) for x in data.get("weaknesses") or [] if _clean_text(x)]
+    if strengths:
+        b.labeled_line("Сильно", " · ".join(strengths))
+    if weaknesses:
+        b.labeled_line("Слабо", " · ".join(weaknesses))
+    picks = [pick for pick in data.get("picks") or [] if _clean_text(pick.get("name"))]
+    if picks:
+        b.spacer()
+        b.bold("🛒 Самое полезное сейчас")
+        b.newline()
+        for index, pick in enumerate(picks, 1):
+            gain = int(pick.get("gain") or 0)
+            suffix = f" · +{gain} {_outfits_word(gain)}" if gain > 0 else ""
+            b.line(f"{index}. {_clean_text(pick['name'])}{suffix}")
     b.spacer()
-    b.line(
-        "Напиши, что ищешь: например «худи», «осенние ботинки» или «рубашка для работы». "
-        "Я учту твои вещи, цвета и стиль и покажу готовые сочетания."
-    )
+    b.line("Или напиши вещь, которую присматриваешь, — подскажу цвет и сочетания.")
     return b.build_stripped()
 
 
-def purchase_recommendation_card(item):
-    """Одна конкретная недостающая вещь с проверенным товаром и покупкой."""
-    item = item or {}
+def purchase_small_wardrobe():
     b = MessageBuilder()
-    b.section("💳 Что докупить · Гардероб")
-    b.spacer()
-    name = _clean_text(item.get("item")) or "Полезная вещь для гардероба"
-    product_url = _clean_text(item.get("product_url"))
-    if product_url:
-        b.link(name, product_url)
-    else:
-        b.bold(name)
-    b.newline()
-    # Причина рекомендации
-    reason = _finish_dot(item.get("reason"))
-    if reason:
-        b.labeled_line("Причина", reason, lowercase=False)
-    # С чем носить
-    outfits = [_finish_dot(value) for value in (item.get("outfits") or []) if _clean_text(value)]
+    b.title("💳 Что докупить")
+    b.line("Добавь хотя бы 5 вещей — тогда разбор будет точным.")
+    return b.build_stripped()
+
+
+def purchase_card(data):
+    """Экран 2: одна покупка с фактами шкафа.
+
+    data: {name, why, before, after, outfits[[names]], tip}
+    """
+    data = data or {}
+    b = MessageBuilder()
+    b.title(f"🛒 {_clean_text(data.get('name')) or 'Вещь'}")
+    why = _finish_dot(data.get("why"))
+    if why:
+        b.labeled_line("Почему тебе", why, lowercase=False)
+    before, after = int(data.get("before") or 0), int(data.get("after") or 0)
+    if after > before:
+        b.spacer()
+        b.line(f"Было {before} {_outfits_word(before)} → станет {after}")
+    outfits = [
+        " + ".join(_lower_first(_clean_text(name)) for name in outfit if _clean_text(name))
+        for outfit in data.get("outfits") or []
+    ]
+    outfits = [outfit for outfit in outfits if outfit][:3]
     if outfits:
         b.spacer()
-        b.section("С чем носить из твоего гардероба:")
-        for outfit in outfits[:3]:
+        b.bold("Готовые образы:")
+        b.newline()
+        for outfit in outfits:
             b.line(f"• {outfit}")
-    # Зачем добавить
-    count = int(item.get("combinations_count") or 0)
-    gap_reason = _finish_dot(item.get("gap_reason"))
-    if count or gap_reason:
+    tip = _finish_dot(data.get("tip"))
+    if tip:
         b.spacer()
-        b.section("Зачем добавить:")
-        if count:
-            b.labeled_line("Новые сочетания", f"до {count}")
-        if gap_reason:
-            b.labeled_line("Закрывает пробел", _upper_first(gap_reason))
-    # Совет по выбору
-    choice_tip = _finish_dot(item.get("choice_tip"))
-    if choice_tip:
-        b.spacer()
-        b.labeled_line("💡 Совет по выбору", choice_tip, lowercase=False)
-    # Бренд
-    product_brand = _clean_text(item.get("product_brand"))
-    if product_brand:
-        b.spacer()
-        b.labeled_line("Бренд", product_brand, lowercase=False)
+        b.line(f"💡 {tip}")
+    return b.build_stripped()
+
+
+def purchase_added(name, added=True):
+    """Короткое подтверждение после «✅ Купил»."""
+    b = MessageBuilder()
+    if added:
+        b.line(f"✅ «{_clean_text(name)}» — в шкафу. Пересчитал, что ещё пригодится.")
+    else:
+        b.line("Такая вещь уже есть в шкафу.")
     return b.build_stripped()
 
 

@@ -27,12 +27,9 @@ def test_dutch_noun_plural_keeps_de_prefix():
     assert "Множественное число: de breinen" in text
 
 
-def test_purchase_recommendation_reason_starts_on_its_own_line():
-    from ui.wardrobe import purchase_recommendation_card
+def test_purchase_card_reason_starts_on_its_own_line():
+    from ui.wardrobe import purchase_card
 
-    message = purchase_recommendation_card({
-        "item": "Белая футболка", "product_url": "https://example.com",
-        "reason": "закроет базовый верх",
-    })
+    message = purchase_card({"name": "Белая футболка", "why": "закроет базовый верх"})
 
-    assert "Белая футболка\nПричина: закроет базовый верх." in message.text
+    assert message.text == "🛒 Белая футболка\n\nПочему тебе: закроет базовый верх."

@@ -270,6 +270,7 @@ def audit_architecture(root=None):
         "fridge_model.py": {"telegram", "store", "ai", "config", "repositories"},
         "recommendation_rotation.py": {"telegram", "store", "ai", "config", "repositories"},
         "wardrobe_outfit.py": {"telegram", "ai"},
+        "wardrobe_purchase.py": {"telegram", "store", "ai", "config", "repositories"},
         "weather_provider.py": {"telegram", "ai"},
         "response_delivery.py": {"ai"},
         "provider_runtime.py": {"ai", "api_usage", "requests", "service_monitor", "telegram"},
