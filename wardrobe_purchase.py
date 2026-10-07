@@ -240,24 +240,32 @@ def rank_candidates(wardrobe, ai_items=(), local_items=()):
     """
     items = _items(wardrobe)
     base = count_outfits(wardrobe)
-    ranked, seen = [], set()
     sources = (
         *((raw, "ai") for raw in ai_items or ()),
         *((raw, "local") for raw in local_items or ()),
         *((raw, "basic") for raw in BASIC_IDEAS),
     )
-    for raw, source in sources:
-        candidate = _normalize_candidate(raw, source)
-        if not candidate or candidate["id"] in seen:
-            continue
-        seen.add(candidate["id"])
-        markers = raw.get("markers") if source == "basic" else ()
-        if _owned(items, candidate, markers) or _covered(items, candidate):
-            continue
-        candidate["gain"] = count_outfits(_with_item(wardrobe, wardrobe_item(candidate))) - base
-        ranked.append(candidate)
-    ranked.sort(key=lambda candidate: -candidate["gain"])
-    return ranked
+
+    def collect(skip_covered):
+        ranked, seen = [], set()
+        for raw, source in sources:
+            candidate = _normalize_candidate(raw, source)
+            if not candidate or candidate["id"] in seen:
+                continue
+            seen.add(candidate["id"])
+            markers = raw.get("markers") if source == "basic" else ()
+            # AI-идеи персональны: «закрытая категория» отсекает только шаблонные.
+            if _owned(items, candidate, markers) or (
+                    skip_covered and source != "ai" and _covered(items, candidate)):
+                continue
+            candidate["gain"] = count_outfits(_with_item(wardrobe, wardrobe_item(candidate))) - base
+            ranked.append(candidate)
+        ranked.sort(key=lambda candidate: -candidate["gain"])
+        return ranked
+
+    # В большом шкафу все категории «закрыты» — экран не должен остаться пустым:
+    # тогда берём недостающие вещи с реальным приростом образов.
+    return collect(True) or [c for c in collect(False) if c["gain"] > 0]
 
 
 def rejected_names(profile):

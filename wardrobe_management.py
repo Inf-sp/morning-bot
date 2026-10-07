@@ -474,6 +474,15 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
         await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
     state = _purchase_cache(cid, wardrobe)
+    if not state.get("pool") and state.get("ai_date") != _wardrobe._day_key():
+        # Ночной прогрев не дал идей — без рекомендаций экран бесполезен, спросим AI сейчас.
+        try:
+            ai_items = await _ai_purchase_ideas(cid, wardrobe, state["facts"])
+        except Exception:
+            _log.warning("wardrobe purchase: on-demand AI ideas unavailable cid=%s", cid, exc_info=True)
+            ai_items = None
+        if ai_items:
+            state = _build_purchase_cache(cid, wardrobe, ai_items=ai_items)
     profile = store.get_profile(cid) or {}
     pool = purchase_logic.visible_pool(state["pool"], purchase_logic.rejected_names(profile))
     cycle_reset = False

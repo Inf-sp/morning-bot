@@ -299,6 +299,9 @@ def purchase_screen(data):
             gain = int(pick.get("gain") or 0)
             suffix = f" · +{gain} {_outfits_word(gain)}" if gain > 0 else ""
             b.line(f"{index}. {_clean_text(pick['name'])}{suffix}")
+    else:
+        b.spacer()
+        b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
     b.spacer()
     b.line("Или напиши вещь, которую присматриваешь, — подскажу цвет и сочетания.")
     return b.build_stripped()
