@@ -1,3 +1,4 @@
+import time
 import asyncio
 import os
 
@@ -144,7 +145,7 @@ def test_unstressed_eren_conjugation():
 
 # --- 4. Очередь Add-запросов не крутится вечно -----------------------------
 
-def test_rejected_queued_add_is_dropped_after_max_attempts(monkeypatch):
+def test_rejected_queued_word_is_reported_once_instead_of_retrying(monkeypatch):
     cid, sent, calls = "queued-reject-limit", [], []
 
     async def rejected(term, *_args, **_kwargs):
@@ -155,36 +156,32 @@ def test_rejected_queued_add_is_dropped_after_max_attempts(monkeypatch):
     dictionary_import._queue_dictionary_analysis(cid, "абракадабра", "nl")
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", rejected)
 
-    for _ in range(dictionary_import._DICT_PENDING_MAX_REJECTIONS - 1):
-        asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
-    queue = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
-    assert queue[0]["attempts"] == dictionary_import._DICT_PENDING_MAX_REJECTIONS - 1
-    assert sent == []
-
     asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
     asyncio.run(dictionary_import.process_queued_dictionary_adds(RecordingBot(sent), [cid]))
 
-    assert len(calls) == dictionary_import._DICT_PENDING_MAX_REJECTIONS
+    assert calls == ["абракадабра"]
     assert "dictionary_pending_analysis" not in dictionary_import.store.get_profile(cid)
-    assert len(sent) == 1
-    assert "«абракадабра»" in sent[0]["text"]
+    assert len(sent) == 1 and "«абракадабра»" in sent[0]["text"]
 
 
-def test_provider_failure_does_not_count_as_rejection(monkeypatch):
-    cid = "queued-provider-down"
+def test_provider_failure_retries_later_with_growing_pause(monkeypatch):
+    cid, calls = "queued-provider-down", []
 
     async def unavailable(*_args, **_kwargs):
+        calls.append(True)
         raise dictionary_import.DictionaryAnalysisUnavailable()
 
     dictionary_import.store.set_profile(cid, {})
     dictionary_import._queue_dictionary_analysis(cid, "мудрость", "nl")
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
 
-    for _ in range(dictionary_import._DICT_PENDING_MAX_REJECTIONS + 1):
+    for _ in range(3):
         asyncio.run(dictionary_import.process_queued_dictionary_adds(object(), [cid]))
 
     queue = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
-    assert [item.get("attempts", 0) for item in queue] == [0]
+    assert calls == [True]  # следующая попытка — только после паузы
+    assert queue[0]["failures"] == 1
+    assert queue[0]["next_at"] >= time.time() + dictionary_import._DICT_RETRY_BACKOFF_SECONDS[0] - 5
 
 
 # --- 5. Фоновая пересборка сдвигает пакет ----------------------------------

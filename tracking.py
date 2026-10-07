@@ -86,6 +86,13 @@ def remaining_action_seconds(trace=None) -> float | None:
     return max(0.0, trace.budget_seconds - (time.monotonic() - trace.started))
 
 
+def extend_action_budget(seconds: float, trace=None) -> None:
+    """Долгий сценарий (разбор слова) получает своё время сверх лимита действия."""
+    trace = trace or current_action()
+    if trace is not None and trace.budget_seconds is not None:
+        trace.budget_seconds = max(trace.budget_seconds, time.monotonic() - trace.started + seconds)
+
+
 def bounded_timeout(default: float, *, minimum: float = 0.5) -> float:
     """HTTP-таймаут внутри действия пользователя не длиннее остатка его бюджета.
 

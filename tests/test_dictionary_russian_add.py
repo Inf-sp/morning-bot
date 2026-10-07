@@ -164,7 +164,7 @@ def test_unknown_russian_add_is_persisted_for_automatic_retry(monkeypatch):
 
     queued = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
     assert queued[0]["term"] == "мудрость"
-    assert "Карточка появится в словаре после автоматической проверки" in sent[-1]["text"]
+    assert "Сервисы перевода сейчас недоступны" in sent[-1]["text"] and "«мудрость»" in sent[-1]["text"]
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
@@ -360,6 +360,7 @@ def test_dictionary_processing_status_uses_neutral_emojis_without_language_flag(
         "🔍 Подбираю разбор...",
         "🧩 Подбираю пример и формы...",
         "✨ Подбираю карточку...",
+        "⏳ Почти готово...",
     ]
     assert all("🇳🇱" not in text and "🇬🇧" not in text for _delay, text in stages)
 
@@ -845,10 +846,7 @@ def test_add_niet_storen_is_not_saved_as_a_phrase_when_ai_is_unavailable(monkeyp
     assert cid not in bot_text.store.pending_input
 
 
-def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
-    cid = "dictionary-clarification"
-    sent = []
-
+def _quiet_status(monkeypatch):
     class Status:
         async def stop(self):
             return None
@@ -856,25 +854,75 @@ def test_add_word_is_saved_without_error_when_all_ai_reserves_fail(monkeypatch):
     async def start(*_args, **_kwargs):
         return Status()
 
+    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+
+
+def test_add_word_waits_in_queue_without_placeholder_when_all_ai_is_down(monkeypatch):
+    cid, sent = "dictionary-clarification", []
+
     async def unavailable(*_args, **_kwargs):
         raise dictionary_import.DictionaryAnalysisUnavailable()
 
-    monkeypatch.setattr(dictionary_import.util.StatusManager, "start", start)
+    async def no_variants(*_args, **_kwargs):
+        return None
+
+    _quiet_status(monkeypatch)
     monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
+    monkeypatch.setattr(dictionary_import, "_translation_variants", no_variants)
+    dictionary_import.store.set_profile(cid, {})
     dictionary_import.store.set_list(dictionary_import.config.DICT_KEY, cid, [])
     dictionary_import.store.pending_input.pop(cid, None)
-    dictionary_import.store.dict_pending_add.pop(cid, None)
 
-    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "tering", "nl"))
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "Wazig", "nl"))
 
-    saved = dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)
-    assert saved[0]["term"] == "Tering"
-    assert saved[0]["analysis_pending"] is True
+    assert dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid) == []
     queued = dictionary_import.store.get_profile(cid)["dictionary_pending_analysis"]
-    assert queued[0]["term"] == "tering"
-    assert "Добавлено в нидерландский словарь" in sent[-1]["text"]
-    assert "Сейчас не удалось проверить" not in sent[-1]["text"]
-    assert cid not in dictionary_import.store.pending_input
+    assert queued[0]["term"] == "wazig"
+    assert "Сервисы перевода сейчас недоступны" in sent[-1]["text"]
+    assert "уточняется" not in sent[-1]["text"]
+
+
+def test_failed_card_offers_translation_choices_instead_of_placeholder(monkeypatch):
+    cid, sent, asked = "dictionary-variants", [], []
+
+    async def rejected(*_args, **_kwargs):
+        return None
+
+    async def variants(term, lang):
+        asked.append((term, lang))
+        return ["Расплывчатый", "Туманный", "Нечёткий"]
+
+    _quiet_status(monkeypatch)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", rejected)
+    monkeypatch.setattr(dictionary_import, "_translation_variants", variants)
+    dictionary_import.store.set_list(dictionary_import.config.DICT_KEY, cid, [])
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot(sent), cid, "Wazig", "nl"))
+
+    assert asked == [("wazig", "nl")]
+    buttons = [button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row]
+    assert buttons[:3] == ["Расплывчатый", "Туманный", "Нечёткий"]
+    assert dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid) == []
+    assert dictionary_import.store.dict_pending_add[cid]["choices"][0] == "Расплывчатый"
+
+
+def test_capitalized_dutch_word_is_analyzed_in_lowercase(monkeypatch):
+    seen = []
+
+    async def analyze(term, lang, **_kwargs):
+        seen.append(term)
+        return None
+
+    async def variants(*_args, **_kwargs):
+        return []
+
+    _quiet_status(monkeypatch)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", analyze)
+    monkeypatch.setattr(dictionary_import, "_translation_variants", variants)
+
+    asyncio.run(dictionary_import.add_dict_entry_from_chat(RecordingBot([]), "case-cid", "Wazig", "nl"))
+
+    assert seen == ["wazig"]
 
 
 def test_common_dutch_phrase_is_rejected_by_word_normalizer(monkeypatch):
@@ -978,7 +1026,7 @@ def test_dictionary_analysis_uses_distinct_ai_reserves(monkeypatch):
     assert kwargs["module"] == "learning_dict_add"
     assert kwargs["fallback_allowed"] is True
     assert kwargs["privacy_level"] == "public"
-    assert kwargs["budget_seconds"] == 15
+    assert kwargs["budget_seconds"] == dictionary_import._DICT_ANALYSIS_DEADLINE_SECONDS
     assert not kwargs["result_validator"]({
         "ok": True, "term": "tering", "translation": "ругательство",
         "breakdown": "существительное",
@@ -1067,13 +1115,21 @@ def test_add_tennissen_rejects_plausible_but_wrong_noun_analysis(monkeypatch):
     assert entry["perfect_form"] == "heeft getennist"
 
 
-def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypatch):
-    cid = "dictionary-clarification-save"
-    saved = []
-    sent = []
+def test_chosen_translation_builds_full_card_with_that_meaning(monkeypatch):
+    cid, saved, sent, meanings = "dictionary-clarification-save", [], [], []
 
+    async def analyze(term, lang, *, meaning=None, **_kwargs):
+        meanings.append((term, lang, meaning))
+        return {
+            "lang": "nl", "term": "Tering", "translation": "Ругательство",
+            "breakdown": "существительное · de-слово", "pos": "существительное",
+            "examples": [{"text": "Wat een tering weer.", "translation": "Ну и погода."}],
+        }
+
+    _quiet_status(monkeypatch)
     dictionary_import.store.pending_input[cid] = "dictclarify_nl"
     dictionary_import.store.dict_pending_add[cid] = {"term": "tering", "lang": "nl"}
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", analyze)
     monkeypatch.setattr(
         dictionary_import, "_save_normalized_dict_entry",
         lambda _cid, entry: ("added", saved.append(dict(entry)) or entry),
@@ -1081,12 +1137,8 @@ def test_dictionary_clarification_saves_word_without_another_ai_request(monkeypa
 
     asyncio.run(dictionary_import.add_dict_clarification(RecordingBot(sent), cid, "ругательство"))
 
-    assert saved[0]["lang"] == "nl"
-    assert saved[0]["term"] == "Tering"
-    assert saved[0]["translation"] == "Ругательство"
-    assert saved[0]["breakdown"] == "слово"
-    assert saved[0]["examples"] == []
-    assert saved[0]["raw_user_term"] == "tering"
+    assert meanings == [("tering", "nl", "ругательство")]
+    assert saved[0]["examples"] and saved[0]["breakdown"] != "слово"
     assert sent[-1]["text"].startswith("🇳🇱 Добавлено")
     assert cid not in dictionary_import.store.pending_input
     assert cid not in dictionary_import.store.dict_pending_add

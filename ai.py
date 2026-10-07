@@ -137,6 +137,23 @@ def background_mode():
         _AI_MODE.reset(token)
 
 
+_PROVIDER_TIMEOUT = contextvars.ContextVar("ai_provider_timeout", default=None)
+
+
+@contextlib.contextmanager
+def provider_timeout(seconds):
+    """Долгая интерактивная задача (разбор слова): одна попытка провайдера до ``seconds``.
+
+    Короткие кэпы рассчитаны на мгновенные ответы в чате; крупному JSON их мало,
+    и Gemini не успевал собрать карточку слова. Общий дедлайн цепочки сохраняется.
+    """
+    token = _PROVIDER_TIMEOUT.set(float(seconds))
+    try:
+        yield
+    finally:
+        _PROVIDER_TIMEOUT.reset(token)
+
+
 def background_job(job):
     """Wrap an async scheduler job so every AI call inside runs in background_mode."""
     @functools.wraps(job)
@@ -567,6 +584,8 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
     gemini_request = service == "gemini"
     if _is_background():
         timeout = BACKGROUND_PROVIDER_TIMEOUT_SECONDS
+    elif _PROVIDER_TIMEOUT.get() is not None:
+        timeout = _PROVIDER_TIMEOUT.get()
     else:
         if timeout_cap is None:
             timeout_cap = _timeout_cap(name)

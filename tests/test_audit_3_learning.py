@@ -78,14 +78,14 @@ def test_failed_queued_dictionary_add_does_not_block_the_rest_of_the_queue(monke
     cid = "audit-queued-rotation"
     terms = []
 
-    async def rejected(term, *_args, **_kwargs):
+    async def unavailable(term, *_args, **_kwargs):
         terms.append(term)
-        return None
+        raise dictionary_import.DictionaryAnalysisUnavailable()
 
     dictionary_import.store.set_profile(cid, {})
     dictionary_import._queue_dictionary_analysis(cid, "первое", "nl")
     dictionary_import._queue_dictionary_analysis(cid, "второе", "nl")
-    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", rejected)
+    monkeypatch.setattr(dictionary_import, "_normalize_dict_entry_full", unavailable)
 
     for _ in range(2):
         asyncio.run(dictionary_import.process_queued_dictionary_adds(object(), [cid], limit=1))
