@@ -5,7 +5,6 @@ from types import SimpleNamespace
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
-import pytest
 
 import cleanup
 import config
@@ -13,7 +12,6 @@ import leisure_books
 import leisure_movies
 import movie_engine
 import personal_collections
-import recommendation_stoplist
 import tmdb
 import yearly_tops
 
@@ -74,25 +72,6 @@ def test_legacy_games_collection_callback_opens_games_list(monkeypatch):
     asyncio.run(personal_collections.handle_collection_callback(object(), "42", None, "as_love_games"))
 
     assert calls == [("games_favorites", "lz_lib")]
-
-
-def test_legacy_stoplist_is_kept_when_saving_merged_stoplist_fails(monkeypatch):
-    state = {config.MOVIE_BLACKLIST_KEY: ["Патерсон"]}
-    monkeypatch.setattr(
-        recommendation_stoplist.store, "get_list", lambda key, _cid: list(state.get(key, [])),
-    )
-
-    def set_list(key, _cid, value):
-        if key == config.RECOMMENDATION_STOPLIST_KEY:
-            raise RuntimeError("storage unavailable")
-        state[key] = list(value)
-
-    monkeypatch.setattr(recommendation_stoplist.store, "set_list", set_list)
-
-    with pytest.raises(RuntimeError):
-        recommendation_stoplist.migrate_legacy("42")
-
-    assert state[config.MOVIE_BLACKLIST_KEY] == ["Патерсон"]
 
 
 def test_yearly_top_counter_matches_the_number_of_found_items():

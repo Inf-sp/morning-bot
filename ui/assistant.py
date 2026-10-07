@@ -25,6 +25,11 @@ def _clean_line(line: str) -> str:
     return line.strip()
 
 
+def preview_text(answer: str) -> str:
+    """Живое превью ответа без markdown-разметки модели — как в итоговой карточке."""
+    return "\n".join(line for line in map(_clean_line, (answer or "").splitlines()) if line)
+
+
 def _strip_title_emoji(line: str) -> str:
     return _LEADING_EMOJI_RE.sub("", line or "").strip()
 

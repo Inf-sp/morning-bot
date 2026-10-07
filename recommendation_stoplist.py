@@ -100,7 +100,7 @@ def remove(cid, kind: str, value) -> bool:
 
 
 def values(cid, kind: str) -> list[str]:
-    """Значения нового стоп-листа плюс старые данные до ручной миграции."""
+    """Значения стоп-листа плюс записи отдельных hidden/seen-списков."""
     kind = str(kind or "").strip().lower()
     result = [item["value"] for item in entries(cid) if item["type"] == kind]
     seen = {value.casefold() for value in result}
@@ -115,32 +115,3 @@ def values(cid, kind: str) -> list[str]:
     return result
 
 
-def migrate_legacy(cid, *, clear_legacy: bool = True) -> int:
-    """Собирает старые hidden/seen-списки в одну категорию базы."""
-    current = entries(cid)
-    seen = {_identity(item["type"], item["value"]) for item in current}
-    added = 0
-    legacy_keys = []
-    for key, kind, reason in _LEGACY_SOURCES:
-        legacy = store.get_list(key, cid)
-        if legacy:
-            legacy_keys.append(key)
-        for value in legacy:
-            entry = _normalized_entry(kind, value, reason)
-            if not entry:
-                continue
-            identity = _identity(kind, entry["value"])
-            if identity in seen:
-                continue
-            seen.add(identity)
-            current.append(entry)
-            added += 1
-    normalized = sorted(current, key=lambda item: (item["type"], item["value"].casefold()))
-    if normalized != store.get_list(config.RECOMMENDATION_STOPLIST_KEY, cid):
-        store.set_list(config.RECOMMENDATION_STOPLIST_KEY, cid, normalized)
-    # Старые списки чистим только после сохранения объединённого стоп-листа,
-    # чтобы сбой записи не потерял пользовательские данные.
-    if clear_legacy:
-        for key in legacy_keys:
-            store.set_list(key, cid, [])
-    return added

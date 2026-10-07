@@ -18,7 +18,6 @@ from dictionary_seed_ui import (
     render_text as _seed_render_text,
     level_keyboard as _seed_level_keyboard,
 )
-from ui import menu as menu_ui
 from ui.navigation import back_menu_keyboard, nav_row
 import rich_delivery
 
@@ -100,12 +99,6 @@ def _seed_state_set(cid, st):
 
 def _seed_state_clear(cid):
     SeedStateRepository(cid).clear()
-
-
-async def send_seed_intro(bot, cid, lang=None, q=None):
-    code, _language, _level = _seed_language(cid, lang)
-    msg = menu_ui.learning_menu({"has_material": False, "lang_code": code})
-    await rich_delivery.show(bot, cid, msg, reply_markup=msg.reply_markup, query=q)
 
 
 async def offer_seed_for_level_change(bot, cid, language, level):

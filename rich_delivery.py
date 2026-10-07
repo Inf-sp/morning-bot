@@ -141,11 +141,27 @@ class Draft:
         )
 
 
+class ClassicDraft(Draft):
+    """Обычный черновик sendMessageDraft — живое превью без Rich Messages."""
+
+    async def thinking(self, text=""):
+        return await self.bot.send_message_draft(chat_id=self.cid, draft_id=self.draft_id)
+
+    async def text(self, value):
+        return await self.bot.send_message_draft(
+            chat_id=self.cid, draft_id=self.draft_id, text=str(value or ""),
+        )
+
+
 async def start_draft(bot, cid):
     """Start a non-blocking live preview, or return ``None`` for classic UI."""
-    if not (enabled(bot) and callable(getattr(bot, "send_rich_message_draft", None))):
+    if enabled(bot) and callable(getattr(bot, "send_rich_message_draft", None)):
+        draft_class = Draft
+    elif callable(getattr(bot, "send_message_draft", None)):
+        draft_class = ClassicDraft
+    else:
         return None
-    draft = Draft(bot, cid, secrets.randbelow(2_147_483_646) + 1)
+    draft = draft_class(bot, cid, secrets.randbelow(2_147_483_646) + 1)
     try:
         await draft.thinking()
     except Exception as error:

@@ -266,6 +266,12 @@ def tavily_monthly_quota_exhausted(now: int | None = None) -> bool:
     after the reset is deliberately left to verify the new month.
     """
     current = int(now or time.time())
+    cached = load_state()["services"]["tavily"]
+    if cached.get("quota_state") == MONTHLY_QUOTA_EXHAUSTED:
+        if int(cached.get("quota_reset_at") or 0) > current:
+            return True
+    elif not (cached.get("quota_remaining") == 0 and cached.get("quota_total") is not None):
+        return False  # переходить нечему: проверка не берёт транзакцию в БД
     active = {"value": False}
 
     def mutate(data):

@@ -95,60 +95,6 @@ RAILWAY_REPLICA_ID = os.environ.get("RAILWAY_REPLICA_ID", "").strip()
 
 API_USAGE_KEY = "api_usage.json"
 SERVICE_MONITOR_KEY = "service_monitor.json"
-API_QUOTAS = {
-    "openweather": [
-        {"mode": "fixed", "unit": "requests", "period": "day", "limit": WEATHER_FREE_DAILY_LIMIT},
-    ],
-    "gemini": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-        {"mode": "local", "unit": "tokens", "period": "day"},
-    ],
-    "tavily": [
-        {"mode": "local", "unit": "credits", "period": "month"},
-    ],
-    "telegram": [
-        {"mode": "local", "unit": "messages", "period": "day"},
-    ],
-    "cloudflare": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "groq": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "languagetool": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-        {"mode": "local", "unit": "characters", "period": "day"},
-    ],
-    "themealdb": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "spoonacular": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "gtts": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "tmdb": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "igdb": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "ticketmaster": [
-        {"mode": "headers", "unit": "requests", "period": "day", "enabled": False},
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "pexels": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "serpapi": [
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-    "unsplash": [
-        {"mode": "headers", "unit": "requests", "period": "hour"},
-        {"mode": "local", "unit": "requests", "period": "day"},
-    ],
-}
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -162,13 +108,10 @@ DIARY_KEY = "diary.json"
 # Канонические имена пользовательских коллекций.
 FAVORITE_ARTISTS_KEY = "favorite_artists.json"
 FAVORITE_MOVIES_KEY = "favorite_movies.json"
-SAVED_COUNTRIES_KEY = "saved_countries.json"  # удалённые «Поездки»: только для scripts/purge_travel_data.py и purge_user
-LEGACY_COUNTRIES_KEY = "mycountries.json"
 FAVORITE_BOOKS_KEY = "favorite_books.json"
 FAVORITE_GAMES_KEY = "favorite_games.json"
 BOOK_RECO_CACHE_KEY = "book_reco_cache.json"  # {cid: {date, item}} — текущая карточка книги на день
 MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, tm}} — персональная карточка кино на день
-MONTHLY_REBUSES_CACHE_KEY = "monthly_rebuses_cache.json"  # {category: {month, items[28..31]}}
 MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, items}} — новые региональные релизы на неделю
 BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, items}} — книги текущего месяца на неделю
 GAME_PREMIERES_CACHE_KEY = "game_premieres_cache.json"  # {platform_signature: {expires, items}} — подтверждённые игровые релизы
@@ -178,7 +121,6 @@ YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, ur
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"
 MUSIC_DISLIKE_KEY = "music_dislike.json"
-TRAVEL_DISLIKE_KEY = "travel_dislike.json"
 MOVIE_SEEN_KEY = "movie_seen.json"
 MOVIE_SHOWN_KEY = "movie_shown.json"
 BOOK_SEEN_KEY = "book_seen.json"
@@ -205,8 +147,6 @@ ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальны
 AI_TRAFFIC_LOG_KEY = "ai_traffic_log.json"  # попытки AI без текста запросов и ответов
 AI_RESPONSE_CACHE_KEY = "ai_response_cache.json"  # кэш дорогих AI-ответов по хэшу промпта
 WEATHER_CACHE_KEY = "weather_cache.json"  # устойчивый кэш OpenWeather: {cache_key: {"ts": epoch, "data": {...}}}
-TRAVEL_COUNTRY_CARDS_KEY = "travel_country_cards.json"  # глобальные карточки по ISO-коду
-TRAVEL_IDEA_KEY = "travel_idea.json"  # удалённые «Поездки»: только для scripts/purge_travel_data.py
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Ошибки» {log: [{ts, source, kind, msg}]}
@@ -218,7 +158,6 @@ DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояни�
 LEGACY_STORAGE_KEYS = {
     FAVORITE_ARTISTS_KEY: ("artists.json",),
     FAVORITE_MOVIES_KEY: ("watchlist.json",),
-    SAVED_COUNTRIES_KEY: ("favcountries.json", "mycountries.json"),
     FAVORITE_BOOKS_KEY: ("mybooks.json",),
     THOUGHTS_KEY: ("worries.json",),
 }

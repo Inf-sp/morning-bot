@@ -40,7 +40,7 @@ def test_text_export_is_readable_and_hides_internal_fields(monkeypatch):
             config.DICT_KEY: [{"id": "word-id", "term": "Immers", "translation": "ведь", "srs_level": 4}],
             config.FAVORITE_MOVIES_KEY: [{"id": "movie-id", "title": "Arrival"}],
             config.FAVORITE_BOOKS_KEY: [], config.FAVORITE_ARTISTS_KEY: [],
-            config.FAVORITE_GAMES_KEY: [], config.SAVED_COUNTRIES_KEY: ["Исландия"],
+            config.FAVORITE_GAMES_KEY: [],
             config.THOUGHTS_KEY: [{"text": "Старая заметка", "internal": "hidden"}],
             personal_collections._ARCHIVED_CONTENT_RECORDS_KEY: [],
         }.get(key, [])
@@ -54,7 +54,6 @@ def test_text_export_is_readable_and_hides_internal_fields(monkeypatch):
     assert "• Помидоры — Овощи" in text
     assert "• Immers → ведь" in text
     assert "• Кино: Arrival" in text
-    assert "Исландия" not in text and "Поездки" not in text
     assert "• Старая заметка" in text
     assert "secret-id" not in text
     assert "srs_level" not in text

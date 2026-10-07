@@ -3,7 +3,6 @@
 import hashlib
 from datetime import datetime
 
-from telegram import InlineKeyboardMarkup
 
 import config
 import store
@@ -116,23 +115,6 @@ def _build_morning_word(cid, language):
         practice["flag"], entries=practice["entries"], empty_hint=not practice["entries"],
     )
     return msg, []
-
-
-async def send_morning_word(bot, cid, language=None, with_kb=True):
-    """11:00 — одно ранее не показанное слово с глубоким разбором."""
-    import settings
-    language = language or settings.study_lang(cid)
-    msg, del_row = _build_morning_word(cid, language)
-    if msg is None:
-        return False
-    rows = _chunks(del_row, 3) if with_kb else []
-    await bot.send_message(
-        chat_id=cid,
-        text=msg.text,
-        entities=msg.entities,
-        reply_markup=InlineKeyboardMarkup(rows) if rows else None,
-    )
-    return True
 
 
 async def send_daily_practice(bot, cid, reply_markup=None):

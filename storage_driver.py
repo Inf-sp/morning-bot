@@ -13,7 +13,7 @@ _connection = None
 _memory = {}
 _memory_locks = {}
 _connection_lock = threading.RLock()
-_READ_CACHE_TTL = 5
+_PRELOAD_MAX_BYTES = 1_000_000
 _CONNECT_TIMEOUT = 5
 _read_cache = {}
 
@@ -38,15 +38,17 @@ def _legacy_keys(key):
     return tuple(getattr(config, "LEGACY_STORAGE_KEYS", {}).get(key, ()))
 
 
+# Бот — единственный процесс, который пишет в kv, и каждая запись проходит через
+# save/mutate/delete ниже, обновляя этот кэш. Поэтому значения не устаревают и
+# читаются из PostgreSQL один раз за жизнь процесса. Ручные правки БД в обход
+# бота видны после рестарта сервиса.
 def _cache_get(key):
     cached = _read_cache.get(key)
-    if not cached or time.monotonic() - cached[0] >= _READ_CACHE_TTL:
-        return None
-    return copy.deepcopy(cached[1])
+    return None if cached is None else copy.deepcopy(cached)
 
 
 def _cache_set(key, value):
-    _read_cache[key] = (time.monotonic(), copy.deepcopy(value))
+    _read_cache[key] = copy.deepcopy(value)
 
 
 def db():
@@ -207,6 +209,7 @@ def load(key):
                 row = cursor.fetchone()
                 if row is not None:
                     return row[0], True
+        _cache_set(key, {})
         return {}, False
 
     try:
@@ -222,6 +225,26 @@ def load(key):
         # безопасным, а новая версия дальше работает только с canonical key.
         save(key, value)
     return copy.deepcopy(value)
+
+
+def preload(max_bytes=_PRELOAD_MAX_BYTES):
+    """Одним запросом кладёт в кэш все небольшие ключи, чтобы меню открывались без БД."""
+    if not config.DATABASE_URL:
+        return 0
+
+    def operation(connection):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT key, value FROM kv WHERE pg_column_size(value) <= %s",
+                (max_bytes,),
+            )
+            rows = cursor.fetchall()
+        for key, value in rows:
+            if key not in _read_cache:
+                _cache_set(key, value)
+        return len(rows)
+
+    return _run(operation)
 
 
 def save(key, data):

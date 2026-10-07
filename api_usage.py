@@ -20,7 +20,6 @@ SERVICE_LABELS = {
     key: label for key, label in provider_runtime.LABELS.items()
     if key != "database"
 }
-SERVICE_ICONS = SERVICE_LABELS
 GOOGLE_BOOKS_DAILY_LIMIT = 1000
 TAVILY_MONTHLY_LIMIT = 1000
 TAVILY_SOFT_LIMIT = 900
@@ -170,17 +169,6 @@ def _bucket(period: str, dt=None) -> str:
     if period == "month":
         return dt.strftime("%Y-%m")
     return dt.strftime("%Y-%m-%d")
-
-
-def _period_start(period: str, dt=None):
-    dt = dt or _now()
-    if period == "minute":
-        return dt.replace(second=0, microsecond=0)
-    if period == "hour":
-        return dt.replace(minute=0, second=0, microsecond=0)
-    if period == "month":
-        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _template():
@@ -424,117 +412,6 @@ def record_cache_hit(service: str) -> None:
         store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         _log.debug("record_cache_hit: ignored error", exc_info=True)
-
-
-def _recent_rate_limit(svc: dict) -> bool:
-    ts = int(svc.get("last_rate_limit_at") or 0)
-    return bool(ts and ts >= int(time.time()) - 86400)
-
-
-def _recent_temp_error(svc: dict) -> bool:
-    ts = int(svc.get("last_error_at") or 0)
-    if not ts or ts < int(time.time()) - 86400:
-        return False
-    reason = str(svc.get("last_error_reason") or "").lower()
-    return any(x in reason for x in ("timeout", "network", "temporary", "503", "502", "504"))
-
-
-def _quota_rows(service: str, svc: dict, dt=None):
-    rows = []
-    for quota in config.API_QUOTAS.get(service, []):
-        if quota.get("enabled") is False:
-            continue
-        unit = quota.get("unit") or "requests"
-        period = quota.get("period") or "day"
-        used = _count(svc, period, unit, dt)
-        rows.append({
-            "mode": quota.get("mode") or "local",
-            "unit": unit,
-            "period": period,
-            "limit": quota.get("limit"),
-            "used": used,
-            "warn": float(quota.get("warn_threshold", 0.8)),
-            "critical": float(quota.get("critical_threshold", 0.95)),
-        })
-    return rows
-
-
-def _status(svc: dict, quotas: list[dict]):
-    if int(svc.get("cooldown_until") or 0) > int(time.time()):
-        return "warn", "cooldown активен"
-    if svc.get("last_ok") is False:
-        return "bad", "Последний запрос завершился ошибкой"
-    for q in quotas:
-        limit = q.get("limit")
-        if limit and q["used"] >= int(limit) * q.get("critical", 0.95):
-            return "bad", "Почти исчерпан лимит"
-    if _recent_rate_limit(svc):
-        return "warn", "Было превышение лимита"
-    if _recent_temp_error(svc):
-        return "warn", "Была временная ошибка"
-    for q in quotas:
-        limit = q.get("limit")
-        if limit and q["used"] >= int(limit) * q.get("warn", 0.8):
-            return "warn", "Использование растёт"
-    if not svc.get("last_request_at"):
-        return "off", "Запросов сегодня не было"
-    if int(time.time()) - int(svc.get("last_request_at") or 0) > 86400:
-        return "stale", "Давно не было проверки"
-    return "ok", "В норме"
-
-
-def _is_used_today_or_configured_with_recent(svc: dict, dt=None) -> bool:
-    if _count(svc, "day", "requests", dt) > 0:
-        return True
-    if _count(svc, "day", "messages", dt) > 0:
-        return True
-    if _count(svc, "day", "tokens", dt) > 0:
-        return True
-    last = int(svc.get("last_request_at") or 0)
-    return bool(last and last >= int(_period_start("day", dt).timestamp()))
-
-
-def snapshot():
-    data = store._load(config.API_USAGE_KEY)
-    services = data.get("services", {}) if isinstance(data, dict) else {}
-    out = []
-    for service in SERVICE_LABELS:
-        svc = services.get(service) or {}
-        if not provider_runtime.is_configured(service):
-            continue
-        if not _is_used_today_or_configured_with_recent(svc) and not svc.get("last_request_at"):
-            continue
-        quotas = _quota_rows(service, svc)
-        status, status_text = _status(svc, quotas)
-        out.append({
-            "service": service,
-            "label": SERVICE_LABELS[service],
-            "icon": SERVICE_ICONS[service],
-            "status": status,
-            "status_text": status_text,
-            "last_ok": svc.get("last_ok"),
-            "quotas": quotas,
-            "day_requests": _count(svc, "day", "requests"),
-            "day_messages": _count(svc, "day", "messages"),
-            "day_failures": _count(svc, "day", "failures"),
-            "day_tokens": _count(svc, "day", "tokens"),
-            "month_credits": _count(svc, "month", "credits"),
-            "cache_hits": _count(svc, "day", "cache_hits"),
-            "last_request_at": svc.get("last_request_at"),
-            "last_success_at": svc.get("last_success_at"),
-            "last_error_at": svc.get("last_error_at"),
-            "last_error_reason": svc.get("last_error_reason") or "",
-            "rate_limit_errors": int(svc.get("rate_limit_errors") or 0),
-            "last_429_at": svc.get("last_429_at") or svc.get("last_rate_limit_at"),
-            "cooldown_until": svc.get("cooldown_until"),
-            "cooldown_scope": svc.get("cooldown_scope") or "",
-            "last_fallback_at": svc.get("last_fallback_at"),
-            "fallback_count": int(svc.get("fallback_count") or 0),
-            "events": list(svc.get("events") or [])[-10:],
-            "avg_latency_ms": int(svc.get("avg_latency_ms") or 0),
-            "errors": list(svc.get("errors") or [])[-10:],
-        })
-    return {"updated_at": int(time.time()), "services": out}
 
 
 def seconds_until_gemini_slot(limit: int = 4, window: int = 60) -> float:

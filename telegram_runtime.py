@@ -5,7 +5,7 @@ import logging
 from urllib.parse import urlparse
 
 from telegram import InlineKeyboardMarkup, Message
-from telegram.error import TimedOut
+from telegram.error import BadRequest, TimedOut
 from telegram.request import HTTPXRequest
 from telegram.ext import ExtBot
 
@@ -84,8 +84,54 @@ class RetryingHTTPXRequest(HTTPXRequest):
             return await super().do_request(*args, **kwargs)
 
 
+# Цвет кнопки по контракту из AGENTS.md (Bot API 9.4): действие с данными — по эмодзи.
+_BUTTON_STYLES = (("✅", "success"), ("❌", "danger"), ("✨", "primary"))
+_buttons_enhanced = True  # выключается до рестарта, если Telegram отклонит новые поля
+
+
+def _enhance_markup(markup):
+    """Inline-клавиатура с цветами и неактивными служебными кнопками, либо None.
+
+    ``noop``-кнопки (счётчик страниц, индикатор ожидания) становятся disabled
+    (Bot API 10.3): нажатие ничего не отправляет боту.
+    """
+    if not isinstance(markup, InlineKeyboardMarkup):
+        return None
+    data = markup.to_dict()
+    changed = False
+    for row in data.get("inline_keyboard", []):
+        for button in row:
+            if button.get("callback_data") == "noop":
+                button.pop("callback_data")
+                button["disabled"] = {}
+                changed = True
+                continue
+            text = str(button.get("text") or "")
+            style = next((value for prefix, value in _BUTTON_STYLES if text.startswith(prefix)), None)
+            if style and "style" not in button:
+                button["style"] = style
+                changed = True
+    return data if changed else None
+
+
 class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
+
+    async def _post(self, endpoint, data=None, *, api_kwargs=None, **kwargs):
+        global _buttons_enhanced
+        data = {**(data or {}), **(api_kwargs or {})}
+        enhanced = _enhance_markup(data.get("reply_markup")) if _buttons_enhanced else None
+        if enhanced is None:
+            return await super()._post(endpoint, data, **kwargs)
+        try:
+            return await super()._post(endpoint, {**data, "reply_markup": enhanced}, **kwargs)
+        except BadRequest as error:
+            if "not modified" in str(error).casefold():
+                raise
+            result = await super()._post(endpoint, data, **kwargs)
+            _buttons_enhanced = False
+            _log.warning("Telegram rejected button styles; plain keyboards until restart: %s", error)
+            return result
 
     @staticmethod
     def _without_link_preview(kwargs):
@@ -248,6 +294,18 @@ class MenuCleanupBot(ExtBot):
         ))
         edit.add_done_callback(self._mark_send_done)
         return await edit
+
+    async def send_message_draft(self, chat_id, draft_id, text=""):
+        """Живой черновик ответа (Bot API 9.3+): исчезает сам, итог отправляет send_message.
+
+        Пустой текст показывает системную заглушку «Thinking…».
+        """
+        draft = asyncio.create_task(self.do_api_request(
+            "sendMessageDraft",
+            api_kwargs={"chat_id": chat_id, "draft_id": int(draft_id), "text": str(text or "")[:4000]},
+        ))
+        draft.add_done_callback(self._mark_send_done)
+        return await draft
 
     async def send_rich_message_draft(self, chat_id, draft_id, rich_message, **kwargs):
         """Send the short-lived Rich draft used by the free-chat stream."""

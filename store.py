@@ -108,6 +108,9 @@ def mutate_profile(chat_id, mutator):
 
 def clear_persisted_transient_message_id(chat_id, expected_message_id=None):
     key = str(chat_id)
+    current = _load(config.TRANSIENT_MESSAGES_KEY).get(key)
+    if current is None or (expected_message_id is not None and str(current) != str(expected_message_id)):
+        return  # нечего чистить: не берём транзакцию в БД на каждом нажатии
 
     def change(data):
         current = data.get(key)
@@ -474,11 +477,10 @@ _PER_USER_KEYS = {
     config.TRANSIENT_MESSAGES_KEY,
     config.SETTINGS_FILE, config.PROFILE_KEY, config.LEVELS_FILE,
     config.FAVORITE_ARTISTS_KEY, config.FAVORITE_MOVIES_KEY,
-    config.LEGACY_COUNTRIES_KEY, config.FAVORITE_BOOKS_KEY, config.FAVORITE_GAMES_KEY,
+    config.FAVORITE_BOOKS_KEY, config.FAVORITE_GAMES_KEY,
     config.BOOK_RECO_CACHE_KEY,
     config.MOVIE_RECO_CACHE_KEY,
-    config.SAVED_COUNTRIES_KEY, config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY,
-    config.MUSIC_DISLIKE_KEY, config.TRAVEL_DISLIKE_KEY,
+    config.MOVIE_BLACKLIST_KEY, config.BOOK_BLACKLIST_KEY, config.MUSIC_DISLIKE_KEY,
     config.THOUGHTS_KEY,
     config.MOVIE_SEEN_KEY, config.BOOK_SEEN_KEY, config.MUSIC_SEEN_KEY,
     config.RECOMMENDATION_STOPLIST_KEY,

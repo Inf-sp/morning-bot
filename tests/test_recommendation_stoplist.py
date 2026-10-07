@@ -60,23 +60,6 @@ def test_saved_cards_store_the_recommendation_name_not_the_whole_card(monkeypatc
     ]
 
 
-def test_refresh_migrates_hidden_and_seen_lists_and_clears_old_categories(monkeypatch):
-    state = _memory_store(monkeypatch, {
-        config.MOVIE_BLACKLIST_KEY: ["Пылающий"],
-        config.MOVIE_SEEN_KEY: ["Патерсон"],
-        config.MUSIC_DISLIKE_KEY: ["Artist"],
-    })
-
-    changed = recommendation_stoplist.migrate_legacy("stoplist")
-
-    assert changed == 3
-    assert state[config.MOVIE_BLACKLIST_KEY] == []
-    assert state[config.MOVIE_SEEN_KEY] == []
-    assert state[config.MUSIC_DISLIKE_KEY] == []
-    assert {item["category"] for item in state[config.RECOMMENDATION_STOPLIST_KEY]} == {
-        "Не рекомендовать"
-    }
-
 def test_removed_favorite_and_seen_item_use_same_stoplist(monkeypatch):
     state = _memory_store(monkeypatch)
     monkeypatch.setattr(cleanup, "_selected_values", lambda *_args: ["Патерсон"])

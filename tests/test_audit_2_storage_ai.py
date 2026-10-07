@@ -31,7 +31,10 @@ class FakeCursor:
             self.conn.saved = params
 
     def fetchone(self):
-        return ({"42": {"name": "Света"}},)
+        return self.conn.row
+
+    def fetchall(self):
+        return [("settings.json", {"42": {"city": "Алкмар"}}), ("profile.json", {"42": {}})]
 
 
 class FakeConnection:
@@ -41,6 +44,7 @@ class FakeConnection:
         self.autocommit = True
         self.calls = []
         self.saved = None
+        self.row = ({"42": {"name": "Света"}},)
 
     def cursor(self):
         return FakeCursor(self)
@@ -75,6 +79,34 @@ def test_load_reconnects_once_after_dropped_connection(postgres):
 
     assert storage_driver.load(config.PROFILE_KEY) == {"42": {"name": "Света"}}
     assert dead.closed and fresh.calls
+
+
+def test_loaded_value_is_served_from_memory_without_new_queries(postgres):
+    conn = FakeConnection()
+    postgres(conn, conn)
+
+    assert storage_driver.load(config.PROFILE_KEY) == {"42": {"name": "Света"}}
+    assert storage_driver.load(config.PROFILE_KEY) == {"42": {"name": "Света"}}
+    assert len(conn.calls) == 1
+
+
+def test_missing_key_is_cached_as_empty(postgres):
+    conn = FakeConnection()
+    conn.row = None
+    postgres(conn, conn)
+
+    assert storage_driver.load("absent.json") == {}
+    assert storage_driver.load("absent.json") == {}
+    assert len(conn.calls) == 1
+
+
+def test_preload_fills_cache_in_one_query(postgres):
+    conn = FakeConnection()
+    postgres(conn)
+
+    assert storage_driver.preload() == 2
+    assert storage_driver.load("settings.json") == {"42": {"city": "Алкмар"}}
+    assert len(conn.calls) == 1
 
 
 def test_mutate_retries_when_connection_dropped_before_mutator(postgres):

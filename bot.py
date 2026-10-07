@@ -13,6 +13,7 @@ import config
 import ai
 import category_news
 import store
+import storage_driver
 import callback_topics
 import access
 import menu
@@ -151,8 +152,6 @@ async def answer_callback(update, context):
     marker = getattr(bot, "mark_transient_message", None)
     if marker and menu.is_main_menu_markup(getattr(q.message, "reply_markup", None)):
         marker(cid, q.message.message_id)
-    if access.is_allowed(cid):
-        tracking.touch(cid)
     answer_task = asyncio.create_task(q.answer())
     answer_task.add_done_callback(
         lambda task: tracking.mark_first_feedback(trace)
@@ -160,7 +159,6 @@ async def answer_callback(update, context):
     )
     # Даём answerCallbackQuery начать отправку до синхронного чтения БД в обработчике.
     await asyncio.sleep(0)
-    cached = home_section and await asyncio.to_thread(home_cache.is_ready, home_section, cid)
     try:
         await bot_callbacks.handle(update, context, _remove_reply_kb_once)
     except Exception as e:
@@ -173,10 +171,22 @@ async def answer_callback(update, context):
             await answer_task
         except Exception:
             _log.debug("answer_callback: ignored error", exc_info=True)
+        seconds = time.monotonic() - opened_at
+        # Учёт активности и задержек пишет в БД — уже после ответа и вне event loop.
+        await asyncio.to_thread(_record_callback, cid, trace, ok, home_section, seconds)
+
+
+def _record_callback(cid, trace, ok, home_section, seconds):
+    try:
+        if access.is_allowed(cid):
+            tracking.touch(cid)
         tracking.finish_action(trace, ok=ok)
         if home_section:
+            cached = home_cache.is_ready(home_section, cid)
             _log.info("home_open section=%s seconds=%.2f cached=%s", home_section,
-                      time.monotonic() - opened_at, "yes" if cached else "no")
+                      seconds, "yes" if cached else "no")
+    except Exception:
+        _log.exception("answer_callback: recording failed cid=%s", cid)
 
 
 # ---------- Текстовый роутер ----------
@@ -466,7 +476,12 @@ from bot_maintenance import (  # noqa: E402 — after definitions bot_maintenanc
 
 
 async def post_init(app):
-    initialized = tracking.initialize_inactivity_tracking(access.get_allowed_cids())
+    try:
+        loaded = await asyncio.to_thread(storage_driver.preload)
+        logging.info("Storage preload: %s keys cached", loaded)
+    except Exception:
+        logging.exception("Storage preload failed; keys will load on first use")
+    initialized =tracking.initialize_inactivity_tracking(access.get_allowed_cids())
     if initialized:
         logging.info("Inactivity reminders: initialized %s users", initialized)
     try:

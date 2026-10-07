@@ -14,7 +14,6 @@ import config
 import provider_runtime
 import storage_driver
 
-ServiceSpec = provider_runtime.ProviderSpec
 SPECS = provider_runtime.SPECS
 SPEC_BY_KEY = provider_runtime.SPEC_BY_KEY
 UNKNOWN = provider_runtime.UNKNOWN

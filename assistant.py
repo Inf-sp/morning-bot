@@ -465,7 +465,7 @@ async def chat_reply(bot, cid, text):
             and now - last_draft_at < 0.45
         ):
             return
-        await draft.text(streamed_text)
+        await draft.text(assistant_ui.preview_text(streamed_text))
         last_draft_at = now
         last_draft_length = len(streamed_text)
 

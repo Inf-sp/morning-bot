@@ -5,7 +5,6 @@ from types import SimpleNamespace
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
-import dictionary_seed
 import dictionary_seed_ui
 import bot_callbacks
 import bot_text
@@ -370,19 +369,6 @@ def test_legacy_japanese_cuisine_preference_migrates_to_asian(monkeypatch):
     monkeypatch.setattr(settings, "get", lambda *_args: ["japanese", "italian"])
 
     assert settings.cuisines("42") == ["asian", "italian"]
-
-
-def test_seed_intro_uses_the_same_learning_empty_state_copy(monkeypatch):
-    sent = []
-
-    monkeypatch.setattr(dictionary_seed, "_seed_language", lambda *_args: ("nl", "нидерландский", "simple"))
-
-    asyncio.run(dictionary_seed.send_seed_intro(RecordingBot(sent), "42"))
-
-    assert sent[0]["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
-    assert _labels(sent[0]["reply_markup"]) == [
-        ["✅ Добавить слова"], ["✨ Подобрать новые слова"],
-    ]
 
 
 def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
