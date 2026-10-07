@@ -89,7 +89,11 @@ class RetryingHTTPXRequest(HTTPXRequest):
 # Отметки выбора («✅ Комедия», «❌ Не добавлять») не трогаем — только глаголы.
 _ADD_RE = re.compile(r"^✅\s*((?:Добавить|Создать)\b.*)$", re.S)
 _DELETE_RE = re.compile(r"^❌\s*((?:Удалить|Очистить|Убрать)\b.*)$", re.S)
-_REFRESH_RE = re.compile(r"^✨\s*(Обновить)$")
+# «Обновить / подобрать новую рекомендацию» — синяя, без эмодзи и в самом верху.
+_REFRESH_RE = re.compile(
+    r"^(?:✨|🔄)\s*((?:Обновить|Подобрать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b.*)$",
+    re.S,
+)
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
 # эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта,
 # но эмодзи у «Добавить/Удалить» не возвращаются никогда.
@@ -110,6 +114,7 @@ def _enhance_markup(markup, level=2):
     rows = markup.to_dict().get("inline_keyboard", [])
     changed = False
     add_rows = set()
+    refresh_rows = set()
     for index, row in enumerate(rows):
         for button in row:
             if level >= 2 and button.get("callback_data") == "noop":
@@ -129,9 +134,14 @@ def _enhance_markup(markup, level=2):
                     changed = True
                     if style == "success":
                         add_rows.add(index)
+                    elif style == "primary":
+                        refresh_rows.add(index)
     if not changed:
         return None
-    order = sorted(range(len(rows)), key=lambda index: index not in add_rows)
+    # Сверху «Обновить/Другой…», затем «Добавить», дальше исходный порядок.
+    order = sorted(range(len(rows)), key=lambda index: (
+        index not in refresh_rows, index not in add_rows,
+    ))
     return {"inline_keyboard": [rows[index] for index in order]}
 
 

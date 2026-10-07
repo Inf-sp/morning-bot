@@ -43,12 +43,12 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [[button["text"] for button in row] for row in rows]
     assert texts == [
-        ["Добавить слово"], ["✨ Другой фильм"], ["✅ Комедия", "❌ Не добавлять"],
+        ["Другой фильм"], ["Добавить слово"], ["✅ Комедия", "❌ Не добавлять"],
         ["Удалить", "2/5"], ["⬅️ Назад"],
     ]
     styles = {button["text"]: button.get("style") for row in rows for button in row}
     assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
-    assert styles["✨ Другой фильм"] is None and styles["✅ Комедия"] is None
+    assert styles["Другой фильм"] == "primary" and styles["✅ Комедия"] is None
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
 
@@ -94,14 +94,21 @@ def test_not_modified_error_is_not_retried(sent):
     assert len(sent) == 1 and telegram_runtime._buttons_enhanced is True
 
 
-def test_refresh_button_is_blue_without_emoji(sent):
+def test_refresh_buttons_are_blue_without_emoji_and_on_top(sent):
     bot = telegram_runtime.MenuCleanupBot("1:x")
     markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("💳 Что докупить", callback_data="w_buy")],
+        [InlineKeyboardButton("✨ Разное", callback_data="cat")],
         [InlineKeyboardButton("✨ Обновить", callback_data="w_look")],
-        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
+        [InlineKeyboardButton("✨ Подобрать новые слова", callback_data="seed")],
+        [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm")],
     ])
     asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
 
     rows = sent[0]["reply_markup"]["inline_keyboard"]
-    assert rows[0][0]["text"] == "Обновить" and rows[0][0]["style"] == "primary"
-    assert rows[1][0]["text"] == "✨ Другой фильм" and "style" not in rows[1][0]
+    texts = [row[0]["text"] for row in rows]
+    assert texts == [
+        "Обновить", "Подобрать новые слова", "Обновить карточки", "💳 Что докупить", "✨ Разное",
+    ]
+    assert all(row[0].get("style") == "primary" for row in rows[:3])
+    assert "style" not in rows[4][0]
