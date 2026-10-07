@@ -243,9 +243,6 @@ def dict_entry_view_kb(entry, page, term_key):
         delete_label("Удалить"), callback_data=f"a_dictviewdelid_{page}_{word_id}")]]
         if word_id else [])
     return InlineKeyboardMarkup([
-        *([[InlineKeyboardButton(
-            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
-        )]] if word_id else []),
         *delete_row,
         *dictionary._dict_tts_row(entry),
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],

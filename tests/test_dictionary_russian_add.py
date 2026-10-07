@@ -1156,16 +1156,15 @@ def test_saved_word_actions_include_delete_and_dictionary():
         {"id": "abc123", "lang": "nl"}, "zekerheid",
     )
 
-    assert keyboard.inline_keyboard[0][0].text == "✨ Обновить"
-    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictdelid_abc123"
-    assert keyboard.inline_keyboard[2][0].text == "🔊 Прослушать"
-    assert keyboard.inline_keyboard[2][0].callback_data == "tts_word:abc123"
-    assert len(keyboard.inline_keyboard[2][0].callback_data.encode("utf-8")) <= 64
-    assert keyboard.inline_keyboard[3][0].text == "🎚️ Мой словарь"
-    assert keyboard.inline_keyboard[3][0].callback_data == "a_dictlang_nl_keep"
+    assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdelid_abc123"
+    assert keyboard.inline_keyboard[1][0].text == "🔊 Прослушать"
+    assert keyboard.inline_keyboard[1][0].callback_data == "tts_word:abc123"
+    assert len(keyboard.inline_keyboard[1][0].callback_data.encode("utf-8")) <= 64
+    assert keyboard.inline_keyboard[2][0].text == "🎚️ Мой словарь"
+    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_nl_keep"
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "✨ Обновить", "❌ Удалить", "🔊 Прослушать",
+        "❌ Удалить", "🔊 Прослушать",
         "🎚️ Мой словарь", "⬅️ Назад", "#️⃣ Главная",
     ]
 
@@ -1175,12 +1174,11 @@ def test_duplicate_word_actions_include_dictionary():
         {"id": "def456", "lang": "en"}, "confidence",
     )
 
-    assert keyboard.inline_keyboard[0][0].callback_data == "a_dictcheck_def456"
-    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictdelid_def456"
-    assert keyboard.inline_keyboard[2][0].text == "🎚️ Мой словарь"
-    assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_en_keep"
+    assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdelid_def456"
+    assert keyboard.inline_keyboard[1][0].text == "🎚️ Мой словарь"
+    assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "✨ Обновить", "❌ Удалить", "🎚️ Мой словарь",
+        "❌ Удалить", "🎚️ Мой словарь",
         "⬅️ Назад", "#️⃣ Главная",
     ]
 
@@ -1193,7 +1191,7 @@ def test_existing_dutch_word_cards_keep_listen_below_delete():
         learning_dictionary._dict_entry_view_kb(entry, 0, "zekerheid"),
     ):
         labels = [button.text for row in keyboard.inline_keyboard for button in row]
-        assert labels.index("✨ Обновить") < labels.index("❌ Удалить")
+        assert "✨ Обновить" not in labels
         assert labels.index("❌ Удалить") < labels.index("🔊 Прослушать")
 
 

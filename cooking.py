@@ -68,10 +68,8 @@ def _recipe_kb(cid=None, recipe=None):
 def _fridge_recipe_kb():
     """Клавиатура после рецепта из холодильника через путь чата (send_leftovers/
     assistant.py) — не через кнопки категории «Готовка» (там используется _recipe_kb
-    через enter_meal/show_next_recipe). «Заменить» переиспользует as_fridge_cook,
-    который теперь тоже заводит активную категорию fridge и общую очередь."""
+    через enter_meal/show_next_recipe)."""
     return _kb([
-        [("✨ Обновить", "as_fridge_cook")],
         [("⬅️ Назад", "m_food"), ("#️⃣ Главная", "m_menu")],
     ])
 

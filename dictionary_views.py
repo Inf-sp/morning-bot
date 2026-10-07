@@ -126,9 +126,6 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     word_id = str(entry.get("id") or "")
     if word_id:
         rows.append([InlineKeyboardButton(
-            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
-        )])
-        rows.append([InlineKeyboardButton(
             delete_label("Удалить"),
             callback_data=f"a_dictcatdel_{lang}_{category_index}_{page}_{word_id}",
         )])
@@ -529,9 +526,6 @@ def _dict_search_kb(entry, term_key):
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
     return InlineKeyboardMarkup([
-        *([[InlineKeyboardButton(
-            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
-        )]] if word_id else []),
         *delete_row,
         *_dict_tts_row(entry),
         [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],

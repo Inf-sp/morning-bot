@@ -1235,9 +1235,6 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
     delete_row = ([[InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelid_{word_id}")]]
                   if word_id else [])
     return InlineKeyboardMarkup([
-        *([[InlineKeyboardButton(
-            "✨ Обновить", callback_data=f"a_dictcheck_{word_id}",
-        )]] if word_id else []),
         *delete_row,
         *_dict_tts_row(entry),
         *([[InlineKeyboardButton(
