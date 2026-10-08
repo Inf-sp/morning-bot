@@ -11,7 +11,6 @@ from telegram.request import HTTPXRequest
 from telegram.ext import ExtBot
 
 import store
-import tracking
 import util
 
 _log = logging.getLogger(__name__)
@@ -245,14 +244,6 @@ class MenuCleanupBot(ExtBot):
     async def _pre_send(self, chat_id):
         await self._delete_transient(chat_id)
 
-    @staticmethod
-    def _mark_send_done(task):
-        try:
-            task.result()
-        except Exception:
-            return
-        tracking.mark_first_feedback()
-
     def _post_send(self, chat_id, msg, transient=False, persistent_inline=False):
         if (not persistent_inline
                 and isinstance(getattr(msg, "reply_markup", None), InlineKeyboardMarkup)):
@@ -266,7 +257,6 @@ class MenuCleanupBot(ExtBot):
         persistent_inline = kwargs.pop("persistent_inline", False)
         kwargs = self._without_link_preview(kwargs)
         send = asyncio.create_task(super().send_message(chat_id, *args, **kwargs))
-        send.add_done_callback(self._mark_send_done)
         if preserve_previous_inline:
             msg = await send
         else:
@@ -337,7 +327,6 @@ class MenuCleanupBot(ExtBot):
         send = asyncio.create_task(self.do_api_request(
             "sendRichMessage", api_kwargs=api_kwargs, return_type=Message,
         ))
-        send.add_done_callback(self._mark_send_done)
         if preserve_previous_inline:
             msg = await send
         else:
@@ -370,7 +359,6 @@ class MenuCleanupBot(ExtBot):
         edit = asyncio.create_task(self.do_api_request(
             "editMessageText", api_kwargs=api_kwargs, return_type=Message,
         ))
-        edit.add_done_callback(self._mark_send_done)
         return await edit
 
     async def send_message_draft(self, chat_id, draft_id, text=""):
@@ -382,7 +370,6 @@ class MenuCleanupBot(ExtBot):
             "sendMessageDraft",
             api_kwargs={"chat_id": chat_id, "draft_id": int(draft_id), "text": str(text or "")[:4000]},
         ))
-        draft.add_done_callback(self._mark_send_done)
         return await draft
 
     async def send_rich_message_draft(self, chat_id, draft_id, rich_message, **kwargs):
@@ -399,26 +386,22 @@ class MenuCleanupBot(ExtBot):
         draft = asyncio.create_task(self.do_api_request(
             "sendRichMessageDraft", api_kwargs=api_kwargs,
         ))
-        draft.add_done_callback(self._mark_send_done)
         return await draft
 
     async def send_photo(self, chat_id, *args, **kwargs):
         send = asyncio.create_task(super().send_photo(chat_id, *args, **kwargs))
-        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_document(self, chat_id, *args, **kwargs):
         send = asyncio.create_task(super().send_document(chat_id, *args, **kwargs))
-        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg
 
     async def send_poll(self, chat_id, *args, **kwargs):
         send = asyncio.create_task(super().send_poll(chat_id, *args, **kwargs))
-        send.add_done_callback(self._mark_send_done)
         msg, _ = await asyncio.gather(send, self._pre_send(chat_id))
         self._post_send(chat_id, msg)
         return msg

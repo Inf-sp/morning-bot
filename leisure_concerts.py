@@ -15,10 +15,12 @@ import leisure_books
 import leisure_games
 import leisure_movies
 import provider_runtime
+import rich_delivery
 import settings
 import store
 import util
 from ui import leisure as leisure_ui
+from ui.builder import MessageSpec
 from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
@@ -1007,7 +1009,13 @@ async def find_artist_concerts(bot, cid, artist):
     await find_concerts(bot, cid, "home", artists_override=[artist])
 
 
-async def find_concerts(bot, cid, mode="home", artists_override=None):
+async def find_concerts(bot, cid, mode="home", artists_override=None, q=None):
+    """Афиша концертов; из кнопки (q) экран меняется на месте, как «Назад» в разделах."""
+    async def show(text, entities=None):
+        await rich_delivery.show(
+            bot, cid, MessageSpec(text, entities), reply_markup=kb, query=q,
+        )
+
     s = store.get_settings(cid)
     home_cc = (s.get("cc") or "NL").upper()
     home_flag = util.flag_from_cc(home_cc)
@@ -1026,27 +1034,21 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     kb = InlineKeyboardMarkup(rows)
 
     if not artists and not artists_override:
-        await bot.send_message(
-            chat_id=cid,
-            text=(f"🎫 Концерты · {cname}\n\nЛюбимых артистов пока нет.\n\n"
-                  "Добавь исполнителя, чтобы я проверял его будущие выступления."),
-            reply_markup=kb,
-        )
+        await show(f"🎫 Концерты · {cname}\n\nЛюбимых артистов пока нет.\n\n"
+                   "Добавь исполнителя, чтобы я проверял его будущие выступления.")
         return
 
     if not config.TICKETMASTER_API_KEY:
-        await bot.send_message(
-            chat_id=cid,
-            text=(f"🎫 Концерты · {cname}\n\nПока не удалось проверить ближайшие концерты. "
-                  "Попробуй поискать артиста или выбери другую страну."),
-            reply_markup=kb,
-        )
+        await show(f"🎫 Концерты · {cname}\n\nПока не удалось проверить ближайшие концерты. "
+                   "Попробуй поискать артиста или выбери другую страну.")
         return
 
     from util import _MONTHS
 
     events = _concerts_cache_get(cid, cc)
     if events is None:
+        if q is not None:
+            await show(f"🎫 Концерты · {cname}\n\n⏳ Проверяю афишу…")
         events = await _fetch_concerts(
             artists, cc, cname, explicit_artist_search=bool(artists_override), cid=cid,
             force_artists=artists_override or (),
@@ -1099,10 +1101,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None):
     msg = leisure_ui.concerts_list(place_label, rows_data, empty_hint=empty_hint)
     store.last_source[str(cid)] = "Музыка · Концерты"
     store.last_answer[str(cid)] = msg.text
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
-        disable_web_page_preview=True,
-    )
+    await show(msg.text, msg.entities)
 
 
 def concert_items_between(events, start, end, limit):
@@ -1198,7 +1197,7 @@ async def send_weekend_events(bot, cid):
     )
 
 
-async def concert_pick_country(bot, cid):
+async def concert_pick_country(bot, cid, q=None):
     countries = [
         (key, name, _concert_country_label(code, name))
         for key, (code, _flag, name) in _CONCERT_CC_MAP.items()
@@ -1209,5 +1208,7 @@ async def concert_pick_country(bot, cid):
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append(nav_row("a_concerts_find"))
-    await bot.send_message(chat_id=cid, text="🌍 Выбери страну для поиска концертов:",
-                           reply_markup=InlineKeyboardMarkup(rows))
+    await rich_delivery.show(
+        bot, cid, "🌍 Выбери страну для поиска концертов:",
+        reply_markup=InlineKeyboardMarkup(rows), query=q,
+    )

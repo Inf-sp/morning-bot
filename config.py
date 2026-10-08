@@ -146,15 +146,12 @@ CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "e
 CONCERT_ARTIST_CHECKS_KEY = "concert_artist_checks.json"  # {cid: {country: {artist: last check + future events}}}
 POPULAR_MUSIC_EVENTS_CACHE_KEY = "popular_music_events_cache.json"  # {country + week: подтверждённые крупные события}
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
-AI_TRAFFIC_LOG_KEY = "ai_traffic_log.json"  # попытки AI без текста запросов и ответов
 AI_RESPONSE_CACHE_KEY = "ai_response_cache.json"  # кэш дорогих AI-ответов по хэшу промпта
 WEATHER_CACHE_KEY = "weather_cache.json"  # устойчивый кэш OpenWeather: {cache_key: {"ts": epoch, "data": {...}}}
 ALLOWED_CIDS_KEY = "allowed_cids.json"    # список разрешённых chat_id (мульти-юзер)
 PENDING_INVITES_KEY = "pending_invites.json"  # одноразовые инвайт-коды {code: ts}
 ERROR_LOG_KEY = "error_log.json"   # rolling-лог ошибок для админ-экрана «Ошибки» {log: [{ts, source, kind, msg}]}
-ACTION_LATENCY_KEY = "action_latency.json"  # задержка действий без текста запросов и ответов
 ACTIVITY_KEY = "activity.json"     # last_seen + счётчики и состояние напоминания после неактивности
-ADMIN_STATE_KEY = "admin_state.json"  # per-admin cursors and compact dashboard state
 DEPLOY_REPORT_KEY = "deploy_report.json"  # служебное состояние деплой-уведомлений
 
 LEGACY_STORAGE_KEYS = {

@@ -17,7 +17,6 @@ def chain(monkeypatch):
     provider_runtime._ai_breaker.clear()
     monkeypatch.setattr(ai, "_cache_get", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_cache_set", lambda *_a, **_k: None)
-    monkeypatch.setattr(ai, "_record_ai_attempt", lambda *_a, **_k: None)
     monkeypatch.setattr(ai, "_reorder_for_monitor", lambda order: order)
     monkeypatch.setattr(ai, "_gemini_cooldown_error", lambda: None)
     monkeypatch.setattr(ai, "_reserve_gemini_for_action", lambda: True)

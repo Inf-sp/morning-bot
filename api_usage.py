@@ -16,10 +16,6 @@ import store
 
 _log = logging.getLogger(__name__)
 
-SERVICE_LABELS = {
-    key: label for key, label in provider_runtime.LABELS.items()
-    if key != "database"
-}
 GOOGLE_BOOKS_DAILY_LIMIT = 1000
 TAVILY_MONTHLY_LIMIT = 1000
 TAVILY_SOFT_LIMIT = 900

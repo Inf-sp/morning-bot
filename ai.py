@@ -64,8 +64,6 @@ _ROUTE_PROVIDER_BASE = {
 }
 
 # ---------- AI traffic log ----------
-_AI_TRAFFIC_MAX = 1000
-_AI_TRAFFIC_TTL = 48 * 3600
 LOCAL_FALLBACK_TEXT = "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
 
 PrivacyLevel = Literal["public", "personal", "sensitive"]
@@ -278,43 +276,6 @@ _TIMEOUT_CAPS = {
 
 def _timeout_cap(name: str):
     return _TIMEOUT_CAPS.get(name)
-
-
-def _record_ai_attempt(provider: str, model: str, module: str, *, ok: bool,
-                       latency_ms: int = 0, failure: str = "", cache_hit: bool = False) -> None:
-    """Короткий технический след AI-попытки без текста запроса или ответа."""
-    try:
-        trace = tracking.current_action()
-        origin = "Пользователь" if trace is not None else "Фон"
-        actor = str(getattr(trace, "cid", "") or "") if trace is not None else ""
-        section = str(getattr(trace, "section", "") or "")
-        if not section:
-            section = tracking._section_for(f"{module}.py")
-        entry = {
-            "ts": int(time.time()),
-            "provider": str(provider or "")[:40],
-            "model": str(model or "")[:80],
-            "module": str(module or "")[:60],
-            "origin": origin,
-            "actor": actor,
-            "section": str(section or "Система")[:40],
-            "action": str(getattr(trace, "action", "") or "")[:100],
-            "ok": bool(ok),
-            "cache_hit": bool(cache_hit),
-            "latency_ms": max(0, int(latency_ms or 0)),
-            "failure": str(failure or "")[:120],
-        }
-        cutoff = entry["ts"] - _AI_TRAFFIC_TTL
-
-        def change(data):
-            rows = [row for row in data.get("log") or [] if int(row.get("ts") or 0) >= cutoff]
-            rows.append(entry)
-            return {"log": rows[-_AI_TRAFFIC_MAX:]}, None
-
-        # AI-вызовы идут из нескольких потоков: атомарная запись не теряет строки.
-        store.mutate_kv(config.AI_TRAFFIC_LOG_KEY, change)
-    except Exception:
-        _log.debug("_record_ai_attempt: ignored error", exc_info=True)
 
 
 _AI_CACHE_MAX = 300
@@ -1374,15 +1335,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     policy = _coerce_policy(fallback_allowed, privacy_level, response_mode, fallback_policy,
                             allow_personal_openrouter)
     order = _resolve(tier, order, route=route, module=module)
-    primary = order[0] if order else ""
-    tracking.annotate_ai_route(
-        requested_tier=(
-            "complex" if primary in ("gemini", GROQ_COMPLEX)
-            else "simple" if primary in (GROQ_SIMPLE, "cf")
-            else "standard"
-        ),
-        primary=primary,
-    )
     cache_ttl = _cache_ttl(module, response_mode)
     cache_key = _cache_key(
         order, prompt, max_tokens, temperature, module, response_mode,
@@ -1391,8 +1343,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
         if _is_cacheable_response(cached, response_mode):
-            _record_ai_attempt("cache", "", module, ok=True, cache_hit=True)
-            tracking.annotate_action(provider="cache", cache_hit=True)
             return cached
         # Ранее закэширован ответ, который не парсится как JSON (баг, уже
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
@@ -1445,13 +1395,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             break
         unavailable = _provider_is_unavailable(name, skip=breaker_skip)
         if unavailable is not None:
-            _record_ai_attempt(
-                name, _provider_model_name(name), module, ok=False,
-                failure=str(unavailable),
-            )
-            tracking.record_ai_failure(
-                name, str(getattr(unavailable, "status_code", "") or getattr(unavailable, "error_type", "")),
-            )
             failed_providers.append(name)
             errs.append(f"{name}:{unavailable}")
             if _is_temporary_exception(unavailable):
@@ -1464,7 +1407,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         if _monitor_name(name) == "gemini" and not _reserve_gemini_for_action():
             errs.append("gemini: action budget exhausted")
             continue
-        t0 = time.time()
         try:
             out = _as_text(_run_provider_attempt(
                 _with_background_retry(calls[name]) if _is_background() else calls[name],
@@ -1477,12 +1419,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                     try:
                         response_validator(out)
                     except Exception:
-                        ms = int((time.time() - t0) * 1000)
-                        _record_ai_attempt(
-                            name, _provider_model_name(name), module, ok=False,
-                            latency_ms=ms, failure="invalid structured response",
-                        )
-                        tracking.record_ai_failure(name, "invalid_response")
                         failed_providers.append(name)
                         errs.append(f"{name}:invalid structured response")
                         temporary_errs.append((name, LLMProviderError(
@@ -1494,32 +1430,14 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(name), reason="request",
                     )
-                ms = int((time.time() - t0) * 1000)
-                _record_ai_attempt(name, _provider_model_name(name), module, ok=True, latency_ms=ms)
                 if _monitor_name(name) != "gemini" and gemini_rate_limit_err is not None:
                     api_usage.record_gemini_fallback(target=name, reason="cooldown")
                     _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
                     rate_limit_logged = True
                 if _is_cacheable_response(out, response_mode):
                     _cache_set(cache_key, out)
-                tracking.annotate_action(
-                    provider=name,
-                    fallback="provider" if failed_providers else "",
-                )
                 return out
-            _record_ai_attempt(
-                name, _provider_model_name(name), module, ok=False,
-                latency_ms=int((time.time() - t0) * 1000), failure="empty response",
-            )
         except Exception as e:
-            ms = int((time.time() - t0) * 1000)
-            _record_ai_attempt(
-                name, _provider_model_name(name), module, ok=False,
-                latency_ms=ms, failure=str(e) or type(e).__name__,
-            )
-            tracking.record_ai_failure(
-                name, str(getattr(e, "status_code", "") or getattr(e, "error_type", "") or type(e).__name__),
-            )
             failed_providers.append(name)
             _mark_cooldown(name, e)
             errs.append(f"{name}:{e}")
@@ -1537,13 +1455,9 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
             origin, err = "provider_chain", None
             reason = "all_providers_failed"
         _log.warning("LLM chain failed; trying OpenRouter fallback: provider=%s reason=%s", origin, reason)
-        fallback_started = time.time()
         out = _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin, reason,
                                               response_mode=policy.response_mode)
-        fallback_ms = int((time.time() - fallback_started) * 1000)
         if out:
-            _record_ai_attempt("openrouter", config.OPENROUTER_MODEL, module, ok=True,
-                               latency_ms=fallback_ms)
             if origin in calls:
                 provider_runtime.activate_fallback(
                     _monitor_name(origin), "openrouter", reason=reason,
@@ -1554,10 +1468,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
                 rate_limit_logged = True
             if _is_cacheable_response(out, response_mode):
                 _cache_set(cache_key, out)
-            tracking.annotate_action(provider="openrouter", fallback="provider")
             return out
-        _record_ai_attempt("openrouter", config.OPENROUTER_MODEL, module, ok=False,
-                           latency_ms=fallback_ms, failure="fallback failed")
         if _monitor_name(origin) == "gemini" and getattr(err, "error_type", "") == "rate_limit":
             api_usage.record_gemini_fallback(target="local", reason="openrouter_failed")
             _log_gemini_limit("gemini_rate_limit", err, fallback=True)
@@ -1567,7 +1478,6 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         api_usage.record_gemini_fallback(target="local", reason="all_providers_failed")
         _log_gemini_limit("gemini_rate_limit", gemini_rate_limit_err, fallback=True)
     _friendly_msg = _friendly(errs)
-    tracking.annotate_action(fallback="local")
     # Сбои конкретных провайдеров уже записаны provider_runtime как единые
     # системные инциденты. Не создаём вторую ошибку раздела с тем же сбоем.
     raise Exception(_friendly_msg)
@@ -1863,7 +1773,6 @@ def _chat_chain_impl(history, cid=None, emit=None):
     system = _chat_system(cid)
     errs = []
     failed_providers = []
-    tracking.annotate_ai_route(requested_tier=FREE_CHAT_TIER, primary=CHAT_ORDER[0])
 
     breaker_skip = _breaker_skip_set(CHAT_ORDER)
     for provider_index, p in enumerate(CHAT_ORDER):
@@ -1873,9 +1782,6 @@ def _chat_chain_impl(history, cid=None, emit=None):
             break
         unavailable = _provider_is_unavailable(p, skip=breaker_skip)
         if unavailable is not None:
-            _record_ai_attempt(
-                p, _provider_model_name(p), "assistant", ok=False, failure=str(unavailable),
-            )
             failed_providers.append(p)
             errs.append(f"{p}:{unavailable}")
             continue
@@ -1890,7 +1796,6 @@ def _chat_chain_impl(history, cid=None, emit=None):
                 emit(delta)
 
         try:
-            attempt_started = time.time()
             later_reserve = _reserve_for_later_providers(
                 CHAT_ORDER, provider_index,
                 FallbackPolicy(fallback_allowed=True, privacy_level="personal"),
@@ -1905,39 +1810,18 @@ def _chat_chain_impl(history, cid=None, emit=None):
             else:
                 out = _as_text(_chat_stream(p, history, system, send_delta, timeout_cap=attempt_timeout))
             if out and out.strip():
-                _record_ai_attempt(
-                    p, _provider_model_name(p), "assistant", ok=True,
-                    latency_ms=int((time.time() - attempt_started) * 1000),
-                )
                 for failed in failed_providers:
                     provider_runtime.activate_fallback(
                         _monitor_name(failed), _monitor_name(p), reason="request",
                     )
-                tracking.annotate_action(
-                    provider=p, fallback="provider" if failed_providers else "",
-                )
                 _log_free_chat_route(served_by=p, outcome="success")
                 return out
-            _record_ai_attempt(
-                p, _provider_model_name(p), "assistant", ok=False,
-                latency_ms=int((time.time() - attempt_started) * 1000), failure="empty response",
-            )
         except _PartialStreamError as stream_error:
             error = stream_error.error
-            _record_ai_attempt(
-                p, _provider_model_name(p), "assistant", ok=False,
-                latency_ms=int((time.time() - attempt_started) * 1000),
-                failure=str(error) or type(error).__name__,
-            )
             _mark_cooldown(p, error)
             _log_free_chat_route(served_by=p, outcome="stream_interrupted")
             raise StreamOutputInterrupted() from error
         except Exception as error:
-            _record_ai_attempt(
-                p, _provider_model_name(p), "assistant", ok=False,
-                latency_ms=int((time.time() - attempt_started) * 1000),
-                failure=str(error) or type(error).__name__,
-            )
             # ``emitted`` is normally only true for _PartialStreamError. Keep
             # the guard for alternate provider implementations as well.
             if emitted:
@@ -1947,7 +1831,6 @@ def _chat_chain_impl(history, cid=None, emit=None):
             failed_providers.append(p)
             _mark_cooldown(p, error)
             errs.append(f"{p}:{error}")
-    tracking.annotate_action(fallback="local")
     _log_free_chat_route(outcome="failed")
     raise Exception(_friendly(errs))
 

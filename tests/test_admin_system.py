@@ -126,7 +126,6 @@ def test_logs_hide_llm_provider_payload_and_code_location(monkeypatch):
     monkeypatch.setattr(admin.time, "time", lambda: now + 10)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [entry])
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
@@ -155,7 +154,6 @@ def test_logs_keep_ai_chain_failures_separate_for_each_section(monkeypatch):
     monkeypatch.setattr(admin.time, "time", lambda: now + 10)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
@@ -218,7 +216,6 @@ def test_logs_hide_monitor_incidents_resolved_by_recovery_or_fallback(monkeypatc
     monkeypatch.setattr(admin.time, "time", lambda: now + 10)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [recovered, fallback])
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
@@ -244,7 +241,6 @@ def test_logs_collapse_duplicate_monitor_incidents_and_show_all_unique_rows(monk
     monkeypatch.setattr(admin.time, "time", lambda: now)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: app_errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: ticketmaster)
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
@@ -266,7 +262,6 @@ def test_logs_collapse_duplicate_app_errors_and_keep_exact_message(monkeypatch):
     monkeypatch.setattr(admin.time, "time", lambda: now)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))
@@ -288,7 +283,6 @@ def test_logs_limit_total_message_size_for_many_unique_errors(monkeypatch):
     monkeypatch.setattr(admin.time, "time", lambda: now)
     monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: errors)
     monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: [])
-    monkeypatch.setattr(admin, "_mark_logs_viewed", lambda *_args: None)
     bot = RecordingBot()
 
     asyncio.run(admin.send_logs(bot, "42"))

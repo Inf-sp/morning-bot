@@ -153,10 +153,6 @@ async def answer_callback(update, context):
     if marker and menu.is_main_menu_markup(getattr(q.message, "reply_markup", None)):
         marker(cid, q.message.message_id)
     answer_task = asyncio.create_task(q.answer())
-    answer_task.add_done_callback(
-        lambda task: tracking.mark_first_feedback(trace)
-        if not task.cancelled() and task.exception() is None else None
-    )
     # Даём answerCallbackQuery начать отправку до синхронного чтения БД в обработчике.
     await asyncio.sleep(0)
     try:

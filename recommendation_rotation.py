@@ -48,15 +48,3 @@ def candidates_for_cycle(candidates: Iterable, history: Iterable, *, current=Non
     return without_current or pool
 
 
-def search_exclusions(values: Iterable, *, limit=10, key: Callable = identity) -> str:
-    """Безопасная строка отрицательных точных фраз для внешнего поиска."""
-    names = recent(values, limit=limit, key=key)
-    return " ".join(
-        f'-"{str(value).replace(chr(34), "").strip()}"'
-        for value in names if str(value).strip()
-    )
-
-
-def cache_history(values: Iterable, *, limit=50, key: Callable = identity) -> list[str]:
-    """Нормализованная история для ключа AI-кэша."""
-    return [key(value) for value in recent(values, limit=limit, key=key) if key(value)]

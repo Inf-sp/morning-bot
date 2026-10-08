@@ -191,30 +191,10 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     assert "deployment=deployment-42" in line
 
 
-def test_action_latency_keeps_only_technical_metadata(monkeypatch):
-    memory = {}
-    clock = {"now": 10.0}
-
-    monkeypatch.setattr(tracking.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(tracking.store, "_load", lambda key: memory.get(key, {}))
-    monkeypatch.setattr(
-        tracking.store, "_save", lambda key, value: memory.__setitem__(key, value),
-    )
-    _patch_mutate_kv(monkeypatch, tracking.store)
-
+def test_finished_action_is_no_longer_active():
     trace = tracking.start_action("42", "Ассистент", "text", budget_seconds=10)
-    clock["now"] = 10.2
-    tracking.mark_first_feedback(trace)
-    tracking.annotate_action(provider="gemini", cache_hit=False)
-    clock["now"] = 12.0
+    assert tracking.has_active_actions() is True
     tracking.finish_action(trace)
-
-    row = memory[tracking.config.ACTION_LATENCY_KEY]["log"][0]
-    assert 199 <= row["first_feedback_ms"] <= 200
-    assert row["duration_ms"] == 2000
-    assert row["provider"] == "gemini"
-    assert "prompt" not in row
-    assert "response" not in row
     assert tracking.has_active_actions() is False
 
 

@@ -16,10 +16,3 @@ def test_cycle_uses_every_fresh_candidate_before_repeating():
     ) == pool[:2]
 
 
-def test_search_and_cache_receive_the_same_recent_history():
-    history = ["Roest Alkmaar", "MADA", "De Eendracht"]
-
-    assert rotation.search_exclusions(history, limit=2) == '-"MADA" -"De Eendracht"'
-    assert rotation.cache_history(history) == [
-        "roest alkmaar", "mada", "de eendracht",
-    ]

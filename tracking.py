@@ -28,7 +28,6 @@ _log = logging.getLogger(__name__)
 
 _ERR_MAX = 200          # rolling-буфер ошибок
 ERROR_TTL_SECONDS = 12 * 3600
-_LATENCY_MAX = 500      # действия без текста запросов и ответов
 _ACT_DAYS_MAX = 40      # сколько последних дат активности хранить на юзера
 DAY = 86400
 _TOUCH_THROTTLE_SECONDS = 60
@@ -46,16 +45,8 @@ class ActionTrace:
     action: str
     budget_seconds: float | None = None
     started: float = field(default_factory=time.monotonic)
-    first_feedback: float | None = None
-    provider: str = ""
-    cache_hit: bool = False
-    fallback: str = ""
     provider_calls: dict[str, int] = field(default_factory=dict)
     provider_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-    requested_tier: str = ""
-    primary: str = ""
-    primary_status: str = ""
-    served_by: str = ""
     finished: bool = False
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
@@ -109,42 +100,6 @@ def has_active_actions() -> bool:
         return bool(_active_action_ids)
 
 
-def mark_first_feedback(trace=None) -> None:
-    trace = trace or current_action()
-    if trace is not None and trace.first_feedback is None:
-        trace.first_feedback = time.monotonic()
-
-
-def annotate_action(*, provider="", cache_hit=None, fallback="") -> None:
-    trace = current_action()
-    if trace is None:
-        return
-    if provider:
-        trace.provider = _safe_text(provider, 40)
-        trace.served_by = trace.provider
-    if cache_hit is not None:
-        trace.cache_hit = bool(cache_hit)
-    if fallback:
-        trace.fallback = _safe_text(fallback, 80)
-
-
-def annotate_ai_route(*, requested_tier="", primary="") -> None:
-    trace = current_action()
-    if trace is None:
-        return
-    trace.requested_tier = _safe_text(requested_tier, 20)
-    trace.primary = _safe_text(primary, 40)
-
-
-def record_ai_failure(provider="", status="") -> None:
-    trace = current_action()
-    if trace is None or trace.primary != _safe_text(provider, 40):
-        return
-    if trace.primary_status:
-        return
-    trace.primary_status = _safe_text(status, 80)
-
-
 def consume_provider_budget(provider: str, *, limit: int) -> bool:
     """Reserve one provider call within the current user action."""
     trace = current_action()
@@ -160,50 +115,15 @@ def consume_provider_budget(provider: str, *, limit: int) -> bool:
 
 
 def finish_action(trace=None, *, ok=True) -> None:
-    """Завершить измерение best-effort и сохранить технические поля."""
+    """Завершить действие: оно больше не считается активным для фоновых задач."""
     trace = trace or current_action()
     if trace is None or trace.finished:
         return
     trace.finished = True
-    finished = time.monotonic()
-    try:
-        entry = {
-            "ts": int(time.time()),
-            "cid": trace.cid,
-            "section": trace.section,
-            "action": trace.action,
-            "first_feedback_ms": (
-                int((trace.first_feedback - trace.started) * 1000)
-                if trace.first_feedback is not None else None
-            ),
-            "duration_ms": int((finished - trace.started) * 1000),
-            "budget_ms": (
-                int(trace.budget_seconds * 1000)
-                if trace.budget_seconds is not None else None
-            ),
-            "provider": trace.provider,
-            "requested_tier": trace.requested_tier,
-            "primary": trace.primary,
-            "primary_status": trace.primary_status,
-            "served_by": trace.served_by or trace.provider,
-            "gemini_calls": int(trace.provider_calls.get("gemini") or 0),
-            "cache_hit": trace.cache_hit,
-            "fallback": trace.fallback,
-            "ok": bool(ok),
-        }
-        def change(data):
-            log = list(data.get("log") or [])
-            log.append(entry)
-            return {"log": log[-_LATENCY_MAX:]}, None
-
-        store.mutate_kv(config.ACTION_LATENCY_KEY, change)
-    except Exception:
-        _log.debug("finish_action: ignored error", exc_info=True)
-    finally:
-        with _active_action_lock:
-            _active_action_ids.discard(trace.trace_id)
-        if current_action() is trace:
-            _current_action.set(None)
+    with _active_action_lock:
+        _active_action_ids.discard(trace.trace_id)
+    if current_action() is trace:
+        _current_action.set(None)
 
 
 _SECTION_BY_MODULE = {

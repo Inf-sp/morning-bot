@@ -81,7 +81,6 @@ SPECS = (
     ProviderSpec("database", "База данных", ("Мой день", "Питание", "Обучение"), ()),
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
-LABELS = {spec.key: spec.label for spec in SPECS}
 AI_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare"}
 
 

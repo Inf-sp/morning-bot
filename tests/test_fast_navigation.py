@@ -136,7 +136,6 @@ def test_duplicate_long_main_screen_taps_start_one_action(monkeypatch, callback_
     monkeypatch.setattr(bot.tracking, "touch", lambda _cid: None)
     monkeypatch.setattr(bot.tracking, "start_action", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(bot.tracking, "finish_action", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(bot.tracking, "mark_first_feedback", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(bot.bot_callbacks, "handle", handle)
 
     async def run():

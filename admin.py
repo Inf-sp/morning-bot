@@ -77,20 +77,6 @@ def _error_signature(entry):
     )
 
 
-def _mark_logs_viewed(cid, errors):
-    newest = errors[0] if errors else {}
-    marker = {"ts": int(newest.get("ts") or time.time()), "id": str(newest.get("id") or "")}
-
-    def mutate(state):
-        state.setdefault("log_cursors", {})[str(cid)] = marker
-        return state, None
-
-    try:
-        store.mutate_kv(config.ADMIN_STATE_KEY, mutate)
-    except Exception:
-        _log.warning("failed to save log cursor for admin %s", cid, exc_info=True)
-
-
 # ================= ДОМ =================
 
 
@@ -555,4 +541,3 @@ async def send_logs(bot, cid, q=None):
     now = int(time.time())
     msg = ui.logs(visible_rows, len(visible_rows), _updated_at(now), now)
     await _show(bot, cid, msg, kb, q)
-    _mark_logs_viewed(cid, errors)

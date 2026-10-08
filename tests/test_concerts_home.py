@@ -201,7 +201,6 @@ def test_nearest_concerts_uses_the_full_classic_delivery(monkeypatch):
         ["🇳🇱 Нидерланды"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert "Romy" in rich_bot.classic[0]["text"]
-    assert rich_bot.classic[0]["disable_web_page_preview"] is True
 
 
 def test_weekly_events_add_large_confirmed_music_events(monkeypatch):

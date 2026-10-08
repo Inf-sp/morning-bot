@@ -26,7 +26,6 @@ def _memory_store(monkeypatch):
 
 def test_catalog_is_shared_by_usage_and_monitor():
     assert service_monitor.SPEC_BY_KEY is provider_runtime.SPEC_BY_KEY
-    assert api_usage.SERVICE_LABELS["gemini"] == provider_runtime.LABELS["gemini"]
     assert provider_runtime.validate_fallback_graph() == []
 
 

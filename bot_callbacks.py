@@ -9,6 +9,7 @@ import callback_topics
 import cleanup
 import cooking
 import dictionary_tts
+import home_cache
 import learning_dictionary as dictionary
 import learning_game
 import learning_settings
@@ -112,6 +113,30 @@ class Ctx(NamedTuple):
     status: Callable  # _inline_status: долгий сценарий с индикатором ожидания
 
 
+class _DirectStatus:
+    """Готовый экран без индикатора ожидания — с семантикой StatusManager.
+
+    preserve_message=False заменяет текущее сообщение (вход в раздел, «Назад»),
+    True присылает результат отдельным сообщением и оставляет прежнее в истории.
+    """
+
+    def __init__(self, bot, cid, q, preserve_message):
+        self.bot, self.cid, self.q, self.preserve_message = bot, cid, q, preserve_message
+
+    async def replace(self, text, **kwargs):
+        if not self.preserve_message:
+            try:
+                await self.q.message.edit_text(text, **kwargs)
+                return True
+            except Exception:
+                _log.debug("_DirectStatus.replace: edit failed, sending new message", exc_info=True)
+        await self.bot.send_message(chat_id=self.cid, text=text, **kwargs)
+        return True
+
+    async def stop(self, delete=True):
+        return None
+
+
 def _matches(keys, data):
     keys = (keys,) if isinstance(keys, str) else keys
     return any(data.startswith(k[:-1]) if k.endswith("*") else data == k for k in keys)
@@ -186,7 +211,8 @@ async def _set_city(c):
 
 
 def _find_concerts(country):
-    return lambda c: c.status(lambda _s: leisure_concerts.find_concerts(c.bot, c.cid, country(c)))
+    # Экран меняется на месте; при поиске сообщение само показывает «Проверяю афишу…».
+    return lambda c: leisure_concerts.find_concerts(c.bot, c.cid, country(c), q=c.q)
 
 
 def _food_menu(meal):
@@ -208,7 +234,7 @@ ACTIONS = (
         c.bot, c.cid, "cinema_favorites", back="lz_lib")),
     R(("concerts_find", "concerts_nearby", "artist_concerts"), _find_concerts(lambda _c: "home")),
     R("concerts_search", lambda c: leisure_concerts.prompt_artist_search(c.bot, c.cid)),
-    R("concerts_pick", lambda c: leisure_concerts.concert_pick_country(c.bot, c.cid)),
+    R("concerts_pick", lambda c: leisure_concerts.concert_pick_country(c.bot, c.cid, q=c.q)),
     R(("concerts_nl", "concerts_be", "concerts_de", "concerts_fr", "concerts_gb",
        "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
        "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"),
@@ -474,6 +500,15 @@ async def handle(update, context, remove_reply_keyboard):
     data = _legacy_alias(q.data)
 
     async def _inline_status(call, *, preserve_message=True):
+        section = home_cache.SECTION_BY_CALLBACK.get(data)
+        if section and home_cache.is_ready(section, cid):
+            # Экран раздела уже готов («Назад», повторный вход): без индикатора.
+            try:
+                return await call(_DirectStatus(bot, cid, q, preserve_message))
+            except Exception as e:
+                _log.error("_inline_status: direct call failed data=%s cid=%s: %r", data, cid, e, exc_info=True)
+                await verify.safe_error(bot, cid, e)
+                return None
         topic = _status_topic(data)
         stages = _status_stages(data)
         _log.info("_inline_status: data=%s topic=%s cid=%s q_message_id=%s",
