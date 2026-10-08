@@ -67,8 +67,8 @@ def _movie_home_only_kb():
 
 def _favorite_movie_added_kb(open_callback=None):
     rows = [[InlineKeyboardButton("Открыть карточку", callback_data=open_callback)]] if open_callback else []
-    rows.append([InlineKeyboardButton("🎚️ Моё кино", callback_data="movie_favorites")])
-    rows.append(nav_row("lz_lib"))
+    # Отдельной кнопки «Моё кино» нет: «Назад» и так ведёт в список.
+    rows.append(nav_row("movie_favorites"))
     return InlineKeyboardMarkup(rows)
 
 

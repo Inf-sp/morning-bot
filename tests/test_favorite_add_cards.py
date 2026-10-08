@@ -138,7 +138,10 @@ def test_manual_movie_add_uses_verified_metadata_when_available(monkeypatch):
     message = bot.messages[0]
     assert "✅ Добавлен в «🎚️ Моё кино»" in message["text"]
     assert "🎬 Прибытие · 2016 · Фильм · фантастика, драма" in message["text"]
-    assert _labels(message["reply_markup"])[0] == ["🎚️ Моё кино"]
+    labels = _labels(message["reply_markup"])
+    assert ["🎚️ Моё кино"] not in labels
+    assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert message["reply_markup"].inline_keyboard[-1][0].callback_data == "movie_favorites"
 
 
 def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
