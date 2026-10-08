@@ -393,6 +393,27 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await wx.send_weather(no_kb_bot, cid, "today")
 
 
+# Плавная печать целого ответа: до ~12 шагов по ~0.12 с (≈1.5 с на ответ).
+_TYPE_CHUNK_CHARS = 80
+_TYPE_MAX_STEPS = 12
+_TYPE_STEP_SECONDS = 0.12
+
+
+def _typing_pieces(text):
+    """Делит текст на 3–12 кусков по границам слов для эффекта печати."""
+    words = re.split(r"(?<=\s)", text)
+    size = max(_TYPE_CHUNK_CHARS // 2, len(text) // _TYPE_MAX_STEPS + 1)
+    pieces, current = [], ""
+    for word in words:
+        current += word
+        if len(current) >= size:
+            pieces.append(current)
+            current = ""
+    if current:
+        pieces.append(current)
+    return pieces
+
+
 async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
     store.last_source[str(cid)] = "Ассистент"
@@ -455,6 +476,16 @@ async def chat_reply(bot, cid, text):
         nonlocal streamed_text, last_draft_at, last_draft_length
         visible_delta = visible_stream.add(delta)
         if not visible_delta:
+            return
+        if len(visible_delta) > _TYPE_CHUNK_CHARS:
+            # Провайдер без потока (Gemini, Cloudflare) отдал ответ целиком —
+            # черновик всё равно допечатывает его плавно, по словам.
+            for piece in _typing_pieces(visible_delta):
+                streamed_text += piece
+                await draft.text(assistant_ui.preview_text(streamed_text))
+                await asyncio.sleep(_TYPE_STEP_SECONDS)
+            last_draft_at = time.monotonic()
+            last_draft_length = len(streamed_text)
             return
         streamed_text += visible_delta
         now = time.monotonic()

@@ -396,11 +396,12 @@ class MenuCleanupBot(ExtBot):
     async def send_message_draft(self, chat_id, draft_id, text=""):
         """Живой черновик ответа (Bot API 9.3+): исчезает сам, итог отправляет send_message.
 
-        Пустой текст показывает системную заглушку «Thinking…».
+        Bot API требует text длиной 1–4096 символов, поэтому пустой текст заменяется на «Думаю…».
         """
+        text = str(text or "").strip() or "Думаю…"
         draft = asyncio.create_task(self.do_api_request(
             "sendMessageDraft",
-            api_kwargs={"chat_id": chat_id, "draft_id": int(draft_id), "text": str(text or "")[:4000]},
+            api_kwargs={"chat_id": chat_id, "draft_id": int(draft_id), "text": text[:4000]},
         ))
         return await draft
 

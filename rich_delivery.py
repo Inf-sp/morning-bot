@@ -144,8 +144,11 @@ class Draft:
 class ClassicDraft(Draft):
     """Обычный черновик sendMessageDraft — живое превью без Rich Messages."""
 
-    async def thinking(self, text=""):
-        return await self.bot.send_message_draft(chat_id=self.cid, draft_id=self.draft_id)
+    async def thinking(self, text="Думаю…"):
+        # Bot API требует непустой text: пустой черновик Telegram отклоняет.
+        return await self.bot.send_message_draft(
+            chat_id=self.cid, draft_id=self.draft_id, text=str(text or "Думаю…"),
+        )
 
     async def text(self, value):
         return await self.bot.send_message_draft(

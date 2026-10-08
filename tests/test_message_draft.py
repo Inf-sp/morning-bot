@@ -26,9 +26,21 @@ def test_classic_draft_streams_without_rich_messages(monkeypatch):
     draft = asyncio.run(flow())
 
     assert isinstance(draft, rich_delivery.ClassicDraft)
-    assert [call.get("text", "") for call in bot.drafts] == ["", "Первая строка"]
+    # Telegram требует непустой text: черновик стартует с «Думаю…».
+    assert [call.get("text", "") for call in bot.drafts] == ["Думаю…", "Первая строка"]
     assert len({call["draft_id"] for call in bot.drafts}) == 1
 
 
 def test_preview_text_drops_model_markdown_like_final_card():
     assert assistant_ui.preview_text("## **Итог**\n\nСовет __важный__") == "Итог\nСовет важный"
+
+
+def test_whole_answer_is_split_into_word_pieces_for_typing():
+    import assistant
+
+    text = "Слово " * 60
+    pieces = assistant._typing_pieces(text)
+
+    assert "".join(pieces) == text
+    assert 3 <= len(pieces) <= assistant._TYPE_MAX_STEPS + 1
+    assert all(piece.endswith(" ") for piece in pieces[:-1])
