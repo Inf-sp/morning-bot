@@ -117,7 +117,7 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     def provider(provider, _history, _system, timeout_cap=None):
         calls.append((provider, timeout_cap))
         if provider == "gemini":
-            clock["now"] = 4.0
+            clock["now"] = 5.0
             raise ai.LLMProviderError(provider, "gemini timeout", temporary=True)
         return "Ответ Groq"
 
@@ -126,8 +126,8 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     result = ai.chat_chain([{"role": "user", "content": "test"}])
 
     assert result == "Ответ Groq"
-    # После Groq остаётся один обычный резерв (Cloudflare), поэтому Groq получает 2 с.
-    assert calls[:2] == [("gemini", 4.0), ("groq", 2.0)]
+    # Groq получает свой полный лимит: после него ещё хватает времени на резервы.
+    assert calls[:2] == [("gemini", 5.0), ("groq", 4.0)]
 
 
 def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
@@ -142,7 +142,7 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
     def slow_provider(provider, *_args, **_kwargs):
         calls.append(provider)
-        clock["now"] = 10.0
+        clock["now"] = 20.0
         raise ai.LLMProviderError(provider, "timeout", temporary=True)
 
     monkeypatch.setattr(ai, "_chat", slow_provider)
@@ -170,7 +170,16 @@ def test_free_chat_prompt_requires_short_human_answers_for_europe_and_america():
 
 def test_free_chat_has_a_small_response_and_time_budget():
     assert ai.FREE_CHAT_MAX_TOKENS <= 350
-    assert ai.FREE_CHAT_BUDGET_SECONDS <= 7
+    assert ai.FREE_CHAT_BUDGET_SECONDS <= 15
+    # Каждый резерв получает реальную попытку, а не 2 секунды.
+    assert min(ai._FREE_CHAT_PROVIDER_TIMEOUTS.values()) >= 4
+
+
+def test_gemini_error_url_is_not_reported_as_overload():
+    url_error = "gemini:500 Server Error for url: https://x/models/gemini-2.5-flash:generateContent"
+
+    assert "перегружен" not in ai._friendly([url_error, "groq:timeout"])
+    assert "перегружен" in ai._friendly(["groq:429 Too Many Requests"])
 
 
 def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypatch):

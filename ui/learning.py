@@ -172,7 +172,7 @@ def game_card(ui, description, category=""):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
     if category:
-        b.line(f"Категория: {category}")
+        b.line(f"{ui.get('category', 'Категория')}: {category}")
         b.spacer()
     b.line(description)
     b.spacer()
@@ -187,7 +187,7 @@ def game_no_new_round(ui):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
     b.spacer()
-    b.line("Новой загадки сейчас нет. Попробуй позже.")
+    b.line(ui.get("no_new", "Новой загадки сейчас нет. Попробуй позже."))
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -223,7 +223,7 @@ def game_hint(ui, hint):
     b.bold(hint)
     b.spacer()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")],
+        [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs={"style": "danger"})],
         [
             InlineKeyboardButton(ui["back"], callback_data="m_learn"),
             InlineKeyboardButton(ui["home"], callback_data="m_menu"),

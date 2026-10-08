@@ -38,7 +38,7 @@ def _flag(language):
 
 
 # ================= ИГРА-ДЕТЕКТИВ =================
-# Текст игры локализован под активный язык обучения, а кнопки остаются русскими.
+# Текст карточки игры — на активном языке обучения, кнопки остаются русскими.
 GAME_UI = {
     "русский": {
         "title": "Угадай персонажа · Русский",
@@ -55,8 +55,12 @@ GAME_UI = {
         "retry": "Попробуй ещё один раз.",
     },
     "английский": {
-        "title": "Угадай персонажа · English",
-        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
+        "title": "Guess the character",
+        "reply_next": "Write your answer in the next message — any language works.",
+        "category": "Category",
+        "categories": {"животное": "animal", "еда": "food", "предмет": "object", "профессия": "job",
+                       "транспорт": "transport", "место": "place", "герой": "character", "другое": "other"},
+        "no_new": "No new riddle right now. Try again later.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
@@ -69,8 +73,12 @@ GAME_UI = {
         "retry": "Try one more time.",
     },
     "нидерландский": {
-        "title": "Угадай персонажа · Nederlands",
-        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
+        "title": "Raad het personage",
+        "reply_next": "Schrijf je antwoord in het volgende bericht — elke taal is goed.",
+        "category": "Categorie",
+        "categories": {"животное": "dier", "еда": "eten", "предмет": "voorwerp", "профессия": "beroep",
+                       "транспорт": "vervoer", "место": "plek", "герой": "personage", "другое": "overig"},
+        "no_new": "Er is nu geen nieuw raadsel. Probeer het later nog eens.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "reveal": "😞 Сдаюсь",
@@ -519,11 +527,16 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
     return out
 
 
+# «Подсказка» — зелёная, «Сдаюсь» — красная (цвет задан явно, не по подписи).
+_GREEN = {"style": "success"}
+_RED = {"style": "danger"}
+
+
 def _game_play_kb(ui, *, hint_available):
     rows = []
     if hint_available:
-        rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint")])
-    rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal")])
+        rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint", api_kwargs=_GREEN)])
+    rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs=_RED)])
     rows.append([
         InlineKeyboardButton(ui["back"], callback_data="m_learn"),
         InlineKeyboardButton(ui["home"], callback_data="m_menu"),
@@ -584,6 +597,7 @@ async def send_game(bot, cid, status=None):
         await verify.safe_error(bot, cid, e, back="m_learn"); return
     _remember_game_answer(cid, d)
     category = _game_category_label(d)
+    category = (ui.get("categories") or {}).get(category, category)
     store.game_state[str(cid)] = {"answer": d.get("answer", ""), "answer_en": d.get("answer_en", ""),
                                   "aliases": d.get("aliases", []),
                                   "category": category,

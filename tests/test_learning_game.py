@@ -194,26 +194,31 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     bot = Bot()
     asyncio.run(learning_game.send_game(bot, "42"))
 
-    assert "Угадай персонажа · Nederlands" in bot.messages[0]["text"]
-    assert "Категория: животное" in bot.messages[0]["text"]
+    text = bot.messages[0]["text"]
+    assert text.startswith("🕵️ Raad het personage\n\nCategorie: dier\n\n")
+    assert text.endswith("Schrijf je antwoord in het volgende bericht — elke taal is goed.")
+    assert not any("а" <= char <= "я" for char in text.casefold())
     assert "Wie ben ik?" not in bot.messages[0]["text"]
     assert "Verdachte:" not in bot.messages[0]["text"]
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
     assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
     assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
+    hint, reveal = (row[0] for row in bot.messages[0]["reply_markup"].inline_keyboard[:2])
+    assert (hint.api_kwargs, reveal.api_kwargs) == ({"style": "success"}, {"style": "danger"})
 
 
-def test_detective_card_shows_a_clear_russian_category():
-    message = learning_ui.game_card(
-        learning_game.GAME_UI["английский"],
-        "I have whiskers and I like warm places.",
-        category="животное",
+def test_detective_card_is_fully_in_the_study_language():
+    ui = learning_game.GAME_UI["английский"]
+    message = learning_ui.game_card(ui, "I have whiskers and I like warm places.",
+                                    category=ui["categories"]["животное"])
+
+    assert message.text == (
+        "🕵️ Guess the character\n\nCategory: animal\n\nI have whiskers and I like warm places."
+        "\n\nWrite your answer in the next message — any language works."
     )
-
-    assert "Категория: животное" in message.text
-    assert message.text.index("Категория: животное") < message.text.index("I have whiskers")
-    assert "I have whiskers and I like warm places.\n\nНапиши ответ" in message.text
+    assert learning_ui.game_card(learning_game.GAME_UI["русский"], "Я кот.", category="животное").text \
+        .startswith("🕵️ Угадай персонажа · Русский\n\nКатегория: животное")
 
 
 def test_detective_expands_local_catalogue_after_the_legacy_cards_are_played(monkeypatch):

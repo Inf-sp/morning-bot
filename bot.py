@@ -189,7 +189,7 @@ def _record_callback(cid, trace, ok, home_section, seconds):
 async def text_router(update, context):
     cid = str(update.effective_chat.id)
     bot = context.bot
-    trace = tracking.start_action(cid, "Ассистент", "text", budget_seconds=10)
+    trace = tracking.start_action(cid, "Ассистент", "text", budget_seconds=20)
     ok = True
     try:
         await bot_text.handle(update, context, _remove_reply_kb_once)

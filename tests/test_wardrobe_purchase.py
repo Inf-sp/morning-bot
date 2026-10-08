@@ -339,3 +339,32 @@ def test_picks_stay_until_added_or_disliked(monkeypatch):
     assert first[1].text not in after
     assert after[:2] == [first[0].text, first[2].text]
     wardrobe.store.pending_input.pop(cid, None)
+
+
+def test_disliked_picks_are_replaced_by_fresh_ai_ideas_when_pool_runs_out(monkeypatch):
+    cid = "purchase-refill"
+    _user(cid, monkeypatch)
+    bot = RecordingBot()
+    asyncio.run(wardrobe.send_purchase_screen(bot, cid))
+    pool = [c["item"] for c in wardrobe._purchase_state(cid)["pool"]]
+    asked = []
+
+    async def ideas(prompt, *_a, **kwargs):
+        asked.append(kwargs["cache_context"]["avoid"])
+        return {"items": [
+            {"item": "Бордовый шерстяной шарф", "zone": "Аксессуары", "subcategory": "Шарфы",
+             "color": "бордовый", "why": "Добавит цвет к тёмной верхней одежде.", "tip": "Бери длинный."},
+        ]}
+
+    monkeypatch.setattr(ai, "allm_json", ideas)
+    # Отклоняем всё, кроме двух: на третье место должна встать новая идея AI.
+    for name in pool[:-2]:
+        wardrobe.store.mutate_profile(cid, lambda profile, name=name: ({
+            **profile, "wardrobe_purchase_rejections": {"items": [
+                *purchase.rejected_names(profile), name]}}, None))
+    asyncio.run(wardrobe.send_purchase_screen(bot, cid))
+
+    labels = [row[0].text for row in bot.sent[-1]["reply_markup"].inline_keyboard[:-1]]
+    assert len(labels) == 3 and "Бордовый шерстяной шарф" in labels
+    assert set(pool[:-2]) <= set(asked[0])
+    wardrobe.store.pending_input.pop(cid, None)

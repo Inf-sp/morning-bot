@@ -37,17 +37,18 @@ BACKGROUND_PROVIDER_TIMEOUT_SECONDS = 50.0
 BACKGROUND_RETRY_PAUSE_SECONDS = 2.0
 _AI_MODE = contextvars.ContextVar("ai_mode", default="live")
 OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
-FREE_CHAT_BUDGET_SECONDS = 7.0
+# Хватает на честную попытку каждого резерва; ожидание видно в живом черновике.
+FREE_CHAT_BUDGET_SECONDS = 15.0
 FREE_CHAT_MAX_TOKENS = 350
 FREE_CHAT_ROUTE_VERSION = "free-chat-concise-v5"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
-    "gemini": 4.0,
-    "groq": 2.5,
-    "groq_standard": 2.5,
-    "cf": 2.0,
-    "openrouter": 2.5,
+    "gemini": 5.0,
+    "groq": 4.0,
+    "groq_standard": 4.0,
+    "cf": 4.0,
+    "openrouter": 5.0,
 }
 _MIN_USEFUL_PROVIDER_ATTEMPT_SECONDS = 1.0
 _COMPLEX_MODULE_PREFIXES = (
@@ -1209,7 +1210,8 @@ def _friendly(errs):
     _log.warning("LLM chain failed: %s", secure.redact(joined))
     if "deadline" in joined.lower():
         return "⏳ Не успел подготовить ответ вовремя. Попробуй ещё раз."
-    if "429" in joined or "Too Many Requests" in joined or "rate" in joined.lower():
+    # Только явные признаки лимита: «rate» есть и в адресе Gemini …:generateContent.
+    if "429" in joined or "Too Many Requests" in joined or "rate_limit" in joined or "rate limit" in joined.lower():
         return "⏳ ИИ временно перегружен — подожди минуту и попробуй снова."
     return "⚠️ ИИ временно недоступен — попробуй снова через пару минут."
 
@@ -1677,7 +1679,7 @@ def _chat(provider, history, system, timeout_cap=None):
              "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
             40,
             "openrouter",
-            timeout_cap=bounded_cap(4),
+            timeout_cap=bounded_cap(5),
         )
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
@@ -1742,7 +1744,7 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
                 "Accept": "text/event-stream",
             },
             {**payload, **_openrouter_routing_payload()},
-            bounded_cap(4), provider, emit,
+            bounded_cap(5), provider, emit,
         )
 
     # Cloudflare's current chat path is the reliable non-streaming reserve.

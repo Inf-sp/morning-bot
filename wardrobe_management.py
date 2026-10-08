@@ -399,9 +399,12 @@ def _purchase_cache(cid, wardrobe):
     return _build_purchase_cache(cid, wardrobe)
 
 
-async def _ai_purchase_ideas(cid, wardrobe, facts):
+async def _ai_purchase_ideas(cid, wardrobe, facts, avoid=()):
     """AI предлагает вещи структурно; числа и текст карточки собирает код."""
     prefs = _settings.wardrobe_prefs_context(cid)
+    avoid = sorted({str(name) for name in avoid if str(name).strip()})
+    avoid_line = (f"\nНе предлагай эти вещи и их близкие варианты: "
+                  f"{secure.wrap_untrusted(', '.join(avoid), 'исключённые вещи')}" if avoid else "")
     prompt = f"""Ты персональный стилист. Предложи 6 конкретных вещей, которые стоит докупить к реальному шкафу.
 Факты, посчитанные кодом (числа не меняй и не добавляй новых): {purchase_logic.ai_facts_text(facts, purchase_logic.analysis(facts))}
 Предпочтения:
@@ -413,12 +416,12 @@ async def _ai_purchase_ideas(cid, wardrobe, facts):
 Правила: не предлагай вещи, которые уже есть; закрывай слабые места; называй цвет и тип вещи
 («Белые кожаные кеды»), без брендов и цен. why — одно предложение, почему вещь нужна именно этому
 шкафу, только по фактам и вещам выше. tip — один практичный совет по выбору этой вещи.
-JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}"""
+JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}{avoid_line}"""
     data = await ai.allm_json(
         prompt, 900, tier="smart", module="wardrobe",
         cache_context={
             "scenario": "wardrobe_purchase_ideas", "wardrobe": wardrobe, "preferences": prefs,
-            "facts": facts, "language": "ru", "schema_version": 1,
+            "facts": facts, "language": "ru", "schema_version": 1, "avoid": avoid,
         },
     )
     return [item for item in (data or {}).get("items") or [] if isinstance(item, dict)][:8]
@@ -501,6 +504,9 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
             state = _build_purchase_cache(cid, wardrobe, ai_items=ai_items)
     profile = store.get_profile(cid) or {}
     pool = purchase_logic.visible_pool(state["pool"], purchase_logic.rejected_names(profile))
+    if len(pool) < purchase_logic.BATCH_SIZE:
+        # Место отклонённой или купленной вещи занимает новая идея, а не пустота.
+        state, pool = await _refill_purchase_pool(cid, wardrobe, state, profile, pool)
     cycle_reset = False
     if more:
         batch, cycle_reset = purchase_logic.next_batch(
@@ -521,6 +527,21 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = msg.text
     await _purchase_reply(bot, cid, q, msg, kb)
+
+
+async def _refill_purchase_pool(cid, wardrobe, state, profile, pool):
+    rejected = purchase_logic.rejected_names(profile)
+    avoid = [*rejected, *(c.get("item") for c in state.get("pool") or [])]
+    try:
+        fresh = await _ai_purchase_ideas(cid, wardrobe, state["facts"], avoid=avoid)
+    except Exception:
+        _log.warning("wardrobe purchase: refill AI ideas unavailable cid=%s", cid, exc_info=True)
+        return state, pool
+    if not fresh:
+        return state, pool
+    previous = [x for x in state.get("ai") or [] if isinstance(x, dict)]
+    state = _build_purchase_cache(cid, wardrobe, ai_items=[*previous, *fresh][-24:])
+    return state, purchase_logic.visible_pool(state["pool"], rejected)
 
 
 def _purchase_candidate_by_id(cid, wardrobe, item_id):
