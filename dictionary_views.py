@@ -75,7 +75,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     entries = [item for item in _dict_lang_entries(cid, lang) if entry_is_dictionary_word(item)]
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
-    rows.append([InlineKeyboardButton("✅ Добавить слово", callback_data=f"a_dictadd_smart_{lang}")])
+    rows.append([InlineKeyboardButton("✅ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")])
     for category in _DICT_VISIBLE_CATEGORY_ORDER:
         index = _DICT_CATEGORY_ORDER.index(category)
         count = sum(1 for item in entries if _dictionary_category(item) == category)
@@ -84,7 +84,7 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         rows.append([InlineKeyboardButton(
             f"{category} · {count}", callback_data=f"a_dictcat_{lang}_{index}_0",
         )])
-    rows.append([InlineKeyboardButton("✨ Подобрать новые слова", callback_data=f"a_dictseed_start_{lang}")])
+    rows.append([InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")])
     rows.append(nav_row(back))
     if entries:
         text = f"{flag} Мой словарь · {len(entries)} слов"
@@ -503,7 +503,7 @@ async def send_dict_add_prompt(bot, cid, lang):
 
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Добавить слово", callback_data=f"a_dictadd_smart_{lang}")],
+        [InlineKeyboardButton("✅ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data=f"a_dictlang_{lang}")],
         nav_row(f"a_dictlang_{lang}"),
     ])

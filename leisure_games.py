@@ -1146,11 +1146,11 @@ def _preferences_keyboard(cid):
         callback_data=f"set_game_platform_{key}",
     )] for key, label in GAME_PLATFORMS]
     rows.extend([[InlineKeyboardButton(
-        ("✅ " if recency == value else "") + label,
+        ("✅ " if recency == value else "□ ") + label,
         callback_data=f"set_game_recency_{value or 'any'}",
     )] for label, value in _GAME_RECENCY_OPTIONS])
     rows.extend([[InlineKeyboardButton(
-        ("✅ " if rating == value else "") + f"⭐ {label}",
+        ("✅ " if rating == value else "□ ") + f"⭐ {label}",
         callback_data=f"set_game_rating_{value}",
     )] for label, value in _GAME_RATING_OPTIONS])
     rows.append(nav_row("vg_set"))

@@ -452,8 +452,8 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
     if code >= 500:
         return "temporary", "временная ошибка"
     if code >= 400:
-        return "unknown", "не удалось определить статус"
-    return "unknown", "не удалось определить статус"
+        return "unknown", "ошибка запроса"
+    return "unknown", "сервис не ответил"
 
 
 def _append_history(
@@ -751,14 +751,25 @@ def selected_provider(provider: str) -> str:
     return fallback if fallback in SPEC_BY_KEY and state.get("fallback_reason") == "request" else provider
 
 
+_LEGACY_ERRORS = {"не удалось определить статус": "сервис не ответил"}
+
+
+def _public_state(state) -> dict:
+    """Старые сохранённые формулировки ошибок заменяются понятными для админки."""
+    state = dict(state)
+    if state.get("last_error") in _LEGACY_ERRORS:
+        state["last_error"] = _LEGACY_ERRORS[state["last_error"]]
+    return state
+
+
 def get_state(provider: str) -> dict:
-    return dict((load_state().get("services") or {}).get(provider) or blank_state(provider))
+    return _public_state((load_state().get("services") or {}).get(provider) or blank_state(provider))
 
 
 def states() -> list[dict]:
     data = load_state().get("services") or {}
     return [
-        {"service": spec.key, **dict(data.get(spec.key) or blank_state(spec.key))}
+        {"service": spec.key, **_public_state(data.get(spec.key) or blank_state(spec.key))}
         for spec in SPECS
     ]
 

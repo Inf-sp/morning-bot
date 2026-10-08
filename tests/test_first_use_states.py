@@ -40,7 +40,7 @@ def test_learning_empty_state_has_one_clear_next_step():
     )
     assert _labels(message.reply_markup) == [
         ["✅ Добавить слова"],
-        ["✨ Подобрать новые слова"],
+        ["✨ Сгенерировать набор слов"],
     ]
 
 
@@ -74,7 +74,7 @@ def test_learning_entry_shows_empty_state_without_starting_seed(monkeypatch):
 
     assert Query.message.updated["text"].startswith("🧠 Обучение\n\nДобавляй сюда слова")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["✅ Добавить слова"], ["✨ Подобрать новые слова"],
+        ["✅ Добавить слова"], ["✨ Сгенерировать набор слов"],
     ]
 
 
@@ -157,8 +157,8 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     rows = _labels(bot.message["reply_markup"])
     assert "📝 Предпочтения" not in [label for row in rows for label in row]
     assert rows == [
-        ["✅ Добавить слово"],
-        ["✨ Подобрать новые слова"],
+        ["✅ Добавить своё слово"],
+        ["✨ Сгенерировать набор слов"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -180,7 +180,7 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[0] == ["✅ Добавить слово"]
+    assert rows[0] == ["✅ Добавить своё слово"]
     assert rows[1:7] == [
         [f"{category} · 1"]
         for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER[:6]
@@ -321,7 +321,7 @@ def test_learning_level_picker_has_two_levels_and_returns_to_language_selection(
 
     assert [row[0].text for row in keyboard.inline_keyboard[:2]] == [
         "✅ 🔽 Простой (A1 - A2)",
-        "🔼 Сложный (B1+)",
+        "□ 🔼 Сложный (B1+)",
     ]
     assert [row[0].callback_data for row in keyboard.inline_keyboard[:2]] == [
         "set_learning_level_simple_dict",
@@ -336,7 +336,7 @@ def test_onboarding_and_dictionary_seed_show_only_two_complexities():
         ["🔼 Сложный (B1+)"],
     ]
     assert _labels(dictionary_seed_ui.level_keyboard("nl", "hard"))[:2] == [
-        ["🔽 Простой (A1 - A2)"],
+        ["□ 🔽 Простой (A1 - A2)"],
         ["✅ 🔼 Сложный (B1+)"],
     ]
 
@@ -345,7 +345,7 @@ def test_learning_preferences_can_disable_language_study():
     keyboard = learning_settings.learning_settings_kb("", "")
     labels = [row[0].text for row in keyboard.inline_keyboard[:-1]]
 
-    assert labels == ["🇳🇱 Нидерландский", "🇬🇧 Английский", "✅ 🚫 Не изучаю"]
+    assert labels == ["□ 🇳🇱 Нидерландский", "□ 🇬🇧 Английский", "✅ 🚫 Не изучаю"]
 
 
 def test_learning_preferences_from_settings_return_to_settings():
@@ -360,13 +360,13 @@ def test_cuisine_preferences_use_one_column():
 
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert _labels(keyboard)[:-1] == [
-        ["🍣 Азиатская"],
-        ["🍕 Итальянская"],
-        ["🥗 Средиземноморская"],
-        ["🥐 Французская"],
-        ["🌶️ Мексиканская"],
-        ["🍛 Индийская"],
-        ["🍲 Восточноевропейская"],
+        ["□ 🍣 Азиатская"],
+        ["□ 🍕 Итальянская"],
+        ["□ 🥗 Средиземноморская"],
+        ["□ 🥐 Французская"],
+        ["□ 🌶️ Мексиканская"],
+        ["□ 🍛 Индийская"],
+        ["□ 🍲 Восточноевропейская"],
     ]
 
 

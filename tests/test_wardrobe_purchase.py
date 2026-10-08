@@ -75,7 +75,7 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
     text = wardrobe_ui.purchase_screen({**data, "picks": [{"name": "Белые кожаные кеды", "gain": 14}]}).text
     assert text.startswith("💳 Что докупить\n\n👔 Твой шкаф · 9 вещей · 16 образов\n")
     assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
-    assert "1. Белые кожаные кеды · +14 образов" in text
+    assert "1. Белые кожаные кеды\n" in text + "\n" and "+14" not in text
     assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
@@ -131,7 +131,11 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     assert (best["zone"], best["gain"]) == ("Обувь", 16)
     assert labels[0] == [f"1. {best['item']}"]
     assert labels[3:] == [["⬅️ Назад"]]
-    assert f"🛒 Самое полезное сейчас\n1. {best['item']} · +16 образов" in message["text"]
+    assert f"🛒 Самое полезное сейчас\n1. {best['item']}\n2. " in message["text"]
+    assert "образов\n2." not in message["text"]
+    styles = [row[0].api_kwargs.get("style") for row in message["reply_markup"].inline_keyboard[:3]]
+    assert styles == ["danger"] * 3
+    assert message["reply_markup"].inline_keyboard[3][0].callback_data == "m_wardrobe"
     callbacks = [b.callback_data for row in message["reply_markup"].inline_keyboard for b in row]
     assert all(len(data.encode()) <= 64 and "кед" not in data for data in callbacks)
     assert all(routing.resolve_callback_handler(data)["handled"] for data in callbacks if data.startswith("w_"))
@@ -161,7 +165,7 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     assert "Готовые образы:\n• серая футболка + синие джинсы" in text
     assert "💡 " in text and "http" not in text and "€" not in text
     assert _labels(query.edited[0]["reply_markup"]) == [
-        ["✅ Купил — добавить в шкаф"], ["❌ Не нужно"], ["⬅️ Назад"],
+        ["✅ Добавить в шкаф"], ["⬅️ Назад"],
     ]
     wardrobe.store.pending_input.pop(cid, None)
 

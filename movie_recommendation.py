@@ -263,13 +263,13 @@ def _movie_prefs_kb(cid):
     tpref = settings.get(cid, "movie_type_pref", "") or ""
     rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = [[InlineKeyboardButton(("✅ " if tpref == value else "") + label,
+    rows = [[InlineKeyboardButton(("✅ " if tpref == value else "□ ") + label,
                                   callback_data=f"mpref_type_{value}")]
             for label, value in _PREF_TYPE]
-    rows.extend([[InlineKeyboardButton(("✅ " if rpref == value else "") + label,
+    rows.extend([[InlineKeyboardButton(("✅ " if rpref == value else "□ ") + label,
                                       callback_data=f"mpref_recency_{value or 'any'}")]
                  for label, value in _PREF_RECENCY])
-    rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "") + f"⭐️ {label}",
+    rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "□ ") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
     rows.append(nav_row("movie_favorites"))

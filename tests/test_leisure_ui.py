@@ -88,14 +88,14 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
     rows = _labels(leisure_movies._movie_prefs_kb("42"))
 
     assert rows == [
-        ["🎬 Фильмы"],
-        ["Сериалы"],
-        ["Новинки"],
+        ["□ 🎬 Фильмы"],
+        ["□ Сериалы"],
+        ["□ Новинки"],
         ["✅ Любые годы"],
-        ["⭐️ 6.5"],
-        ["⭐️ 7.0"],
-        ["⭐️ 7.5"],
-        ["⭐️ 8.0"],
+        ["□ ⭐️ 6.5"],
+        ["□ ⭐️ 7.0"],
+        ["□ ⭐️ 7.5"],
+        ["□ ⭐️ 8.0"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_movies._movie_prefs("42") == {
@@ -291,9 +291,9 @@ def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypat
 
     assert rows == [
         ["✅ Новинки"],
-        ["Любые годы"],
-        ["⭐️ 3.5"],
-        ["⭐️ 4.0"],
+        ["□ Любые годы"],
+        ["□ ⭐️ 3.5"],
+        ["□ ⭐️ 4.0"],
         ["✅ ⭐️ 4.5"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]

@@ -79,13 +79,16 @@ def _error_signature(entry):
 
 # ================= ДОМ =================
 
+# Основные действия админки — зелёные кнопки (явный цвет, не по подписи).
+_GREEN = {"style": "success"}
+
 
 async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
-        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
-        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
+        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check", api_kwargs=_GREEN)],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users", api_kwargs=_GREEN)],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
@@ -242,7 +245,7 @@ async def send_users(bot, cid, q=None):
     stats = _user_stats()
     users_list = _users_list()
     rows = [
-        [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite")],
+        [InlineKeyboardButton(ui_label("invite", "Инвайт"), callback_data="adm_invite", api_kwargs=_GREEN)],
     ]
     if _removable_users():
         rows.append([InlineKeyboardButton(delete_label("Удалить пользователя"), callback_data="adm_user_del")])
@@ -409,8 +412,8 @@ def _monitor_error_message(message, status_code):
         return "ошибка запроса"
     if code in (408, 502, 503, 504):
         return "временно недоступен"
-    if message == "не удалось определить статус":
-        return "сервис не ответил"
+    if message in provider_runtime._LEGACY_ERRORS:
+        return provider_runtime._LEGACY_ERRORS[message]
     return message
 
 

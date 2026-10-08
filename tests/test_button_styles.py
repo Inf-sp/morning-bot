@@ -43,12 +43,12 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [[button["text"] for button in row] for row in rows]
     assert texts == [
-        ["Другой фильм"], ["Добавить слово"], ["✅ Комедия", "Не добавлять"],
+        ["Другой фильм"], ["Добавить слово"], ["Комедия", "Не добавлять"],
         ["Удалить", "2/5"], ["Назад"],
     ]
     styles = {button["text"]: button.get("style") for row in rows for button in row}
     assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
-    assert styles["Другой фильм"] == "success" and styles["✅ Комедия"] is None
+    assert styles["Другой фильм"] == "success" and styles["Комедия"] == "success"
     assert styles["Назад"] == "primary"
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
@@ -136,9 +136,9 @@ def test_meaningful_emoji_stay_and_main_menu_is_untouched():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [[button["text"] for button in row] for row in rows] == [
-        ["Мой шкаф"], ["□ Драма", "🟢 Яйца"], ["⬅️", "🇳🇱 Нидерланды"], ["Главная"],
+        ["Мой шкаф"], ["Драма", "🟢 Яйца"], ["⬅️", "🇳🇱 Нидерланды"], ["Главная"],
     ]
-    assert rows[3][0]["style"] == "primary"
+    assert rows[3][0]["style"] == "primary" and rows[1][0]["style"] == "danger"
 
     main = InlineKeyboardMarkup([
         [InlineKeyboardButton("☀️ Мой день", callback_data="m_myday")],
@@ -155,3 +155,18 @@ def test_disable_button_is_red(sent):
     assert sent[0]["reply_markup"]["inline_keyboard"][0][0] == {
         "text": "Отключить уведомления", "callback_data": "off", "style": "danger",
     }
+
+
+def test_toggles_become_green_or_red_without_marks_and_keep_marks_without_color():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ 🇳🇱 Нидерландский", callback_data="nl")],
+        [InlineKeyboardButton("□ ⭐️ 7+", callback_data="r7")],
+        [InlineKeyboardButton("✅ Добавить отмеченные", callback_data="add")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
+        ("Добавить отмеченные", "success"), ("Нидерландский", "success"), ("7+", "danger"),
+    ]
+
+    plain = telegram_runtime._enhance_markup(markup, level=0)["inline_keyboard"]
+    assert [row[0]["text"] for row in plain][1:] == ["✅ 🇳🇱 Нидерландский", "□ ⭐️ 7+"]

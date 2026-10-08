@@ -80,7 +80,7 @@ def render_keyboard(state):
 def level_keyboard(code, current):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(
-            f"{'✅ ' if level == current else ''}{LEVEL_LABELS[level]}",
+            f"{'✅ ' if level == current else '□ '}{LEVEL_LABELS[level]}",
             callback_data=f"a_dictseedlvl_{code}_{level}")]
         for level in SEED_LEVELS
     ] + [

@@ -728,21 +728,32 @@ def build_how_to_wear(items, style_tip=""):
     return actions[:3]
 
 
+# Носки — цветной акцент к низу и обуви; синий почти не предлагаем.
+_SOCK_ACCENTS = (
+    (("джинс", "деним", "син", "голуб"), "Жёлтые — контраст с синим низом"),
+    (("олив", "зелён", "зелен", "хаки"), "Бордовые — глубокий акцент к оливковому"),
+    (("беж", "корич", "песоч", "кэмел"), "Зелёные — свежая деталь к бежевому"),
+    (("чёрн", "черн", "тём", "темн", "графит"), "Горчичные — тёплый акцент к тёмному низу"),
+    (("сер",), "Бордовые — оживят серый"),
+)
+
+
+def _color_facts(item):
+    return f"{_item_facts(item)} {' '.join(map(str, item.get('colors') or []))}".casefold()
+
+
 def build_sock_recommendation(items):
-    """Подбирает спокойный цвет носков к обуви и низу, не утверждая, что они есть в шкафу."""
+    """Цвет носков-акцента к низу и обуви; носки из шкафа показываются как есть."""
     selected = next((item for item in items
                      if item.get("zone") == "Аксессуары" and "носк" in _item_facts(item)), None)
     if selected:
-        return public_item_name(selected)
+        color = re.sub(r"\s*носк\w*", "", public_item_name(selected)).strip()
+        return f"{color} — из твоего шкафа" if color else "из твоего шкафа"
 
-    shoe = next((item for item in items if item.get("zone") == "Обувь"), {})
-    bottom = next((item for item in items if item.get("zone") == "Низ"), {})
-    facts = f"{_item_facts(shoe)} {_item_facts(bottom)}"
-    if any(marker in facts for marker in ("чёрн", "черн", "тём", "темн")):
-        return "Тёмно-серые носки"
-    if any(marker in facts for marker in ("олив", "зелён", "зелен", "хаки")):
-        return "Светло-серые носки"
-    return "Белые носки"
+    facts = " ".join(_color_facts(item) for item in items if item.get("zone") in ("Низ", "Обувь"))
+    return next((accent for markers, accent in _SOCK_ACCENTS
+                 if any(marker in facts for marker in markers)),
+                "Жёлтые — яркая деталь к светлой обуви")
 
 
 def build_main_accent(items, weather_ctx=None, avoid_accents=None):

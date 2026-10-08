@@ -85,7 +85,22 @@ def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
         "Рукава слегка подвернуть",
         "Футболку оставить навыпуск",
     ]
-    assert build_sock_recommendation(items) == "Светло-серые носки"
+    assert build_sock_recommendation(items) == "Бордовые — глубокий акцент к оливковому"
+
+
+def test_socks_are_a_colour_accent_and_never_blue():
+    def socks(bottom, shoe="Белые кеды"):
+        return build_sock_recommendation([
+            {"name": bottom, "zone": "Низ"}, {"name": shoe, "zone": "Обувь"},
+        ])
+
+    assert socks("Синие джинсы") == "Жёлтые — контраст с синим низом"
+    assert socks("Чёрные брюки", "Чёрные ботинки") == "Горчичные — тёплый акцент к тёмному низу"
+    assert socks("Бежевые чиносы") == "Зелёные — свежая деталь к бежевому"
+    assert all(not socks(bottom).startswith(("Син", "Голуб")) for bottom in ("Синие джинсы", "Серые брюки", "Белые шорты"))
+    assert build_sock_recommendation([
+        {"name": "Синие носки", "zone": "Аксессуары"},
+    ]) == "Синие — из твоего шкафа"
 
 
 def test_outfit_card_does_not_show_legacy_fashion_rebus():
@@ -134,7 +149,8 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
     assert "- Синие носки" not in message.text
-    assert "Главный акцент: синие носки поддержат обувь и соберут образ." in message.text
+    assert "Главный акцент" not in message.text
+    assert message.text.endswith("🧦 Носки: синие")
 
 
 def test_outfit_card_puts_each_selected_top_on_its_own_line():
@@ -645,15 +661,15 @@ def test_style_preferences_invalidate_current_outfit_and_purchase_advice(monkeyp
     assert invalidated == [("look", "42"), ("purchase", "42")]
 
 
-def test_wardrobe_preferences_show_only_six_emoji_styles():
+def test_wardrobe_preferences_show_six_styles_as_toggles_without_emoji():
     markup = settings._wardrobe_style_kb("prefs-test", state={
-        "styles": [], "fit": "", "palette": [], "avoid": [],
+        "styles": ["Минимализм"], "fit": "", "palette": [], "avoid": [],
     })
     labels = [button.text for row in markup.inline_keyboard for button in row]
 
     assert labels[:-2] == [
-        "👕 Минимализм", "🧥 Скандинавский", "👖 Повседневный",
-        "🧢 Городской", "👔 Классический", "👟 Спортивный",
+        "✅ Минимализм", "□ Скандинавский", "□ Повседневный",
+        "□ Городской", "□ Классический", "□ Спортивный",
     ]
     assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"

@@ -1,3 +1,5 @@
+import re
+
 from .builder import MessageBuilder
 from .news import append_weekly_news
 from .text import ru_plural
@@ -86,19 +88,22 @@ def render_wardrobe_message(look_data, *, news=None):
     selected_socks = next(
         (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
     )
-    sock_recommendation = _upper_first(
-        _clean_text(look_data.get("sock_recommendation")) or selected_socks
-    )
-    main_accent = _finish_dot(
-        look_data.get("main_accent")
-        or (f"{sock_recommendation} поддержат обувь и соберут образ"
-            if sock_recommendation else "")
-    )
+    # Старые кэши хранят «Белые носки» — слово «носки» уже в подписи строки.
+    socks = re.sub(r"\s*носк\w*", "", _clean_text(
+        look_data.get("sock_recommendation") or selected_socks)).strip()
+    main_accent = _finish_dot(look_data.get("main_accent") or "")
     if main_accent:
         b.spacer()
         b.text_line("💡 ")
         b.bold("Главный акцент:")
         b.text_line(f" {_lower_first(main_accent)}")
+        b.newline()
+    if socks:
+        if not main_accent:
+            b.spacer()
+        b.text_line("🧦 ")
+        b.bold("Носки:")
+        b.text_line(f" {_lower_first(socks)}")
         b.newline()
 
     append_weekly_news(b, news)
@@ -286,9 +291,7 @@ def purchase_screen(data):
         b.bold("🛒 Самое полезное сейчас")
         b.newline()
         for index, pick in enumerate(picks, 1):
-            gain = int(pick.get("gain") or 0)
-            suffix = f" · +{gain} {_outfits_word(gain)}" if gain > 0 else ""
-            b.line(f"{index}. {_clean_text(pick['name'])}{suffix}")
+            b.line(f"{index}. {_clean_text(pick['name'])}")
     else:
         b.spacer()
         b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")

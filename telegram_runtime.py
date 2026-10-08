@@ -100,7 +100,7 @@ _DELETE_RE = re.compile(r"^(?:Удалить|Очистить|Убрать|От�
 _ADD_RE = re.compile(r"^(?:Добавить|Создать)\b")
 # Всё, что подбирает или создаёт новое, — зелёная кнопка в самом верху.
 _REFRESH_RE = re.compile(
-    r"^(?:Обновить|Подобрать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
+    r"^(?:Обновить|Подобрать|Сгенерировать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
 )
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
@@ -114,6 +114,21 @@ _button_level = 2
 
 def _is_flag(text):
     return len(text) >= 2 and all("\U0001F1E6" <= char <= "\U0001F1FF" for char in text[:2])
+
+
+# Переключатели: в коде «✅ X» / «□ X», в чате — зелёная / красная кнопка без значков.
+_TOGGLE_ON = ("✅", "☑")
+_TOGGLE_OFF = ("□", "⬜")
+
+
+def _toggle(text):
+    """(подпись без значков, стиль) для переключателя, иначе None."""
+    if not text.startswith(_TOGGLE_ON + _TOGGLE_OFF):
+        return None
+    label = _LEADING_EMOJI_RE.sub("", text[1:].lstrip("\uFE0F").lstrip()).strip()
+    if not label or _ADD_RE.match(label) or _DELETE_RE.match(label):
+        return None
+    return label, "success" if text.startswith(_TOGGLE_ON) else "danger"
 
 
 def _plain_label(text):
@@ -136,7 +151,8 @@ def _enhance_markup(markup, level=2):
     Без эмодзи (кроме главного меню и исключений выше); зелёные — «Другой…/Ещё…/
     Подобрать…/Обновить» (самый верх) и «Добавить…» (под ними); красные —
     «Удалить…»; синие — «Главная», «Назад» и «Настроить»; ``noop``-кнопки (счётчик страниц,
-    индикатор ожидания) становятся disabled (Bot API 10.3), индикатор ожидания — зелёный.
+    индикатор ожидания) становятся disabled (Bot API 10.3), индикатор ожидания — зелёный;
+    переключатели «✅ X» / «□ X» — зелёная / красная «X» (без цвета значки остаются).
     """
     if not isinstance(markup, InlineKeyboardMarkup):
         return None
@@ -150,6 +166,12 @@ def _enhance_markup(markup, level=2):
     for index, row in enumerate(rows):
         for button in row:
             text = str(button.get("text") or "")
+            toggle = _toggle(text) if level >= 1 else None
+            if toggle:
+                button["text"] = toggle[0]
+                button.setdefault("style", toggle[1])
+                changed = True
+                continue
             label = _plain_label(text)
             if label is not None and label != text:
                 button["text"] = text = label

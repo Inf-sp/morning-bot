@@ -369,6 +369,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     rows = [
         [("✨ Другой образ", "w_look")],  # новый образ дня; в чате — зелёная без эмодзи
+        [("💳 Что докупить", "w_buy")],
         [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "w_closet")],
     ]
     return _kb(rows)
@@ -722,7 +723,6 @@ async def send_wardrobe_zones(bot, cid, q=None):
             public_zone_name(zone),
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    rows.append([InlineKeyboardButton("💳 Что докупить", callback_data="w_buy")])
     rows.append([InlineKeyboardButton(
         "📝 Предпочтения", callback_data="set_pref_style",
     )])

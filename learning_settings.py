@@ -86,15 +86,15 @@ def learning_settings_kb(active_lang, active_level, back="set_home"):
     }.get(str(active_lang or "").strip().lower(), "")
     rows = [
         [InlineKeyboardButton(
-            f"{'✅ ' if active_code == 'nl' else ''}🇳🇱 Нидерландский",
+            f"{'✅ ' if active_code == 'nl' else '□ '}🇳🇱 Нидерландский",
             callback_data=f"set_learning_language_nl{suffix}",
         )],
         [InlineKeyboardButton(
-            f"{'✅ ' if active_code == 'en' else ''}🇬🇧 Английский",
+            f"{'✅ ' if active_code == 'en' else '□ '}🇬🇧 Английский",
             callback_data=f"set_learning_language_en{suffix}",
         )],
         [InlineKeyboardButton(
-            f"{'✅ ' if not active_code else ''}🚫 Не изучаю",
+            f"{'✅ ' if not active_code else '□ '}🚫 Не изучаю",
             callback_data=f"set_learning_language_none{suffix}",
         )],
     ]
@@ -106,7 +106,7 @@ def learning_level_kb(active_level, back="set_home"):
     suffix = _suffix(back)
     rows = [
         [InlineKeyboardButton(
-            f"{'✅ ' if level == active_level else ''}{LEVEL_LABELS[level]}",
+            f"{'✅ ' if level == active_level else '□ '}{LEVEL_LABELS[level]}",
             callback_data=f"set_learning_level_{level}{suffix}",
         )]
         for level in LEVELS

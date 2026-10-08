@@ -195,7 +195,7 @@ def _refresh_with(monkeypatch, llm_name, local_name):
     monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kw: [])
     monkeypatch.setattr(recipe_generation, "_normalize_home_idea", lambda data, _ctx: dict(data))
     monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_args, **_kw: _recipe(llm_name))
-    monkeypatch.setattr(recipe_generation, "_home_local_idea", lambda _ctx: _recipe(local_name))
+    monkeypatch.setattr(recipe_generation, "_home_local_idea", lambda _ctx, avoid=(): _recipe(local_name))
     return recipe_generation.get_cooking_home_idea("42", refresh=True)["name"]
 
 
@@ -205,3 +205,14 @@ def test_other_recipe_skips_recipes_already_shown_this_month(monkeypatch):
 
 def test_other_recipe_never_repeats_current_when_nothing_new(monkeypatch):
     assert _refresh_with(monkeypatch, llm_name="Омлет", local_name="Омлет") == "Сырники"
+
+
+def test_local_fallback_skips_shown_recipes_when_ai_is_down():
+    fridge = "яйца, помидоры, сыр, хлеб, рис, курица, лук"
+    first = recipe_generation._fallback_leftovers_recipe(fridge, meal="lunch")["name"]
+    second = recipe_generation._fallback_leftovers_recipe(fridge, meal="lunch", avoid=[first])["name"]
+
+    assert second != first
+    assert recipe_generation._fallback_leftovers_recipe(
+        "яйца", meal="lunch", avoid=["Яичная сковорода с овощами", "Омлет"],
+    )["name"] == "Яичная сковорода с овощами"

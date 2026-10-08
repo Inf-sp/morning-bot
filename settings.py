@@ -617,7 +617,7 @@ def _cuisines_kb(cid, back="as_fridge_home"):
     selected = set(cuisines(cid))
     buttons = [
         InlineKeyboardButton(
-            ("✅ " if key in selected else "") + label,
+            ("✅ " if key in selected else "□ ") + label,
             callback_data=f"set_cuisine_{key}",
         )
         for key, label in CUISINE_OPTIONS
@@ -782,7 +782,7 @@ def _toggle_multi(cid, key, options, idx):
 
 
 def _multi_pick_kb(selected, options, prefix, back):
-    buttons = [InlineKeyboardButton(("✅ " if v in selected else "") + v, callback_data=f"{prefix}_{i}")
+    buttons = [InlineKeyboardButton(("✅ " if v in selected else "□ ") + v, callback_data=f"{prefix}_{i}")
                for i, v in enumerate(options)]
     rows = [[button] for button in buttons]
     rows.append(nav_row(back))
@@ -894,9 +894,7 @@ def _wardrobe_style_state(cid):
 def _wardrobe_style_kb(cid, state=None):
     state = state or _wardrobe_style_state(cid)
     selected_styles = set(state["styles"])
-    emojis = {"Минимализм": "👕", "Скандинавский": "🧥", "Повседневный": "👖",
-              "Городской": "🧢", "Классический": "👔", "Спортивный": "👟"}
-    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "") + f"{emojis[s]} {s}", callback_data=f"set_style_{i}")
+    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "□ ") + s, callback_data=f"set_style_{i}")
                      for i, s in enumerate(STYLES)]
     rows = [[button] for button in style_buttons]
     rows.append(nav_row("w_closet"))

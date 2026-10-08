@@ -4,6 +4,8 @@ import logging
 import re
 from datetime import datetime
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 import ai
 import config
 import recommendation_rotation as rotation
@@ -497,12 +499,16 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
         **state["analysis"],
         "picks": [{"name": c["item"], "gain": c["gain"]} for c in batch],
     })
-    rows = [[(f"{index}. {c['item'][:40]}", f"w_buy_i:{c['id']}")] for index, c in enumerate(batch, 1)]
-    rows.append([("⬅️ Назад", "w_closet")])
+    # Вещи-кандидаты — красные кнопки: цвет задан явно, это не «Удалить».
+    kb = InlineKeyboardMarkup([
+        *[[InlineKeyboardButton(f"{index}. {c['item'][:40]}", callback_data=f"w_buy_i:{c['id']}",
+                                api_kwargs={"style": "danger"})] for index, c in enumerate(batch, 1)],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe")],
+    ])
     store.pending_input[str(cid)] = "wardrobe_buy"
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = msg.text
-    await _purchase_reply(bot, cid, q, msg, _wardrobe._kb(rows))
+    await _purchase_reply(bot, cid, q, msg, kb)
 
 
 def _purchase_candidate_by_id(cid, wardrobe, item_id):
@@ -520,8 +526,7 @@ async def show_purchase_card(bot, cid, item_id, q=None):
         return
     msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
     kb = _wardrobe._kb([
-        [("✅ Купил — добавить в шкаф", f"w_buy_got:{item_id}")],
-        [("❌ Не нужно", f"w_buy_no:{item_id}")],
+        [("✅ Добавить в шкаф", f"w_buy_got:{item_id}")],
         [("⬅️ Назад", "w_buy_back")],
     ])
     store.last_source[str(cid)] = "Гардероб · Что докупить"

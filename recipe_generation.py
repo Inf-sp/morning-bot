@@ -765,10 +765,11 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     )
 
 
-def _home_local_idea(context: dict) -> dict:
+def _home_local_idea(context: dict, avoid=()) -> dict:
     local = _fallback_leftovers_recipe(
         ", ".join(context.get("available") or []),
         meal=context.get("meal"),
+        avoid=avoid,
     ) or _fallback_recipe()
     if not local:
         return {}
@@ -923,7 +924,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
         idea = next((card for card in map(lambda source: _source_home_idea(source, context), sources)
                      if is_new(card)), {})
     if not is_new(idea):
-        idea = _home_local_idea(context)
+        idea = _home_local_idea(context, avoided_names if refresh else ())
     if refresh and not is_new(idea):
         # Нового варианта нет — самый давний рецепт месяца, но не текущий.
         idea = next((item for item in month_pool if _home_idea_complete(item)
@@ -1074,8 +1075,8 @@ def _gen_leftovers_recipe(ingredients, cid=None):
     return _source_fallback_card(sources) or _fallback_leftovers_recipe(ingredients) or _fallback_recipe()
 
 
-def _fallback_leftovers_recipe(ingredients, meal=None):
-    """Простой рецепт без AI на случай лимита обоих провайдеров.
+def _leftovers_candidates(ingredients, meal=None):
+    """Простые рецепты без AI на случай лимита обоих провайдеров, лучший первым.
 
     Использует только названия из холодильника; вода и сухая антипригарная
     сковорода позволяют не приписывать пользователю масло или специи.
@@ -1088,7 +1089,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
             seen.add(name.casefold())
             names.append(name)
     if not names:
-        return None
+        return
 
     by_cat = {}
     for name in names:
@@ -1147,13 +1148,13 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
     if eggs:
         used = eggs[:1] + cookable_vegetables[:2] + cheese[:1]
         if meal == "lunch":
-            return build("Яичная сковорода с овощами", 15, used, [
+            yield build("Яичная сковорода с овощами", 15, used, [
                 "Нарежь добавки и прогрей их на сухой антипригарной сковороде 4–5 минут",
                 "Взбей яйца, влей к овощам и перемешивай 2–3 минуты",
                 "Добавь сыр и подержи под крышкой ещё 2 минуты",
             ], "Перемешивай яйца от краёв к центру: так они останутся мягкими")
         if meal == "dinner":
-            return build("Фриттата с овощами", 20, used, [
+            yield build("Фриттата с овощами", 20, used, [
                 "Нарежь добавки и прогрей их на сухой жаропрочной сковороде 4–5 минут",
                 "Взбей яйца, влей к овощам и посыпь сыром",
                 "Запекай при 190 °C 10–12 минут до плотного края и мягкого центра",
@@ -1166,7 +1167,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
             title = "Омлет с сыром"
         else:
             title = "Омлет"
-        return build(title, 12, used, [
+        yield build(title, 12, used, [
             "Нарежь добавки небольшими кусочками",
             "Прогрей их на сухой антипригарной сковороде 3–4 минуты",
             "Взбей яйца, влей и готовь под крышкой 6–7 минут",
@@ -1175,7 +1176,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
     pasta = next((name for name in grains if re.search(r"макар|спагет|паст|лапш|noedel", name, re.I)), None)
     if pasta and (cookable_vegetables or cheese):
         used = [pasta] + cookable_vegetables[:2] + cheese[:1]
-        return build("Паста с овощами" if cookable_vegetables else "Паста с сыром", 20, used, [
+        yield build("Паста с овощами" if cookable_vegetables else "Паста с сыром", 20, used, [
             f"Отвари {pasta} по инструкции на упаковке и сохрани половника воды",
             "Нарежь добавки и прогрей их на сковороде с двумя ложками воды 5–7 минут",
             "Добавь пасту, влей немного воды от варки и перемешай 1 минуту",
@@ -1189,7 +1190,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
             (r"рис", "Рис"), (r"греч", "Гречка"),
             (r"булгур", "Булгур"), (r"кускус", "Кускус"),
         ) if re.search(pattern, base, re.I)), "Крупа")
-        return build(f"{base_title} с овощами", 25, used, [
+        yield build(f"{base_title} с овощами", 25, used, [
             f"Приготовь {base} по инструкции на упаковке",
             "Нарежь овощи одинаковыми кусочками и туши под крышкой с третью стакана воды 8–10 минут",
             "Смешай крупу с овощами и прогрей 2 минуты",
@@ -1197,7 +1198,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
 
     if bread and (cheese or sandwich_proteins or sandwich_vegetables):
         used = bread[:1] + cheese[:1] + sandwich_proteins[:1] + sandwich_vegetables[:1]
-        return build("Горячие бутерброды", 12, used, [
+        yield build("Горячие бутерброды", 12, used, [
             "Нарежь начинку тонкими ломтиками",
             "Разложи начинку на хлебе, сыр положи сверху",
             "Прогрей под крышкой на сухой сковороде 6–8 минут",
@@ -1206,7 +1207,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
     if cultured and fruit:
         used = cultured[:1] + fruit[:3]
         title = "Творог с фруктами" if re.search(r"творог", cultured[0], re.I) else "Йогурт с фруктами"
-        return build(title, 5, used, [
+        yield build(title, 5, used, [
             "Нарежь фрукты небольшими кусочками",
             "Выложи основу в миску и добавь фрукты",
             "Перемешай часть фруктов с основой, остальные оставь сверху",
@@ -1215,7 +1216,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
     if proteins and cookable_vegetables:
         used = proteins[:1] + cookable_vegetables[:3]
         is_fish = bool(re.search(r"рыб|лосос|с[её]мг|тунец|треск|форел|кревет", proteins[0], re.I))
-        return build("Рыба с овощами" if is_fish else "Мясо с овощами", 25, used, [
+        yield build("Рыба с овощами" if is_fish else "Мясо с овощами", 25, used, [
             "Подготовь основной продукт и нарежь овощи одинаковыми кусочками",
             "Готовь основной продукт на антипригарной сковороде до полной готовности",
             "Добавь овощи и треть стакана воды, накрой и туши 8–10 минут",
@@ -1223,7 +1224,7 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
 
     if len(cookable_vegetables) >= 2:
         used = cookable_vegetables[:4]
-        return build("Тушёные овощи", 20, used, [
+        yield build("Тушёные овощи", 20, used, [
             "Нарежь овощи одинаковыми кусочками",
             "Выложи плотные овощи в сковороду, добавь треть стакана воды и туши 8 минут",
             "Добавь мягкие овощи и готовь под крышкой ещё 6–8 минут",
@@ -1231,12 +1232,22 @@ def _fallback_leftovers_recipe(ingredients, meal=None):
 
     if len(fruit) >= 2:
         used = fruit[:4]
-        return build("Фруктовый салат", 7, used, [
+        yield build("Фруктовый салат", 7, used, [
             "Нарежь фрукты кусочками одного размера",
             "Сложи их в миску и аккуратно перемешай",
             "Оставь на 3 минуты, чтобы фрукты дали сок",
         ], "Самые мягкие фрукты добавь последними, чтобы они сохранили форму")
-    return None
+
+
+def _fallback_leftovers_recipe(ingredients, meal=None, avoid=()):
+    """Первый подходящий рецепт без AI, которого нет в avoid; иначе — лучший."""
+    avoided = {str(name).casefold() for name in avoid}
+    first = None
+    for recipe in _leftovers_candidates(ingredients, meal=meal):
+        if recipe["name"].casefold() not in avoided:
+            return recipe
+        first = first or recipe
+    return first
 
 
 # ---------- Батч-генерация очереди рецептов (§5 спеки) ----------

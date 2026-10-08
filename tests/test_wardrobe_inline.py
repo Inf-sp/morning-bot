@@ -323,9 +323,11 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
         ["✨ Другой образ"],
+        ["💳 Что докупить"],
         ["#️⃣ Главная", "🎚️ Настроить"],
     ]
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_look"
+    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_buy"
     assert "📝 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
@@ -628,7 +630,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
-    assert labels.index(["💳 Что докупить"]) == labels.index(["📝 Предпочтения"]) - 1
+    assert ["💳 Что докупить"] not in labels
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])
     assert all("✏️ Изменить" not in row for row in labels)
