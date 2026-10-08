@@ -104,8 +104,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Dat is de druppel!",
-        "Это последняя капля.",
+        "Dat is de druppel! — Это последняя капля.",
         "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
         "Грамматика:\nПосле eerst и toen подлежащее и глагол меняются местами: Toen morste ik koffie.",
         "💡 Полезно: придумай своё предложение с «eerst… toen…» и скажи его вслух.",
@@ -116,7 +115,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("blockquote") == ["Dat is de druppel!"]
+    assert marked("blockquote") == ["Dat is de druppel! — Это последняя капля."]
     assert marked("italic") == [
         "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
         "eerst", "toen", "Toen morste ik koffie.",

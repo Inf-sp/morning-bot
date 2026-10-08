@@ -149,10 +149,9 @@ def learning_menu(home: dict):
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
-        b.quote(str(phrase["text"]).strip())
+        # Фраза и перевод — одной цитатой: «Dat is de druppel! — Это последняя капля.»
+        b.quote(f"{str(phrase['text']).strip()} — {str(phrase['translation']).strip()}")
         b.newline()
-        b.spacer()
-        b.line(str(phrase["translation"]).strip())
         if phrase.get("example"):
             b.spacer()
             b.italic(str(phrase["example"]).strip())

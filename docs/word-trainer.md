@@ -13,9 +13,7 @@
 ```
 🇳🇱 Изучаем сегодня · Нидерландский
 
-> Dat is de druppel!
-
-Это последняя капля.
+> Dat is de druppel! — Это последняя капля.
 
 *Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!*
 
