@@ -16,6 +16,7 @@ import config
 import inclusive_recommendations
 import igdb
 import research
+import youtube_tracks
 import recommendation_rotation as rotation
 import recommendation_stoplist
 import secure
@@ -558,12 +559,35 @@ def _game_signature(cid):
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-def _youtube_trailer_search_url(title):
+# Фильтр YouTube «Дата загрузки: за этот год».
+_YOUTUBE_THIS_YEAR = "EgIIBQ%253D%253D"
+
+
+def _youtube_trailer_search_url(title, year=None):
     query = " ".join(str(title or "").split())
-    return (
-        f"https://www.youtube.com/results?search_query={quote_plus(f'{query} game official trailer')}"
-        if query else ""
-    )
+    if not query:
+        return ""
+    if year:
+        return ("https://www.youtube.com/results?search_query="
+                f"{quote_plus(f'{query} official trailer {year}')}&sp={_YOUTUBE_THIS_YEAR}")
+    return f"https://www.youtube.com/results?search_query={quote_plus(f'{query} game official trailer')}"
+
+
+async def _with_fresh_trailers(items, year):
+    """Новым играм — трейлер, опубликованный в этом году; иначе поиск YouTube за этот год.
+
+    Трейлер IGDB здесь не используется: его дату публикации проверить нельзя, и он
+    часто оказывается анонсом многолетней давности.
+    """
+    urls = await asyncio.gather(*(
+        asyncio.to_thread(youtube_tracks.find_fresh_trailer_url, item.get("title") or "", year)
+        for item in items
+    ))
+    return [
+        {**item, "trailer_url": url or _youtube_trailer_search_url(item.get("title"), year),
+         "trailer_year": year}
+        for item, url in zip(items, urls)
+    ]
 
 
 def _ensure_game_trailer_url(item):
@@ -1374,9 +1398,11 @@ def cached_season_premieres(cid, *, allow_stale=True):
         return None
     # В Досуге — только игры текущего года: релизы следующего года ещё рано советовать.
     items = [item for item in items if str(item.get("date") or "")[:4] == str(today.year)]
+    # Старый кэш без проверки года (трейлер IGDB) — поиск YouTube за этот год.
     return [
         {**item, "trailer_url": str(item.get("trailer_url") or "").strip()
-         or _youtube_trailer_search_url(item.get("title"))}
+         if item.get("trailer_year") == today.year
+         else _youtube_trailer_search_url(item.get("title"), today.year)}
         for item in _rotated_season_items(items, today)
     ]
 
@@ -1418,6 +1444,7 @@ async def get_game_premieres(cid, *, refresh=False, seasonal=False):
         for item in items:
             item["date_label"] = _premiere_date_label(item.get("date"))
         if items:
+            items = await _with_fresh_trailers(items, today.year)
             _premiere_cache_set(signature, today, items)
         return items
     source_urls = {str(item["url"]).strip() for item in sources}
@@ -1462,6 +1489,7 @@ async def get_game_premieres(cid, *, refresh=False, seasonal=False):
             item["date_label"] = _premiere_date_label(item.get("date"))
     if items:
         items = await asyncio.to_thread(igdb.enrich_game_premieres, items)
+        items = await _with_fresh_trailers(items, today.year)
         _premiere_cache_set(signature, today, items)
     return items
 

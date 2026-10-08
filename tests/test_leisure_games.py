@@ -492,6 +492,9 @@ def test_game_premieres_use_verified_source_url_and_platforms(monkeypatch):
         "genre": "приключение",
         "summary": "Герой исследует неизвестную планету.",
         "url": source_url,
+        # Без ключа YouTube API — поиск YouTube только за текущий год.
+        "trailer_url": leisure_games._youtube_trailer_search_url("Example Game", today.year),
+        "trailer_year": today.year,
     }]
 
 
@@ -534,7 +537,11 @@ def test_game_premieres_fall_back_to_igdb_when_web_search_is_empty(monkeypatch):
 
     items = asyncio.run(leisure_games.get_game_premieres("42", refresh=True))
 
-    assert items == [expected]
+    assert items == [{
+        **expected,
+        "trailer_url": leisure_games._youtube_trailer_search_url("Catalog Game", today.year),
+        "trailer_year": today.year,
+    }]
 
 
 def test_game_premiere_title_uses_youtube_trailer():
@@ -588,3 +595,21 @@ def test_game_premieres_are_sent_as_pageable_poster_card(monkeypatch):
     assert card["photo"] == items[0]["poster"]
     assert card["caption"].startswith("🎮 Премьеры игр")
     assert _labels(card["reply_markup"])[0] == ["◀️", "1/3", "▶️"]
+
+
+def test_fresh_game_trailer_is_from_current_year_and_not_a_reaction():
+    import youtube_tracks
+
+    items = [
+        {"id": {"videoId": "oldvid12"},
+         "snippet": {"title": "Example Game - Announcement Trailer", "publishedAt": "2024-09-24T00:00:00Z"}},
+        {"id": {"videoId": "reactvid1"},
+         "snippet": {"title": "Example Game trailer reaction", "publishedAt": "2026-10-01T00:00:00Z"}},
+        {"id": {"videoId": "newvid12"},
+         "snippet": {"title": "Example Game - Official Launch Trailer", "publishedAt": "2026-09-30T00:00:00Z"}},
+    ]
+
+    assert youtube_tracks._best_trailer_url(items, "Example Game", 2026) == (
+        "https://www.youtube.com/watch?v=newvid12"
+    )
+    assert "sp=EgIIBQ" in leisure_games._youtube_trailer_search_url("Example Game", 2026)

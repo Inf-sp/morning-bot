@@ -124,6 +124,7 @@ BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, item
 GAME_PREMIERES_CACHE_KEY = "game_premieres_cache.json"  # {platform_signature: {expires, items}} — подтверждённые игровые релизы
 CATEGORY_NEWS_CACHE_KEY = "category_news_cache.json"  # общий проверенный пул новостей по разделам
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
+YOUTUBE_TRAILER_CACHE_KEY = "youtube_trailer_cache.json"  # {год | название: {ts, url}} — свежие трейлеры игр
 YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"

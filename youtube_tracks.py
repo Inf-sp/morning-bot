@@ -219,3 +219,117 @@ def find_track_url(track: str, artist: str) -> str:
         url = _best_video_url(items, track, artist)
         _cache_set(key, url)
         return url
+
+
+# ---------- Свежие трейлеры игр (публикация текущего года) ----------
+_TRAILER_WORDS = ("trailer", "teaser", "трейлер")
+_TRAILER_UNWANTED = ("reaction", "review", "fan made", "fanmade", "concept", "mod ", "explained")
+
+
+def _trailer_cache_get(key: str):
+    cached = util.ttl_get("youtube_trailers", key, _MEMORY_CACHE_TTL)
+    if cached is not None:
+        return str(cached)
+    try:
+        data = store._load(config.YOUTUBE_TRAILER_CACHE_KEY)
+    except Exception:
+        return None
+    item = data.get(key) if isinstance(data, dict) else None
+    if not isinstance(item, dict):
+        return None
+    try:
+        if time.time() - float(item.get("ts") or 0) >= _CACHE_TTL:
+            return None
+    except (TypeError, ValueError):
+        return None
+    url = str(item.get("url") or "")
+    util.ttl_set("youtube_trailers", key, url)
+    return url
+
+
+def _trailer_cache_set(key: str, url: str) -> None:
+    now = time.time()
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        fresh = {
+            str(k): v for k, v in data.items()
+            if isinstance(v, dict) and now - float(v.get("ts") or 0) < _CACHE_TTL
+        }
+        fresh[key] = {"ts": now, "url": str(url or "")}
+        for stale in sorted(fresh, key=lambda k: fresh[k]["ts"])[:max(0, len(fresh) - _CACHE_LIMIT)]:
+            fresh.pop(stale, None)
+        return fresh, None
+
+    try:
+        store.mutate_kv(config.YOUTUBE_TRAILER_CACHE_KEY, mutate)
+    except Exception:
+        _log.debug("_trailer_cache_set: ignored error", exc_info=True)
+    util.ttl_set("youtube_trailers", key, str(url or ""))
+
+
+def _best_trailer_url(items, title: str, year: int) -> str:
+    wanted = _norm(title)
+    candidates = []
+    for item in items or []:
+        video_id = str(((item or {}).get("id") or {}).get("videoId") or "").strip()
+        snippet = (item or {}).get("snippet") or {}
+        name = _norm(snippet.get("title"))
+        published = str(snippet.get("publishedAt") or "")
+        if (not _VIDEO_ID_RE.fullmatch(video_id) or not published.startswith(str(year))
+                or not any(word in name for word in _TRAILER_WORDS)
+                or any(marker in f" {name} " for marker in _TRAILER_UNWANTED)):
+            continue
+        score = 1.0 if wanted and wanted in name else _similarity(wanted, name)
+        if " official " in f" {name} ":
+            score += 0.05
+        candidates.append((score, published, video_id))
+    if not candidates:
+        return ""
+    score, _published, video_id = max(candidates)
+    return f"https://www.youtube.com/watch?v={video_id}" if score >= 0.6 else ""
+
+
+def find_fresh_trailer_url(title: str, year: int) -> str:
+    """Трейлер игры, опубликованный в ``year``; пустая строка при сомнении или без ключа."""
+    if not config.YOUTUBE_API_KEY or not _norm(title):
+        return ""
+    key = f"{int(year)} | {_norm(title)}"
+    cached = _trailer_cache_get(key)
+    if cached is not None:
+        return cached
+    started = time.monotonic()
+    try:
+        response = requests.get(
+            _SEARCH_URL,
+            params={
+                "key": config.YOUTUBE_API_KEY, "part": "snippet", "type": "video",
+                "q": f"{title} official trailer", "maxResults": 8, "order": "relevance",
+                "publishedAfter": f"{int(year)}-01-01T00:00:00Z",
+            },
+            timeout=_timeout(),
+        )
+    except requests.exceptions.RequestException:
+        api_usage.record_request(
+            "youtube", False, error="network_error",
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        return ""
+    if response.status_code != 200:
+        api_usage.record_request(
+            "youtube", False, status_code=response.status_code,
+            error=provider_runtime.google_error_details(response), headers=response.headers,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        return ""
+    try:
+        items = response.json().get("items") or []
+    except (AttributeError, TypeError, ValueError):
+        return ""
+    api_usage.record_request(
+        "youtube", True, headers=response.headers,
+        latency_ms=int((time.monotonic() - started) * 1000),
+    )
+    url = _best_trailer_url(items, title, int(year))
+    _trailer_cache_set(key, url)
+    return url
