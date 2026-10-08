@@ -48,26 +48,32 @@ def test_recommendation_cards_have_no_refresh_label():
         assert (first.text, first.callback_data) == (other, callback)
         assert keyboard.inline_keyboard[1][0].text == "🎭 По жанру"
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
-    movie_button = leisure_movies._movie_kb(3).inline_keyboard[2][0]
-    assert movie_button.text == "✅ Добавить в Моё кино"
-    assert movie_button.callback_data == "movie_love_3"
-    assert _labels(leisure_music._listen_kb())[2] == ["✅ Добавить в Мои артисты"]
-    assert _labels(leisure_books._book_kb(3))[2] == ["✅ Добавить в Мои книги"]
-    assert _labels(leisure_games._game_keyboard())[3] == ["✅ Добавить в Мой набор игр"]
+    # «Не нравится» — красная, последней перед навигацией, вместо «Добавить в Моё…».
+    for keyboard, callback in (
+        (leisure_movies._movie_kb(3), "movie_no_3"),
+        (leisure_books._book_kb(3), "book_no_3"),
+        (leisure_music._listen_kb(), "listen_no"),
+        (leisure_games._game_keyboard(), "game_no"),
+    ):
+        dislike = keyboard.inline_keyboard[-2][0]
+        assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
+            "Не нравится", callback, {"style": "danger"},
+        )
+        assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_preferences_are_available_in_personal_content_lists():
     assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📝 Предпочтения", "movie_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📝 Выбрать предпочтения", "movie_prefs")
     assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
     assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📝 Предпочтения", "book_prefs")
+    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📝 Выбрать предпочтения", "book_prefs")
     assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
     assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📝 Предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📝 Выбрать предпочтения", "music_prefs")
     assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is False
     assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
 
@@ -335,7 +341,7 @@ def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch)
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить артиста"]
-    assert ["📝 Предпочтения"] in rows
+    assert ["📝 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -364,7 +370,7 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить фильм"]
-    assert ["📝 Предпочтения"] in rows
+    assert ["📝 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -416,7 +422,7 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
         "Драма:\nПатерсон"
     )
     assert labels[0] == ["✅ Добавить фильм"]
-    assert ["📝 Предпочтения"] in labels
+    assert ["📝 Выбрать предпочтения"] in labels
     genre_callback = next(
         row[0].callback_data
         for row in bot.messages[0]["reply_markup"].inline_keyboard
@@ -655,7 +661,7 @@ def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить книгу"]
-    assert ["📝 Предпочтения"] in rows
+    assert ["📝 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
 
 
@@ -750,18 +756,18 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
         lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
     )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
-        ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
+        ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
         ["Романтика"], ["История"], ["Биографии"], ["Психология"],
     ]
     assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
-        ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
+        ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
     ]
     assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
-        ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
         ["Триллер"], ["Романтика"], ["Драма"],
     ]
     assert _labels(leisure_games._genre_keyboard())[:-1] == [
-        ["RPG"], ["Экшен"], ["Стратегии"],
+        ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
         ["Приключения"], ["Уютные"], ["Хоррор"],
     ]
 
@@ -770,7 +776,7 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
-        ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -1246,3 +1252,14 @@ def test_tv_detail_line_uses_russian_plurals():
     for n, (seasons, episodes) in expected.items():
         line = _detail_line({"kind": "tv", "seasons": n, "episodes": n})
         assert line == f"{seasons} • {episodes}"
+
+
+def test_book_premiere_summary_is_separated_from_date_by_blank_line():
+    from ui import leisure as leisure_ui
+
+    text = leisure_ui.book_premieres_screen("сентябрь", [{
+        "title": "Intermezzo", "author": "Sally Rooney",
+        "published_date": "2026-09-01", "summary": "История двух братьев после смерти отца.",
+    }]).text
+
+    assert "Премьера: 1 сентября 2026\n\nИстория двух братьев" in text

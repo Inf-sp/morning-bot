@@ -683,9 +683,6 @@ def wardrobe_styles(cid):
     return _normalize_wardrobe_styles(get(cid, "style", []))
 
 
-STYLE_LIMIT = 3
-
-
 def _invalidate_wardrobe_recommendations(cid):
     """Следующий образ и совет по покупке должны учитывать новые параметры стиля."""
     store.clear_wardrobe_daylook(cid)
@@ -700,14 +697,6 @@ async def set_style(bot, cid, i, q=None):
             selected = [s for s in selected if s != chosen]
             set_(cid, "style", selected)
             _invalidate_wardrobe_recommendations(cid)
-        elif len(selected) >= STYLE_LIMIT:
-            if q is not None:
-                try:
-                    await q.answer(f"Можно выбрать максимум {STYLE_LIMIT} стиля.", show_alert=False)
-                except Exception:
-                    _log.debug("set_style: ignored error", exc_info=True)
-            await send_wardrobe_style(bot, cid, q=q)
-            return
         else:
             selected.append(chosen)
             set_(cid, "style", selected)

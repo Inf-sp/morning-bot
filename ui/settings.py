@@ -42,8 +42,8 @@ def wardrobe_style(styles):
     b = MessageBuilder()
     b.section("Стиль")
     b.spacer()
-    b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран")
-    b.line("Выбери до трёх стилей. Изменения сохраняются сразу.")
+    b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран", lowercase=False)
+    b.line("Выбери любые стили. Изменения сохраняются сразу.")
     return b.build_stripped()
 
 

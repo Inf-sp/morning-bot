@@ -6,6 +6,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import ai
 import wardrobe
+import wardrobe_router
 import bot_callbacks
 import util
 from ui.wardrobe import purchase_check_card, purchase_suggestions_card
@@ -328,7 +329,7 @@ def test_wardrobe_home_actions_use_one_column():
     ]
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_look"
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_buy"
-    assert "📝 Предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
+    assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
 def test_purchase_suggestions_show_colors_and_three_real_outfits():
@@ -711,3 +712,18 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
     assert labels[-2] == ["◀️", "2/2", "▶️"]
     assert labels[0] == ["✅ Добавить вещь"]
     assert bot.message["text"].startswith("👕 Верх · 10 вещей")
+
+
+def test_delete_removes_item_at_once_without_confirmation(monkeypatch):
+    removed, shown = [], []
+    monkeypatch.setattr(wardrobe_router.store, "remove_wardrobe_items", lambda cid, ids: removed.append((cid, ids)))
+
+    async def zones(_bot, cid, q=None):
+        shown.append(cid)
+
+    monkeypatch.setattr(wardrobe, "send_wardrobe_zones", zones)
+    for data in ("w_delete_it_1", "w_searchdel_it_2", "w_deleteok_it_3"):
+        asyncio.run(wardrobe.handle_callback(RecordingBot(), "42", None, data))
+
+    assert removed == [("42", ["it_1"]), ("42", ["it_2"]), ("42", ["it_3"])]
+    assert shown == ["42", "42", "42"]

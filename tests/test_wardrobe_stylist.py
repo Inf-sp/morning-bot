@@ -64,7 +64,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
-    assert "- Белые носки" not in message.text
+    assert message.text.split("\n\n")[1].endswith("- Белые кеды\n- Белые носки")
     assert "Как носить:" not in message.text
     assert "💡 Главный акцент:" in message.text
     assert "белая футболка связывает светлую обувь с низом." in message.text
@@ -85,7 +85,7 @@ def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
         "Рукава слегка подвернуть",
         "Футболку оставить навыпуск",
     ]
-    assert build_sock_recommendation(items) == "Бордовые — глубокий акцент к оливковому"
+    assert build_sock_recommendation(items) == "Бордовые носки"
 
 
 def test_socks_are_a_colour_accent_and_never_blue():
@@ -94,13 +94,13 @@ def test_socks_are_a_colour_accent_and_never_blue():
             {"name": bottom, "zone": "Низ"}, {"name": shoe, "zone": "Обувь"},
         ])
 
-    assert socks("Синие джинсы") == "Жёлтые — контраст с синим низом"
-    assert socks("Чёрные брюки", "Чёрные ботинки") == "Горчичные — тёплый акцент к тёмному низу"
-    assert socks("Бежевые чиносы") == "Зелёные — свежая деталь к бежевому"
+    assert socks("Синие джинсы") == "Жёлтые носки"
+    assert socks("Чёрные брюки", "Чёрные ботинки") == "Горчичные носки"
+    assert socks("Бежевые чиносы") == "Зелёные носки"
     assert all(not socks(bottom).startswith(("Син", "Голуб")) for bottom in ("Синие джинсы", "Серые брюки", "Белые шорты"))
     assert build_sock_recommendation([
         {"name": "Синие носки", "zone": "Аксессуары"},
-    ]) == "Синие — из твоего шкафа"
+    ]) == "Синие носки"
 
 
 def test_outfit_card_does_not_show_legacy_fashion_rebus():
@@ -148,9 +148,9 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
 
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
-    assert "- Синие носки" not in message.text
+    assert message.text.endswith("- Кеды\n- Синие носки")
     assert "Главный акцент" not in message.text
-    assert message.text.endswith("🧦 Носки: синие")
+    assert "🧦" not in message.text
 
 
 def test_outfit_card_puts_each_selected_top_on_its_own_line():
@@ -712,3 +712,45 @@ def test_generic_style_tip_has_a_broader_safe_rotation():
     assert all("чтобы" in tip.casefold() for tip in tips)
 
 
+
+
+def test_main_accent_alternates_outfit_description_and_accessory_advice():
+    items = [
+        {"name": "Белая футболка", "zone": "Верх"},
+        {"name": "Синие джинсы", "zone": "Низ"},
+        {"name": "Белые кеды", "zone": "Обувь"},
+    ]
+    first = build_main_accent(items, {"sunny": True})
+    second = build_main_accent(items, {"sunny": True}, avoid_accents={first})
+
+    assert "белые кеды завершают образ" in first.casefold()
+    assert second == "Добавь солнечные очки — они завершат лёгкий образ."
+    assert "Шарф" in build_main_accent(items, {"tmax": 8}, avoid_accents={first})
+
+
+def test_old_cached_sock_line_is_shown_as_last_item():
+    message = render_wardrobe_message({
+        "items": [{"name": "Брюки", "zone": "Низ"}],
+        "sock_recommendation": "Жёлтые — контраст с синим низом",
+    })
+
+    assert message.text.endswith("- Брюки\n- Жёлтые носки")
+
+
+def test_any_number_of_styles_can_be_selected(monkeypatch):
+    import asyncio
+
+    saved = {"style": ["Минимализм", "Скандинавский", "Повседневный"]}
+    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: saved.get(key, default))
+    monkeypatch.setattr(settings, "set_", lambda _cid, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(settings, "_invalidate_wardrobe_recommendations", lambda _cid: None)
+
+    async def no_screen(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(settings, "send_wardrobe_style", no_screen)
+    asyncio.run(settings.set_style(None, "42", settings.STYLES.index("Городской")))
+
+    assert saved["style"][-1] == "Городской" and len(saved["style"]) == 4
+    text = settings.settings_ui.wardrobe_style(saved["style"]).text
+    assert "Стиль: Минимализм · Скандинавский" in text and "до трёх" not in text

@@ -100,8 +100,10 @@ _DELETE_RE = re.compile(r"^(?:Удалить|Очистить|Убрать|От�
 _ADD_RE = re.compile(r"^(?:Добавить|Создать)\b")
 # Всё, что подбирает или создаёт новое, — зелёная кнопка в самом верху.
 _REFRESH_RE = re.compile(
-    r"^(?:Обновить|Подобрать|Сгенерировать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
+    r"^(?:Обновить|Подобрать|Сгенерировать|Что докупить|Запустить|Угадать|По жанру|Новинка|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
 )
+# «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
+_PREFS_RE = re.compile(r"^Выбрать предпочтения$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
 _WAIT_RE = re.compile(r"(?:\.\.\.|…)$")
@@ -163,6 +165,7 @@ def _enhance_markup(markup, level=2):
     changed = False
     add_rows = set()
     refresh_rows = set()
+    prefs_rows = set()
     for index, row in enumerate(rows):
         for button in row:
             text = str(button.get("text") or "")
@@ -189,6 +192,7 @@ def _enhance_markup(markup, level=2):
                 continue
             for pattern, style, bucket in (
                 (_REFRESH_RE, "success", refresh_rows), (_ADD_RE, "success", add_rows),
+                (_PREFS_RE, "success", prefs_rows),
                 (_DELETE_RE, "danger", None), (_NAV_RE, "primary", None),
             ):
                 if pattern.match(text):
@@ -200,9 +204,9 @@ def _enhance_markup(markup, level=2):
                     break
     if not changed:
         return None
-    # Сверху «Другой/Обновить…», затем «Добавить…», дальше исходный порядок.
+    # Сверху «Другой/Обновить…», затем «Добавить…», «Выбрать предпочтения», дальше исходный порядок.
     order = sorted(range(len(rows)), key=lambda index: (
-        index not in refresh_rows, index not in add_rows,
+        index not in refresh_rows, index not in add_rows, index not in prefs_rows,
     ))
     return {"inline_keyboard": [rows[index] for index in order]}
 

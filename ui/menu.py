@@ -172,8 +172,8 @@ def learning_menu(home: dict):
             b.text_line(f" {str(phrase['tip']).strip()}")
 
     return b.build_stripped(reply_markup=ikb([
-        [("🎯 Тренажёр", f"a_train_{code}")],
-        [(ui_label("game", "Угадай персонажа"), "a_game")],
+        [("🎯 Запустить тренировку", f"a_train_{code}")],
+        [(ui_label("game", "Угадать персонажа"), "a_game")],
         [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", f"a_dictlang_{code}_from_menu")],
     ]))
 

@@ -180,7 +180,7 @@ def test_music_recommendation_requires_a_selected_style(monkeypatch):
 
     assert calls[0][0] == "Сначала выбери хотя бы один музыкальный жанр."
     assert [(button.text, button.callback_data) for button in calls[0][1]["reply_markup"].inline_keyboard[0]] == [
-        ("📝 Предпочтения", "music_prefs"),
+        ("📝 Выбрать предпочтения", "music_prefs"),
     ]
 
 

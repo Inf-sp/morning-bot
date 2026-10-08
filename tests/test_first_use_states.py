@@ -98,8 +98,8 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
-        ["🎯 Тренажёр"],
-        ["🕵️ Угадай персонажа"],
+        ["🎯 Запустить тренировку"],
+        ["🕵️ Угадать персонажа"],
         ["#️⃣ Главная", "🎚️ Настроить"],
     ]
     assert "Прогресс:" not in message.text
@@ -155,7 +155,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     asyncio.run(learning_dictionary.send_dict_lang(bot, "42", "nl"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert "📝 Предпочтения" not in [label for row in rows for label in row]
+    assert "📝 Выбрать предпочтения" not in [label for row in rows for label in row]
     assert rows == [
         ["✅ Добавить своё слово"],
         ["✨ Сгенерировать набор слов"],
@@ -302,7 +302,7 @@ def test_dictionary_overview_has_learning_language_preferences(monkeypatch):
     assert _labels(bot.message["reply_markup"]) == [
         ["🇳🇱 Нидерландский (12)"],
         ["🇬🇧 Английский (8)"],
-        ["📝 Предпочтения"],
+        ["📝 Выбрать предпочтения"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert bot.message["reply_markup"].inline_keyboard[2][0].callback_data == "set_learning_dictionary"

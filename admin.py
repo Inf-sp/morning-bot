@@ -114,14 +114,14 @@ async def send_api_check(bot, cid, q=None):
             await status.stop(delete=True)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🩺 Проверить снова", callback_data="adm_api_check")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="adm_home")],
+        nav_row("adm_home"),
     ])
     await _show(bot, cid, ui.api_check(results), kb, q)
 
 
 _REFRESH_CARDS = (
     ("myday", "☀️ Мой день"),
-    ("wardrobe", "🧵 Гардероб"),
+    ("wardrobe", "👔 Гардероб"),
     ("cooking", "🥣 Готовка"),
     ("learning", "🧠 Обучение"),
     ("leisure", "🍿 Досуг"),

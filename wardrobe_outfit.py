@@ -598,7 +598,11 @@ def _shoe_finishing_verb(item):
     if any(marker in name for marker in ("обувь", "пара ", "модель ")):
         return "завершает"
     plural_subcategories = {"Кеды", "Кроссовки", "Лоферы", "Ботинки", "Сандалии", "Тапочки"}
-    return "завершают" if item.get("subcategory") in plural_subcategories else "завершает"
+    plural_names = ("кеды", "кроссовки", "лоферы", "ботинки", "сандалии", "тапочки",
+                    "туфли", "сапоги", "мокасины", "слипоны", "челси", "мюли")
+    if item.get("subcategory") in plural_subcategories or any(word in name.split() for word in plural_names):
+        return "завершают"
+    return "завершает"
 
 
 def build_outfit_reasons(items, weather_ctx, score_details=None):
@@ -730,11 +734,11 @@ def build_how_to_wear(items, style_tip=""):
 
 # Носки — цветной акцент к низу и обуви; синий почти не предлагаем.
 _SOCK_ACCENTS = (
-    (("джинс", "деним", "син", "голуб"), "Жёлтые — контраст с синим низом"),
-    (("олив", "зелён", "зелен", "хаки"), "Бордовые — глубокий акцент к оливковому"),
-    (("беж", "корич", "песоч", "кэмел"), "Зелёные — свежая деталь к бежевому"),
-    (("чёрн", "черн", "тём", "темн", "графит"), "Горчичные — тёплый акцент к тёмному низу"),
-    (("сер",), "Бордовые — оживят серый"),
+    (("джинс", "деним", "син", "голуб"), "Жёлтые носки"),
+    (("олив", "зелён", "зелен", "хаки"), "Бордовые носки"),
+    (("беж", "корич", "песоч", "кэмел"), "Зелёные носки"),
+    (("чёрн", "черн", "тём", "темн", "графит"), "Горчичные носки"),
+    (("сер",), "Бордовые носки"),
 )
 
 
@@ -743,17 +747,33 @@ def _color_facts(item):
 
 
 def build_sock_recommendation(items):
-    """Цвет носков-акцента к низу и обуви; носки из шкафа показываются как есть."""
+    """Носки последней строкой списка: цвет-акцент к низу и обуви или носки из шкафа."""
     selected = next((item for item in items
                      if item.get("zone") == "Аксессуары" and "носк" in _item_facts(item)), None)
     if selected:
-        color = re.sub(r"\s*носк\w*", "", public_item_name(selected)).strip()
-        return f"{color} — из твоего шкафа" if color else "из твоего шкафа"
+        return public_item_name(selected)
 
     facts = " ".join(_color_facts(item) for item in items if item.get("zone") in ("Низ", "Обувь"))
     return next((accent for markers, accent in _SOCK_ACCENTS
                  if any(marker in facts for marker in markers)),
-                "Жёлтые — яркая деталь к светлой обуви")
+                "Жёлтые носки")
+
+
+def _accessory_advice(items, weather_ctx):
+    """Совет по аксессуару к образу без аксессуаров: по погоде, затем по характеру образа."""
+    facts = " ".join(_item_facts(item) for item in items)
+    advice = []
+    if weather_ctx.get("sunny") or weather_ctx.get("hot"):
+        advice.append("Добавь солнечные очки — они завершат лёгкий образ.")
+        if not weather_ctx.get("strong_wind"):
+            advice.append("Кепка добавит образу расслабленности и защитит от солнца.")
+    elif weather_ctx.get("tmax") is not None and weather_ctx["tmax"] <= 12:
+        advice.append("Шарф добавит тепла и сделает образ законченным у лица.")
+    if any(marker in facts for marker in ("рубаш", "пиджак", "классич", "брюк")):
+        advice.append("Тонкое кольцо или часы подчеркнут собранный образ.")
+    else:
+        advice.append("Подвеска на тонкой цепочке добавит образу деталь у ворота.")
+    return advice
 
 
 def build_main_accent(items, weather_ctx=None, avoid_accents=None):
@@ -767,6 +787,8 @@ def build_main_accent(items, weather_ctx=None, avoid_accents=None):
             f"{_sentence_item_name(accessory)} становится заметной деталью и завершает образ."
         )
     candidates.extend(build_outfit_reasons(items, weather_ctx or {}))
+    if not any(item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item) for item in items):
+        candidates.extend(_accessory_advice(items, weather_ctx or {}))
     shoe = next((item for item in items if item.get("zone") == "Обувь"), None)
     if shoe:
         candidates.append(

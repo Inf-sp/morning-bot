@@ -72,10 +72,10 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
 
     assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 4, 2, 1)
     assert data["weaknesses"] == ["1 пара обуви на все случаи", "нет тёплой куртки к зиме"]
-    text = wardrobe_ui.purchase_screen({**data, "picks": [{"name": "Белые кожаные кеды", "gain": 14}]}).text
+    text = wardrobe_ui.purchase_screen({**data, "has_picks": True}).text
     assert text.startswith("💳 Что докупить\n\n👔 Твой шкаф · 9 вещей · 16 образов\n")
     assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
-    assert "1. Белые кожаные кеды\n" in text + "\n" and "+14" not in text
+    assert "Самое полезное" not in text and "Явных пробелов нет" not in text
     assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
@@ -114,7 +114,7 @@ def test_small_wardrobe_asks_to_add_items(monkeypatch):
     asyncio.run(wardrobe.handle_callback(bot, cid, None, "w_buy"))
 
     assert bot.sent[0]["text"] == "💳 Что докупить\n\nДобавь хотя бы 5 вещей — тогда разбор будет точным."
-    assert _labels(bot.sent[0]["reply_markup"]) == [["✅ Добавить вещи"], ["⬅️ Назад"]]
+    assert _labels(bot.sent[0]["reply_markup"]) == [["✅ Добавить вещи"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert bot.sent[0]["reply_markup"].inline_keyboard[0][0].callback_data == "w_fill"
 
 
@@ -129,10 +129,9 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     labels = _labels(message["reply_markup"])
     best = wardrobe._purchase_state(cid)["pool"][0]
     assert (best["zone"], best["gain"]) == ("Обувь", 16)
-    assert labels[0] == [f"1. {best['item']}"]
-    assert labels[3:] == [["⬅️ Назад"]]
-    assert f"🛒 Самое полезное сейчас\n1. {best['item']}\n2. " in message["text"]
-    assert "образов\n2." not in message["text"]
+    assert labels[0] == [best["item"]]
+    assert labels[3:] == [["⬅️ Назад", "#️⃣ Главная"]]
+    assert best["item"] not in message["text"] and "Самое полезное" not in message["text"]
     styles = [row[0].api_kwargs.get("style") for row in message["reply_markup"].inline_keyboard[:3]]
     assert styles == ["danger"] * 3
     assert message["reply_markup"].inline_keyboard[3][0].callback_data == "m_wardrobe"
@@ -145,8 +144,8 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     query = Query()
     asyncio.run(wardrobe.handle_callback(bot, cid, query, "w_buy_more"))
     first = {row[0] for row in labels[:3]}
-    second = {row[0].text.split(". ", 1)[1] for row in query.edited[0]["reply_markup"].inline_keyboard[:3]}
-    assert not {label.split(". ", 1)[1] for label in first} & second
+    second = {row[0].text for row in query.edited[0]["reply_markup"].inline_keyboard[:3]}
+    assert not first & second
     wardrobe.store.pending_input.pop(cid, None)
 
 
@@ -165,8 +164,11 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     assert "Готовые образы:\n• серая футболка + синие джинсы" in text
     assert "💡 " in text and "http" not in text and "€" not in text
     assert _labels(query.edited[0]["reply_markup"]) == [
-        ["✅ Добавить в шкаф"], ["⬅️ Назад"],
+        ["✅ Добавить в шкаф"], ["Не нравится"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
+    keyboard = query.edited[0]["reply_markup"].inline_keyboard
+    assert keyboard[1][0].api_kwargs == {"style": "danger"}
+    assert keyboard[1][0].callback_data == first.replace("w_buy_i:", "w_buy_no:")
     wardrobe.store.pending_input.pop(cid, None)
 
 
@@ -235,7 +237,7 @@ def test_open_uses_cache_and_night_warm_adds_ai_ideas(monkeypatch):
     asyncio.run(wardrobe.show_purchase_card(bot, cid, purchase.item_id("Тёмно-синий пуховик"), q=query))
 
     assert rebuilt == []
-    assert "Тёмно-синий пуховик" in bot.sent[0]["text"]
+    assert ["Тёмно-синий пуховик"] in _labels(bot.sent[0]["reply_markup"])
     assert "Почему тебе: Есть только ветровка, а тёплой верхней одежды нет." in query.edited[0]["text"]
     assert "💡 Бери длину до середины бедра." in query.edited[0]["text"]
     wardrobe.store.pending_input.pop(cid, None)
@@ -314,3 +316,26 @@ def test_free_text_after_screen_one_gets_personal_answer(monkeypatch):
     asyncio.run(bot_text.handle(update, SimpleNamespace(bot=bot), lambda *_args: asyncio.sleep(0)))
 
     assert asked == [(cid, "зелёная худи")]
+
+
+def test_picks_stay_until_added_or_disliked(monkeypatch):
+    cid = "purchase-stable"
+    _user(cid, monkeypatch)
+    bot = RecordingBot()
+
+    def picks():
+        asyncio.run(wardrobe.send_purchase_screen(bot, cid))
+        return [row[0] for row in bot.sent[-1]["reply_markup"].inline_keyboard[:3]]
+
+    first = picks()
+    # Порядок пула поменялся (например, ночной пересчёт) — подборка та же.
+    state = wardrobe.store.get_profile(cid)[purchase.PROFILE_KEY]
+    monkeypatch.setattr(wardrobe_management, "_purchase_cache",
+                        lambda *_a, **_k: {**state, "pool": list(reversed(state["pool"]))})
+    assert [b.text for b in picks()] == [b.text for b in first]
+
+    asyncio.run(wardrobe.handle_callback(bot, cid, Query(), first[1].callback_data.replace("w_buy_i:", "w_buy_no:")))
+    after = [b.text for b in picks()]
+    assert first[1].text not in after
+    assert after[:2] == [first[0].text, first[2].text]
+    wardrobe.store.pending_input.pop(cid, None)

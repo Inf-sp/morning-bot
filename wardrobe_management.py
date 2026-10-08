@@ -454,12 +454,26 @@ async def _purchase_reply(bot, cid, q, msg, kb):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
+_CURRENT_KEY = "wardrobe_purchase_current"
+
+
+def _stable_batch(pool, profile):
+    """Подборка не меняется, пока вещь не добавлена в шкаф или не отклонена:
+    сначала прежние рекомендации, которые всё ещё в пуле, затем лучшие новые."""
+    current = (profile.get(_CURRENT_KEY) or {}).get("items") or []
+    by_key = {purchase_logic.item_key(c["item"]): c for c in pool}
+    kept = [by_key[key] for key in dict.fromkeys(map(purchase_logic.item_key, current)) if key in by_key]
+    fresh = [c for c in pool if c not in kept]
+    return (kept + fresh)[:purchase_logic.BATCH_SIZE]
+
+
 def _remember_purchase_batch(cid, batch, cycle_reset=False):
     def change(profile):
         seen = [] if cycle_reset else (profile.get("wardrobe_purchase_seen") or {}).get("items") or []
         for candidate in batch:
             seen = rotation.remember(seen, candidate["item"], limit=50, key=purchase_logic.item_key)
         profile["wardrobe_purchase_seen"] = {"items": seen}
+        profile[_CURRENT_KEY] = {"items": [c["item"] for c in batch]}
         state = profile.get(purchase_logic.PROFILE_KEY)
         if isinstance(state, dict):
             profile[purchase_logic.PROFILE_KEY] = {**state, "shown": [c["id"] for c in batch]}
@@ -472,7 +486,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     """Экран 1: разбор шкафа и три самые полезные покупки из кэша."""
     wardrobe = store.load_wardrobe(cid)
     if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
-        kb = _wardrobe._kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "w_closet")]])
+        kb = _wardrobe._kb([[("✅ Добавить вещи", "w_fill")], [("⬅️ Назад", "m_wardrobe"), ("#️⃣ Главная", "m_menu")]])
         await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
     state = _purchase_cache(cid, wardrobe)
@@ -493,17 +507,15 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
             pool, (profile.get("wardrobe_purchase_seen") or {}).get("items") or [], state.get("shown"),
         )
     else:
-        batch = pool[:purchase_logic.BATCH_SIZE]
+        batch = _stable_batch(pool, profile)
     _remember_purchase_batch(cid, batch, cycle_reset)
-    msg = wardrobe_ui.purchase_screen({
-        **state["analysis"],
-        "picks": [{"name": c["item"], "gain": c["gain"]} for c in batch],
-    })
-    # Вещи-кандидаты — красные кнопки: цвет задан явно, это не «Удалить».
+    msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch)})
+    # Рекомендации — только кнопки, красные (цвет задан явно, это не «Удалить»).
     kb = InlineKeyboardMarkup([
-        *[[InlineKeyboardButton(f"{index}. {c['item'][:40]}", callback_data=f"w_buy_i:{c['id']}",
-                                api_kwargs={"style": "danger"})] for index, c in enumerate(batch, 1)],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe")],
+        *[[InlineKeyboardButton(c["item"][:40], callback_data=f"w_buy_i:{c['id']}",
+                                api_kwargs={"style": "danger"})] for c in batch],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     store.pending_input[str(cid)] = "wardrobe_buy"
     store.last_source[str(cid)] = "Гардероб · Что докупить"
@@ -525,9 +537,13 @@ async def show_purchase_card(bot, cid, item_id, q=None):
         await send_purchase_screen(bot, cid, q=q)
         return
     msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
-    kb = _wardrobe._kb([
-        [("✅ Добавить в шкаф", f"w_buy_got:{item_id}")],
-        [("⬅️ Назад", "w_buy_back")],
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Добавить в шкаф", callback_data=f"w_buy_got:{item_id}")],
+        # «Не нравится» убирает вещь навсегда, на её место встаёт следующая.
+        [InlineKeyboardButton("Не нравится", callback_data=f"w_buy_no:{item_id}",
+                              api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="w_buy_back"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     store.last_source[str(cid)] = "Гардероб · Что докупить"
     store.last_answer[str(cid)] = msg.text
@@ -555,7 +571,7 @@ async def buy_purchase(bot, cid, item_id, q=None):
 
 
 async def reject_purchase(bot, cid, item_id, q=None):
-    """«❌ Не нужно»: вещь навсегда уходит в историю отказов."""
+    """«Не нравится»: вещь навсегда уходит в историю отказов, её место занимает следующая."""
     wardrobe = store.load_wardrobe(cid)
     _state, candidate = _purchase_candidate_by_id(cid, wardrobe, item_id)
     if candidate:
@@ -576,7 +592,7 @@ async def ask_purchase_check(bot, cid):
     await bot.send_message(
         chat_id=cid,
         text="Опиши вещь, которую присматриваешь: тип, цвет, материал и крой.",
-        reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_buy")]]),
+        reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
     )
 
 

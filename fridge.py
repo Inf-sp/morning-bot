@@ -76,7 +76,7 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             callback_data=f"as_fridge_cat_{ci}_0",
         )])
     rows.append([InlineKeyboardButton(
-        "📝 Предпочтения", callback_data="set_pref_cuisines",
+        "📝 Выбрать предпочтения", callback_data="set_pref_cuisines",
     )])
     rows.append(nav_row(back))
 

@@ -724,7 +724,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
     rows.append([InlineKeyboardButton(
-        "📝 Предпочтения", callback_data="set_pref_style",
+        "📝 Выбрать предпочтения", callback_data="set_pref_style",
     )])
     rows.append(nav_row("m_wardrobe"))
     msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)
@@ -774,19 +774,6 @@ async def send_item_card(bot, cid, item_id, q=None):
     kb = _kb([
         [(delete_label("Удалить"), f"w_delete_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
-    ])
-    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
-
-
-async def send_delete_confirmation(bot, cid, item_id, q=None):
-    zone, _subcat, item = _find_item(cid, item_id)
-    if not item:
-        await send_wardrobe_zones(bot, cid, q=q)
-        return
-    msg = wardrobe_ui.delete_confirmation(item)
-    kb = _kb([
-        [(delete_label("Удалить"), f"w_deleteok_{item_id}"), ("Отмена", f"w_item_{item_id}")],
-        [("⬅️ Назад", f"w_item_{item_id}"), ("#️⃣ Главная", "m_menu")],
     ])
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 

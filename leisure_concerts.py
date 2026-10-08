@@ -1030,7 +1030,7 @@ async def find_concerts(bot, cid, mode="home", artists_override=None, q=None):
     if not artists:
         rows.append([InlineKeyboardButton("✅ Добавить артиста", callback_data="as_loveadd_artists")])
     rows.append([InlineKeyboardButton(_concert_country_label(cc, cname), callback_data="a_concerts_pick")])
-    rows.append(nav_row("lz_prem"))
+    rows.append(nav_row("lz_lib"))  # концерты живут в «Моей библиотеке»
     kb = InlineKeyboardMarkup(rows)
 
     if not artists and not artists_override:

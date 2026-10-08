@@ -20,6 +20,7 @@ import leisure_games
 import leisure_hub
 import leisure_movies
 import leisure_music
+import leisure_novelty
 import menu
 import myday
 import onboard
@@ -471,6 +472,12 @@ ROUTES = (
     R("movie_love_*", lambda c: leisure_movies.movie_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("game_love", lambda c: leisure_games.game_love(c.bot, c.cid, c.q)),
+    R("game_no", lambda c: c.status(lambda status: leisure_games.game_dislike(c.bot, c.cid, status=status))),
+    # «Новинка» из меню «По жанру»: nov_no_* раньше nov_*.
+    R("nov_no_*", lambda c: c.status(lambda status: leisure_novelty.dislike_novelty(
+        c.bot, c.cid, c.data[len("nov_no_"):], status=status))),
+    R("nov_*", lambda c: c.status(lambda status: leisure_novelty.send_novelty(
+        c.bot, c.cid, c.data[len("nov_"):], status=status))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
     R("movie_no_*", lambda c: c.status(lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c)))),
     R("book_no_*", lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c)))),

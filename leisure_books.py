@@ -256,7 +256,7 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая книга", callback_data="book_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="book_genre_menu")],
-        [InlineKeyboardButton("✅ Добавить в Мои книги", callback_data=f"book_love_{i}")],
+        [InlineKeyboardButton("Не нравится", callback_data=f"book_no_{i}", api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
     ])
 
@@ -829,7 +829,7 @@ async def send_favorite_books(bot, cid, q=None):
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
-        "📝 Предпочтения", callback_data="book_prefs",
+        "📝 Выбрать предпочтения", callback_data="book_prefs",
     )])
     rows.append(nav_row("lz_lib"))
     kb = InlineKeyboardMarkup(rows)
@@ -1207,7 +1207,7 @@ async def show_book_premiere_page(q, page):
 def _book_genre_menu_kb():
     buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
                for key, label, _subject in _BOOK_GENRES]
-    rows = [[button] for button in buttons]
+    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_book")], *[[button] for button in buttons]]
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 

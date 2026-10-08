@@ -72,7 +72,7 @@ def test_admin_card_refresh_menu_has_all_cards():
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [row[0].text for row in markup[:-1]] == [
-        "☀️ Мой день", "🧵 Гардероб", "🥣 Готовка", "🧠 Обучение", "🍿 Досуг",
+        "☀️ Мой день", "👔 Гардероб", "🥣 Готовка", "🧠 Обучение", "🍿 Досуг",
     ]
     assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
 
@@ -404,7 +404,7 @@ def test_api_check_screen_shows_results_and_buttons(monkeypatch):
     assert "✅ Gemini · 1,2 с" in bot.sent[0]["text"]
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [[(b.text, b.callback_data) for b in row] for row in markup] == [
-        [("🩺 Проверить снова", "adm_api_check")], [("⬅️ Назад", "adm_home")],
+        [("🩺 Проверить снова", "adm_api_check")], [("⬅️ Назад", "adm_home"), ("#️⃣ Главная", "m_menu")],
     ]
 
 

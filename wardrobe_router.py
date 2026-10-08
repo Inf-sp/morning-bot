@@ -67,9 +67,6 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_search":
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
         return
-    if data.startswith("w_searchdel_"):
-        await wardrobe.send_delete_confirmation(bot, cid, data[len("w_searchdel_"):], q=q)
-        return
     if data.startswith("w_cat_"):
         category_data = data[len("w_cat_"):]
         zone_slug, separator, page_value = category_data.rpartition("_")
@@ -84,13 +81,10 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data.startswith("w_edit_"):
         await wardrobe.send_item_card(bot, cid, data[len("w_edit_"):], q=q)
         return
-    if data.startswith("w_deleteok_"):
-        item_id = data[len("w_deleteok_"):]
-        store.remove_wardrobe_items(cid, [item_id])
+    # «Удалить» удаляет вещь сразу, без подтверждения; w_deleteok_ — старые кнопки.
+    if data.startswith(("w_delete_", "w_deleteok_", "w_searchdel_")):
+        store.remove_wardrobe_items(cid, [data.split("_", 2)[2]])
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)
-        return
-    if data.startswith("w_delete_"):
-        await wardrobe.send_delete_confirmation(bot, cid, data[len("w_delete_"):], q=q)
         return
     if data == "w_del" or data.startswith(("w_del_", "w_delz_", "w_delsc_")):
         await wardrobe.send_wardrobe_zones(bot, cid, q=q)

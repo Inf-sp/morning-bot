@@ -83,14 +83,14 @@ def _seed_caches(monkeypatch):
 def test_main_menu_has_leisure_hub_instead_of_four_sections():
     assert _labels(menu.main_menu_kb()) == [
         ["☀️ Мой день"],
-        ["🧵 Гардероб", "🥣 Готовка"],
+        ["👔 Гардероб", "🥣 Готовка"],
         ["🧠 Обучение", "🍿 Досуг"],
         ["🎚️ Настройки"],
     ]
     assert "m_leisure" in _callbacks(menu.main_menu_kb())
     assert menu.is_main_menu_markup(menu.main_menu_kb())
     old_menu = menu_ui.ikb([
-        [("☀️ Мой день", "m_myday")], [("🧵", "m_wardrobe"), ("🥣", "m_food")],
+        [("☀️ Мой день", "m_myday")], [("👔", "m_wardrobe"), ("🥣", "m_food")],
         [("🧠", "m_learn")], [("🎬", "m_movie"), ("🎧", "m_music")], [("🎚️", "m_settings")],
     ])
     assert menu.is_main_menu_markup(old_menu)
@@ -114,7 +114,7 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
     }
     assert _labels(msg.reply_markup) == [
         ["🎬 Что посмотреть"], ["📚 Что почитать"], ["👾 Во что поиграть"],
-        ["🎧 Что послушать"], ["🆕 Премьеры и концерты"], ["#️⃣ Главная", "🎚️ Настроить"],
+        ["🎧 Что послушать"], ["#️⃣ Главная", "🎚️ Настроить"],
     ]
 
 
@@ -185,16 +185,16 @@ def test_premieres_and_library_submenus():
     library = leisure_ui.leisure_library_menu()
 
     assert _labels(premieres.reply_markup) == [
-        ["🎟️ Премьеры кино"], ["🆕 Премьеры книг"], ["🆕 Премьеры игр"], ["🎫 Концерты"], ["⬅️ Назад"],
+        ["🎟️ Премьеры кино"], ["🆕 Премьеры книг"], ["🆕 Премьеры игр"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(premieres.reply_markup) == [
-        "movie_premieres", "book_premieres", "vg_premieres", "a_concerts_find", "m_leisure",
+        "movie_premieres", "book_premieres", "vg_premieres", "a_concerts_find", "m_leisure", "m_menu",
     ]
     assert _labels(library.reply_markup) == [
-        ["🎬 Кино"], ["📚 Книги"], ["👾 Игры"], ["🎧 Музыка"], ["⬅️ Назад"],
+        ["🎬 Кино"], ["📚 Книги"], ["👾 Игры"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(library.reply_markup) == [
-        "movie_favorites", "book_favorites", "vg_set", "artist_favorites", "m_leisure",
+        "movie_favorites", "book_favorites", "vg_set", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
     ]
     for collection in ("cinema_favorites", "books_favorites", "music_favorite_artists"):
         assert cleanup.COLLECTIONS[collection]["back"] == "lz_lib"

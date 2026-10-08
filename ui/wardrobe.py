@@ -80,30 +80,26 @@ def render_wardrobe_message(look_data, *, news=None):
         *(item for item in slots["Аксессуары"] if "носк" not in item.casefold()),
         *slots["Другое"],
     ]
+    selected_socks = next(
+        (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
+    )
+    # Носки — последним пунктом списка. Кэш прошлой версии хранил «Жёлтые — пояснение».
+    socks = _upper_first(_clean_text(look_data.get("sock_recommendation") or selected_socks))
+    if " — " in socks:
+        socks = f"{socks.split(' — ', 1)[0]} носки"
+    if socks:
+        items.append(socks)
     if items:
         b.spacer()
         for item in items:
             b.line(f"- {item}")
 
-    selected_socks = next(
-        (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
-    )
-    # Старые кэши хранят «Белые носки» — слово «носки» уже в подписи строки.
-    socks = re.sub(r"\s*носк\w*", "", _clean_text(
-        look_data.get("sock_recommendation") or selected_socks)).strip()
     main_accent = _finish_dot(look_data.get("main_accent") or "")
     if main_accent:
         b.spacer()
         b.text_line("💡 ")
         b.bold("Главный акцент:")
         b.text_line(f" {_lower_first(main_accent)}")
-        b.newline()
-    if socks:
-        if not main_accent:
-            b.spacer()
-        b.text_line("🧦 ")
-        b.bold("Носки:")
-        b.text_line(f" {_lower_first(socks)}")
         b.newline()
 
     append_weekly_news(b, news)
@@ -271,7 +267,7 @@ def _outfits_word(n):
 def purchase_screen(data):
     """Экран 1 «💳 Что докупить»: разбор шкафа и самые полезные покупки.
 
-    data: {total, outfits, strengths[], weaknesses[], picks[{name, gain}]}
+    data: {total, outfits, strengths[], weaknesses[], has_picks}
     """
     data = data or {}
     b = MessageBuilder()
@@ -285,14 +281,8 @@ def purchase_screen(data):
         b.labeled_line("Сильно", " · ".join(strengths))
     if weaknesses:
         b.labeled_line("Слабо", " · ".join(weaknesses))
-    picks = [pick for pick in data.get("picks") or [] if _clean_text(pick.get("name"))]
-    if picks:
-        b.spacer()
-        b.bold("🛒 Самое полезное сейчас")
-        b.newline()
-        for index, pick in enumerate(picks, 1):
-            b.line(f"{index}. {_clean_text(pick['name'])}")
-    else:
+    # Рекомендации показываются только кнопками под экраном.
+    if not data.get("has_picks"):
         b.spacer()
         b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
     return b.build_stripped()
@@ -514,8 +504,3 @@ def search_results(query, items):
     return b.build_stripped()
 
 
-def delete_confirmation(item):
-    b = MessageBuilder()
-    b.section("Удалить вещь?")
-    b.line(f"Удалить «{_clean_text((item or {}).get('name'))}» из шкафа?")
-    return b.build_stripped()

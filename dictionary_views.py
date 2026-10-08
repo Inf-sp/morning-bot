@@ -63,7 +63,7 @@ async def send_dict(bot, cid, back="m_learn", q=None):
     rows = [
         [InlineKeyboardButton(f"🇳🇱 Нидерландский ({nl_total})", callback_data=f"a_dictlang_nl_from_{origin}")],
         [InlineKeyboardButton(f"🇬🇧 Английский ({en_total})", callback_data=f"a_dictlang_en_from_{origin}")],
-        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_learning_dictionary")],
+        [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="set_learning_dictionary")],
         nav_row(back),
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)

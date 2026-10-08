@@ -328,7 +328,7 @@ def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой артист", callback_data="music_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="music_genre_menu")],
-        [InlineKeyboardButton("✅ Добавить в Мои артисты", callback_data="listen_love")],
+        [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
     ])
 
@@ -413,7 +413,7 @@ def _music_genre_menu_kb(cid):
     selected = set(_music_styles(cid))
     buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
                for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
-    rows = [[button] for button in buttons]
+    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_music")], *[[button] for button in buttons]]
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
@@ -476,7 +476,7 @@ async def send_music_preferences(bot, cid, q=None):
 
 def _music_preferences_required_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Предпочтения", callback_data="music_prefs")],
+        [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="music_prefs")],
         nav_row("m_leisure"),
     ])
 

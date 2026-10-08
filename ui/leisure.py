@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
+from .navigation import nav_row
 from .text import ru_plural
 
 
@@ -881,8 +882,6 @@ def book_premieres_screen(month, items):
     b.bold(f"Премьеры книг · {month}")
     b.newline()
     b.spacer()
-    b.line("Свежие книги разных жанров; список обновляется раз в неделю.")
-    b.spacer()
     if not items:
         b.line("Витрина появится после ближайшего ночного обновления.")
         return b.build_stripped()
@@ -935,6 +934,7 @@ def _write_book_premiere(
     if premiere_date:
         builder.line(f"Премьера: {premiere_date}")
     if summary:
+        builder.spacer()  # описание отделено от данных книги пустой строкой
         builder.line(_book_premiere_summary(summary, limit=summary_limit))
     builder.newline()
 
@@ -1121,8 +1121,15 @@ def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         rating = _weekly_rating(
             _item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10,
         )
-        _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url, (genres, rating))
+        _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url,
+                     (genres, _event_date_label(_item_value(item, "date", "")), rating))
     return bool(rows)
+
+
+def _event_date_label(value) -> str:
+    """Дата события в хабе — как у концертов: «16 октября», год только если не текущий."""
+    day = _parse_event_date(str(value or "")[:10])
+    return _format_date_label(day, include_year=day.year != date.today().year) if day else ""
 
 
 def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
@@ -1130,9 +1137,7 @@ def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     if rows:
         b.section(title)
     for item in rows:
-        day = _parse_event_date(item.get("date"))
-        date_label = _format_date_label(day, include_year=day.year != date.today().year) if day else ""
-        _weekly_item(b, item.get("title"), item.get("url"), (item.get("genre"), date_label))
+        _weekly_item(b, item.get("title"), item.get("url"), (item.get("genre"), _event_date_label(item.get("date"))))
     return bool(rows)
 
 
@@ -1146,7 +1151,7 @@ def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         )
         _weekly_item(
             b, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
-            (_book_premiere_genres(item), rating),
+            (_book_premiere_genres(item), _event_date_label(_item_value(item, "published_date", "")), rating),
         )
     return bool(rows)
 
@@ -1158,7 +1163,8 @@ def _game_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     for item in rows:
         _weekly_item(
             b, item.get("title"), item.get("trailer_url") or item.get("url"),
-            (item.get("genre"), item.get("date_label"), item.get("platform_label")),
+            (item.get("genre"), _event_date_label(item.get("date")) or item.get("date_label"),
+             item.get("platform_label")),
         )
     return bool(rows)
 
@@ -1214,7 +1220,6 @@ def leisure_hub_kb():
         ("📚 Что почитать", "book_reco"),
         ("👾 Во что поиграть", "vg_reco"),
         ("🎧 Что послушать", "music_reco"),
-        ("🆕 Премьеры и концерты", "lz_prem"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
@@ -1226,23 +1231,91 @@ def leisure_premieres_menu() -> MessageSpec:
     b = MessageBuilder()
     b.title("🆕 Премьеры и концерты")
     b.line("Свежие релизы и ближайшие концерты любимых артистов.")
-    return b.build_stripped(reply_markup=_column_kb((
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
         ("🎟️ Премьеры кино", "movie_premieres"),
         ("🆕 Премьеры книг", "book_premieres"),
         ("🆕 Премьеры игр", "vg_premieres"),
         ("🎫 Концерты", "a_concerts_find"),
-        ("⬅️ Назад", "m_leisure"),
-    )))
+    )).inline_keyboard, nav_row("m_leisure")]))
 
 
 def leisure_library_menu() -> MessageSpec:
     b = MessageBuilder()
     b.title("🎚️ Моя библиотека")
     b.line("Любимое кино, книги, игры и артисты — по ним подбираю рекомендации.")
-    return b.build_stripped(reply_markup=_column_kb((
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
         ("🎬 Кино", "movie_favorites"),
         ("📚 Книги", "book_favorites"),
         ("👾 Игры", "vg_set"),
         ("🎧 Музыка", "artist_favorites"),
-        ("⬅️ Назад", "m_leisure"),
-    )))
+        ("🎫 Концерты", "a_concerts_find"),
+    )).inline_keyboard, nav_row("m_leisure")]))
+
+
+# ---------- «Новинка» в меню «По жанру» ----------
+_NOVELTY_EMPTY = {
+    "movie": "Свежих премьер в кино пока нет — загляни позже.",
+    "book": "Свежих книжных премьер пока нет — загляни позже.",
+    "game": "Свежих игровых премьер пока нет — загляни позже.",
+    "music": "Свежих альбомов в твоих жанрах пока нет — загляни позже.",
+}
+
+
+def novelty_empty(kind) -> MessageSpec:
+    b = MessageBuilder()
+    b.line(_NOVELTY_EMPTY.get(kind, "Новинок пока нет."))
+    return b.build_stripped()
+
+
+def _novelty_status(kind, item) -> str:
+    """Плашка новинки: идёт сейчас или выходит позже, дата — как в хабе."""
+    day = _parse_event_date(str(_item_value(item, "date", "") or _item_value(item, "published_date", ""))[:10])
+    label = _event_date_label(day.isoformat()) if day else ""
+    released = day is not None and day <= date.today()
+    if kind == "movie":
+        return "🎬 Сейчас в кино" if released else f"🎬 Скоро в кино · {label}" if label else "🎬 Скоро в кино"
+    if kind == "book":
+        return f"📚 Новая книга · {label}" if label else "📚 Новая книга"
+    if kind == "game":
+        if not label:
+            return "👾 Новая игра"
+        return f"👾 Вышла {label}" if released else f"👾 Выходит {label}"
+    return f"🎧 Новый альбом · {label}" if label else "🎧 Новый альбом"
+
+
+def novelty_card(kind, item) -> MessageSpec:
+    """Карточка новинки: плашка, название, данные одной строкой, описание после пустой строки."""
+    b = MessageBuilder()
+    b.bold(_novelty_status(kind, item))
+    b.newline()
+    b.spacer()
+    title = str(_item_value(item, "title", "") or "").strip()
+    url = str(_item_value(item, "trailer_url", "") or _item_value(item, "url", "") or "").strip()
+    if kind == "movie" and not url and _item_value(item, "id", ""):
+        url = f"https://www.themoviedb.org/movie/{_item_value(item, 'id', '')}"
+    heading = f"«{title}»" + (f" — {item.get('artist')}" if kind == "music" and item.get("artist") else "")
+    if url:
+        b.link(heading, url)
+    else:
+        b.bold(heading)
+    b.newline()
+    if kind == "movie":
+        meta = [_movie_genres_for_line(item).replace(", ", " · "),
+                _weekly_rating(_item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10)]
+        summary = _movie_premiere_summary(_item_value(item, "overview", ""), limit=300)
+    elif kind == "book":
+        meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]
+        summary = _book_premiere_summary(str(_item_value(item, "summary", "") or ""), limit=300)
+    elif kind == "game":
+        meta = [str(item.get("genre") or ""), str(item.get("platform_label") or "")]
+        summary = str(item.get("summary") or "")
+    else:
+        meta = []
+        summary = ""
+    meta = [value for value in meta if value.strip()]
+    if meta:
+        b.line(" · ".join(meta))
+    if summary.strip():
+        b.spacer()
+        b.line(summary.strip())
+    return b.build_stripped()

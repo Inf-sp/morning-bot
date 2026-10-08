@@ -32,7 +32,7 @@ def _profile_store(monkeypatch):
 def test_main_menu_has_single_leisure_hub():
     assert _labels(menu.main_menu_kb()) == [
         ["☀️ Мой день"],
-        ["🧵 Гардероб", "🥣 Готовка"],
+        ["👔 Гардероб", "🥣 Готовка"],
         ["🧠 Обучение", "🍿 Досуг"],
         ["🎚️ Настройки"],
     ]
@@ -109,6 +109,7 @@ def test_board_genre_card_keyboard_is_board_style_without_set_button():
     assert labels == [
         ["✨ Другая игра"],
         ["🎭 По жанру"],
+        ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert callbacks[:2] == ["vg_gb_strategy", "vg_genres_board"]
@@ -224,7 +225,7 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
         ["✨ Другая игра"],
         ["🎭 По жанру"],
         ["🎲 Настолки"],
-        ["✅ Добавить в Мой набор игр"],
+        ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -252,6 +253,7 @@ def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch)
     assert labels == [
         ["✨ Другая игра"],
         ["🎭 По жанру"],
+        ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert all("Мой набор игр" not in line for lines in labels for line in lines)
@@ -327,7 +329,7 @@ def test_game_set_groups_games_like_my_cinema(monkeypatch):
     )
     labels = _labels(bot.message["reply_markup"])
     assert labels[0] == ["✅ Добавить игру"]
-    assert ["📝 Предпочтения"] in labels
+    assert ["📝 Выбрать предпочтения"] in labels
 
 
 def test_game_set_uses_one_primary_genre_and_keeps_board_games_separate(monkeypatch):

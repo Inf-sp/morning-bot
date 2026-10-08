@@ -17,6 +17,7 @@ import inclusive_recommendations
 import igdb
 import research
 import recommendation_rotation as rotation
+import recommendation_stoplist
 import secure
 import settings
 import store
@@ -579,10 +580,12 @@ def _ensure_game_trailer_url(item):
 def _eligible_games(cid, genre=None, board=False):
     board_platform = board or genre == "board"
     platforms = {"board"} if board_platform else set(_effective_platforms(cid))
+    hidden = {value.casefold() for value in recommendation_stoplist.values(cid, "game")}
     candidates = [
         item for item in _GAME_CATALOG
         if platforms.intersection(item["platforms"])
         and (not genre or genre in item["genres"])
+        and item["name"].casefold() not in hidden
     ]
     current_year = datetime.now(config.TZ).year
     recency = _game_recency(cid)
@@ -699,6 +702,8 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
             )])
         # Настолки: доступен подбор по жанру внутри настольного режима.
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres_board")])
+        if not no_match:
+            rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
     else:
         if not no_match:
             rows.append([InlineKeyboardButton(
@@ -707,11 +712,24 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
         rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")])
         if not no_match:
-            rows.append([InlineKeyboardButton("✅ Добавить в Мой набор игр", callback_data="game_love")])
+            rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
     if no_match:
-        rows.append([InlineKeyboardButton("📝 Предпочтения", callback_data="game_prefs")])
+        rows.append([InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="game_prefs")])
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
+
+
+async def game_dislike(bot, cid, *, status=None):
+    """«Не нравится»: игра уходит в чёрный список, сразу показывается следующая."""
+    rec = store.last_recos.get(str(cid))
+    if isinstance(rec, dict) and rec.get("kind") == "game" and rec.get("items"):
+        recommendation_stoplist.add(cid, "game", rec["items"][0], "hidden")
+        _reset_game_daily(cid)
+        await send_game_recommendation(
+            bot, cid, status=status, refresh=True, genre=rec.get("genre"), board=bool(rec.get("board")),
+        )
+        return
+    await send_game_recommendation(bot, cid, status=status, refresh=True)
 
 
 async def game_love(bot, cid, q=None):
@@ -797,7 +815,7 @@ async def send_game_set(bot, cid, q=None):
             *[[InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"vg_setg:{token}:{index}:0")]
               for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
-        "📝 Предпочтения", callback_data="game_prefs",
+        "📝 Выбрать предпочтения", callback_data="game_prefs",
     )])
     rows.append(nav_row("lz_lib"))
     await _deliver(bot, cid, msg, InlineKeyboardMarkup(rows), q=q)
@@ -1049,6 +1067,8 @@ def _genre_keyboard(board=False):
     prefix = "vg_gb_" if board else "vg_g_"
     buttons = [InlineKeyboardButton(label, callback_data=f"{prefix}{key}") for key, label in GAME_GENRES]
     rows = [[button] for button in buttons]
+    if not board:  # премьеры — видеоигры, у настолок новинки нет
+        rows.insert(0, [InlineKeyboardButton("🆕 Новинка", callback_data="nov_game")])
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
@@ -1081,6 +1101,8 @@ async def send_game_recommendation(
         if candidate:
             item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre, board=board)
     item = item or pick_game(cid, genre=genre, refresh=refresh, board=board)
+    if item:
+        store.last_recos[str(cid)] = {"kind": "game", "items": [item["name"]], "genre": genre, "board": board}
     if board or genre == "board":
         await _send_board_game(bot, cid, item, genre=genre, q=q, status=status)
         return

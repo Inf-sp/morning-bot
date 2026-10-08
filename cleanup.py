@@ -74,7 +74,7 @@ COLLECTIONS = {
         "lz_lib", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                     {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить фильм", "as_loveadd_movies"),
-        menu_button=("📝 Предпочтения", "movie_prefs"),
+        menu_button=("📝 Выбрать предпочтения", "movie_prefs"),
         add_button_at_bottom=False,
         allow_edit=False),
     "cinema_watched": _collection(
@@ -89,7 +89,7 @@ COLLECTIONS = {
         "lz_lib", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
                    {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить книгу", "as_loveadd_books"),
-        menu_button=("📝 Предпочтения", "book_prefs"),
+        menu_button=("📝 Выбрать предпочтения", "book_prefs"),
         add_button_at_bottom=False,
         allow_edit=False),
     "books_read": _collection(
@@ -104,7 +104,7 @@ COLLECTIONS = {
         "lz_lib", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
                      {"id": "hide", "label": "Скрыть", "confirm": False}],
         add_button=("✅ Добавить артиста", "as_loveadd_artists"),
-        menu_button=("📝 Предпочтения", "music_prefs"),
+        menu_button=("📝 Выбрать предпочтения", "music_prefs"),
         add_button_at_bottom=False,
         allow_edit=False),
     "music_hidden_artists": _collection(

@@ -170,7 +170,7 @@ async def send_favorite_movies(bot, cid, q=None):
         for index, (genre, items) in enumerate(view["genres"])
     ])
     rows.append([InlineKeyboardButton(
-        "📝 Предпочтения", callback_data="movie_prefs",
+        "📝 Выбрать предпочтения", callback_data="movie_prefs",
     )])
     rows.append(nav_row("lz_lib"))
     kb = InlineKeyboardMarkup(rows)
@@ -306,7 +306,8 @@ def _movie_kb(i, category=None):
     rows = [
         [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
         [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
-        [InlineKeyboardButton("✅ Добавить в Моё кино", callback_data=f"movie_love_{i}")],
+        # «Не нравится» — в чёрный список, сразу следующая рекомендация.
+        [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
     ]
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
@@ -320,7 +321,7 @@ _GENRE_MENU = [
 ]
 
 def _movie_genre_menu_kb():
-    rows = []
+    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")]]
     buttons = [InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")
                for label, gid in _GENRE_MENU]
     for button in buttons:
