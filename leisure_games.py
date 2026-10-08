@@ -1289,13 +1289,16 @@ def _premiere_cache_get(signature, today, *, allow_stale=False):
     return [dict(item) for item in items] if isinstance(items, list) else None
 
 
-def _premiere_cache_set(signature, today, items):
+def _premiere_cache_set(signature, today, items, *, keep_expiry=False):
     def mutate(data):
         data = data if isinstance(data, dict) else {}
+        previous = data.get(signature) if isinstance(data.get(signature), dict) else {}
+        expires = (previous.get("expires") if keep_expiry else None) or (
+            today + timedelta(days=7)).isoformat()
         data[signature] = {
             "version": _GAME_PREMIERES_VERSION,
             "igdb_configured": igdb.configured(),
-            "expires": (today + timedelta(days=7)).isoformat(),
+            "expires": expires,
             "items": [dict(item) for item in items],
         }
         return data, None
@@ -1416,6 +1419,10 @@ async def get_game_premieres(cid, *, refresh=False, seasonal=False):
     signature = _premiere_signature(cid, start_date, end_date)
     cached = _premiere_cache_get(signature, today)
     if cached is not None:
+        if refresh and cached and any(item.get("trailer_year") != today.year for item in cached):
+            # Кэш недели без свежих трейлеров: дозаполняем только их, без пересборки витрины.
+            cached = await _with_fresh_trailers(cached, today.year)
+            _premiere_cache_set(signature, today, cached, keep_expiry=True)
         return cached
     if not refresh:
         return _premiere_cache_get(signature, today, allow_stale=True) or []
