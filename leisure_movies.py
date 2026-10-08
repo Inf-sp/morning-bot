@@ -305,7 +305,7 @@ def _movie_kb(i, category=None):
     """
     rows = [
         [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data="movie_genre_menu")],
+        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data="movie_genre_menu")],
         # «Не нравится» — в чёрный список, сразу следующая рекомендация.
         [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
     ]
@@ -313,7 +313,7 @@ def _movie_kb(i, category=None):
     return InlineKeyboardMarkup(rows)
 
 
-# Шесть популярных жанров для быстрого меню «По жанру».
+# Шесть популярных жанров для быстрого меню «Выбрать жанр».
 _GENRE_MENU = [
     ("Комедия", 35), ("Ужасы", 27),
     ("Фантастика", 878), ("Триллер", 53),

@@ -46,7 +46,7 @@ def test_recommendation_cards_have_no_refresh_label():
     ):
         first = keyboard.inline_keyboard[0][0]
         assert (first.text, first.callback_data) == (other, callback)
-        assert keyboard.inline_keyboard[1][0].text == "🎭 По жанру"
+        assert keyboard.inline_keyboard[1][0].text == "🎭 Выбрать жанр"
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
     # «Не нравится» — красная, последней перед навигацией, вместо «Добавить в Моё…».
     for keyboard, callback in (

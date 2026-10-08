@@ -1,4 +1,4 @@
-"""«Новинка» в меню «По жанру»: премьера кино, книги, игры или свежий альбом.
+"""«Новинка» в меню «Выбрать жанр»: премьера кино, книги, игры или свежий альбом.
 
 Данные — только из реальных источников, которые уже собирает бот (TMDB,
 книжная и игровая витрины премьер) и Apple Music для музыки. Показанные новинки
@@ -81,7 +81,7 @@ def _remember(cid, kind, item):
 def _keyboard(kind):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другая новинка", callback_data=f"nov_{kind}")],
-        [InlineKeyboardButton("🎭 По жанру", callback_data=_GENRE_MENU[kind])],
+        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data=_GENRE_MENU[kind])],
         [InlineKeyboardButton("Не нравится", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
@@ -102,7 +102,7 @@ async def send_novelty(bot, cid, kind, *, status=None):
     if not item:
         msg = leisure_ui.novelty_empty(kind)
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎭 По жанру", callback_data=_GENRE_MENU[kind])], nav_row("m_leisure"),
+            [InlineKeyboardButton("🎭 Выбрать жанр", callback_data=_GENRE_MENU[kind])], nav_row("m_leisure"),
         ])
         await _deliver(bot, cid, msg, kb, status=status)
         return

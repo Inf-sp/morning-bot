@@ -701,7 +701,7 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
                 "✨ Другая игра", callback_data=f"vg_gb_{board_genre}" if board_genre else "vg_board",
             )])
         # Настолки: доступен подбор по жанру внутри настольного режима.
-        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres_board")])
+        rows.append([InlineKeyboardButton("🎭 Выбрать жанр", callback_data="vg_genres_board")])
         if not no_match:
             rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
     else:
@@ -709,7 +709,7 @@ def _game_keyboard(*, no_match=False, genre=None, board=False):
             rows.append([InlineKeyboardButton(
                 "✨ Другая игра", callback_data=f"vg_next_{genre}" if genre else "vg_next",
             )])
-        rows.append([InlineKeyboardButton("🎭 По жанру", callback_data="vg_genres")])
+        rows.append([InlineKeyboardButton("🎭 Выбрать жанр", callback_data="vg_genres")])
         rows.append([InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")])
         if not no_match:
             rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])

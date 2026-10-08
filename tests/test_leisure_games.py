@@ -108,7 +108,7 @@ def test_board_genre_card_keyboard_is_board_style_without_set_button():
 
     assert labels == [
         ["✨ Другая игра"],
-        ["🎭 По жанру"],
+        ["🎭 Выбрать жанр"],
         ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -223,7 +223,7 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     assert "👾 Игра для тебя" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
-        ["🎭 По жанру"],
+        ["🎭 Выбрать жанр"],
         ["🎲 Настолки"],
         ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
@@ -252,7 +252,7 @@ def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch)
     labels = _labels(status.call[1]["reply_markup"])
     assert labels == [
         ["✨ Другая игра"],
-        ["🎭 По жанру"],
+        ["🎭 Выбрать жанр"],
         ["Не нравится"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]

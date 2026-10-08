@@ -473,7 +473,7 @@ ROUTES = (
     R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("game_love", lambda c: leisure_games.game_love(c.bot, c.cid, c.q)),
     R("game_no", lambda c: c.status(lambda status: leisure_games.game_dislike(c.bot, c.cid, status=status))),
-    # «Новинка» из меню «По жанру»: nov_no_* раньше nov_*.
+    # «Новинка» из меню «Выбрать жанр»: nov_no_* раньше nov_*.
     R("nov_no_*", lambda c: c.status(lambda status: leisure_novelty.dislike_novelty(
         c.bot, c.cid, c.data[len("nov_no_"):], status=status))),
     R("nov_*", lambda c: c.status(lambda status: leisure_novelty.send_novelty(
