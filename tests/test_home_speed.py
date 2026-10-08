@@ -14,27 +14,12 @@ import home_cache
 import leisure_books
 import leisure_games
 import leisure_movies
-import restaurant_discovery
 import tracking
 from ui import admin as admin_ui
 
 
 def _boom(*_args, **_kwargs):
     raise AssertionError("network or AI called on cached home")
-
-
-def test_cached_restaurant_is_served_without_weather_search_or_ai(monkeypatch):
-    card = {"city": "Alkmaar", "name": "Roest", "map_url": "https://maps.example",
-            "cached_at": datetime.now(config.TZ).isoformat()}
-    monkeypatch.setattr(restaurant_discovery.store, "get_settings",
-                        lambda _cid: {"city": "Alkmaar", "lat": 52.6, "lon": 4.7})
-    monkeypatch.setattr(restaurant_discovery.store, "get_profile",
-                        lambda _cid: {"food_restaurant_recommendation": card})
-    monkeypatch.setattr(restaurant_discovery, "_good_terrace_weather", _boom)
-    monkeypatch.setattr(restaurant_discovery.research, "web_search", _boom)
-    monkeypatch.setattr(restaurant_discovery.ai, "llm_json", _boom)
-
-    assert restaurant_discovery.get_restaurant("42")["name"] == "Roest"
 
 
 def _patch_warm_steps(monkeypatch, calls, probe=None):
@@ -57,7 +42,7 @@ def _patch_warm_steps(monkeypatch, calls, probe=None):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", step("wardrobe"))
-    monkeypatch.setattr(bot_maintenance.restaurant_discovery, "get_restaurant", step("cooking", False))
+    monkeypatch.setattr(bot_maintenance.recipe_generation, "warm_cooking_home_ideas", step("cooking", False))
     monkeypatch.setattr(bot.learning, "warm_home_cache", step("learning", False))
     monkeypatch.setattr(bot_maintenance.leisure_hub, "warm_hub_cache", step("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", step("myday"))

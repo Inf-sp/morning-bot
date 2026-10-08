@@ -165,8 +165,10 @@ async def _refresh_card_cache(cid, key):
         store.clear_wardrobe_daylook(cid)
         return await wardrobe.warm_home_cache(cid)
     if key == "cooking":
-        import restaurant_discovery
-        return await asyncio.to_thread(restaurant_discovery.get_restaurant, cid, refresh=True)
+        import recipe_generation
+        return await asyncio.to_thread(
+            recipe_generation.get_cooking_home_idea, cid, None, True,
+        )
     if key == "learning":
         import learning
         learning.reset_daily_material_cache(cid)

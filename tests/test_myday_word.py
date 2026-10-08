@@ -42,15 +42,11 @@ def test_myday_rebuilds_cached_summary_when_ready_sections_are_missing(monkeypat
         "text": "Мой день\n\n🦉Лайфхак: Старая сводка.",
         "entities": [],
     }
-    rebuilt = (
-        "Мой день\n\n🧥 Образ: Серая рубашка.\n\n"
-        "🍽️ Куда сходить: Roest Alkmaar.",
-        [],
-    )
+    rebuilt = ("Мой день\n\n🧥 Образ: Серая рубашка.", [])
     monkeypatch.setattr(myday, "_load_day_cache", lambda *_args: stale)
     monkeypatch.setattr(
         myday, "_ready_day_sections",
-        lambda _cid: {"outfit": True, "restaurant": True},
+        lambda _cid: {"outfit": True},
         raising=False,
     )
     monkeypatch.setattr(myday, "_build_day_text", lambda *_args, **_kwargs: rebuilt)
@@ -64,7 +60,6 @@ def test_myday_rebuilds_cached_summary_when_ready_sections_are_missing(monkeypat
     asyncio.run(myday.send_plany(object(), "42", status=status))
 
     assert "🧥 Образ:" in status.replaced[0]
-    assert "🍽️ Куда сходить:" in status.replaced[0]
 
 
 def test_myday_menu_offers_detailed_day_and_week_weather():

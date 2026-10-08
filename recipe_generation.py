@@ -820,16 +820,23 @@ def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     return normalized if _home_idea_complete(normalized) else None
 
 
-def get_fast_cooking_home_idea(cid, now=None) -> dict:
-    """Возвращает экран Готовки без сети: раздельный кэш или локальный рецепт."""
-    cached = get_cached_cooking_home_idea(cid, now=now)
-    if cached is not None:
-        return cached
-    context = _home_idea_context(cid, now=now)
-    idea = _home_local_idea(context)
-    if not _home_idea_complete(idea):
-        raise ValueError("Нет готового рецепта для главного экрана Готовки")
-    return idea
+def current_meal(now=None) -> str:
+    """Приём пищи главного экрана: 06–11 завтрак, 11–16 обед, 16–06 ужин."""
+    return _home_meal_for_hour((now or datetime.now(TZ)).hour)
+
+
+def warm_cooking_home_ideas(cid, now=None) -> dict:
+    """Ночью готовит дневной кэш завтрака, обеда и ужина без сообщений пользователю."""
+    base = now or datetime.now(TZ)
+    result = {}
+    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 18)):
+        meal_time = base.replace(hour=hour, minute=0, second=0, microsecond=0)
+        try:
+            result[meal] = bool(get_cooking_home_idea(cid, now=meal_time, refresh=False))
+        except Exception as error:
+            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
+            result[meal] = False
+    return result
 
 
 def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:

@@ -134,7 +134,7 @@ def test_cooking_idea_card_has_no_extra_drink_block():
         "steps": ["Отвари пасту", "Добавь овощи"],
     })
 
-    assert "🌍 Готовим сегодня · Международная кухня" in message.text
+    assert message.text.startswith("🍳 Что приготовить · Международная кухня")
     assert "🥣 Питание · Идея на сегодня" not in message.text
     assert "Напиток" not in message.text
 

@@ -82,34 +82,32 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
 
 
 async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None):
+    """Главный экран Готовки: рецепт из холодильника на текущий приём пищи.
+
+    Рецепт дня берётся из кэша мгновенно (ночной прогрев готовит все три);
+    без кэша или по «✨ Другой рецепт» собирается один раз с индикатором.
+    """
     import asyncio
     import recipe_generation
-    import restaurant_discovery
     import util
     import verify
-
-    if meal is None:
-        card = await asyncio.to_thread(
-            restaurant_discovery.get_restaurant, cid, refresh=refresh,
-        )
-        msg = menu_ui.restaurant_menu(card, news=category_news.cached_line("food"))
-        await _deliver(bot, cid, msg, status, q, disable_web_page_preview=True)
-        return
 
     if not has_available_fridge(cid):
         await _deliver(bot, cid, menu_ui.food_empty_menu(), status, q)
         return
 
-    current_now = datetime.now(config.TZ)
-    recipe_now = current_now
+    recipe_now = datetime.now(config.TZ)
     if meal in _FOOD_MEAL_HOURS:
-        recipe_now = current_now.replace(
+        recipe_now = recipe_now.replace(
             hour=_FOOD_MEAL_HOURS[meal], minute=0, second=0, microsecond=0,
         )
+    meal = recipe_generation.current_meal(recipe_now)
+    news = category_news.cached_line("food")
     if not refresh:
-        ready = recipe_generation.get_fast_cooking_home_idea(cid, now=recipe_now)
-        await _deliver(bot, cid, menu_ui.food_menu(ready), status, q)
-        return
+        ready = recipe_generation.get_cached_cooking_home_idea(cid, now=recipe_now)
+        if ready is not None:
+            await _deliver(bot, cid, menu_ui.food_menu(ready, meal=meal, news=news), status, q)
+            return
 
     owns_status = status is None
     if status is None:
@@ -127,7 +125,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
     try:
         idea = await asyncio.to_thread(
             recipe_generation.get_cooking_home_idea, cid, recipe_now, refresh)
-        msg = menu_ui.food_menu(idea)
+        msg = menu_ui.food_menu(idea, meal=meal, news=news)
         await status.replace(
             msg.text,
             entities=msg.entities,

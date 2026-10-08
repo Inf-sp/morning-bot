@@ -52,7 +52,7 @@ def _status_stages(data):
         return ((0, first), (2, second), (6, final))
 
     if data in ("m_food", "m_food_next"):
-        return progress("🍽️ Ищу место...", "📍 Проверяю город...", "📝 Готовлю рекомендацию...")
+        return progress("🍳 Подбираю рецепт...", "🧊 Сверяю холодильник...", "📝 Готовлю рецепт...")
     if data.startswith(("as_food", "as_fridge_cook", "food_")):
         first = "⏳ Ищу рецепт..."
     elif data == "w_look":
@@ -319,8 +319,6 @@ ROUTES = (
     R("m_close", _close),
     R("m_settings", lambda c: settings.send_home(c.bot, c.cid, q=c.q)),
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
-    R("m_food_gen", lambda c: c.status(
-        lambda status: cooking.send_recipe_featured(c.bot, c.cid, status=status))),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
     R("m_menu", _main_menu),
@@ -333,7 +331,7 @@ ROUTES = (
         lambda status: myday.send_plany(c.bot, c.cid, status=status), preserve_message=False)),
     R("m_wardrobe", lambda c: c.status(
         lambda status: wardrobe.send_home(c.bot, c.cid, status=status), preserve_message=False)),
-    # Главный экран — готовая карточка дня; новый поиск только по m_food_next.
+    # Рецепт дня текущего приёма пищи; новый вариант — только по m_food_next.
     R("m_food", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status), preserve_message=False)),
     # Хаб читает только готовые кэши — без статуса ожидания.
@@ -461,6 +459,7 @@ ROUTES = (
 LEGACY_ALIASES = (
     (("m_travel*", "a_trav_*"), "m_menu"),
     (("m_movie", "m_music", "m_books", "m_games", "movie_now_playing"), "m_leisure"),
+    ("m_food_gen", "m_food"),  # прежняя кнопка «🍳 Что приготовить»
 )
 
 

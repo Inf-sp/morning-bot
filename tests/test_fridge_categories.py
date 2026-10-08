@@ -21,6 +21,11 @@ def _labels(markup):
 
 
 def _memory_store(monkeypatch, initial):
+    async def no_cooking_home(*_args, **_kwargs):
+        return None
+
+    # Переход в «Готовку» собирает настоящий рецепт — здесь он не нужен.
+    monkeypatch.setattr(fridge, "_send_cooking_home", no_cooking_home)
     state = list(initial)
     monkeypatch.setattr(fridge.store, "get_list", lambda *_args: list(state))
 

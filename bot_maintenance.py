@@ -11,7 +11,7 @@ import learning_dictionary as dictionary
 import leisure_collection
 import leisure_hub
 import myday
-import restaurant_discovery
+import recipe_generation
 import tracking
 import wardrobe
 
@@ -100,7 +100,7 @@ async def job_warm_home_pages(context):
             break
         steps = (
             ("wardrobe", lambda: wardrobe.warm_home_cache(cid)),
-            ("cooking", lambda: asyncio.to_thread(restaurant_discovery.get_restaurant, cid)),
+            ("cooking", lambda: asyncio.to_thread(recipe_generation.warm_cooking_home_ideas, cid)),
             ("learning", lambda: asyncio.to_thread(learning.warm_home_cache, cid)),
             ("leisure", lambda: leisure_hub.warm_hub_cache(cid)),
             ("myday", lambda: myday.warm_day_cache(cid, bot=context.bot)),

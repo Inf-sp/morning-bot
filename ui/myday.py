@@ -32,9 +32,6 @@ def day_summary(
     movie_rebus=None,
     outfit_items=None,
     outfit_emoji="🧶",
-    restaurant_line="",
-    restaurant_name="",
-    restaurant_url="",
     lifehack="",
     quote_text="",
     quote_author="",
@@ -85,25 +82,6 @@ def day_summary(
     if outfit:
         b.text_line(f"{str(outfit_emoji or '👕').strip()} ")
         b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
-        b.spacer()
-
-    if restaurant_name:
-        b.text_line("🍽️ ")
-        b.label("Куда сходить")
-        b.text_line(" ")
-        if restaurant_url:
-            b.link(str(restaurant_name).strip(), str(restaurant_url).strip())
-        else:
-            b.text_line(str(restaurant_name).strip())
-        details = str(restaurant_line or "").strip()
-        if details:
-            b.text_line(f" · {details}")
-        b.text_line(".")
-        b.newline()
-        b.spacer()
-    elif restaurant_line:
-        b.text_line("🍽️ ")
-        b.labeled_line("Куда сходить", finish_dot(str(restaurant_line).strip()), lowercase=False)
         b.spacer()
 
     if lifehack:

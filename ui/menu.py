@@ -4,7 +4,7 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from .builder import MessageBuilder, MessageSpec
-from .constants import CUISINE_EMOJI, LANGUAGE_EMOJI, ui_label
+from .constants import LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
 from .news import append_weekly_news
 
@@ -104,7 +104,7 @@ _SCREENS = {
         "Готовка",
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
-            [("🍳 Что приготовить", "m_food_gen")],
+            [("🍳 Что приготовить", "m_food")],
             [("🎚️ Мой холодильник", "as_fridge_home")],
             [("#️⃣ Главная", "m_menu")],
         ],
@@ -217,14 +217,17 @@ def _cooking_sentence(value) -> str:
     return value
 
 
-def food_menu(idea=None):
-    """Главный экран Готовки: один полный рецепт из холодильника."""
+_MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "dinner": "на ужин"}
+
+
+def food_menu(idea=None, *, meal="", news=None):
+    """Главный экран Готовки: рецепт из холодильника на текущий приём пищи."""
     idea = idea or {}
     b = MessageBuilder()
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
-    cuisine_flag = CUISINE_EMOJI.get(cuisine_code, CUISINE_EMOJI["international"])
     cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
-    b.section(f"{cuisine_flag} Готовим сегодня · {cuisine_name}")
+    title = " ".join(part for part in ("🍳 Что приготовить", _MEAL_TITLES.get(meal, "")) if part)
+    b.section(f"{title} · {cuisine_name}")
 
     name = _cooking_text(idea.get("name"))
     if name:
@@ -269,59 +272,9 @@ def food_menu(idea=None):
         b.text_line("💡 ")
         b.labeled_line("Полезно", tip)
 
-    rows = [
-        [("🎚️ Мой холодильник", "as_fridge_home")],
-        [("#️⃣ Главная", "m_menu")],
-    ]
-    return b.build_stripped(reply_markup=ikb(rows))
-
-
-def restaurant_menu(card=None, *, news=None):
-    """Главный экран Готовки: одно проверенное место в текущем городе."""
-    card = card or {}
-    city = _cooking_text(card.get("city")) or "Alkmaar"
-    b = MessageBuilder()
-    b.section(f"🍽️ Куда сходить · {city}")
-    name = _cooking_text(card.get("name"))
-    if name and card.get("map_url"):
-        b.bold_link(name, str(card["map_url"]))
-        details = " · ".join(
-            value for value in (
-                _cooking_text(card.get("address")),
-                _cooking_text(card.get("cuisine")),
-                _cooking_text(card.get("price")),
-            ) if value
-        )
-        if details:
-            b.text_line(f" ({details})")
-        description = _cooking_sentence(card.get("description"))
-        if description:
-            b.text_line(f" — {description}")
-        b.newline()
-        dishes = [
-            _cooking_text(value)
-            for value in (card.get("signature_dishes") or [card.get("signature_dish")])
-            if _cooking_text(value)
-        ][:3]
-        if dishes:
-            b.spacer()
-            b.section("Что взять:")
-            for dish in dishes:
-                b.line(f"• {dish}")
-        fact = _cooking_sentence(card.get("fact"))
-        if fact:
-            b.spacer()
-            b.text_line("💡 ")
-            b.bold("Интересный факт:")
-            b.text_line(f" {fact}")
-            b.newline()
-    else:
-        b.line("Не удалось проверить актуальное место. Попробуй обновить подборку позже.")
     append_weekly_news(b, news)
     rows = [
-        # Новое место подбирается живым запросом только по нажатию; вход берёт карточку дня.
-        [("✨ Другое место" if name else "✨ Подобрать место", "m_food_next")],
-        [("🍳 Что приготовить", "m_food_gen")],
+        [("✨ Другой рецепт", "m_food_next")],
         [("🎚️ Мой холодильник", "as_fridge_home")],
         [("#️⃣ Главная", "m_menu")],
     ]

@@ -314,29 +314,15 @@ async def back_to_food_menu(bot, cid, status=None):
     clear_recipe_queue(cid)
     await menu.send_food_menu(bot, cid, status=status)
 
-async def send_recipe_featured(bot, cid, status=None):
-    """Подбирает блюдо только из доступных продуктов холодильника."""
-    available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
-    if not available:
-        msg = food_ui.fridge_empty_for_recipe()
-        await status.replace(
-            msg.text, entities=msg.entities, reply_markup=back_menu_keyboard("m_food"),
-        )
-        return
-    _set_selected_recipe_cuisine(cid, "")
-    clear_recipe_queue(cid)
-    await enter_meal(bot, cid, "fridge", ", ".join(available), status=status)
-
 
 async def send_recipe_cuisines(bot, cid):
     import settings
     rows = [[InlineKeyboardButton(label, callback_data=f"as_food_cuisine_{code}")]
             for code, label in settings.CUISINE_OPTIONS]
-    rows.append(nav_row("m_food_gen"))
+    rows.append(nav_row("m_food"))
     await bot.send_message(
         chat_id=cid, text="🎭 Выбери кухню", reply_markup=InlineKeyboardMarkup(rows), transient=True,
     )
-
 
 
 async def send_leftovers(bot, cid, ingredients, status=None):

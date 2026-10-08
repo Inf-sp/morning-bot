@@ -6,9 +6,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import menu
-import cooking
 import recipe_generation
-import restaurant_discovery
 import util
 import bot_callbacks
 
@@ -21,28 +19,6 @@ def test_home_meal_time_windows():
     assert recipe_generation._home_meal_for_hour(15) == "lunch"
     assert recipe_generation._home_meal_for_hour(16) == "dinner"
     assert recipe_generation._home_meal_for_hour(21) == "dinner"
-
-
-def test_pick_recipe_uses_available_fridge_products(monkeypatch):
-    # docs/food.md: «Что приготовить» берёт только доступные продукты холодильника,
-    # автоматический выбор приёма пищи по времени больше не применяется.
-    calls = []
-
-    async def enter_meal(_bot, _cid, meal, ingredients=None, status=None, cuisine=""):
-        calls.append((meal, ingredients, status))
-
-    monkeypatch.setattr(cooking.store, "get_list", lambda *_args: [
-        {"name": "яйца", "cat": "молочное и напитки", "on": True},
-        {"name": "сыр", "cat": "молочное и напитки", "on": False},
-    ])
-    monkeypatch.setattr(cooking, "_set_selected_recipe_cuisine", lambda *_args: None)
-    monkeypatch.setattr(cooking, "clear_recipe_queue", lambda *_args: None)
-    monkeypatch.setattr(cooking, "enter_meal", enter_meal)
-    status = object()
-
-    asyncio.run(cooking.send_recipe_featured(object(), "42", status=status))
-
-    assert calls == [("fridge", "яйца", status)]
 
 
 def test_month_recipe_pool_only_uses_current_profile_and_month():
@@ -72,58 +48,79 @@ def test_month_recipe_pool_only_uses_current_profile_and_month():
     ) == []
 
 
-def test_other_food_place_refresh_replaces_inline_status(monkeypatch):
-    calls = []
+def test_other_recipe_refreshes_current_meal_in_inline_status(monkeypatch):
+    calls, generated = [], []
 
     class Status:
-        mode = "inline"
-
         async def replace(self, text, **kwargs):
-            calls.append(("replace", text, kwargs))
+            calls.append((text, kwargs))
 
-        async def stop(self, delete=True):
-            calls.append(("stop", delete))
+    def generate(cid, now, refresh):
+        generated.append((cid, recipe_generation.current_meal(now), refresh))
+        return {"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
+            "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}
 
-    monkeypatch.setattr(
-        restaurant_discovery, "get_restaurant",
-        lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
-    )
-    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda _card, **_kwargs: SimpleNamespace(
-        text="Обновлённое место", entities=[], reply_markup="food-kb"))
+    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", generate)
 
     asyncio.run(menu.send_food_menu(object(), "42", refresh=True, status=Status()))
 
-    assert calls[0] == ("replace", "Обновлённое место", {
-        "entities": [], "reply_markup": "food-kb", "disable_web_page_preview": True,
-    })
+    assert generated == [("42", recipe_generation.current_meal(), True)]
+    text, kwargs = calls[0]
+    assert text.startswith("🍳 Что приготовить на ") and "Шакшука" in text
+    labels = [b.text for row in kwargs["reply_markup"].inline_keyboard for b in row]
+    assert labels[0] == "✨ Другой рецепт"
 
 
-def test_food_home_uses_cached_restaurant_without_recipe_generation(monkeypatch):
+def test_food_home_serves_cached_day_recipe_instantly(monkeypatch):
     shown = []
 
     class Status:
         async def replace(self, text, **_kwargs):
             shown.append(text)
 
-    monkeypatch.setattr(
-        restaurant_discovery, "get_restaurant",
-        lambda *_args, **_kwargs: {"name": "De Eendracht", "city": "Alkmaar"},
-    )
-    monkeypatch.setattr(menu.menu_ui, "restaurant_menu", lambda card, **_kwargs: SimpleNamespace(
-        text=card["name"], entities=[], reply_markup="food-kb",
-    ))
+    def no_generation(*_args, **_kwargs):
+        raise AssertionError("cached recipe must not be regenerated")
+
+    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
+    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_a, **_k: {"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
+            "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."})
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", no_generation)
 
     import time
     started = time.monotonic()
     asyncio.run(menu.send_food_menu(object(), "42", status=Status()))
-    elapsed = time.monotonic() - started
 
-    assert elapsed < 0.1
-    assert shown == ["De Eendracht"]
+    assert time.monotonic() - started < 0.1
+    assert "Шакшука" in shown[0]
+
+
+def test_recipe_header_follows_time_of_day():
+    for meal, words in (("breakfast", "на завтрак"), ("lunch", "на обед"), ("dinner", "на ужин")):
+        text = menu.menu_ui.food_menu({"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
+            "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}, meal=meal).text
+        assert text.startswith(f"🍳 Что приготовить {words} · ")
+
+
+def test_warm_prepares_three_day_recipes(monkeypatch):
+    meals = []
+    monkeypatch.setattr(
+        recipe_generation, "get_cooking_home_idea",
+        lambda cid, now=None, refresh=False: meals.append(recipe_generation.current_meal(now)) or {"name": "x"},
+    )
+
+    assert recipe_generation.warm_cooking_home_ideas("42") == {
+        "breakfast": True, "lunch": True, "dinner": True,
+    }
+    assert meals == ["breakfast", "lunch", "dinner"]
+
+
+def test_old_what_to_cook_button_opens_the_recipe_home():
+    assert bot_callbacks._legacy_alias("m_food_gen") == "m_food"
 
 
 def test_opening_food_serves_the_day_restaurant_card(monkeypatch):
-    """Обычное открытие «Готовки» показывает готовую карточку дня без нового поиска."""
+    """Обычное открытие «Готовки» показывает рецепт дня без принудительной пересборки."""
     calls = []
 
     class Status:

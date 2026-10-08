@@ -754,7 +754,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 16
+_DAY_CACHE_VERSION = 17
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -834,21 +834,16 @@ def _save_day_cache(cid, today, text, entities, ts):
 def _ready_day_sections(cid):
     """Готовые соседние карточки, которые сводка может показать без новой генерации."""
     import wardrobe
-    import restaurant_discovery
 
     return {
         "outfit": bool(wardrobe.get_cached_outfit_summary(cid).get("items")),
-        "restaurant": bool(restaurant_discovery.cached_restaurant_preview(cid).get("name")),
     }
 
 
 def _cache_misses_ready_sections(cache, cid):
     text = str((cache or {}).get("text") or "")
     ready = _ready_day_sections(cid)
-    return (
-        (ready["outfit"] and " Образ:" not in text)
-        or (ready["restaurant"] and "🍽️ Куда сходить:" not in text)
-    )
+    return ready["outfit"] and " Образ:" not in text
 
 def _day_menu_kb():
     return InlineKeyboardMarkup([
@@ -936,8 +931,6 @@ def _build_day_text(cid, *, refresh_current=False):
     movie_rebus = {} if learning_enabled else _movie_rebus_of_day(now.date())
     import wardrobe
     outfit_summary = wardrobe.get_cached_outfit_summary(cid)
-    import restaurant_discovery
-    restaurant_preview = restaurant_discovery.cached_restaurant_preview(cid)
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     _hack_cat, hack_text = daily_lifehack(
         cid, rain=(rain >= 40 or bool(current_precipitation)),
@@ -959,9 +952,6 @@ def _build_day_text(cid, *, refresh_current=False):
         movie_rebus=movie_rebus,
         outfit_items=outfit_summary["items"],
         outfit_emoji=outfit_summary["emoji"],
-        restaurant_name=restaurant_preview.get("name", ""),
-        restaurant_url=restaurant_preview.get("url", ""),
-        restaurant_line=restaurant_preview.get("details", ""),
         lifehack=hack_text,
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),

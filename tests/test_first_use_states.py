@@ -372,8 +372,7 @@ def test_legacy_japanese_cuisine_preference_migrates_to_asian(monkeypatch):
     assert settings.cuisines("42") == ["asian", "italian"]
 
 
-def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
-    import restaurant_discovery
+def test_empty_fridge_opens_add_products_screen(monkeypatch):
     class QueryMessage:
         updated = None
 
@@ -388,18 +387,12 @@ def test_empty_fridge_still_opens_the_restaurant_home(monkeypatch):
             raise AssertionError("empty state should replace the current screen")
 
     monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: False)
-    monkeypatch.setattr(
-        restaurant_discovery, "get_restaurant",
-        lambda *_args, **_kwargs: {"city": "Alkmaar"},
-    )
 
     asyncio.run(menu.send_food_menu(Bot(), "42", q=Query()))
 
-    assert Query.message.updated["text"].startswith("🍽️ Куда сходить · Alkmaar")
+    assert Query.message.updated["text"].startswith("🥣 Готовка")
     assert _labels(Query.message.updated["reply_markup"]) == [
-        ["✨ Подобрать место"],
-        ["🍳 Что приготовить"],
-        ["🎚️ Мой холодильник"],
+        ["✅ Добавить продукт"],
         ["#️⃣ Главная"],
     ]
 
@@ -542,7 +535,7 @@ def test_first_fridge_fill_returns_to_normal_cooking_home(monkeypatch):
 
     asyncio.run(fridge.fridge_add_done(RecordingBot(sent), "42", "курица, рис"))
 
-    assert opened == [("42", True)]
+    assert opened == [("42", False)]
     assert sent == []
 
 
@@ -577,7 +570,7 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
         lambda *_args: asyncio.sleep(0),
     ))
 
-    assert opened == [(cid, True)]
+    assert opened == [(cid, False)]
     assert cid not in store.pending_input
     assert [message["text"] for message in sent] == [
         "✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
@@ -609,4 +602,4 @@ def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
     asyncio.run(fridge.fridge_add_done(Bot(), cid, "дуриан"))
     asyncio.run(fridge.fridge_assign_category(Bot(), cid, 1))
 
-    assert opened == [(cid, True)]
+    assert opened == [(cid, False)]

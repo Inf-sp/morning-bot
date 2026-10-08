@@ -85,19 +85,15 @@ def test_day_summary_outfit_keeps_capital_letter_after_label():
     assert "👕 Образ: Светло-серая рубашка, чёрные брюки" in message.text
 
 
-def test_day_summary_puts_cached_restaurant_immediately_after_outfit():
+def test_day_summary_has_no_restaurant_line():
     message = day_summary(
         "Вт, 1 сентября", "Алкмар",
         outfit_items=["Белая футболка", "Чёрные брюки"], outfit_emoji="👕",
-        restaurant_line="Roest Alkmaar · современная европейская · €€",
         lifehack="возьми зонт",
     )
 
-    outfit_at = message.text.index("👕 Образ:")
-    restaurant_at = message.text.index("🍽️ Куда сходить:")
-    lifehack_at = message.text.index("🦉Лайфхак:")
-    assert outfit_at < restaurant_at < lifehack_at
-    assert "🍽️ Куда сходить: Roest Alkmaar · современная европейская · €€." in message.text
+    assert message.text.index("👕 Образ:") < message.text.index("🦉Лайфхак:")
+    assert "Куда сходить" not in message.text
 
 
 def test_day_summary_word_keeps_capital_letter_after_label():

@@ -288,7 +288,7 @@ def test_home_cache_warm_schedule_separates_heavy_sections():
     )
 
 
-def test_cooking_home_warm_prepares_restaurant_for_myday(monkeypatch):
+def test_cooking_home_warm_prepares_day_recipes(monkeypatch):
     calls = []
 
     class Job:
@@ -300,9 +300,9 @@ def test_cooking_home_warm_prepares_restaurant_for_myday(monkeypatch):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(
-        bot_maintenance.restaurant_discovery,
-        "get_restaurant",
-        lambda cid: calls.append(cid) or {"name": "Roest Alkmaar"},
+        bot_maintenance.recipe_generation,
+        "warm_cooking_home_ideas",
+        lambda cid: calls.append(cid) or {"breakfast": True, "lunch": True, "dinner": True},
     )
 
     asyncio.run(bot.job_warm_home_pages(Context()))
@@ -335,7 +335,7 @@ def test_myday_final_warm_repairs_dependencies_in_order(monkeypatch):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", async_call("wardrobe"))
-    monkeypatch.setattr(bot_maintenance.restaurant_discovery, "get_restaurant", sync("cooking", {"name": "Roest"}))
+    monkeypatch.setattr(bot_maintenance.recipe_generation, "warm_cooking_home_ideas", sync("cooking", {"name": "Roest"}))
     monkeypatch.setattr(bot.learning, "warm_home_cache", sync("learning"))
     monkeypatch.setattr(bot_maintenance.leisure_hub, "warm_hub_cache", async_call("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", async_call("myday"))
@@ -375,7 +375,7 @@ def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", wardrobe)
-    monkeypatch.setattr(bot_maintenance.restaurant_discovery, "get_restaurant", cooking)
+    monkeypatch.setattr(bot_maintenance.recipe_generation, "warm_cooking_home_ideas", cooking)
     monkeypatch.setattr(bot.learning, "warm_home_cache", lambda _cid: True)
     monkeypatch.setattr(bot_maintenance.leisure_hub, "warm_hub_cache", lambda _cid: asyncio.sleep(0, result=True))
     monkeypatch.setattr(bot.myday, "warm_day_cache", myday)

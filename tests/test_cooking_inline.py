@@ -18,30 +18,6 @@ def test_recipe_card_has_no_refresh_label():
     assert all("По кухне" not in label for row in labels for label in row)
 
 
-def test_featured_recipe_uses_available_fridge_products(monkeypatch):
-    calls = []
-
-    class Status:
-        async def replace(self, *_args, **_kwargs):
-            raise AssertionError("available fridge should produce a recipe")
-
-    monkeypatch.setattr(cooking.store, "get_list", lambda *_args: [
-        {"name": "яйца", "on": True}, {"name": "сыр", "on": True},
-    ])
-    monkeypatch.setattr(cooking, "_set_selected_recipe_cuisine", lambda *_args: None)
-    monkeypatch.setattr(cooking, "clear_recipe_queue", lambda *_args: None)
-
-    async def enter(_bot, cid, meal, ingredients=None, status=None, cuisine=""):
-        calls.append((cid, meal, ingredients, cuisine))
-
-    monkeypatch.setattr(cooking, "enter_meal", enter)
-    asyncio.run(cooking.send_recipe_featured(object(), "42", status=Status()))
-
-    assert calls[0][:2] == ("42", "fridge")
-    assert set(calls[0][2].split(", ")) == {"яйца", "сыр"}
-    assert calls[0][3] == ""
-
-
 def test_recipe_queue_uses_one_of_selected_cuisines_as_a_hard_filter(monkeypatch):
     captured = {}
     monkeypatch.setattr(settings, "cuisines", lambda _cid: ["italian", "japanese"])

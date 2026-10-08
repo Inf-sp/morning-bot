@@ -203,10 +203,10 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
 
 
 async def _send_cooking_home(bot, cid, q=None):
-    """Continue a first fridge fill with the useful Cooking result."""
+    """После первого заполнения холодильника сразу показываем рецепт дня."""
     import menu
 
-    await menu.send_food_menu(bot, cid, refresh=True, q=q)
+    await menu.send_food_menu(bot, cid, q=q)
 
 
 async def send_fridge_category_choice(bot, cid, q=None):
