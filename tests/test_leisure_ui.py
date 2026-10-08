@@ -37,16 +37,16 @@ def test_recommendation_cards_have_no_refresh_label():
     assert "✨ Обновить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
     assert "✨ Обновить" not in sum(_labels(leisure_books._book_kb(0)), [])
     assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
-    # «✨ Другой …» — живой новый подбор; «Назад» ведёт в хаб «Досуг».
+    # «✨ Другой …» открывает выбор жанра под карточкой; кнопки «Выбрать жанр» нет.
     for keyboard, other, callback in (
-        (leisure_movies._movie_kb(0), "✨ Другой фильм", "movie_next"),
-        (leisure_books._book_kb(0), "✨ Другая книга", "book_next"),
-        (leisure_music._listen_kb(), "✨ Другой артист", "music_next"),
-        (leisure_games._game_keyboard(), "✨ Другая игра", "vg_next"),
+        (leisure_movies._movie_kb(0), "✨ Другой фильм", "movie_pick_0"),
+        (leisure_books._book_kb(0), "✨ Другая книга", "book_pick_0"),
+        (leisure_music._listen_kb(), "✨ Другой артист", "music_pick"),
+        (leisure_games._game_keyboard(), "✨ Другая игра", "vg_pick"),
     ):
         first = keyboard.inline_keyboard[0][0]
         assert (first.text, first.callback_data) == (other, callback)
-        assert keyboard.inline_keyboard[1][0].text == "🎭 Выбрать жанр"
+        assert all("жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
     # «Не нравится» — красная, последней перед навигацией, вместо «Добавить в Моё…».
     for keyboard, callback in (
@@ -756,18 +756,18 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
         lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
     )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
-        ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
+        ["Любой жанр"], ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
         ["Романтика"], ["История"], ["Биографии"], ["Психология"],
     ]
     assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
-        ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
+        ["Любой жанр"], ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
     ]
     assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
-        ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["Любой жанр"], ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
         ["Триллер"], ["Романтика"], ["Драма"],
     ]
     assert _labels(leisure_games._genre_keyboard())[:-1] == [
-        ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
+        ["Любой жанр"], ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
         ["Приключения"], ["Уютные"], ["Хоррор"],
     ]
 
@@ -776,7 +776,7 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
-        ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["Любой жанр"], ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -1274,3 +1274,81 @@ def test_new_game_cards_show_platforms_without_emoji():
 
     assert "ПК · PS5" in novelty.text
     assert "💻" not in novelty.text and "🎮" not in novelty.text
+
+
+def test_other_opens_green_genre_picker_and_back_returns_card_buttons():
+    picker = leisure_movies._movie_genre_menu_kb(back="movie_card_3")
+    rows = picker.inline_keyboard
+    assert (rows[0][0].text, rows[0][0].callback_data) == ("Любой жанр", "movie_next")
+    assert all(row[0].api_kwargs == {"style": "success"} for row in rows[2:-1])
+    assert rows[-1][0].callback_data == "movie_card_3"
+    assert leisure_games._genre_keyboard(board=True).inline_keyboard[0][0].callback_data == "vg_board"
+    assert all("Новинка" not in b.text for row in leisure_games._genre_keyboard(board=True).inline_keyboard for b in row)
+
+
+def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
+    import bot_callbacks
+    from types import SimpleNamespace
+
+    class Message:
+        chat_id = "42"
+        message_id = 9
+        reply_markup = None
+
+        def __init__(self):
+            self.markups = []
+
+        async def edit_reply_markup(self, reply_markup=None):
+            self.markups.append(reply_markup)
+
+    async def answer(*_a, **_k):
+        return None
+
+    shown = []
+
+    async def by_genre(_bot, _cid, genre):
+        shown.append(genre)
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.leisure_movies, "send_movie_by_genre", by_genre)
+    async def start_inline(*_a, **_k):
+        return _NoStatus()
+
+    monkeypatch.setattr(bot_callbacks.util.StatusManager, "start_inline", start_inline)
+
+    def click(data):
+        message = Message()
+        query = SimpleNamespace(data=data, message=message, answer=answer)
+        asyncio.run(bot_callbacks.handle(SimpleNamespace(callback_query=query), SimpleNamespace(bot=object()), None))
+        return message.markups
+
+    picker = click("movie_pick_3")[0]
+    assert picker.inline_keyboard[0][0].text == "Любой жанр"
+    assert click("movie_card_3")[0].inline_keyboard[0][0].callback_data == "movie_pick_3"
+    assert click("movie_g_35") == [None] and shown == ["35"]
+
+
+class _NoStatus:
+    async def replace(self, *_a, **_k):
+        return True
+
+    async def stop(self, delete=True):
+        return None
+
+
+def test_book_genre_pick_uses_library_taste_first(monkeypatch):
+    asked = []
+
+    def recommend(kind, cid, genre=None):
+        asked.append(genre)
+        return {"items": [{"title": "Dune"}]}
+
+    async def enrich(items):
+        return items
+
+    monkeypatch.setattr(leisure_books, "content_recommend", recommend)
+    monkeypatch.setattr(leisure_books, "_enrich_book_candidates", enrich)
+
+    items = asyncio.run(leisure_books._book_candidates("42", {"value": "scifi"}))
+
+    assert asked == [("Фантастика", "Science fiction")] and items == [{"title": "Dune"}]

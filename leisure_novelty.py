@@ -25,10 +25,21 @@ from ui.navigation import nav_row
 _log = logging.getLogger(__name__)
 
 KINDS = ("movie", "book", "game", "music")
-_GENRE_MENU = {
-    "movie": "movie_genre_menu", "book": "book_genre_menu",
-    "game": "vg_genres", "music": "music_genre_menu",
+_OTHER_LABEL = {
+    "movie": "✨ Другой фильм", "book": "✨ Другая книга",
+    "game": "✨ Другая игра", "music": "✨ Другой артист",
 }
+
+
+def genre_picker(cid, kind, back="m_leisure"):
+    """Тот же выбор жанра, что под карточкой рекомендации (с «Новинкой» и «Любым жанром»)."""
+    if kind == "movie":
+        return leisure_movies._movie_genre_menu_kb(back=back)
+    if kind == "book":
+        return leisure_books._book_genre_menu_kb(back=back)
+    if kind == "game":
+        return leisure_games._genre_keyboard(back=back)
+    return leisure_music._music_genre_menu_kb(cid, back=back)
 # Тип записи стоп-листа: альбом музыки не должен скрывать артиста.
 _STOP_KIND = {"movie": "movie", "book": "book", "game": "game", "music": "album"}
 _SEEN_KEY = "novelty_seen"
@@ -78,10 +89,10 @@ def _remember(cid, kind, item):
     store.mutate_profile(cid, change)
 
 
-def _keyboard(kind):
+def card_keyboard(kind):
+    """«Другой…» открывает выбор жанра под карточкой (там же следующая «Новинка»)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другая новинка", callback_data=f"nov_{kind}")],
-        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data=_GENRE_MENU[kind])],
+        [InlineKeyboardButton(_OTHER_LABEL[kind], callback_data=f"nov_pick_{kind}")],
         [InlineKeyboardButton("Не нравится", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
@@ -100,16 +111,12 @@ async def send_novelty(bot, cid, kind, *, status=None):
         return
     item = _pick(cid, kind, await _items(cid, kind))
     if not item:
-        msg = leisure_ui.novelty_empty(kind)
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎭 Выбрать жанр", callback_data=_GENRE_MENU[kind])], nav_row("m_leisure"),
-        ])
-        await _deliver(bot, cid, msg, kb, status=status)
+        await _deliver(bot, cid, leisure_ui.novelty_empty(kind), genre_picker(cid, kind), status=status)
         return
     _remember(cid, kind, item)
     store.last_recos[str(cid)] = {"kind": f"novelty_{kind}", "items": [item.get("title")]}
     msg = leisure_ui.novelty_card(kind, item)
-    kb = _keyboard(kind)
+    kb = card_keyboard(kind)
     image = await _image(kind, item)
     if image:
         try:

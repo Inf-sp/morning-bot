@@ -693,28 +693,15 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
 
 
 def _game_keyboard(*, no_match=False, genre=None, board=False):
-    rows = []
-    if board or genre == "board":
-        board_genre = genre if genre and genre != "board" else None
-        if not no_match:
-            rows.append([InlineKeyboardButton(
-                "✨ Другая игра", callback_data=f"vg_gb_{board_genre}" if board_genre else "vg_board",
-            )])
-        # Настолки: доступен подбор по жанру внутри настольного режима.
-        rows.append([InlineKeyboardButton("🎭 Выбрать жанр", callback_data="vg_genres_board")])
-        if not no_match:
-            rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
-    else:
-        if not no_match:
-            rows.append([InlineKeyboardButton(
-                "✨ Другая игра", callback_data=f"vg_next_{genre}" if genre else "vg_next",
-            )])
-        rows.append([InlineKeyboardButton("🎭 Выбрать жанр", callback_data="vg_genres")])
+    """«Другая игра» меняет кнопки под карточкой на выбор жанра (vg_pick / vg_pick_b)."""
+    board = board or genre == "board"
+    rows = [[InlineKeyboardButton("✨ Другая игра", callback_data="vg_pick_b" if board else "vg_pick")]]
+    if not board:
         rows.append([InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")])
-        if not no_match:
-            rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="game_prefs")])
+    else:
+        rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
@@ -1063,13 +1050,16 @@ async def handle_manual_game_add_callback(bot, cid, q, data):
     await send_favorite_games_added_card(bot, cid, [item])
 
 
-def _genre_keyboard(board=False):
+def _genre_keyboard(board=False, back="m_leisure"):
+    """Выбор после «Другая игра»: любой жанр по вкусу, новинка (не у настолок) или жанр; всё зелёное."""
+    green = {"style": "success"}
     prefix = "vg_gb_" if board else "vg_g_"
-    buttons = [InlineKeyboardButton(label, callback_data=f"{prefix}{key}") for key, label in GAME_GENRES]
-    rows = [[button] for button in buttons]
+    rows = [[InlineKeyboardButton("Любой жанр", callback_data="vg_board" if board else "vg_next", api_kwargs=green)]]
     if not board:  # премьеры — видеоигры, у настолок новинки нет
-        rows.insert(0, [InlineKeyboardButton("🆕 Новинка", callback_data="nov_game")])
-    rows.append(nav_row("m_leisure"))
+        rows.append([InlineKeyboardButton("🆕 Новинка", callback_data="nov_game")])
+    rows.extend([InlineKeyboardButton(label, callback_data=f"{prefix}{key}", api_kwargs=green)]
+                for key, label in GAME_GENRES)
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 

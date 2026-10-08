@@ -304,8 +304,8 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
-        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_next")],
-        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data="movie_genre_menu")],
+        # «Другой фильм» меняет кнопки под карточкой на выбор жанра (movie_pick_*).
+        [InlineKeyboardButton("✨ Другой фильм", callback_data=f"movie_pick_{i}")],
         # «Не нравится» — в чёрный список, сразу следующая рекомендация.
         [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
     ]
@@ -320,13 +320,15 @@ _GENRE_MENU = [
     ("Романтика", 10749), ("Драма", 18),
 ]
 
-def _movie_genre_menu_kb():
-    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")]]
-    buttons = [InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")
-               for label, gid in _GENRE_MENU]
-    for button in buttons:
-        rows.append([button])
-    rows.append(nav_row("m_leisure"))
+def _movie_genre_menu_kb(back="m_leisure"):
+    """Выбор после «Другой фильм»: любой жанр по вкусу, новинка или жанр; всё зелёное."""
+    rows = [
+        [InlineKeyboardButton("Любой жанр", callback_data="movie_next", api_kwargs={"style": "success"})],
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")],
+        *[[InlineKeyboardButton(label, callback_data=f"movie_g_{gid}", api_kwargs={"style": "success"})]
+          for label, gid in _GENRE_MENU],
+    ]
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 MIN_TMDB_RATING = 7.0

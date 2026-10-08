@@ -195,9 +195,9 @@ def _cache_book(cid, item):
     store.mutate_kv(config.BOOK_RECO_CACHE_KEY, mutate)
 
 
-def content_recommend(kind, cid):
+def content_recommend(kind, cid, genre=None):
     import leisure_collection
-    return leisure_collection.content_recommend(kind, cid)
+    return leisure_collection.content_recommend(kind, cid, genre=genre)
 
 
 def _book_cover(title, title_en=""):
@@ -254,8 +254,7 @@ def _book_matches_preferences(item, cid):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другая книга", callback_data="book_next")],
-        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data="book_genre_menu")],
+        [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_pick_{i}")],
         [InlineKeyboardButton("Не нравится", callback_data=f"book_no_{i}", api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
     ])
@@ -1204,11 +1203,15 @@ async def show_book_premiere_page(q, page):
     )
 
 
-def _book_genre_menu_kb():
-    buttons = [InlineKeyboardButton(label, callback_data=f"book_g_{key}")
-               for key, label, _subject in _BOOK_GENRES]
-    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_book")], *[[button] for button in buttons]]
-    rows.append(nav_row("m_leisure"))
+def _book_genre_menu_kb(back="m_leisure"):
+    """Выбор после «Другая книга»: любой жанр по вкусу, новинка или жанр; всё зелёное."""
+    rows = [
+        [InlineKeyboardButton("Любой жанр", callback_data="book_next", api_kwargs={"style": "success"})],
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_book")],
+        *[[InlineKeyboardButton(label, callback_data=f"book_g_{key}", api_kwargs={"style": "success"})]
+          for key, label, _subject in _BOOK_GENRES],
+    ]
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 
@@ -1571,9 +1574,18 @@ async def _enrich_book_candidates(items):
 
 async def _book_candidates(cid, category=None):
     if category:
-        _label, subject = _book_genre(category.get("value"))
+        label, subject = _book_genre(category.get("value"))
         if not subject:
             return []
+        # Сначала подбор по «Моим книгам» внутри жанра, без AI — книги жанра из Google Books.
+        try:
+            data = await asyncio.to_thread(content_recommend, "book", str(cid), (label, subject))
+            items = data.get("items", []) if isinstance(data, dict) else []
+        except Exception:
+            _log.warning("book genre taste recommend unavailable cid=%s", cid, exc_info=True)
+            items = []
+        if items:
+            return await _enrich_book_candidates(items)
         return await asyncio.to_thread(google_books.search_by_subject, subject)
     items = []
     for _ in range(2):

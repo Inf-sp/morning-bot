@@ -326,8 +326,7 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другой артист", callback_data="music_next")],
-        [InlineKeyboardButton("🎭 Выбрать жанр", callback_data="music_genre_menu")],
+        [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
         [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
         nav_row("m_leisure"),
     ])
@@ -409,12 +408,16 @@ def _music_genre(key):
     return "", ""
 
 
-def _music_genre_menu_kb(cid):
+def _music_genre_menu_kb(cid, back="m_leisure"):
+    """Выбор после «Другой артист»: любой из стилей, новинка или стиль; всё зелёное."""
     selected = set(_music_styles(cid))
-    buttons = [InlineKeyboardButton(label, callback_data=f"music_g_{key}")
-               for key, label, _prompt_name in _MUSIC_GENRES if key in selected]
-    rows = [[InlineKeyboardButton("🆕 Новинка", callback_data="nov_music")], *[[button] for button in buttons]]
-    rows.append(nav_row("m_leisure"))
+    rows = [
+        [InlineKeyboardButton("Любой жанр", callback_data="music_next", api_kwargs={"style": "success"})],
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_music")],
+        *[[InlineKeyboardButton(label, callback_data=f"music_g_{key}", api_kwargs={"style": "success"})]
+          for key, label, _prompt_name in _MUSIC_GENRES if key in selected],
+    ]
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 
 

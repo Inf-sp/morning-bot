@@ -51,10 +51,13 @@ def test_movie_novelty_card_says_now_in_cinema_and_has_actions(monkeypatch):
 
     assert sent["text"].startswith("🎬 Сейчас в кино\n\n«Фильм 0»\nдрама\n\nПервое предложение.")
     rows = sent["reply_markup"].inline_keyboard
-    assert [(row[0].text, row[0].callback_data) for row in rows[:3]] == [
-        ("✨ Другая новинка", "nov_movie"), ("🎭 Выбрать жанр", "movie_genre_menu"), ("Не нравится", "nov_no_movie"),
+    assert [(row[0].text, row[0].callback_data) for row in rows[:2]] == [
+        ("✨ Другой фильм", "nov_pick_movie"), ("Не нравится", "nov_no_movie"),
     ]
-    assert rows[2][0].api_kwargs == {"style": "danger"}
+    assert rows[1][0].api_kwargs == {"style": "danger"}
+    picker = leisure_novelty.genre_picker(CID, "movie", back="nov_card_movie").inline_keyboard
+    assert [row[0].text for row in picker[:2]] == ["Любой жанр", "🆕 Новинка"]
+    assert picker[-1][0].callback_data == "nov_card_movie"
 
 
 def test_upcoming_movie_and_game_show_date_like_concerts():
@@ -119,7 +122,8 @@ def test_empty_novelty_offers_genres(monkeypatch):
     sent = _send(monkeypatch, "book", [])
 
     assert sent["text"] == "Свежих книжных премьер пока нет — загляни позже."
-    assert sent["reply_markup"].inline_keyboard[0][0].callback_data == "book_genre_menu"
+    # Новинок нет — под сообщением сразу выбор жанра.
+    assert sent["reply_markup"].inline_keyboard[0][0].callback_data == "book_next"
 
 
 def test_disliked_game_is_not_recommended_again(monkeypatch):

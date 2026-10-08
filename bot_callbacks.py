@@ -305,6 +305,31 @@ def _tail_int(c):
     return int(c.data.split("_")[-1])
 
 
+def _swap_kb(make_kb):
+    """«Другой…» / «Назад» в выборе жанра: меняются только кнопки под текущей карточкой."""
+    async def run(c):
+        await _ack(c.q)
+        try:
+            await c.q.message.edit_reply_markup(reply_markup=make_kb(c))
+        except Exception:
+            _log.debug("_swap_kb: keyboard not changed data=%s", c.data, exc_info=True)
+    return run
+
+
+def _picked(handler):
+    """Выбор жанра: новая карточка приходит отдельно, у прежней снимаются кнопки.
+
+    Снимаем после handler: inline-статус на время подбора сам восстанавливает кнопки.
+    """
+    async def run(c):
+        await handler(c)
+        try:
+            await c.q.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            _log.debug("_picked: keyboard not cleared data=%s", c.data, exc_info=True)
+    return run
+
+
 def _page(c):
     return int(c.data.split(":", 1)[1])
 
@@ -393,17 +418,22 @@ ROUTES = (
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
-    R("book_next", lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid))),
+    R("book_next", _picked(lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid)))),
+    R("book_pick_*", _swap_kb(lambda c: leisure_books._book_genre_menu_kb(back=f"book_card_{_tail_int(c)}"))),
+    R("book_card_*", _swap_kb(lambda c: leisure_books._book_kb(_tail_int(c)))),
     R("yt:*", _yearly_tops),
     R("book_premieres", lambda c: c.status(
         lambda status: leisure_books.send_book_premieres(c.bot, c.cid, status=status))),
     R("book_premiere_page:*", lambda c: leisure_books.show_book_premiere_page(c.q, _page(c))),
     R("book_genre_menu", _acked(lambda c: leisure_books.send_book_genre_menu(c.bot, c.cid, c.q))),
-    R("book_g_*", lambda c: c.status(
-        lambda _s: leisure_books.send_book_by_genre(c.bot, c.cid, c.data[len("book_g_"):]))),
+    R("book_g_*", _picked(lambda c: c.status(
+        lambda _s: leisure_books.send_book_by_genre(c.bot, c.cid, c.data[len("book_g_"):])))),
     # Музыка.
     R("music_reco", lambda c: c.status(lambda _s: leisure_music.send_listen(c.bot, c.cid))),
-    R("music_next", lambda c: c.status(lambda status: leisure_music.listen_next(c.bot, c.cid, status=status))),
+    R("music_next", _picked(lambda c: c.status(
+        lambda status: leisure_music.listen_next(c.bot, c.cid, status=status)))),
+    R("music_pick", _swap_kb(lambda c: leisure_music._music_genre_menu_kb(c.cid, back="music_card"))),
+    R("music_card", _swap_kb(lambda c: leisure_music._listen_kb())),
     R("music_archive", lambda c: c.status(
         lambda status: leisure_music.send_music_task(c.bot, c.cid, "archive", status=status))),
     R("music_task_*", lambda c: c.status(lambda status: leisure_music.send_music_task(
@@ -416,18 +446,22 @@ ROUTES = (
     R("vg_seti:*", lambda c: leisure_games.send_game_set_card(c.bot, c.cid, *_card_args(c))),
     R("vg_setd:*", lambda c: leisure_games.confirm_game_set_delete(c.bot, c.cid, *_card_args(c), q=c.q)),
     R("vg_setdok:*", lambda c: leisure_games.delete_game_set_item(c.bot, c.cid, *_token_id(c), q=c.q)),
-    R("vg_board", _games(refresh=True, genre="board")),
-    R("vg_next", _games(refresh=True)),
-    R("vg_next_*", _games_genre("vg_next_")),
+    R("vg_board", _picked(_games(refresh=True, genre="board"))),
+    R("vg_next", _picked(_games(refresh=True))),
+    R("vg_next_*", _picked(_games_genre("vg_next_"))),
+    R("vg_pick_b", _swap_kb(lambda c: leisure_games._genre_keyboard(board=True, back="vg_card_b"))),
+    R("vg_pick", _swap_kb(lambda c: leisure_games._genre_keyboard(back="vg_card"))),
+    R("vg_card_b", _swap_kb(lambda c: leisure_games._game_keyboard(board=True))),
+    R("vg_card", _swap_kb(lambda c: leisure_games._game_keyboard())),
     R("vg_premieres", lambda c: c.status(
         lambda status: leisure_games.send_game_premieres(c.bot, c.cid, status=status))),
     R("game_premiere_page:*", lambda c: leisure_games.show_game_premiere_page(c.cid, c.q, _page(c))),
     R("vg_genres", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q))),
     R("vg_genres_board", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q, board=True))),
-    R("vg_gb_*", _games_genre("vg_gb_", board=True)),
-    R("vg_g_*", _games_genre("vg_g_")),
-    R("music_g_*", lambda c: c.status(lambda status: leisure_music.send_music_by_genre(
-        c.bot, c.cid, c.data[len("music_g_"):], status=status))),
+    R("vg_gb_*", _picked(_games_genre("vg_gb_", board=True))),
+    R("vg_g_*", _picked(_games_genre("vg_g_"))),
+    R("music_g_*", _picked(lambda c: c.status(lambda status: leisure_music.send_music_by_genre(
+        c.bot, c.cid, c.data[len("music_g_"):], status=status)))),
     # Избранное кино и книги.
     R("movie_favorites", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid, q=c.q)),
     R("mfg:*", lambda c: leisure_movies.send_favorite_movie_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
@@ -454,8 +488,10 @@ ROUTES = (
     # Кино: явный запрос всегда получает новый вариант, а не карточку дня из кэша.
     R("movie_reco", lambda c: c.status(
         lambda status: leisure_movies.send_current_movie(c.bot, c.cid, status=status))),
-    R("movie_next", lambda c: c.status(
-        lambda status: leisure_movies.send_recos(c.bot, c.cid, "movie", status=status))),
+    R("movie_next", _picked(lambda c: c.status(
+        lambda status: leisure_movies.send_recos(c.bot, c.cid, "movie", status=status)))),
+    R("movie_pick_*", _swap_kb(lambda c: leisure_movies._movie_genre_menu_kb(back=f"movie_card_{_tail_int(c)}"))),
+    R("movie_card_*", _swap_kb(lambda c: leisure_movies._movie_kb(_tail_int(c)))),
     R("movie_premieres", lambda c: c.status(
         lambda status: leisure_movies.send_combined_premieres(c.bot, c.cid, status=status))),
     R("combined_premiere_page:*", lambda c: leisure_movies.show_combined_premiere_page(c.cid, c.q, _page(c))),
@@ -466,18 +502,21 @@ ROUTES = (
     R("series_premiere_page:*", _acked(lambda c: leisure_movies.show_series_premiere_page(
         c.cid, c.q, int(c.data.rsplit(":", 1)[1])))),
     R("movie_genre_menu", _acked(lambda c: leisure_movies.send_movie_genre_menu(c.bot, c.cid, c.q))),
-    R("movie_g_*", lambda c: c.status(
-        lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("movie_g_"):]))),
+    R("movie_g_*", _picked(lambda c: c.status(
+        lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("movie_g_"):])))),
     # Реакции на карточки.
     R("movie_love_*", lambda c: leisure_movies.movie_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("game_love", lambda c: leisure_games.game_love(c.bot, c.cid, c.q)),
     R("game_no", lambda c: c.status(lambda status: leisure_games.game_dislike(c.bot, c.cid, status=status))),
-    # «Новинка» из меню «Выбрать жанр»: nov_no_* раньше nov_*.
+    # «Новинка» из выбора жанра: nov_pick_*, nov_card_* и nov_no_* раньше nov_*.
+    R("nov_pick_*", _swap_kb(lambda c: leisure_novelty.genre_picker(
+        c.cid, c.data[len("nov_pick_"):], back=f"nov_card_{c.data[len('nov_pick_'):]}"))),
+    R("nov_card_*", _swap_kb(lambda c: leisure_novelty.card_keyboard(c.data[len("nov_card_"):]))),
     R("nov_no_*", lambda c: c.status(lambda status: leisure_novelty.dislike_novelty(
         c.bot, c.cid, c.data[len("nov_no_"):], status=status))),
-    R("nov_*", lambda c: c.status(lambda status: leisure_novelty.send_novelty(
-        c.bot, c.cid, c.data[len("nov_"):], status=status))),
+    R("nov_*", _picked(lambda c: c.status(lambda status: leisure_novelty.send_novelty(
+        c.bot, c.cid, c.data[len("nov_"):], status=status)))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
     R("movie_no_*", lambda c: c.status(lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c)))),
     R("book_no_*", lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c)))),
