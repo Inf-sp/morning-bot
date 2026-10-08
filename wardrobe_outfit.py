@@ -776,25 +776,49 @@ def _accessory_advice(items, weather_ctx):
     return advice
 
 
+def outfit_accessories(items):
+    """Аксессуары образа, кроме носков: их показывает только «Главный акцент»."""
+    return [item for item in items
+            if item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item)]
+
+
+_PLURAL_ACCESSORIES = ("часы", "очки", "серьги", "перчатки", "бусы", "наушники", "подтяжки", "кольца", "браслеты")
+
+
+def _is_plural_name(name):
+    """«Серые часы», «очки» — множественное число: по слову-исключению или окончанию прилагательного."""
+    words = name.casefold().split()
+    return bool(words) and (words[0].endswith(("ые", "ие")) or any(word in _PLURAL_ACCESSORIES for word in words))
+
+
+def _accessory_accents(accessories):
+    names = [_sentence_item_name(item) for item in accessories]
+    joined = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} и {names[-1]}"
+    if len(names) == 1 and not _is_plural_name(names[0]):
+        return [f"{joined} становится заметной деталью и завершает образ.",
+                f"{joined} добавляет образу законченности и держит на себе главный акцент."]
+    return [f"{joined} становятся заметными деталями и завершают образ.",
+            f"{joined} добавляют образу законченности и держат на себе главный акцент."]
+
+
 def build_main_accent(items, weather_ctx=None, avoid_accents=None):
-    """Выбирает grounded-акцент и ротирует его для другого образа."""
-    candidates = []
-    for accessory in (
-        item for item in items
-        if item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item)
-    ):
-        candidates.append(
-            f"{_sentence_item_name(accessory)} становится заметной деталью и завершает образ."
-        )
-    candidates.extend(build_outfit_reasons(items, weather_ctx or {}))
-    if not any(item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item) for item in items):
+    """Выбирает grounded-акцент и ротирует его для другого образа.
+
+    Если в образе есть аксессуары, акцент всегда о них: в списке вещей их нет.
+    """
+    accessories = outfit_accessories(items)
+    candidates = _accessory_accents(accessories) if accessories else []
+    if not accessories:
+        candidates.extend(build_outfit_reasons(items, weather_ctx or {}))
+    if not accessories:
         candidates.extend(_accessory_advice(items, weather_ctx or {}))
     shoe = next((item for item in items if item.get("zone") == "Обувь"), None)
-    if shoe:
+    if shoe and not accessories:
         candidates.append(
             f"{_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ и держит на себе главный акцент."
         )
-    candidates.append("Спокойная палитра связывает вещи, а обувь завершает образ.")
+    if not accessories:
+        candidates.append("Спокойная палитра связывает вещи, а обувь завершает образ.")
 
     unique = list(dict.fromkeys(candidate for candidate in candidates if candidate))
     avoided = {

@@ -113,8 +113,8 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
         "https://t.example", "https://y.example", "https://b.example", "https://g.example",
     }
     assert _labels(msg.reply_markup) == [
-        ["🎬 Что посмотреть"], ["📚 Что почитать"], ["👾 Во что поиграть"],
-        ["🎧 Что послушать"], ["#️⃣ Главная", "🎚️ Настроить"],
+        ["🎬 Подобрать кино"], ["📚 Подобрать книгу"], ["👾 Подобрать игру"],
+        ["🎧 Подобрать музыку"], ["#️⃣ Главная", "🎚️ Настроить"],
     ]
 
 

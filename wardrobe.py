@@ -23,6 +23,7 @@ from wardrobe_outfit import (
     build_how_to_wear,
     build_main_accent,
     build_sock_recommendation,
+    outfit_accessories,
     build_style_tip,
     choose_outfit_style,
     is_urban_2026_base_top,
@@ -123,6 +124,11 @@ def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, ra
 
 
 def _build_look_message(look_data, *, news=None):
+    accessories = outfit_accessories((look_data or {}).get("items") or [])
+    accent = str((look_data or {}).get("main_accent") or "").casefold()
+    if accessories and not any(public_item_name(item).casefold() in accent for item in accessories):
+        # Кэш до версии «аксессуары только в акценте»: акцент должен их назвать.
+        look_data = {**look_data, "main_accent": build_main_accent(look_data["items"])}
     msg = wardrobe_ui.render_wardrobe_message(look_data, news=news)
     return msg.text, msg.entities
 

@@ -75,10 +75,9 @@ def render_wardrobe_message(look_data, *, news=None):
     b.section(outfit_header(primary_style))
 
     slots = _outfit_slots(look_data.get("items") or [])
+    # Аксессуары не входят в список: о них говорит только «Главный акцент».
     items = [
-        *slots["Верх"], *slots["Низ"], *slots["Обувь"], *slots["Верхняя одежда"],
-        *(item for item in slots["Аксессуары"] if "носк" not in item.casefold()),
-        *slots["Другое"],
+        *slots["Верх"], *slots["Низ"], *slots["Обувь"], *slots["Верхняя одежда"], *slots["Другое"],
     ]
     selected_socks = next(
         (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",

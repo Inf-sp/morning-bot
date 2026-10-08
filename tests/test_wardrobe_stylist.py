@@ -131,7 +131,8 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "- Цепочка со значком сторон света" in message.text and "Дополнительно" not in message.text
+    # Аксессуар (цепочка) в список не попадает — о нём говорит только «Главный акцент».
+    assert "Цепочка" not in message.text and "Дополнительно" not in message.text
     assert "- Футболка Levi's" in message.text
     assert "Надень сегодня" in message.text
 
@@ -191,6 +192,7 @@ def test_main_accent_rotates_and_can_use_an_accessory():
 
     first = build_main_accent(items)
     second = build_main_accent(items, avoid_accents={first})
+    assert "браслет" in second.casefold()
 
     assert "браслет" in first.casefold()
     assert second != first
@@ -754,3 +756,39 @@ def test_any_number_of_styles_can_be_selected(monkeypatch):
     assert saved["style"][-1] == "Городской" and len(saved["style"]) == 4
     text = settings.settings_ui.wardrobe_style(saved["style"]).text
     assert "Стиль: Минимализм · Скандинавский" in text and "до трёх" not in text
+
+
+def test_accessories_are_only_in_main_accent_not_in_list():
+    items = [
+        {"name": "Белая футболка", "zone": "Верх"},
+        {"name": "Синие джинсы", "zone": "Низ"},
+        {"name": "Белые кеды", "zone": "Обувь"},
+        {"name": "Серые часы", "zone": "Аксессуары"},
+        {"name": "Чёрная кепка", "zone": "Аксессуары"},
+    ]
+    accent = build_main_accent(items, {"sunny": True})
+    message = render_wardrobe_message({"items": items, "sock_recommendation": "Жёлтые носки",
+                                       "main_accent": accent})
+
+    assert accent == "серые часы и чёрная кепка становятся заметными деталями и завершают образ."
+    assert message.text.split("\n\n")[1] == "- Белая футболка\n- Синие джинсы\n- Белые кеды\n- Жёлтые носки"
+    assert "💡 Главный акцент: серые часы и чёрная кепка" in message.text
+
+
+def test_cached_look_without_accessory_accent_is_recomputed(monkeypatch):
+    look = {"items": [{"name": "Футболка", "zone": "Верх"}, {"name": "Серые часы", "zone": "Аксессуары"}],
+            "main_accent": "Спокойная палитра связывает вещи."}
+
+    text, _entities = wardrobe._build_look_message(look)
+
+    assert "Главный акцент: серые часы становятся заметными деталями" in text
+    assert "- Серые часы" not in text
+
+
+def test_single_accessory_accent_agrees_in_number():
+    def accent(name):
+        return build_main_accent([{"name": "Футболка", "zone": "Верх"}, {"name": name, "zone": "Аксессуары"}])
+
+    assert accent("Серебристый браслет").startswith("серебристый браслет становится")
+    assert accent("Солнцезащитные очки").startswith("солнцезащитные очки становятся")
+    assert accent("Часы").startswith("часы становятся")

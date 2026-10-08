@@ -1220,10 +1220,10 @@ def _column_kb(rows):
 
 def leisure_hub_kb():
     rows = _column_kb((
-        ("🎬 Что посмотреть", "movie_reco"),
-        ("📚 Что почитать", "book_reco"),
-        ("👾 Во что поиграть", "vg_reco"),
-        ("🎧 Что послушать", "music_reco"),
+        ("🎬 Подобрать кино", "movie_reco"),
+        ("📚 Подобрать книгу", "book_reco"),
+        ("👾 Подобрать игру", "vg_reco"),
+        ("🎧 Подобрать музыку", "music_reco"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),

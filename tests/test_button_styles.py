@@ -205,14 +205,26 @@ def test_learning_actions_are_green():
 
 def test_leisure_hub_picks_are_green_and_keep_their_order():
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Что посмотреть", callback_data="movie_reco")],
-        [InlineKeyboardButton("📚 Что почитать", callback_data="book_reco")],
-        [InlineKeyboardButton("👾 Во что поиграть", callback_data="vg_reco")],
-        [InlineKeyboardButton("🎧 Что послушать", callback_data="music_reco")],
+        [InlineKeyboardButton("🎬 Подобрать кино", callback_data="movie_reco")],
+        [InlineKeyboardButton("📚 Подобрать книгу", callback_data="book_reco")],
+        [InlineKeyboardButton("👾 Подобрать игру", callback_data="vg_reco")],
+        [InlineKeyboardButton("🎧 Подобрать музыку", callback_data="music_reco")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
-        ("Что посмотреть", "success"), ("Что почитать", "success"),
-        ("Во что поиграть", "success"), ("Что послушать", "success"), ("Главная", "primary"),
+        ("Подобрать кино", "success"), ("Подобрать книгу", "success"),
+        ("Подобрать игру", "success"), ("Подобрать музыку", "success"), ("Главная", "primary"),
+    ]
+
+
+def test_forecast_buttons_are_green():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
+        [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
+        ("Полный прогноз на сегодня", "success"), ("Погода на неделю", "success"), ("Главная", "primary"),
     ]
