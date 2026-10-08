@@ -82,11 +82,11 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     message = menu_ui.learning_menu({
         "has_material": True, "lang_code": "nl", "kind": "word",
         "term": "morgen", "translation": "завтра",
-        "grammar_rules": list(learning._GRAMMAR_RULES_NL),
-        "focus": "Сначала попробуй составить своё предложение с каждым правилом в уме, а только потом проверяй себя по словарю.",
         "live_language": {
-            "text": "Laat maar", "translation": "Ладно, забудь",
-            "meaning": "Когда решаешь не продолжать тему.",
+            "text": "Dat is de druppel!", "translation": "Это последняя капля.",
+            "example": "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
+            "rule": "После _eerst_ и _toen_ подлежащее и глагол меняются местами: _Toen morste ik koffie._",
+            "tip": "придумай своё предложение с «eerst… toen…» и скажи его вслух.",
         },
         "daily_practice": {
             "entries": [{"term": "Inmiddels", "translation": "Уже"}],
@@ -102,20 +102,26 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         ["🕵️ Угадай персонажа"],
         ["#️⃣ Главная", "🎚️ Настроить"],
     ]
-    assert "Грамматика:\n- Союзы omdat, als, dat уводят глагол в самый конец" in message.text
-    assert "- Время или место на первом месте" in message.text
-    assert "- Приставка разделяемого глагола" in message.text
-    assert "Bijzin" not in message.text
     assert "Прогресс:" not in message.text
-    assert "Фраза дня" not in message.text
-    assert "Слово дня" not in message.text
-    assert "Laat maar → Ладно, забудь (Когда решаешь не продолжать тему)" in message.text
-    spoiler_texts = [
-        message.text.encode("utf-16-le")[entity.offset * 2:(entity.offset + entity.length) * 2].decode("utf-16-le")
-        for entity in message.entities
-        if entity.type == "spoiler"
+    assert message.text.split("\n\n")[1:] == [
+        "Dat is de druppel!",
+        "Это последняя капля.",
+        "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
+        "Грамматика:\nПосле eerst и toen подлежащее и глагол меняются местами: Toen morste ik koffie.",
+        "💡 Полезно: придумай своё предложение с «eerst… toen…» и скажи его вслух.",
     ]
-    assert spoiler_texts == ["Laat maar"]
+
+    def marked(kind):
+        raw = message.text.encode("utf-16-le")
+        return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+                for e in message.entities if e.type == kind]
+
+    assert marked("blockquote") == ["Dat is de druppel!"]
+    assert marked("italic") == [
+        "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
+        "eerst", "toen", "Toen morste ik koffie.",
+    ]
+    assert marked("spoiler") == []
 
 
 def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary(monkeypatch):
@@ -139,7 +145,6 @@ def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary
 
     assert before["term"] == after["term"] == "Morgen"
     assert before["live_language"] != after["live_language"]
-    assert before["grammar_rules"] != after["grammar_rules"]
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):
@@ -602,3 +607,13 @@ def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
     asyncio.run(fridge.fridge_assign_category(Bot(), cid, 1))
 
     assert opened == [(cid, False)]
+
+
+def test_each_daily_phrase_has_its_own_example_rule_and_action():
+    import live_language
+
+    for phrases in live_language._DAILY_PHRASES.values():
+        for phrase in phrases:
+            assert phrase["text"].rstrip(".!").casefold() in phrase["example"].casefold()
+            assert phrase["translation"] and phrase["tip"]
+            assert phrase["rule"].count("_") % 2 == 0 and "_" in phrase["rule"]

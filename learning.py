@@ -47,57 +47,6 @@ def _flag(language):
 
 _DAILY_MATERIAL_CACHE = {}  # cid -> {"date": iso, "entry": dict, "lang": code}
 
-_GRAMMAR_RULES_NL = (
-    {
-        "title": "Порядок слов в придаточном (Bijzin)",
-        "parts": (
-            ("Союзы ", "text"), ("omdat", "italic"), (", ", "text"),
-            ("als", "italic"), (", ", "text"), ("dat", "italic"),
-            (" уводят глагол в самый конец — ", "text"),
-            ("...omdat ik morgen ", "italic"), ("werk", "bold_italic"), (".", "text"),
-        ),
-    },
-    {
-        "title": "Инверсия после обстоятельств",
-        "parts": (
-            ("Время или место на первом месте меняют подлежащее и глагол — ", "text"),
-            ("Vandaag ", "italic"), ("werk ik", "bold_italic"), (" thuis", "italic"),
-            (".", "text"),
-        ),
-    },
-    {
-        "title": "Разделяемые глаголы (Scheidbare werkwoorden)",
-        "parts": (
-            ("Приставка разделяемого глагола уходит в финал — ", "text"),
-            ("opbellen", "italic"), (" → ", "text"), ("Ik ", "italic"),
-            ("bel", "bold_italic"), (" je zo ", "italic"), ("op", "bold_italic"), (".", "text"),
-        ),
-    },
-    {
-        "title": "Глагол на втором месте (V2)",
-        "parts": (
-            ("В обычном главном предложении спрягаемый глагол занимает вторую позицию: ", "text"),
-            ("Ik ", "italic"), ("werk", "bold_italic"), (" vandaag thuis", "italic"), (".", "text"),
-        ),
-    },
-    {
-        "title": "Модальные глаголы",
-        "parts": (
-            ("После модального глагола смысловой инфинитив уходит в конец: ", "text"),
-            ("Ik ", "italic"), ("wil", "bold_italic"), (" Nederlands ", "italic"),
-            ("leren", "bold_italic"), (".", "text"),
-        ),
-    },
-    {
-        "title": "Отрицание geen",
-        "parts": (
-            ("Перед неопределённым существительным отрицание выражается словом ", "text"),
-            ("geen", "italic"), (": ", "text"), ("Ik heb ", "italic"),
-            ("geen", "bold_italic"), (" auto", "italic"), (".", "text"),
-        ),
-    },
-)
-
 
 def _save_daily_material(cid, today, lang, entry):
     cached = {"date": today, "lang": lang, "entry": entry}
@@ -181,21 +130,12 @@ def build_learning_home(cid):
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
     variant = int((store.get_profile(cid) or {}).get("learning_home_variant") or 0)
-    if lang_code == "nl":
-        start = (variant * 3) % len(_GRAMMAR_RULES_NL)
-        grammar_rules = [
-            _GRAMMAR_RULES_NL[(start + offset) % len(_GRAMMAR_RULES_NL)]
-            for offset in range(3)
-        ]
-    else:
-        grammar_rules = []
     phrase = live_language.daily_phrase(lang_code, variant=variant)
     if not entry:
         return {
             "has_material": False,
             "lang_code": lang_code,
             "live_language": phrase,
-            "grammar_rules": grammar_rules,
         }
     kind = daily_material_type(entry)
     raw_term = entry.get("rule") or entry_term(entry)
@@ -215,14 +155,12 @@ def build_learning_home(cid):
         "example_text": str(example.get("text") or "").strip(),
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
-        "focus": "Сначала попробуй составить своё предложение с каждым правилом в уме, а только потом проверяй себя по словарю.",
         "live_language": phrase,
-        "grammar_rules": grammar_rules,
     }
 
 
 def refresh_learning_home(cid):
-    """Переключает только фразу и грамматику, не меняя материал словаря."""
+    """Переключает только фразу дня с её правилом, не меняя материал словаря."""
     store.mutate_profile(cid, lambda profile: (
         {**profile, "learning_home_variant": int(profile.get("learning_home_variant") or 0) + 1},
         None,

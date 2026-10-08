@@ -1,7 +1,7 @@
 import html
 import re
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder, MessageSpec
 from .constants import LANGUAGE_EMOJI, ui_label
@@ -145,35 +145,31 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
+    # Одна мысль: фраза → пример с ней → правило из примера → одно действие.
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
-        b.add(str(phrase["text"]).strip(), MessageEntity.SPOILER)
-        translation = str(phrase["translation"]).strip().rstrip(".")
-        meaning = str(phrase.get("meaning") or "").strip().rstrip(".")
-        if meaning:
-            b.text_line(f" → {translation} ({meaning})")
-        else:
-            b.text_line(f" → {translation}")
+        b.quote(str(phrase["text"]).strip())
         b.newline()
-
-    grammar_rules = home.get("grammar_rules") or []
-    b.spacer()
-    b.bold("Грамматика:")
-    b.newline()
-    for rule in grammar_rules:
-        parts = (rule or {}).get("parts") or []
-        if not parts:
-            continue
-        b.text_line("- ")
-        for text, style in parts:
-            getattr(b, style if style in {"italic", "bold_italic"} else "text_line")(str(text))
-        b.newline()
-    b.spacer()
-    focus = home.get("focus") or "Сначала составь своё предложение, затем проверь себя."
-    b.text_line("💡 ")
-    b.bold("Полезно:")
-    b.text_line(f" {focus}")
+        b.spacer()
+        b.line(str(phrase["translation"]).strip())
+        if phrase.get("example"):
+            b.spacer()
+            b.italic(str(phrase["example"]).strip())
+            b.newline()
+        if phrase.get("rule"):
+            b.spacer()
+            b.bold("Грамматика:")
+            b.newline()
+            # _слово_ — пример на изучаемом языке, выделяется курсивом.
+            for index, part in enumerate(re.split(r"_([^_]+)_", str(phrase["rule"]).strip())):
+                (b.italic if index % 2 else b.text_line)(part)
+            b.newline()
+        if phrase.get("tip"):
+            b.spacer()
+            b.text_line("💡 ")
+            b.bold("Полезно:")
+            b.text_line(f" {str(phrase['tip']).strip()}")
 
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Тренажёр", f"a_train_{code}")],
