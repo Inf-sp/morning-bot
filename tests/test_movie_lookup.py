@@ -49,10 +49,28 @@ def test_adding_uses_ai_original_title_when_written_title_does_not_match(monkeyp
     assert leisure_collection._resolve_movie_label("Шыттс крык") is None
 
 
-def test_favorite_movie_list_shows_every_title_numbered():
-    text = leisure_ui.favorite_movie_list("Драма", ["Патерсон (фильм, 2016)", "Медведь (сериал, 2022)"]).text
+def test_favorite_movie_list_is_buttons_like_dictionary(monkeypatch):
+    import asyncio
+    import leisure_movies
 
-    assert text == "🎬 Драма · 2\n\n1. Патерсон (фильм, 2016)\n2. Медведь (сериал, 2022)"
+    items = [{"title": f"Фильм {index}", "value": f"Фильм {index} (фильм, 2020)"} for index in range(14)]
+    view = {"cid": "42", "created_at": 10**12, "genres": [("Драма", items)]}
+    monkeypatch.setattr(leisure_movies, "_favorite_movie_view", lambda _cid, _token: view)
+    shown = {}
+
+    async def show(_bot, _cid, msg, reply_markup=None, query=None):
+        shown.update(text=msg.text, markup=reply_markup)
+
+    import rich_delivery
+    monkeypatch.setattr(rich_delivery, "show", show)
+
+    asyncio.run(leisure_movies.send_favorite_movie_list(object(), "42", "tok", 0, 0))
+
+    rows = shown["markup"].inline_keyboard
+    assert shown["text"] == "🎬 Драма · 14\n\nВыбери фильм."
+    assert [b.text for b in rows[0]] == ["Фильм 0", "Фильм 1"]
+    assert rows[0][1].callback_data == "mfg:tok:0:1"
+    assert [b.callback_data for b in rows[-2]][0] == "mfl:tok:0:1"  # листание: 12 на страницу
 
 
 def test_movie_add_query_keeps_kind_year_and_both_titles():

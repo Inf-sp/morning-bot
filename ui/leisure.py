@@ -35,19 +35,14 @@ def _pluralize_titles(n):
     return ru_plural(n, "фильм/сериал", "фильма/сериала", "фильмов/сериалов")
 
 
-_FAVORITE_LIST_LIMIT = 80  # одно сообщение Telegram, без обрезки посередине строки
 
 
-def favorite_movie_list(genre, titles):
-    """Категория «Моего кино» списком: жанр · число, затем нумерованные названия."""
-    titles = [str(title).strip() for title in titles if str(title).strip()]
+def favorite_movie_list(genre, total):
+    """Заголовок списка категории «Моего кино»; сами фильмы — кнопками, как в словаре."""
     b = MessageBuilder()
-    b.section(f"🎬 {genre} · {len(titles)}")
+    b.section(f"🎬 {genre} · {int(total or 0)}")
     b.spacer()
-    for index, title in enumerate(titles[:_FAVORITE_LIST_LIMIT], 1):
-        b.line(f"{index}. {title}")
-    if len(titles) > _FAVORITE_LIST_LIMIT:
-        b.line(f"… и ещё {len(titles) - _FAVORITE_LIST_LIMIT}")
+    b.line("Выбери фильм.")
     return b.build_stripped()
 
 
