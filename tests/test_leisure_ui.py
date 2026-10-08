@@ -1265,3 +1265,12 @@ def test_book_premiere_summary_is_separated_from_date_by_blank_line():
     }]).text
 
     assert "Премьера: 1 сентября 2026\n\nИстория двух братьев" in text
+
+
+def test_new_game_cards_show_platforms_without_emoji():
+    item = {"title": "Игра", "genre": "RPG", "platform_label": "💻 ПК · 🎮 PS5", "date": "2026-11-01"}
+
+    novelty = leisure_movies.leisure_ui.novelty_card("game", item)
+
+    assert "ПК · PS5" in novelty.text
+    assert "💻" not in novelty.text and "🎮" not in novelty.text

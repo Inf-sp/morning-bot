@@ -272,6 +272,14 @@ def game_preferences(current, recency, rating):
     return b.build_stripped()
 
 
+_PLATFORM_EMOJI_RE = re.compile(r"[^\w\s·,/+.-]+\s*")
+
+
+def _plain_platforms(value) -> str:
+    """«💻 ПК · 🎮 PS5» → «ПК · PS5»: у новых игр платформы без эмодзи."""
+    return " ".join(_PLATFORM_EMOJI_RE.sub("", str(value or "")).split())
+
+
 def game_premieres_screen(items):
     b = MessageBuilder()
     b.section("🎮 Премьеры игр")
@@ -291,7 +299,8 @@ def game_premieres_screen(items):
         card.newline()
         meta = " · ".join(
             str(value).strip()
-            for value in (item.get("date_label"), item.get("platform_label"), item.get("genre"))
+            for value in (item.get("date_label"), _plain_platforms(item.get("platform_label")),
+                          item.get("genre"))
             if str(value or "").strip()
         )
         if meta:
@@ -1159,7 +1168,7 @@ def _game_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         _weekly_item(
             b, item.get("title"), item.get("trailer_url") or item.get("url"),
             (item.get("genre"), _event_date_label(item.get("date")) or item.get("date_label"),
-             item.get("platform_label")),
+             _plain_platforms(item.get("platform_label"))),
         )
     return bool(rows)
 
@@ -1302,7 +1311,7 @@ def novelty_card(kind, item) -> MessageSpec:
         meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]
         summary = _book_premiere_summary(str(_item_value(item, "summary", "") or ""), limit=300)
     elif kind == "game":
-        meta = [str(item.get("genre") or ""), str(item.get("platform_label") or "")]
+        meta = [str(item.get("genre") or ""), _plain_platforms(item.get("platform_label"))]
         summary = str(item.get("summary") or "")
     else:
         meta = []
