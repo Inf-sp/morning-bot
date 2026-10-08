@@ -5,7 +5,6 @@ import store
 import dictionary_morning
 import learning_settings as learning_preferences
 from ui import settings as settings_ui
-from ui import weather as weather_ui
 from ui.constants import cuisine_label, ui_label
 import rich_delivery
 from ui.navigation import nav_row
@@ -179,15 +178,16 @@ def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeybo
 
 async def send_home(bot, cid, q=None):
     rows = [
-        [InlineKeyboardButton("📍 Город", callback_data="set_city")],
+        [InlineKeyboardButton("📍 Выбрать город", callback_data="set_city")],
+        # Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
+        [InlineKeyboardButton("🧠 Выбрать язык обучения", callback_data="set_learning_global")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
-    notification_kinds = [item.key for item in get_notification_options()]
-    notifications_on = any(notif_on(cid, kind) for kind in notification_kinds)
-    msg = settings_ui.settings_home(city, notifications_on)
+    enabled = [item.button_label for item in get_notification_options() if notif_on(cid, item.key)]
+    msg = settings_ui.settings_home(city, enabled, study_lang(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -459,8 +459,9 @@ async def _send_scheduled_notification(bot, cid, kind):
         await leisure_concerts.send_weekend_events(bot, cid)
     elif kind == "evening_weather":
         import weather as _w
-        kb = notification_markup("evening_weather", [[
-            InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week"),
+        # Одна строка: «Настроить» (настройки уведомлений новым сообщением) | «Главная».
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]])
         await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)

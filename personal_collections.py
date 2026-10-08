@@ -349,7 +349,7 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
             for item in items:
                 title = movie_title_for_lookup(item)
                 metadata = await asyncio.wait_for(
-                    asyncio.to_thread(_resolve_movie_label, title), timeout=4.0,
+                    asyncio.to_thread(_resolve_movie_label, title, allow_ai=True), timeout=12.0,
                 )
                 if metadata:
                     verified.append(canonical_movie_label(item, metadata))

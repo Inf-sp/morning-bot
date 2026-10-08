@@ -197,7 +197,8 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
     rows.insert(0, [InlineKeyboardButton(
         "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    rows.append([InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")])
+    # Внутри категории добавления нет: «Удалить», листание, «Показать списком», навигация.
+    rows.append([InlineKeyboardButton("Показать списком", callback_data=f"mfl:{token}:{genre_index}:0")])
     rows.append(nav_row("movie_favorites"))
     kb = InlineKeyboardMarkup(rows)
     poster = str(item["tm"].get("poster") or "").strip()
@@ -224,6 +225,23 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
     await bot.send_message(
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb,
     )
+
+
+async def send_favorite_movie_list(bot, cid, token, genre_index, q=None):
+    """Все фильмы категории одним сообщением, как «Показать списком» в словаре."""
+    import rich_delivery
+
+    view = _favorite_movie_view(cid, token)
+    if view is None or not 0 <= genre_index < len(view["genres"]):
+        await send_favorite_movies(bot, cid, q=q)
+        return
+    genre, items = view["genres"][genre_index]
+    msg = leisure_ui.favorite_movie_list(genre, [item["value"] or item["title"] for item in items])
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Показать карточками", callback_data=f"mfg:{token}:{genre_index}:0")],
+        nav_row("movie_favorites"),
+    ])
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 def _favorite_movie_from_view(cid, token, short_id):

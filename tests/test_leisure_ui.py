@@ -443,7 +443,9 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     assert "Фильм · драма, комедия · 2016" in bot.photos[-1]["caption"]
     assert bot.photos[-1]["caption"].startswith("🎬 Патерсон")
     assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
-    assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
+    assert _labels(bot.photos[-1]["reply_markup"]) == [
+        ["❌ Удалить"], ["Показать списком"], ["⬅️ Назад", "#️⃣ Главная"],
+    ]
 
 
 def test_favorite_movie_genre_switches_posters_in_the_same_card():

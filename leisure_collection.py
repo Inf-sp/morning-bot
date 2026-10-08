@@ -53,16 +53,38 @@ def _movie_parts(value):
     )
 
 
-def _resolve_movie_label(title):
-    """Ищет локализованные данные TMDb; кэш TMDb ограничивает запросы сутками."""
+def _resolve_movie_label(title, *, allow_ai=False):
+    """Данные TMDb только при уверенном совпадении названия, иначе None.
+
+    allow_ai (добавление пользователем): если по написанному названию совпадения нет —
+    транслитерация или опечатка, — AI подсказывает оригинальное название и год.
+    """
     if not config.TMDB_API_KEY or not title:
         return None
     try:
         import tmdb
 
-        return tmdb.lookup_title(title)
+        found = tmdb.lookup_title(title, strict=True)
+        if found or not allow_ai:
+            return found
+        original = _ai_original_title(title)
+        return tmdb.lookup_title(title, original, strict=True) if original else None
     except Exception:
         return None
+
+
+def _ai_original_title(title):
+    """Оригинальное (обычно английское) название фильма или сериала по запросу пользователя."""
+    data = ai.llm_json(
+        "Пользователь ввёл название фильма или сериала, возможно транслитом или с опечаткой: "
+        f"{secure.wrap_untrusted(title, 'название')}.\n"
+        "Определи, какой это реальный фильм или сериал. Верни JSON без markdown: "
+        '{"title_en": "оригинальное название", "year": "год выхода"}. '
+        'Если не уверен — {"title_en": "", "year": ""}.',
+        120, tier="cheap", module="leisure",
+        cache_context={"scenario": "movie_original_title", "title": title, "schema_version": 1},
+    )
+    return str((data or {}).get("title_en") or "").strip() if isinstance(data, dict) else ""
 
 
 def canonical_movie_label(value, metadata=None):

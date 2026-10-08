@@ -553,3 +553,24 @@ def test_live_database_check_failure_is_friendly(monkeypatch):
     row = service_monitor.live_check("database")
 
     assert (row["status"], row["detail"]) == ("fail", "нет подключения")
+
+
+def test_rate_limited_gemini_row_does_not_break_admin(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    state = {**provider_runtime.blank_state("gemini"), "status": provider_runtime.WARNING,
+             "error_type": "rate_limit", "last_error": "слишком много запросов"}
+
+    assert service_monitor.format_row("gemini", state).endswith("Gemini · Основной · слишком много запросов")
+
+
+def test_one_broken_row_does_not_break_the_whole_admin_screen(monkeypatch):
+    _memory_store(monkeypatch)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("bad state")
+
+    monkeypatch.setattr(service_monitor, "format_row", boom)
+    rows = service_monitor.rows()
+
+    assert "Gemini · нет данных" in rows and "AI" in rows

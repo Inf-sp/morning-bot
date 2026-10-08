@@ -504,6 +504,7 @@ ROUTES = (
     # Избранное кино и книги.
     R("movie_favorites", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid, q=c.q)),
     R("mfg:*", lambda c: leisure_movies.send_favorite_movie_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
+    R("mfl:*", lambda c: leisure_movies.send_favorite_movie_list(c.bot, c.cid, *_genre_args(c)[:2], q=c.q)),
     R("mfi:*", lambda c: leisure_movies.send_favorite_movie_card(c.bot, c.cid, *_card_args(c))),
     R("mfd:*", lambda c: leisure_movies.send_favorite_movie_delete_confirmation(
         c.bot, c.cid, *_card_args(c), q=c.q)),

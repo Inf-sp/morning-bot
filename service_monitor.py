@@ -5,6 +5,7 @@ Authoritative catalog, health transitions and fallback state live in
 """
 from __future__ import annotations
 
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
@@ -21,6 +22,8 @@ OK = provider_runtime.OK
 WARNING = provider_runtime.WARNING
 DOWN = provider_runtime.DOWN
 _DOT = provider_runtime.DOT
+
+_log = logging.getLogger(__name__)
 
 
 def _display_status(state: dict) -> str:
@@ -225,7 +228,7 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     if status in (DOWN, WARNING) and state.get("error_type") == "rate_limit":
         detail = str(state.get("last_error") or "слишком много запросов")
         if service == "gemini":
-            cooldown = api_usage.gemini_state(config.GEMINI_MODEL)
+            cooldown = api_usage.gemini_state(1)
             if int(cooldown.get("cooldown_remaining") or 0) > 0:
                 detail = {
                     "RPD": "дневной лимит исчерпан",
@@ -240,19 +243,26 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
     return _row(status, f"{label} · {role} · {detail}")
 
 
+def _safe_row(service, state):
+    """Сбой одной строки не роняет экран админки: строка «нет данных», ошибка — в лог."""
+    try:
+        return _format_groq_row(state) if service == "groq" else format_row(service, state)
+    except Exception:
+        _log.exception("service_monitor: row failed service=%s", service)
+        label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+        return f"{label} · нет данных"
+
+
 def rows() -> list[str]:
     current = _load().get("services") or {}
     out = ["AI"]
     for service in _AI_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
-        if service == "groq":
-            out.append(_format_groq_row(state))
-        else:
-            out.append(format_row(service, state))
+        out.append(_safe_row(service, state))
     out.append("Данные")
     for service in _DATA_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
-        out.append(format_row(service, state))
+        out.append(_safe_row(service, state))
     for service in ("telegram", "database"):
         state = current.get(service) or provider_runtime.get_state(service)
         if state.get("status") not in (OK, UNKNOWN):

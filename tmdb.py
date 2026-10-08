@@ -11,7 +11,9 @@ Endpoint'ы:
 - detail         — детали (runtime/страна/студия для movie; сезоны/статус/… для tv)
 - discover       — подбор по жанру/настроению/фильтрам
 """
+import difflib
 import logging
+import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
@@ -98,11 +100,31 @@ def _get(path, params, timeout=12, language=None):
         return None
 
 
-def lookup_title(title, title_en=""):
-    """Нормализовать название в данные карточки через TMDb с суточным кэшем."""
+def _title_key(value):
+    text = str(value or "").casefold().replace("ё", "е")
+    return " ".join(re.sub(r"[^\w\s]", " ", text).split())
+
+
+def title_similarity(query, item):
+    """0..1: насколько локальное или оригинальное название совпадает с запросом."""
+    wanted = _title_key(query)
+    names = (item.get("title") or item.get("name"), item.get("original_title") or item.get("original_name"))
+    return max((difflib.SequenceMatcher(None, wanted, _title_key(name)).ratio() for name in names if name),
+               default=0.0)
+
+
+STRICT_TITLE_SIMILARITY = 0.75
+
+
+def lookup_title(title, title_en="", strict=False):
+    """Нормализовать название в данные карточки через TMDb с суточным кэшем.
+
+    Кандидаты ранжируются по совпадению названия, затем по популярности.
+    strict — только уверенное совпадение (добавление в «Моё кино»), иначе None.
+    """
     if not config.TMDB_API_KEY:
         return None
-    cache_key = f"english-poster-v2|{title_en}|{title}".strip().lower()
+    cache_key = f"english-poster-v3|{int(strict)}|{title_en}|{title}".strip().lower()
     cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
     if cached is not None:
         return cached
@@ -121,7 +143,12 @@ def lookup_title(title, title_en=""):
         ]
         if not candidates:
             continue
+        candidates.sort(key=lambda value: (
+            -round(title_similarity(query, value), 2), -float(value.get("popularity") or 0),
+        ))
         item = candidates[0]
+        if strict and title_similarity(query, item) < STRICT_TITLE_SIMILARITY:
+            continue
         kind = item.get("media_type")
         overview = item.get("overview", "")
         if not overview:
@@ -141,7 +168,8 @@ def lookup_title(title, title_en=""):
                 if genre_id in GENRES
             ),
             "kind": kind,
-            "poster": english_poster(item.get("id"), kind),
+            # Англоязычный постер, иначе обычный постер TMDb — карточка не остаётся без картинки.
+            "poster": english_poster(item.get("id"), kind) or _poster(item.get("poster_path")),
             "url": f"https://www.themoviedb.org/{kind}/{item.get('id')}",
             "overview": overview,
         }

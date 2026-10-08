@@ -104,7 +104,9 @@ _REFRESH_RE = re.compile(
 )
 # «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
 _PREFS_RE = re.compile(r"^Выбрать предпочтения$")
-_NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
+_NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить|Показать списком|Показать карточками)$")
+# Листание: эмодзи-стрелки ◀️/▶️ → синие «←»/«→».
+_PAGER_ARROWS = {"◀️": "←", "◀": "←", "⬅️": "←", "⬅": "←", "▶️": "→", "▶": "→", "➡️": "→", "➡": "→"}
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
 _WAIT_RE = re.compile(r"(?:\.\.\.|…)$")
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
@@ -169,6 +171,12 @@ def _enhance_markup(markup, level=2):
     for index, row in enumerate(rows):
         for button in row:
             text = str(button.get("text") or "")
+            if text.strip() in _PAGER_ARROWS:
+                button["text"] = _PAGER_ARROWS[text.strip()]
+                if level >= 1:
+                    button.setdefault("style", "primary")
+                changed = True
+                continue
             toggle = _toggle(text) if level >= 1 else None
             if toggle:
                 button["text"] = toggle[0]

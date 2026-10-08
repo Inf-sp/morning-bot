@@ -136,7 +136,7 @@ def test_meaningful_emoji_stay_and_main_menu_is_untouched():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [[button["text"] for button in row] for row in rows] == [
-        ["Мой шкаф"], ["Драма", "🟢 Яйца"], ["⬅️", "🇳🇱 Нидерланды"], ["Главная"],
+        ["Мой шкаф"], ["Драма", "🟢 Яйца"], ["←", "🇳🇱 Нидерланды"], ["Главная"],
     ]
     assert rows[3][0]["style"] == "primary" and rows[1][0]["style"] == "danger"
 
@@ -238,3 +238,14 @@ def test_explicitly_styled_button_keeps_its_place():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [row[0]["text"] for row in rows] == ["Любой жанр", "Драма", "Новинка"]
+
+
+def test_pager_arrows_become_blue_side_arrows_and_list_button_is_blue():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("◀️", callback_data="p0"), InlineKeyboardButton("2/5", callback_data="noop"),
+         InlineKeyboardButton("▶️", callback_data="p2")],
+        [InlineKeyboardButton("🔢 Показать списком", callback_data="list")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [(b["text"], b.get("style")) for b in rows[0]] == [("←", "primary"), ("2/5", None), ("→", "primary")]
+    assert (rows[1][0]["text"], rows[1][0]["style"]) == ("Показать списком", "primary")
