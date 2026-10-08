@@ -100,7 +100,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert _labels(message.reply_markup) == [
         ["🎯 Тренажёр"],
         ["🕵️ Угадай персонажа"],
-        ["🎚️ Мой словарь"],
+        ["🎚️ Настроить"],
         ["#️⃣ Главная"],
     ]
     assert "Грамматика:\n- Союзы omdat, als, dat уводят глагол в самый конец" in message.text

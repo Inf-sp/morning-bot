@@ -369,7 +369,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     rows = [
         [("✨ Другой образ", "w_look")],  # новый образ дня; в чате — зелёная без эмодзи
-        [("🎚️ Мой шкаф", "w_closet")],
+        [("🎚️ Настроить", "w_closet")],
         [("#️⃣ Главная", "m_menu")],
     ]
     return _kb(rows)

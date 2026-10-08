@@ -323,7 +323,7 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
         ["✨ Другой образ"],
-        ["🎚️ Мой шкаф"],
+        ["🎚️ Настроить"],
         ["#️⃣ Главная"],
     ]
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_look"

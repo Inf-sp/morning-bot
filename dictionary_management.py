@@ -245,6 +245,6 @@ def dict_entry_view_kb(entry, page, term_key):
     return InlineKeyboardMarkup([
         *delete_row,
         *dictionary._dict_tts_row(entry),
-        [InlineKeyboardButton("🎚️ Мой словарь", callback_data=f"a_dictlang_{lang}_keep")],
+        [InlineKeyboardButton("🎚️ Настроить", callback_data=f"a_dictlang_{lang}_keep")],
         nav_row(f"a_dictlang_{lang}"),
     ])
