@@ -45,6 +45,7 @@ FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "gemini": 5.0,
+    "cerebras": 4.0,
     "groq": 4.0,
     "groq_standard": 4.0,
     "cf": 4.0,
@@ -270,6 +271,7 @@ def _is_temporary_exception(exc):
 
 _TIMEOUT_CAPS = {
     "gemini": 6.0,
+    "cerebras": 5.0,
     "groq": 5.0,
     "cf": 4.0,
 }
@@ -426,17 +428,19 @@ def _parse_retry_seconds(headers=None, body="") -> int | None:
 def _provider_model_name(provider: str) -> str:
     provider = (provider or "").strip()
     if provider == GROQ_SIMPLE:
-        return config.GROQ_SIMPLE_MODEL
+        return _resolve_model(config.GROQ_SIMPLE_MODEL)
     if provider == GROQ_STANDARD:
-        return config.GROQ_STANDARD_MODEL
+        return _resolve_model(config.GROQ_STANDARD_MODEL)
     if provider == GROQ_COMPLEX:
-        return config.GROQ_COMPLEX_MODEL
+        return _resolve_model(config.GROQ_COMPLEX_MODEL)
     if provider == "gemini":
-        return config.GEMINI_MODEL
+        return _resolve_model(config.GEMINI_MODEL)
     if provider == "groq":
-        return config.GROQ_STANDARD_MODEL
+        return _resolve_model(config.GROQ_STANDARD_MODEL)
     if provider == "cf":
         return config.CF_MODEL
+    if provider == "cerebras":
+        return _resolve_model(config.CEREBRAS_MODEL)
     return ""
 
 
@@ -538,6 +542,50 @@ def _is_json_validation_error(status_code, body="") -> bool:
     return "failed to validate json" in text or "failed_generation" in text
 
 
+# Запасные модели на случай, если провайдер снял модель из настроек (404):
+# постоянный алиас Google на актуальную Flash и стабильная модель Groq.
+GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
+GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
+CEREBRAS_FALLBACK_MODEL = "llama3.1-8b"
+_MODEL_OVERRIDES = {}
+
+
+def _resolve_model(model):
+    return _MODEL_OVERRIDES.get(model, model)
+
+
+def _gemini_thinking(model):
+    """Gemini 2.x отключает размышления бюджетом 0, Gemini 3+ — минимальным уровнем."""
+    return {"thinkingBudget": 0} if str(model).startswith("gemini-2") else {"thinkingLevel": "low"}
+
+
+def _fallback_request(service, status, body, url, payload):
+    """(url, payload) на запасной модели, если провайдер снял модель (404); иначе None."""
+    if status != 404 or not isinstance(payload, dict):
+        return None
+    if service == "gemini":
+        match = re.search(r"models/([^/:]+):", url)
+        if not match or match.group(1) == GEMINI_FALLBACK_MODEL:
+            return None
+        old, new = match.group(1), GEMINI_FALLBACK_MODEL
+        config_ = dict(payload.get("generationConfig") or {})
+        if "thinkingConfig" in config_:
+            config_["thinkingConfig"] = _gemini_thinking(new)
+        payload = {**payload, "generationConfig": config_} if config_ else payload
+        url = url.replace(f"models/{old}:", f"models/{new}:")
+    elif service in ("groq", "cerebras") and payload.get("model"):
+        new = GROQ_FALLBACK_MODEL if service == "groq" else CEREBRAS_FALLBACK_MODEL
+        if payload["model"] == new or (service == "groq" and "model_not_found" not in body):
+            return None
+        old = payload["model"]
+        payload = {**payload, "model": new}
+    else:
+        return None
+    _MODEL_OVERRIDES[old] = new
+    _log.warning("%s model %s not available (404); switching to %s", service, old, new)
+    return url, payload
+
+
 def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=None,
           suppress_json_validation_failure=False):
     service_aliases = {"cf": "cloudflare", **_ROUTE_PROVIDER_BASE}
@@ -608,6 +656,10 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
                 cooldown_until=cooldown_until,
                 message=body,
             )
+        fallback = _fallback_request(service, r.status_code, r.text or "", url, payload)
+        if fallback:
+            return _post(fallback[0], headers, fallback[1], timeout, name, timeout_cap, usage_service,
+                         suppress_json_validation_failure)
         raise LLMProviderError(name, f"{name} {r.status_code}: {body}",
                                status_code=r.status_code, temporary=temporary,
                                error_type="rate_limit" if limit_scope else "http_error",
@@ -681,6 +733,10 @@ def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_s
 
     body = secure.redact((response.text or "")[:300])
     status_code = response.status_code
+    fallback = _fallback_request(service, status_code, response.text or "", url, payload)
+    if fallback:
+        response.close()
+        return _stream_post(fallback[0], headers, fallback[1], timeout, name, timeout_cap, usage_service)
     record(
         False,
         error=f"HTTP {status_code}",
@@ -850,7 +906,7 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     generation_config = {
         "maxOutputTokens": max_tokens,
         "temperature": temperature,
-        "thinkingConfig": {"thinkingBudget": 0},
+        "thinkingConfig": _gemini_thinking(model or _provider_model_name(provider)),
     }
     if response_mode == "json":
         generation_config["responseMimeType"] = "application/json"
@@ -870,7 +926,7 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
             time.sleep(wait)
         t0 = time.time()
         r = _post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model or _provider_model_name(provider)}:generateContent",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{_resolve_model(model) if model else _provider_model_name(provider)}:generateContent",
             {"x-goog-api-key": config.GEMINI_API_KEY}, payload, 30, provider, timeout_cap=5)
     finally:
         _GEMINI_RATE_LOCK.release()
@@ -915,11 +971,11 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
             "maxOutputTokens": max_tokens,
             "temperature": 0.2,
             "responseMimeType": "application/json",
-            "thinkingConfig": {"thinkingBudget": 0},
+            "thinkingConfig": _gemini_thinking(_provider_model_name("gemini")),
         },
     }
     r = _post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name('gemini')}:generateContent",
         {"x-goog-api-key": config.GEMINI_API_KEY}, payload, 40, "gemini", timeout_cap=40,
     )
     data = r.json()
@@ -1067,6 +1123,26 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
             "https://api.groq.com/openai/v1/chat/completions", headers, retry_payload,
             40, provider, timeout_cap=5, usage_service=usage_service,
         )
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _gen_cerebras(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+    """Cerebras: OpenAI-совместимый API, бесплатный тариф без карты."""
+    if not config.CEREBRAS_API_KEY:
+        raise LLMProviderError("cerebras", "no cerebras", error_type="credentials")
+    payload = {
+        "model": _provider_model_name("cerebras"),
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if response_mode == "json":
+        payload["response_format"] = {"type": "json_object"}
+    r = _post(
+        "https://api.cerebras.ai/v1/chat/completions",
+        {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}", "Content-Type": "application/json"},
+        payload, 40, "cerebras", suppress_json_validation_failure=response_mode == "json",
+    )
     return r.json()["choices"][0]["message"]["content"]
 
 
@@ -1222,7 +1298,7 @@ def _reserve_gemini_for_action() -> bool:
 
 # Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
 # попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
-AI_ORDER = ("gemini", "groq", "cf", "openrouter")
+AI_ORDER = ("gemini", "cerebras", "groq", "cf", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
@@ -1234,6 +1310,7 @@ FOOD_ORDER = COMPLEX_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
+    "cerebras": AI_ORDER,
     "cf": AI_ORDER,
     "groq": AI_ORDER,
     "gemini": AI_ORDER,
@@ -1359,18 +1436,19 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         GROQ_SIMPLE: lambda: _gen_groq(
             prompt, max_tokens, temperature, response_mode,
-            model=config.GROQ_SIMPLE_MODEL, provider=GROQ_SIMPLE,
+            model=_resolve_model(config.GROQ_SIMPLE_MODEL), provider=GROQ_SIMPLE,
         ),
         GROQ_STANDARD: lambda: _gen_groq(
             prompt, max_tokens, temperature, response_mode,
-            model=config.GROQ_STANDARD_MODEL, provider=GROQ_STANDARD,
+            model=_resolve_model(config.GROQ_STANDARD_MODEL), provider=GROQ_STANDARD,
         ),
         GROQ_COMPLEX: lambda: _gen_groq(
             prompt, max_tokens, temperature, response_mode,
-            model=config.GROQ_COMPLEX_MODEL, provider=GROQ_COMPLEX,
+            model=_resolve_model(config.GROQ_COMPLEX_MODEL), provider=GROQ_COMPLEX,
         ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
+        "cerebras": lambda: _gen_cerebras(prompt, max_tokens, temperature, response_mode),
     }
     errs = []
     temporary_errs = []
@@ -1656,7 +1734,7 @@ def _chat(provider, history, system, timeout_cap=None):
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{_provider_model_name(provider)}:generateContent",
             {"x-goog-api-key": config.GEMINI_API_KEY}, {"system_instruction": {"parts": [{"text": system}]}, "contents": contents,
                  "generationConfig": {"maxOutputTokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8,
-                                      "thinkingConfig": {"thinkingBudget": 0}}},
+                                      "thinkingConfig": _gemini_thinking(_provider_model_name(provider))}},
             40, provider, timeout_cap=bounded_cap(6))
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
     if _monitor_name(provider) == "groq":
@@ -1680,6 +1758,18 @@ def _chat(provider, history, system, timeout_cap=None):
             40,
             "openrouter",
             timeout_cap=bounded_cap(5),
+        )
+        return r.json()["choices"][0]["message"]["content"]
+    if provider == "cerebras":
+        if not config.CEREBRAS_API_KEY:
+            raise LLMProviderError("cerebras", "no cerebras", error_type="credentials")
+        r = _post(
+            "https://api.cerebras.ai/v1/chat/completions",
+            {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}", "Content-Type": "application/json"},
+            {"model": _provider_model_name("cerebras"),
+             "messages": [{"role": "system", "content": system}] + history,
+             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
+            40, "cerebras", timeout_cap=bounded_cap(5),
         )
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
@@ -1732,6 +1822,19 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
             {**payload, "model": _provider_model_name(provider)},
             bounded_cap(5), provider, emit,
             usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
+        )
+    if provider == "cerebras":
+        if not config.CEREBRAS_API_KEY:
+            raise LLMProviderError(provider, "no cerebras", error_type="credentials")
+        return _stream_openai_chat(
+            "https://api.cerebras.ai/v1/chat/completions",
+            {
+                "Authorization": f"Bearer {config.CEREBRAS_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            {**payload, "model": _provider_model_name(provider)},
+            bounded_cap(5), provider, emit,
         )
     if provider == "openrouter":
         if not config.OPENROUTER_API_KEY:

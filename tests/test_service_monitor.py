@@ -36,7 +36,8 @@ def test_every_service_exposes_the_same_state_shape(monkeypatch):
 
 def test_ai_provider_catalog_uses_roles_not_sections():
     assert provider_runtime.SPEC_BY_KEY["gemini"].category == "Основной"
-    assert provider_runtime.SPEC_BY_KEY["cloudflare"].category == "Резерв 2"
+    assert provider_runtime.SPEC_BY_KEY["cloudflare"].category == "Резерв 3"
+    assert provider_runtime.SPEC_BY_KEY["cerebras"].category == "Резерв 1"
     assert provider_runtime.SPEC_BY_KEY["spoonacular"].category == "Питание"
 
 
@@ -128,7 +129,7 @@ def test_unclassified_failure_without_later_success_is_yellow_not_white(monkeypa
     )
 
     row = service_monitor.format_row("openrouter")
-    assert row.startswith("🟡 OpenRouter · Резерв 3 · ") and "⚪" not in row
+    assert row.startswith("🟡 OpenRouter · Резерв 4 · ") and "⚪" not in row
 
 
 def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
@@ -157,7 +158,7 @@ def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
         )
 
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Резерв 1 · 5 сегодня"
+        "🟢 Groq · Резерв 2 · 5 сегодня"
     )
 
 
@@ -167,12 +168,12 @@ def test_groq_turns_yellow_only_below_half_of_confirmed_quota(monkeypatch):
 
     provider_runtime.record_result("groq", True, quota_remaining=998, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Резерв 1 · 998/1 000 осталось"
+        "🟢 Groq · Резерв 2 · 998/1 000 осталось"
     )
 
     provider_runtime.record_result("groq", True, quota_remaining=499, quota_total=1000)
     assert service_monitor.format_row("groq") == (
-        "🟡 Groq · Резерв 1 · 499/1 000 осталось"
+        "🟡 Groq · Резерв 2 · 499/1 000 осталось"
     )
 
 
@@ -188,7 +189,7 @@ def test_groq_error_is_not_hidden_by_stale_full_quota(monkeypatch):
     })
 
     assert service_monitor.format_row("groq", state) == (
-        "🔴 Groq · Резерв 1 · неверный API-ключ"
+        "🔴 Groq · Резерв 2 · неверный API-ключ"
     )
 
 
@@ -227,7 +228,7 @@ def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
     )
 
     assert service_monitor.format_row("groq") == (
-        "🟢 Groq · Резерв 1 · 1 000/1 000 осталось"
+        "🟢 Groq · Резерв 2 · 1 000/1 000 осталось"
     )
 
 
@@ -238,7 +239,7 @@ def test_openrouter_row_shows_requests_not_money(monkeypatch):
     state = provider_runtime.blank_state("openrouter")
     state.update({"status": provider_runtime.OK})
 
-    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 3 · 12 сегодня"
+    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 4 · 12 сегодня"
 
 
 def test_unclassified_failure_after_real_success_is_green(monkeypatch):
@@ -251,7 +252,7 @@ def test_unclassified_failure_after_real_success_is_green(monkeypatch):
         "incident_started_at": 1000, "last_real_success": 2000,
     })
 
-    assert service_monitor.format_row("groq", state) == "🟢 Groq · Резерв 1 · 999/1 000 осталось"
+    assert service_monitor.format_row("groq", state) == "🟢 Groq · Резерв 2 · 999/1 000 осталось"
 
 
 def test_service_without_any_data_has_no_status_icon(monkeypatch):
@@ -302,7 +303,7 @@ def test_active_ai_reserves_are_shown_in_main_rows(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert service_monitor._AI_SERVICES == ("gemini", "groq", "cloudflare", "openrouter")
+    assert service_monitor._AI_SERVICES == ("gemini", "cerebras", "groq", "cloudflare", "openrouter")
     assert any("Groq" in row for row in rows)
     assert not any("gpt-oss" in row or "qwen" in row for row in rows)
     assert any("Cloudflare AI" in row for row in rows)

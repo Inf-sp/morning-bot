@@ -126,8 +126,8 @@ def test_free_chat_uses_the_next_provider_before_later_reserves(monkeypatch):
     result = ai.chat_chain([{"role": "user", "content": "test"}])
 
     assert result == "Ответ Groq"
-    # Groq получает свой полный лимит: после него ещё хватает времени на резервы.
-    assert calls[:2] == [("gemini", 5.0), ("groq", 4.0)]
+    # Следующий резерв (Cerebras) получает свой полный лимит: времени хватает и на остальные.
+    assert calls[:2] == [("gemini", 5.0), ("cerebras", 4.0)]
 
 
 def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
@@ -154,7 +154,7 @@ def test_free_chat_does_not_start_provider_after_deadline(monkeypatch):
 
 
 def test_free_chat_route_uses_the_standard_chain():
-    assert ai.CHAT_ORDER == ("gemini", "groq", "cf", "openrouter")
+    assert ai.CHAT_ORDER == ("gemini", "cerebras", "groq", "cf", "openrouter")
     assert ai.FREE_CHAT_TIER == "smart"
 
 
@@ -194,7 +194,7 @@ def test_free_chat_route_log_identifies_deployment_and_serving_provider(monkeypa
     line = records[0]
     assert "scenario=assistant/free_chat" in line
     assert "tier=smart" in line
-    assert "provider_chain=gemini,groq,cf,openrouter" in line
+    assert "provider_chain=gemini,cerebras,groq,cf,openrouter" in line
     assert "served_by=openrouter" in line
     assert "version=1.16.236" in line
     assert "deployment=deployment-42" in line

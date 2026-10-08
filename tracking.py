@@ -145,7 +145,7 @@ _SECTION_BY_MODULE = {
 _SERVICE_NAMES = (
     "azure speech", "language tool", "languagetool", "spoonacular", "themealdb",
     "openweather", "ticketmaster", "google books", "firecrawl",
-    "openrouter", "github models", "cloudflare", "gemini",
+    "openrouter", "github models", "cloudflare", "gemini", "cerebras",
     "groq", "tavily", "telegram", "tmdb", "pexels", "unsplash",
 )
 
