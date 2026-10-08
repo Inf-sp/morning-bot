@@ -58,11 +58,11 @@ def _span(window):
 
 
 def golden_hour_line(lat, lon, day: date, tz) -> str:
-    """«Золотой час: 18:05–18:55» — только вечернее окно, без эмодзи и синего часа."""
+    """«Золотой час будет с 18:05 по 18:55» — только вечернее окно, без эмодзи и синего часа."""
     if lat is None or lon is None:
         return ""
-    golden = _span(light_windows(float(lat), float(lon), day, tz)["evening_golden"])
-    return f"Золотой час: {golden}" if golden else ""
+    window = light_windows(float(lat), float(lon), day, tz)["evening_golden"]
+    return f"Золотой час будет с {window[0]:%H:%M} по {window[1]:%H:%M}" if window else ""
 
 
 def evening_golden_start(lat, lon, day: date, tz) -> str:
