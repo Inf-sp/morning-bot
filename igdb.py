@@ -139,7 +139,7 @@ def _multiquery(titles: list[str], token: str) -> list[dict]:
         queries.append(
             f'query games "game_{index}" {{ '
             f'search "{_escape_query(title)}"; '
-            "fields id,name,slug,summary,cover.image_id,videos.name,videos.video_id,"
+            "fields id,name,slug,summary,cover.image_id,videos.id,videos.name,videos.video_id,"
             "platforms.id,genres.name,first_release_date; limit 5; };"
         )
     if not queries:
@@ -182,15 +182,33 @@ def _best_match(title: str, candidates) -> dict | None:
     return None
 
 
+# Чем выше, тем лучше: релизный/основной трейлер важнее раннего анонса или тизера.
+_TRAILER_PRIORITY = (
+    (("launch", "release", "official trailer", "gameplay trailer", "story trailer"), 3),
+    (("trailer",), 2),
+    (("teaser",), 1),
+    (("announcement", "announce", "reveal"), 0),
+)
+
+
 def _trailer_video_id(videos) -> str:
-    for video in videos or []:
+    """Свежий основной трейлер игры, а не первый (самый ранний) ролик из IGDB."""
+    best = None
+    for position, video in enumerate(videos or []):
         if not isinstance(video, dict):
             continue
         name = str(video.get("name") or "").casefold()
         video_id = str(video.get("video_id") or "").strip()
-        if video_id and any(word in name for word in _TRAILER_WORDS):
-            return video_id
-    return ""
+        if not video_id or not any(word in name for word in _TRAILER_WORDS):
+            continue
+        priority = next(
+            (rank for words, rank in _TRAILER_PRIORITY if any(word in name for word in words)), 0,
+        )
+        # id IGDB растёт со временем добавления; без id — позиция в списке.
+        rank = (priority, int(video.get("id") or 0), position)
+        if best is None or rank > best[0]:
+            best = (rank, video_id)
+    return best[1] if best else ""
 
 
 def search_game_candidates(title: str) -> list[dict]:
@@ -280,7 +298,7 @@ def get_upcoming_games(platforms, *, today=None, days=180) -> list[dict]:
     end = int(datetime.combine(today + timedelta(days=days), datetime.max.time(), tzinfo=timezone.utc).timestamp())
     query = (
         "fields name,slug,first_release_date,cover.image_id,platforms.id,"
-        "genres.name,summary,videos.name,videos.video_id; "
+        "genres.name,summary,videos.id,videos.name,videos.video_id; "
         f"where first_release_date >= {start} & first_release_date <= {end} "
         f"& platforms = ({','.join(str(value) for value in platform_ids)}) "
         "& cover != null & version_parent = null; sort first_release_date asc; limit 50;"
@@ -362,7 +380,7 @@ def enrich_game_premieres(items) -> list[dict]:
         return result
     unresolved = []
     for item_index in digital_indexes:
-        cache_key = f"v2:{_normalized_title(result[item_index].get('title'))}"
+        cache_key = f"v3:{_normalized_title(result[item_index].get('title'))}"
         cached = util.ttl_get("igdb_game", cache_key, _LOOKUP_CACHE_TTL)
         if cached is None:
             unresolved.append(item_index)
@@ -387,7 +405,7 @@ def enrich_game_premieres(items) -> list[dict]:
     }
     for query_index, item_index in enumerate(digital_indexes):
         match = _best_match(titles[query_index], grouped.get(f"game_{query_index}"))
-        cache_key = f"v2:{_normalized_title(titles[query_index])}"
+        cache_key = f"v3:{_normalized_title(titles[query_index])}"
         if not match:
             util.ttl_set("igdb_game", cache_key, {})
             continue

@@ -411,33 +411,50 @@ def detail(tmdb_id, kind):
     return base
 
 
-def trailer_url(tmdb_id, kind="movie"):
-    """Точный YouTube-трейлер фильма, подтверждённый карточкой TMDB."""
-    if not config.TMDB_API_KEY or not tmdb_id or kind not in ("movie", "tv"):
-        return ""
-    cache_key = f"trailer|{kind}|{tmdb_id}"
-    cached = util.ttl_get("tmdb_trailer", cache_key, 7 * 24 * 3600)
-    if cached is not None:
-        return str(cached or "")
-    data = _get(f"/{kind}/{tmdb_id}/videos", {}, timeout=10, language="en-US") or {}
-    candidates = []
-    for video in data.get("results") or []:
+def _pick_trailer(results):
+    """Свежий официальный YouTube-трейлер; тизер — только если он новее трейлера.
+
+    Раньше обычный трейлер всегда выигрывал у тизера, а среди старых роликов
+    фильма или сериала нередко попадался трейлер многолетней давности.
+    """
+    videos = []
+    for video in results or []:
         if str(video.get("site") or "").casefold() != "youtube":
             continue
         key = str(video.get("key") or "").strip()
-        if not key:
-            continue
         video_type = str(video.get("type") or "").casefold()
-        if video_type not in ("trailer", "teaser"):
-            continue
-        score = (2 if video_type == "trailer" else 0) + (1 if video.get("official") else 0)
-        candidates.append((score, str(video.get("published_at") or ""), key))
-    if not candidates:
-        util.ttl_set("tmdb_trailer", cache_key, False)
+        if key and video_type in ("trailer", "teaser"):
+            videos.append((bool(video.get("official")), str(video.get("published_at") or ""),
+                           video_type == "trailer", key))
+    if not videos:
         return ""
-    _score, _published_at, key = max(candidates)
-    url = f"https://www.youtube.com/watch?v={key}"
-    util.ttl_set("tmdb_trailer", cache_key, url)
+    official = [video for video in videos if video[0]] or videos
+    return max(official, key=lambda video: (video[1], video[2]))[3]
+
+
+def trailer_url(tmdb_id, kind="movie"):
+    """Точный YouTube-трейлер, подтверждённый карточкой TMDB.
+
+    У сериала сначала ищем ролик последнего сезона: общий список видео сериала
+    часто начинается с трейлера первого сезона многолетней давности.
+    """
+    if not config.TMDB_API_KEY or not tmdb_id or kind not in ("movie", "tv"):
+        return ""
+    cache_key = f"trailer-v2|{kind}|{tmdb_id}"
+    cached = util.ttl_get("tmdb_trailer", cache_key, 7 * 24 * 3600)
+    if cached is not None:
+        return str(cached or "")
+    key = ""
+    if kind == "tv":
+        seasons = int((detail(tmdb_id, "tv") or {}).get("seasons") or 0)
+        if seasons > 0:
+            data = _get(f"/tv/{tmdb_id}/season/{seasons}/videos", {}, timeout=10, language="en-US") or {}
+            key = _pick_trailer(data.get("results"))
+    if not key:
+        data = _get(f"/{kind}/{tmdb_id}/videos", {}, timeout=10, language="en-US") or {}
+        key = _pick_trailer(data.get("results"))
+    url = f"https://www.youtube.com/watch?v={key}" if key else ""
+    util.ttl_set("tmdb_trailer", cache_key, url or False)
     return url
 
 

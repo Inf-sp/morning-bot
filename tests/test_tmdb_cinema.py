@@ -126,3 +126,13 @@ def test_trailer_url_prefers_the_official_youtube_trailer(monkeypatch):
     })
 
     assert tmdb.trailer_url(42) == "https://www.youtube.com/watch?v=trailer456"
+
+
+def test_trailer_prefers_newest_official_video():
+    videos = [
+        {"site": "YouTube", "key": "old", "type": "Trailer", "official": True, "published_at": "2016-01-01"},
+        {"site": "YouTube", "key": "new", "type": "Teaser", "official": True, "published_at": "2025-05-01"},
+        {"site": "YouTube", "key": "fan", "type": "Trailer", "official": False, "published_at": "2026-01-01"},
+    ]
+
+    assert tmdb._pick_trailer(videos) == "new"

@@ -170,3 +170,13 @@ def test_search_game_candidates_retries_the_sims_with_latest_installment(monkeyp
     assert calls == ["The Sims", "The Sims 4"]
     assert result[0]["name"] == "The Sims 4"
     assert result[0]["poster"].endswith("/sims4-cover.jpg")
+
+
+def test_game_trailer_prefers_newest_main_trailer_over_early_announcement():
+    videos = [
+        {"id": 1, "name": "Announcement Trailer", "video_id": "announce"},
+        {"id": 5, "name": "Teaser", "video_id": "teaser"},
+        {"id": 9, "name": "Launch Trailer", "video_id": "launch"},
+    ]
+
+    assert igdb._trailer_video_id(videos) == "launch"
