@@ -174,3 +174,34 @@ def test_dinner_button_uses_dinner_cache_without_forced_refresh(monkeypatch):
 
     assert calls[0]["meal"] == "dinner"
     assert calls[0]["refresh"] is False
+
+
+def _recipe(name):
+    return {"name": name, "minutes": 10, "ingredients": ["яйца"],
+            "steps": [{"text": "Взбей яйца", "minutes": 10}], "reason": "Быстро.", "tip": "Посоли."}
+
+
+def _refresh_with(monkeypatch, llm_name, local_name):
+    context = {"meal": "breakfast", "month": "2026-10", "pool_signature": "p", "signature": "s"}
+    profile = {
+        "cooking_home_ideas": {"breakfast": {"signature": "s", "idea": _recipe("Омлет")}},
+        "cooking_home_month_pools": {"breakfast": {
+            "month": "2026-10", "signature": "p", "ideas": [_recipe("Сырники"), _recipe("Омлет")],
+        }},
+    }
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda _cid, now=None: context)
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(recipe_generation.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kw: [])
+    monkeypatch.setattr(recipe_generation, "_normalize_home_idea", lambda data, _ctx: dict(data))
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_args, **_kw: _recipe(llm_name))
+    monkeypatch.setattr(recipe_generation, "_home_local_idea", lambda _ctx: _recipe(local_name))
+    return recipe_generation.get_cooking_home_idea("42", refresh=True)["name"]
+
+
+def test_other_recipe_skips_recipes_already_shown_this_month(monkeypatch):
+    assert _refresh_with(monkeypatch, llm_name="Сырники", local_name="Гренки") == "Гренки"
+
+
+def test_other_recipe_never_repeats_current_when_nothing_new(monkeypatch):
+    assert _refresh_with(monkeypatch, llm_name="Омлет", local_name="Омлет") == "Сырники"

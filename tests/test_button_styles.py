@@ -53,6 +53,18 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
 
+def test_waiting_indicator_is_green_and_disabled(sent):
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍳 Подбираю рецепт...", callback_data="noop")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_menu")],
+    ])
+    bot = telegram_runtime.MenuCleanupBot("1:x")
+    asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
+
+    rows = sent[0]["reply_markup"]["inline_keyboard"]
+    assert rows[0][0] == {"text": "Подбираю рецепт...", "style": "success", "disabled": {}}
+
+
 def test_rejected_disabled_field_keeps_colors_and_no_emoji(sent, monkeypatch):
     monkeypatch.setattr(telegram_runtime, "_button_level", 2)
     calls = []

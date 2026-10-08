@@ -862,6 +862,12 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
     avoided_names = list(dict.fromkeys(
         [name for name in [previous_name, *month_names] if name]
     ))
+    avoided = {name.casefold() for name in avoided_names}
+
+    def is_new(candidate):
+        # «Другой рецепт» не повторяет ни текущий, ни уже показанные в этом месяце.
+        return _home_idea_complete(candidate) and not (
+            refresh and str(candidate.get("name") or "").casefold() in avoided)
 
     sources = _recipe_sources(
         _HOME_MEAL_LABELS[context["meal"]],
@@ -892,6 +898,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
                     "cuisines": context.get("cuisine_codes") or [],
                     "sources": sources,
                     "previous_recipe": previous_name,
+                    "avoid": avoided_names[-31:],
                     "attempt": attempt,
                     "language": "ru",
                     "profile_version": context["signature"],
@@ -903,11 +910,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
             result = {}
             llm_failed = True
         idea = _with_recipe_source(_normalize_home_idea(result, context), sources)
-        complete = _home_idea_complete(idea)
-        repeated = bool(
-            refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold()
-        )
-        if complete and not repeated:
+        if is_new(idea):
             break
         if llm_failed:
             break
@@ -916,15 +919,15 @@ def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
                 "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
                 "русские названия, 2–3 коротких шага без времени в тексте и один конкретный совет на «ты»."
             )
-    if refresh and previous_name and idea.get("name", "").casefold() == previous_name.casefold():
-        idea = {}
-    if not _home_idea_complete(idea) and sources:
-        for source in sources:
-            idea = _source_home_idea(source, context)
-            if _home_idea_complete(idea):
-                break
-    if not _home_idea_complete(idea):
+    if not is_new(idea):
+        idea = next((card for card in map(lambda source: _source_home_idea(source, context), sources)
+                     if is_new(card)), {})
+    if not is_new(idea):
         idea = _home_local_idea(context)
+    if refresh and not is_new(idea):
+        # Нового варианта нет — самый давний рецепт месяца, но не текущий.
+        idea = next((item for item in month_pool if _home_idea_complete(item)
+                     and str(item.get("name") or "").casefold() != previous_name.casefold()), idea)
     if not _home_idea_complete(idea):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,

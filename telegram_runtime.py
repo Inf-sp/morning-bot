@@ -103,6 +103,8 @@ _REFRESH_RE = re.compile(
     r"^(?:Обновить|Подобрать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
 )
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
+# Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
+_WAIT_RE = re.compile(r"(?:\.\.\.|…)$")
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
 # эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта.
 _KEYBOARD_ERRORS = ("button", "keyboard", "reply markup", "reply_markup", "style", "disabled")
@@ -134,7 +136,7 @@ def _enhance_markup(markup, level=2):
     Без эмодзи (кроме главного меню и исключений выше); зелёные — «Другой…/Ещё…/
     Подобрать…/Обновить» (самый верх) и «Добавить…» (под ними); красные —
     «Удалить…»; синие — «Главная», «Назад» и «Настроить»; ``noop``-кнопки (счётчик страниц,
-    индикатор ожидания) становятся disabled (Bot API 10.3).
+    индикатор ожидания) становятся disabled (Bot API 10.3), индикатор ожидания — зелёный.
     """
     if not isinstance(markup, InlineKeyboardMarkup):
         return None
@@ -152,10 +154,14 @@ def _enhance_markup(markup, level=2):
             if label is not None and label != text:
                 button["text"] = text = label
                 changed = True
-            if level >= 2 and button.get("callback_data") == "noop":
-                button.pop("callback_data")
-                button["disabled"] = {}
-                changed = True
+            if button.get("callback_data") == "noop":
+                if level >= 1 and _WAIT_RE.search(text):
+                    button["style"] = "success"
+                    changed = True
+                if level >= 2:
+                    button.pop("callback_data")
+                    button["disabled"] = {}
+                    changed = True
                 continue
             if label is None:
                 continue
