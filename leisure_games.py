@@ -1075,11 +1075,10 @@ def _platform_keyboard(back="vg_card"):
 
 
 def _genre_keyboard(board=False, back="m_leisure", platform=None):
-    """Выбор после «Другая игра»: новинка (не у настолок) или жанр; всё зелёное.
+    """Выбор после «Другая игра»: зелёная новинка (не у настолок) или жанр без цвета.
 
     platform — выбранная на первом шаге группа: жанры подбираются только на ней.
     """
-    green = {"style": "success"}
     if platform:
         board = platform == "board"
         prefix = f"vg_pg_{platform}_"
@@ -1088,7 +1087,7 @@ def _genre_keyboard(board=False, back="m_leisure", platform=None):
     rows = []
     if not board:  # премьеры — видеоигры, у настолок новинки нет
         rows.append([InlineKeyboardButton("🆕 Новинка", callback_data="nov_game")])
-    rows.extend([InlineKeyboardButton(label, callback_data=f"{prefix}{key}", api_kwargs=green)]
+    rows.extend([InlineKeyboardButton(label, callback_data=f"{prefix}{key}")]
                 for key, label in GAME_GENRES)
     rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)

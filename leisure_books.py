@@ -1205,10 +1205,10 @@ async def show_book_premiere_page(q, page):
 
 
 def _book_genre_menu_kb(back="m_leisure"):
-    """Выбор после «Другая книга»: жанры и новинка; всё зелёное."""
+    """Выбор после «Другая книга»: зелёная новинка и жанры (стандартные, без цвета)."""
     rows = [
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_book")],
-        *[[InlineKeyboardButton(label, callback_data=f"book_g_{key}", api_kwargs={"style": "success"})]
+        *[[InlineKeyboardButton(label, callback_data=f"book_g_{key}")]
           for key, label, _subject in _BOOK_GENRES],
     ]
     rows.append(nav_row(back))

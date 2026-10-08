@@ -410,11 +410,11 @@ def _music_genre(key):
 
 
 def _music_genre_menu_kb(cid, back="m_leisure"):
-    """Выбор после «Другой артист»: новинка или стиль; всё зелёное."""
+    """Выбор после «Другой артист»: зелёная новинка или стиль (стандартный, без цвета)."""
     selected = set(_music_styles(cid))
     rows = [
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_music")],
-        *[[InlineKeyboardButton(label, callback_data=f"music_g_{key}", api_kwargs={"style": "success"})]
+        *[[InlineKeyboardButton(label, callback_data=f"music_g_{key}")]
           for key, label, _prompt_name in _MUSIC_GENRES if key in selected],
     ]
     rows.append(nav_row(back))
