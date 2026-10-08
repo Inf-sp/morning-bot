@@ -1,0 +1,109 @@
+import asyncio
+import os
+from datetime import datetime
+
+os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
+
+import ns_alerts
+import ns_api
+from ui import transport as transport_ui
+
+RAW = {
+    "id": "7001", "type": "DISRUPTION", "isActive": True, "title": "Alkmaar – Amsterdam Centraal",
+    "timespans": [{"cause": {"label": "defecte trein"}, "situation": {"label": "minder treinen"},
+                   "end": "2026-10-08T18:30:00+0200"}],
+    "summaryAdditionalTravelTime": {"label": "tot 30 minuten extra reistijd"},
+}
+
+
+class Bot:
+    def __init__(self):
+        self.sent = []
+
+    async def send_message(self, **kwargs):
+        self.sent.append(kwargs)
+
+
+def test_parse_keeps_disruptions_and_calamities_but_not_maintenance():
+    assert ns_api.parse_disruption(RAW) == {
+        "id": "7001", "type": "DISRUPTION", "title": "Alkmaar – Amsterdam Centraal",
+        "cause": "defecte trein", "situation": "minder treinen",
+        "until": "2026-10-08T18:30:00+0200", "extra": "tot 30 minuten extra reistijd",
+    }
+    calamity = ns_api.parse_disruption({"id": "c1", "type": "CALAMITY", "title": "Brand", "description": "Geen treinen"})
+    assert calamity["situation"] == "Geen treinen"
+    assert ns_api.parse_disruption({**RAW, "type": "MAINTENANCE"}) is None
+    assert ns_api.parse_disruption({**RAW, "isActive": False}) is None
+
+
+def test_station_code_prefers_exact_city_name(monkeypatch):
+    monkeypatch.setattr(ns_api.util, "ttl_get", lambda *_a: None)
+    monkeypatch.setattr(ns_api.util, "ttl_set", lambda *_a: None)
+    monkeypatch.setattr(ns_api, "_get", lambda *_a, **_k: {"payload": [
+        {"id": {"code": "AMRN"}, "names": {"long": "Alkmaar Noord"}},
+        {"id": {"code": "AMR"}, "names": {"long": "Alkmaar", "medium": "Alkmaar"}},
+    ]})
+
+    assert ns_api.station_code("Alkmaar") == "AMR"
+
+
+def test_alert_card_is_russian_with_section_cause_and_time():
+    text = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption(RAW),
+                                             "cause": "неисправный поезд", "situation": "меньше поездов",
+                                             "extra": "до 30 минут дольше в пути"}).text
+
+    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal: меньше поездов\n"
+                    "Причина: неисправный поезд\nОжидается до 18:30 · до 30 минут дольше в пути")
+
+
+def _user(monkeypatch, cc="NL"):
+    profile = {}
+    monkeypatch.setattr(ns_alerts.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": cc})
+    monkeypatch.setattr(ns_alerts.store, "get_profile", lambda _cid: dict(profile))
+
+    def mutate(_cid, change):
+        updated, _ = change(dict(profile))
+        profile.clear()
+        profile.update(updated)
+
+    monkeypatch.setattr(ns_alerts.store, "mutate_profile", mutate)
+    monkeypatch.setattr(ns_alerts.ns_api, "station_code", lambda _city: "AMR")
+    monkeypatch.setattr(ns_alerts, "_translate", lambda item: item)
+    return profile
+
+
+def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
+    profile = _user(monkeypatch)
+    feed = {"items": [ns_api.parse_disruption(RAW)]}
+    monkeypatch.setattr(ns_alerts.ns_api, "active_disruptions", lambda _code: feed["items"])
+    bot = Bot()
+
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🚆 Сбой NS · Alkmaar")
+    assert [b.text for b in bot.sent[0]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить", "#️⃣ Главная"]
+
+    feed["items"] = []
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert bot.sent[-1]["text"] == "✅ Движение Alkmaar – Amsterdam Centraal восстановлено"
+    assert profile["ns_alerts"] == {"active": {}}
+
+
+def test_no_alerts_outside_netherlands_or_when_ns_is_down(monkeypatch):
+    _user(monkeypatch, cc="DE")
+    monkeypatch.setattr(ns_alerts.ns_api, "active_disruptions", lambda _code: [ns_api.parse_disruption(RAW)])
+    bot = Bot()
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert bot.sent == []
+
+    profile = _user(monkeypatch)
+    monkeypatch.setattr(ns_alerts.ns_api, "active_disruptions", lambda _code: None)
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert bot.sent == [] and "ns_alerts" not in profile
+
+
+def test_checks_run_only_from_six_to_twenty_three():
+    assert not ns_alerts.is_active_time(datetime(2026, 10, 8, 5, 59))
+    assert ns_alerts.is_active_time(datetime(2026, 10, 8, 6, 0))
+    assert ns_alerts.is_active_time(datetime(2026, 10, 8, 22, 59))
+    assert not ns_alerts.is_active_time(datetime(2026, 10, 8, 23, 0))

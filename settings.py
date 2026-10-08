@@ -19,6 +19,7 @@ NOTIF_TYPES = [
     ("weekend_events",  "Ближайшие события"),
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
+    ("ns_disruptions",  "Поезда NS"),
 ]
 
 CUISINE_OPTIONS = [
@@ -97,7 +98,8 @@ def notif_on(cid, kind):
     # До появления переключателя погодные предупреждения приходили всем.
     # Сохраняем это поведение для старых профилей, пока пользователь сам их
     # не отключит.
-    if kind == "weather_warn":
+    if kind in ("weather_warn", "ns_disruptions"):
+        # Сбои NS включены по умолчанию: без города в Нидерландах они всё равно молчат.
         return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
         legacy_value = get(cid, f"notif_{legacy_kind}", None)
@@ -465,6 +467,9 @@ async def _send_scheduled_notification(bot, cid, kind):
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]])
         await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)
+    elif kind == "ns_disruptions":
+        import ns_alerts
+        await ns_alerts.check_user(bot, cid)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -504,6 +509,7 @@ _ADMIN_NOTIFICATION_META = {
     "weekend_events":  ("пт 10:00", "Ближайшие события"),
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
+    "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
 }
 
 

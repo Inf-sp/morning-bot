@@ -73,6 +73,7 @@ OPENROUTER_MODELS = tuple(dict.fromkeys([
 OPENROUTER_DAILY_LIMIT = _env_int("OPENROUTER_DAILY_LIMIT", 50)
 CF_NEURON_DAILY_LIMIT = _env_int("CF_NEURON_DAILY_LIMIT", 10000)
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
+NS_API_KEY = os.environ.get("NS_API_KEY", "").strip()  # сбои поездов NS
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 IGDB_CLIENT_ID = os.environ.get("IGDB_CLIENT_ID", "").strip()
 IGDB_CLIENT_SECRET = os.environ.get("IGDB_CLIENT_SECRET", "").strip()

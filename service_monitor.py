@@ -49,7 +49,7 @@ _quota_from_headers = provider_runtime.quota_from_headers
 _AI_SERVICES = ("gemini", "cerebras", "groq", "cloudflare", "github", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
-    "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
+    "spoonacular", "gtts", "ticketmaster", "ns", "pexels", "unsplash",
 )
 _DATA_CATEGORIES = {
     "openweather": "Погода",
@@ -62,6 +62,7 @@ _DATA_CATEGORIES = {
     "spoonacular": "Питание",
     "gtts": "Озвучка",
     "ticketmaster": "Концерты",
+    "ns": "Поезда",
     "pexels": "Фото",
     "unsplash": "Фото",
 }
@@ -278,6 +279,7 @@ def _probe_request(service: str):
     probes = {
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
+        "ns": ("GET", "https://gateway.apiportal.ns.nl/disruptions/v3", {"params": {"isActive": "true"}, "headers": {"Ocp-Apim-Subscription-Key": config.NS_API_KEY}}),
         "cerebras": ("GET", "https://api.cerebras.ai/v1/models", {"headers": {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}"}}),
         "github": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),

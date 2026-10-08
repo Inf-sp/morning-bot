@@ -433,6 +433,22 @@ async def job_weekend_events(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_weekend_events failed for cid=%s", cid)
 
 
+@ai.background_job
+async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
+    """Каждые 10 минут 06:00–23:00: новые сбои NS и восстановление движения."""
+    import ns_alerts
+
+    if not config.NS_API_KEY or not ns_alerts.is_active_time():
+        return
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, ns_alerts.KIND):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, ns_alerts.KIND)
+        except Exception:
+            logging.exception("job_ns_disruptions failed for cid=%s", cid)
+
+
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "evening_weather"):
@@ -598,6 +614,12 @@ def _build_application():
         interval=300,
         first=310,
         **_job_options("monitoring_repeating"),
+    )
+    jq.run_repeating(
+        job_ns_disruptions,
+        interval=600,
+        first=120,
+        **_job_options("ns_disruptions_repeating"),
     )
     jq.run_repeating(
         job_retry_dictionary_adds,
