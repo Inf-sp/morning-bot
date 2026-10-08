@@ -879,7 +879,7 @@ def test_book_card_has_modern_compact_hierarchy():
     message = leisure_books._book_text({
         "title": "Ночной город", "title_en": "Night Night Fawn", "author": "Автор",
         "year": "2026", "categories": ["Fantasy"],
-        "plot": "Первое предложение. Второе предложение. Третье предложение. Четвёртое предложение.",
+        "plot": "Первое. Второе. Третье. Четвёртое. Пятое. Шестое предложение.",
         "rating": 4.7, "ratings_count": 1234,
         "why": ["Необычный мир"],
         "quote": "Выдуманная цитата",
@@ -889,11 +889,21 @@ def test_book_card_has_modern_compact_hierarchy():
         "Автор · 2026 · Night Night Fawn\n"
         "Жанр: Фэнтези\n\n"
         "Сюжет\n"
-        "Первое предложение. Второе предложение. Третье предложение."
+        "Первое. Второе. Третье. Четвёртое. Пятое."
     )
     assert "⭐" not in message.text
     assert "Почему стоит читать" not in message.text
     assert "цитат" not in message.text.casefold()
+
+
+def test_book_card_shows_author_section_from_details():
+    message = leisure_books._book_text({
+        "title": "Книга", "author": "Автор", "plot": "О чём книга.",
+        "author_about": "Американская писательница", "author_books": ["A", "B", "C", "D"],
+    })
+    assert message.text.endswith(
+        "Об авторе\nАмериканская писательница.\nДругие книги: «A», «B», «C»"
+    )
 
 
 def test_book_card_hides_missing_metadata_instead_of_inventing_it():

@@ -1260,6 +1260,103 @@ async def toggle_book_preference(bot, cid, data, q=None):
             settings.set_(cid, "book_min_rating", "" if current == value else value)
     await send_book_preferences(bot, cid, q)
 
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def _author_other_books(author_en, skip_titles):
+    """До трёх других популярных книг автора из Google Books (проверенные названия)."""
+    if not author_en:
+        return []
+    skip = {google_books._norm(title) for title in skip_titles if title}
+    books, seen = [], set()
+    volumes = []
+    for item in google_books._search_items(f'inauthor:"{author_en}"', max_results=20):
+        try:
+            volumes.append(google_books._volume(item))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    volumes.sort(key=lambda volume: -(volume.get("ratings_count") or 0))
+    for volume in volumes:
+        title = str(volume.get("title") or "").strip()
+        key = google_books._norm(title)
+        if (not title or key in seen or any(key in value or value in key for value in skip)
+                or volume.get("language") not in ("en", "")
+                or google_books._author_match_score(volume, author_en) < 0.55):
+            continue
+        seen.add(key)
+        books.append(title)
+        if len(books) == 3:
+            break
+    return books
+
+
+async def _with_book_details(it):
+    """Подробный сюжет по-русски и пара строк об авторе — только по источникам.
+
+    Описание и другие книги автора берутся из Google Books; AI только пересказывает
+    описание по-русски и даёт короткую справку об авторе. Без источника строк нет.
+    """
+    it = dict(it or {})
+    if it.get("details_ready"):
+        return it
+    title, title_en = str(it.get("title") or ""), str(it.get("title_en") or "")
+    author = str(it.get("author") or "")
+    try:
+        volume = await asyncio.wait_for(asyncio.to_thread(
+            google_books.find_volume, title, title_en,
+            "" if _CYRILLIC_RE.search(author) else author, english_only=True,
+        ), timeout=5.0)
+    except Exception:
+        volume = None
+    volume = volume or {}
+    description = str(volume.get("description") or it.get("description") or "").strip()
+    author_en = str(volume.get("author") or ("" if _CYRILLIC_RE.search(author) else author)).strip()
+    try:
+        other_books = await asyncio.wait_for(asyncio.to_thread(
+            _author_other_books, author_en, [title, title_en, volume.get("title")],
+        ), timeout=4.0)
+    except Exception:
+        other_books = []
+    # Свой русский текст каталога — запасной сюжет, если пересказ не получится.
+    own = str(it.get("plot") or it.get("desc") or "").strip()
+    plot, about = (own if _CYRILLIC_RE.search(own) else ""), ""
+    if description:
+        prompt = (
+            "Перескажи по-русски, о чём книга, по описанию издателя: 3–5 живых предложений "
+            "без спойлеров финала, без рекламных оборотов и оценок. Затем одной фразой — кто "
+            "автор (только общеизвестный проверяемый факт; если не уверен — пусто).\n"
+            f"Книга: {secure.wrap_untrusted(f'{title_en or title} — {author_en or author}', 'книга')}\n"
+            f"{secure.wrap_untrusted(description[:2500], 'описание издателя')}\n"
+            'JSON: {"plot": "...", "author_about": "..."}'
+        )
+        try:
+            data = await ai.allm_json(
+                prompt, 700, tier="leisure", module="leisure_books",
+                fallback_allowed=True, privacy_level="public", budget_seconds=8,
+                cache_context={"scenario": "book_details", "title": title_en or title,
+                               "author": author_en or author, "description": description[:2500],
+                               "schema_version": 1},
+            )
+        except Exception:
+            data = {}
+        data = data if isinstance(data, dict) else {}
+        ai_plot = " ".join(str(data.get("plot") or "").split())
+        if _CYRILLIC_RE.search(ai_plot):
+            plot = ai_plot
+        about = " ".join(str(data.get("author_about") or "").split())
+        if not _CYRILLIC_RE.search(about):
+            about = ""
+    it.update({
+        "plot": plot, "author_about": about, "author_books": other_books,
+        "details_ready": True,
+    })
+    # Сырое английское описание на карточке не показываем.
+    it.pop("desc", None)
+    if it.get("description") and not _CYRILLIC_RE.search(str(it["description"])):
+        it["description_en"] = it.pop("description")
+    return it
+
+
 async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
     if enrich:
         try:
@@ -1273,6 +1370,7 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
             it = dict(it or {})
     else:
         it = dict(it or {})
+    it = await _with_book_details(it)
     it = _with_book_url(it)
     msg = _book_text(it)
     kb = _book_kb(i)
@@ -1508,9 +1606,9 @@ def _record_book_recommendation(cid, item):
 def _genre_fallback_book(cid, genre_key, extra_skip=()):
     """Локальный резерв сохраняет смысл выбранного жанра при пустом каталоге."""
     used = _book_used(cid) | {str(x).strip().lower() for x in extra_skip}
+    # Без общей заглушки «Заметная книга жанра…»: сюжет соберёт _with_book_details.
     top = [{
         "title": title, "title_en": title_en, "year": year, "author": author,
-        "desc": "Заметная книга жанра с сильными читательскими и критическими отзывами.",
     } for title, title_en, year, author in _GENRE_TOP_BOOKS.get(genre_key, [])]
     source = [*top, *_GENRE_FALLBACKS.get(genre_key, [])]
     book_key = lambda value: (

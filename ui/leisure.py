@@ -335,13 +335,23 @@ def book_text(item):
     if plot_source:
         plot = " ".join(str(plot_source).split()).strip()
         sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", plot) if part.strip()]
-        plot = " ".join(sentences[:3])
+        plot = " ".join(sentences[:5])
         if plot and plot[-1] not in ".!?…":
             plot += "."
         b.spacer()
         b.bold("Сюжет")
         b.newline()
         b.line(plot)
+    about = str(item.get("author_about") or "").strip()
+    other_books = [str(value).strip() for value in item.get("author_books") or [] if str(value).strip()]
+    if about or other_books:
+        b.spacer()
+        b.bold("Об авторе")
+        b.newline()
+        if about:
+            b.line(about if about[-1] in ".!?…" else about + ".")
+        if other_books:
+            b.line("Другие книги: " + ", ".join(f"«{value}»" for value in other_books[:3]))
     return b.build_stripped()
 
 
