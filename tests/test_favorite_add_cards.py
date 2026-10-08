@@ -7,7 +7,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import leisure_movies
 import movie_recommendation
 import leisure_music
-import leisure_games
 import leisure_books
 import leisure_collection
 import personal_collections
@@ -97,10 +96,9 @@ def test_movie_recommendation_add_does_not_fail_when_markup_is_unchanged(monkeyp
     assert advanced and advanced[0][1] == "42"
 
 
-def test_artist_and_game_add_prompts_name_their_collections():
+def test_artist_add_prompt_names_its_collection():
     for key, expected in (
         ("artists", "Напиши артиста — добавлю в 🎚️ Мои артисты."),
-        ("games", "Напиши игру — добавлю в 🎚️ Мой набор игр."),
     ):
         bot = _Bot()
         asyncio.run(personal_collections.love_add_start(bot, "42", key))
@@ -636,87 +634,10 @@ def test_manual_collection_add_routes_to_artist_card(monkeypatch):
     assert cards == [["The National"]]
 
 
-def test_manual_game_add_saves_detected_genre_and_platform(monkeypatch):
-    added = []
-    monkeypatch.setattr(personal_collections, "_love_items", lambda _cid, _key: [])
-    monkeypatch.setattr(
-        personal_collections.store, "add_to_list",
-        lambda _key, _cid, value: added.append(value),
-    )
-    monkeypatch.setattr(
-        leisure_games.igdb,
-        "enrich_game_recommendation",
-        lambda item: {
-            **item,
-            "genres": ["adventure"],
-            "platforms": ["ps5"],
-            "year": 2025,
-        },
-    )
-    monkeypatch.setattr(leisure_games, "_reset_game_daily", lambda _cid: None)
-
-    async def send_card(_bot, _cid, _items):
-        return None
-
-    monkeypatch.setattr(leisure_games, "send_favorite_games_added_card", send_card)
-
-    asyncio.run(personal_collections.love_add_done(
-        _Bot(), "42", "games", "Unknown Adventure", confirmed=True,
-    ))
-
-    assert added[0]["genres"] == ["adventure"]
-    assert added[0]["platforms"] == ["ps5"]
 
 
-def test_manual_game_is_saved_only_after_card_confirmation(monkeypatch):
-    added = []
-    cards = []
-    item = {
-        "igdb_id": 1, "name": "The Sims", "genres": ["simulator"],
-        "platforms": ["pc"], "year": 2000, "poster": "https://images.test/sims.jpg",
-    }
-    leisure_games._manual_game_choices.clear()
-    monkeypatch.setattr(leisure_games.igdb, "search_game_candidates", lambda _value: [item])
-    monkeypatch.setattr(leisure_games, "_favorite_games", lambda _cid: [])
-    monkeypatch.setattr(leisure_games.store, "add_to_list", lambda _key, _cid, value: added.append(value))
-    monkeypatch.setattr(leisure_games, "_reset_game_daily", lambda _cid: None)
-
-    async def send_card(_bot, _cid, items):
-        cards.extend(items)
-
-    monkeypatch.setattr(leisure_games, "send_favorite_games_added_card", send_card)
-    bot = _Bot()
-
-    asyncio.run(leisure_games.offer_manual_favorite_game(bot, "42", "The Sims"))
-
-    assert added == []
-    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить игру", "✨ Другая игра"]]
-    token = next(iter(leisure_games._manual_game_choices))
-    asyncio.run(leisure_games.handle_manual_game_add_callback(
-        bot, "42", _Query(), f"game_add_ok:{token}:0",
-    ))
-
-    assert added == [item]
-    assert cards == [item]
 
 
-def test_game_text_from_collection_opens_card_flow_without_old_choice_menu(monkeypatch):
-    offered = []
-
-    async def offer(_bot, _cid, value, origin):
-        offered.append((value, origin))
-
-    monkeypatch.setattr(leisure_games, "offer_manual_favorite_game", offer)
-    monkeypatch.setattr(
-        personal_collections, "_offer_collection_choices",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("old menu opened")),
-    )
-
-    asyncio.run(personal_collections.love_add_done(
-        _Bot(), "42", "games", "the sims", origin="base",
-    ))
-
-    assert offered == [("the sims", "base")]
 
 
 def test_collection_migration_uses_a_plain_russian_movie_label(monkeypatch):

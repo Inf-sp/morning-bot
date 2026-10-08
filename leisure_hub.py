@@ -1,7 +1,7 @@
 """Хаб «🍿 Досуг»: концерты, премьеры, подборки и библиотека.
 
 Открытие хаба только читает готовые кэши (концерты любимых артистов, премьеры
-кино/книг, сезонные игры) — без сети и AI. Кэши обновляет ночной прогрев
+кино/книг) — без сети и AI. Кэши обновляет ночной прогрев
 ``warm_hub_cache`` (задача ``leisure`` в bot_maintenance.job_warm_home_pages).
 """
 import logging
@@ -10,7 +10,6 @@ from datetime import datetime
 import config
 import leisure_books
 import leisure_concerts
-import leisure_games
 import leisure_movies
 import store
 from ui import leisure as leisure_ui
@@ -30,7 +29,6 @@ def hub_data(cid) -> dict:
         "concerts": leisure_concerts.cached_favorite_concerts(cid, limit),
         "movies": leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or [],
         "books": leisure_books._book_premieres_cache_get(today, allow_stale=True) or [],
-        "games": leisure_games.cached_season_premieres(cid) or [],
     }
 
 
@@ -86,7 +84,6 @@ async def warm_hub_cache(cid):
         ("movie_premieres", lambda: _warm_movie_premieres(cid)),
         # refresh=True возвращает свежий кэш без запроса; внешний поиск — только без него.
         ("book_premieres", lambda: leisure_books.get_book_premieres(refresh=True)),
-        ("game_premieres", lambda: leisure_games.get_game_premieres(cid, refresh=True, seasonal=True)),
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
     )
     ok = True
@@ -105,6 +102,5 @@ def is_ready(cid) -> bool:
     return (
         leisure_movies._movie_premieres_cache_get(cc, today) is not None
         and leisure_books._book_premieres_cache_get(today) is not None
-        and leisure_games.cached_season_premieres(cid, allow_stale=False) is not None
         and leisure_movies._cached_movie(cid) is not None
     )

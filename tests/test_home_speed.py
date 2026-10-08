@@ -9,7 +9,6 @@ import ai
 import bot
 import bot_maintenance
 import leisure_books
-import leisure_games
 import leisure_movies
 import tracking
 
@@ -110,7 +109,7 @@ def test_background_jobs_propagate_mode_into_threads(monkeypatch):
 
     assert modes == [True]
     for job in (bot.job_warm_weather_cache, bot.job_warm_movie_premieres_cache,
-                bot.job_warm_book_premieres_cache, bot.job_warm_game_premieres_cache,
+                bot.job_warm_book_premieres_cache,
                 bot.job_refresh_concerts_cache, bot.job_retry_dictionary_adds,
                 bot.job_requested_dictionary_rechecks):
         assert hasattr(job, "__wrapped__"), job.__name__

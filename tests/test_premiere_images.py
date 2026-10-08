@@ -5,7 +5,6 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import leisure_books
-import leisure_games
 import leisure_movies
 import movie_discovery
 
@@ -63,34 +62,6 @@ def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
     assert bot.sent[0][1]["photo"] == "https://images.test/en2.jpg"
 
 
-def test_game_premiere_without_poster_is_not_shown(monkeypatch):
-    items = [{
-        "title": "Без постера",
-        "date_label": "15 сентября 2026",
-        "platform_label": "💻 ПК",
-        "genre": "RPG",
-        "url": "https://example.test/missing",
-    }, *[{
-        "title": f"С постером {index}",
-        "date_label": "15 сентября 2026",
-        "platform_label": "💻 ПК",
-        "genre": "RPG",
-        "poster": f"https://images.test/game{index}.jpg",
-        "trailer_url": f"https://youtube.test/game{index}",
-    } for index in range(2)]]
-    monkeypatch.setattr(
-        leisure_games, "get_game_premieres",
-        lambda _cid, **_kwargs: asyncio.sleep(0, result=items),
-    )
-    bot = Bot()
-
-    asyncio.run(leisure_games.send_game_premieres(bot, "42"))
-
-    # Одна перелистываемая карточка (docs/games.md): релиз без постера не попадает в страницы.
-    assert [kind for kind, _kwargs in bot.sent] == ["photo"]
-    assert "Без постера" not in bot.sent[0][1]["caption"]
-    assert bot.sent[0][1]["photo"] == "https://images.test/game0.jpg"
-    assert leisure_games._GAME_PREMIERE_VIEWS["42"] == items[1:]
 
 
 def test_book_premiere_without_cover_is_not_shown(monkeypatch):

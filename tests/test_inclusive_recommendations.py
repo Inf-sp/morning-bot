@@ -32,7 +32,6 @@ def test_rotation_requires_inclusive_attempt_on_every_fifth_recommendation(monke
 def test_only_verified_titles_receive_lgbt_marker():
     assert inclusive_recommendations.is_inclusive("movie", "Nimona")
     assert inclusive_recommendations.is_inclusive("book", "Песнь Ахилла")
-    assert inclusive_recommendations.is_inclusive("game", "Hades")
     assert not inclusive_recommendations.is_inclusive("movie", "Неизвестный фильм")
 
 
@@ -42,12 +41,10 @@ def test_cards_show_lgbt_marker_only_when_confirmed():
         {"name": "Нимона", "kind": "movie", "genres": "анимация", "lgbt": True},
     )
     book = leisure_ui.book_text({"title": "Песнь Ахилла", "lgbt": True})
-    game = leisure_ui.game_card({"name": "Hades", "lgbt": True})
 
     assert "🏳️‍🌈 ЛГБТ" in movie.text
     assert "🏳️‍🌈 ЛГБТ" not in book.text
-    assert "🏳️‍🌈 ЛГБТ" in game.text
-    assert "🏳️‍🌈 ЛГБТ" not in leisure_ui.game_card({"name": "Другая игра"}).text
+
 
 
 def test_due_movie_pick_respects_selected_content_type(monkeypatch):

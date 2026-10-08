@@ -23,10 +23,6 @@ _TITLES = {
         "the price of salt", "цена соли", "кэрол",
         "last night at the telegraph club", "прошлой ночью в телеграфном клубе",
     },
-    "game": {
-        "hades", "life is strange: true colors", "tell me why",
-        "the last of us part ii", "the last of us часть ii",
-    },
 }
 
 

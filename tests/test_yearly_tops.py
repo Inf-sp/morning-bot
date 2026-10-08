@@ -12,15 +12,15 @@ def _labels(markup):
 
 
 def test_yearly_top_card_has_genre_and_short_description():
-    message = yearly_tops.leisure_ui.yearly_top_screen("game", 2025, {
-        "title": "Clair Obscur: Expedition 33",
-        "genre": "RPG",
-        "summary": "Экспедиция отправляется остановить Художницу.",
+    message = yearly_tops.leisure_ui.yearly_top_screen("book", 2025, {
+        "title": "Flesh",
+        "genre": "литературная проза",
+        "summary": "Сдержанный роман о теле и амбициях.",
     })
 
-    assert message.text.startswith("🏆 Топ-5 · Игры 2025")
-    assert "RPG" in message.text
-    assert "Экспедиция отправляется" in message.text
+    assert message.text.startswith("🏆 Топ-5 · Книги 2025")
+    assert "литературная проза" in message.text
+    assert "Сдержанный роман" in message.text
 
 
 def test_movie_top_uses_previous_year_and_english_posters(monkeypatch):

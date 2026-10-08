@@ -14,7 +14,6 @@ import config
 import home_cache
 import leisure_books
 import leisure_concerts
-import leisure_games
 import leisure_hub
 import leisure_movies
 import menu
@@ -72,12 +71,6 @@ def _seed_caches(monkeypatch):
     leisure_books._book_premieres_cache_set(today, [
         {"title": "Новая книга", "url": "https://books.example/new"},
     ])
-    start, end, _season = leisure_games._game_season(today)
-    leisure_games._premiere_cache_set(
-        leisure_games._premiere_signature("42", start, end), today,
-        [{"title": "Hades II", "url": "https://games.example/hades", "date": f"{today.year}-11-20"},
-         {"title": "Next Year Game", "url": "https://games.example/next", "date": f"{today.year + 1}-02-03"}],
-    )
 
 
 
@@ -101,30 +94,30 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
     msg = leisure_ui.leisure_hub_screen(
         [{"title": "Muse", "date": "2026-10-12", "url": "https://t.example"}],
         [{"title": "Дюна", "trailer_url": "https://y.example"}],
-        [{"title": "Книга", "url": "https://b.example"}],
-        [{"title": "Hades II", "url": "https://g.example"}] * 5,
+        [{"title": "Книга", "url": "https://b.example"}] * 5,
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
     assert msg.text.startswith("🍿 Досуг\n\n🎫 Концерты\n• Muse")
-    for title in ("🎟️ Премьеры кино", "📚 Новые книги", "👾 Новые игры", "«Дюна»", "«Книга»"):
+    for title in ("🎟️ Премьеры кино", "📚 Новые книги", "«Дюна»", "«Книга»"):
         assert title in msg.text
-    assert msg.text.count("Hades II") == leisure_ui.LEISURE_HUB_LIMIT
+    assert "игр" not in msg.text
+    assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_LIMIT
     assert {entity.url for entity in msg.entities if entity.url} >= {
-        "https://t.example", "https://y.example", "https://b.example", "https://g.example",
+        "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
-        ["🎬 Подобрать кино"], ["📚 Подобрать книгу"], ["👾 Подобрать игру"],
+        ["🎬 Подобрать кино"], ["📚 Подобрать книгу"],
         ["🎧 Подобрать музыку"], ["#️⃣ Главная", "🎚️ Настроить"],
     ]
 
 
 def test_hub_hides_empty_blocks():
-    only_books = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}], [])
-    empty = leisure_ui.leisure_hub_screen([], [], [], [])
+    only_books = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}])
+    empty = leisure_ui.leisure_hub_screen([], [], [])
 
     assert "📚 Новые книги" in only_books.text
-    for title in ("🎫 Концерты", "🎟️ Премьеры кино", "👾 Новые игры"):
+    for title in ("🎫 Концерты", "🎟️ Премьеры кино"):
         assert title not in only_books.text
         assert title not in empty.text
     assert empty.text.startswith("🍿 Досуг\n\n")
@@ -136,8 +129,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     for module, name in (
         (leisure_concerts, "_fetch_concerts"), (leisure_concerts, "refresh_concerts_cache"),
         (leisure_movies.tmdb, "get_now_playing"), (leisure_movies.tmdb, "get_upcoming_theatrical_releases"),
-        (leisure_books.google_books, "search_new_releases"), (leisure_games.research, "web_search"),
-        (leisure_games.ai, "allm_json"), (leisure_games.igdb, "get_upcoming_games"),
+        (leisure_books.google_books, "search_new_releases"),
     ):
         monkeypatch.setattr(module, name, _boom)
     bot = RecordingBot()
@@ -145,10 +137,10 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 
     text = bot.sent[0]["text"]
-    for value in ("Muse", "«Дюна»", "«Новая книга»", "Hades II"):
+    for value in ("Muse", "«Дюна»", "«Новая книга»"):
         assert value in text
-    # В Досуге только игры текущего года.
-    assert "Next Year Game" not in text
+    # Раздела игр больше нет.
+    assert "Новые игры" not in text and "Подобрать игру" not in str(bot.sent[0]["reply_markup"])
     assert bot.sent[0]["disable_web_page_preview"] is True
 
 
@@ -176,11 +168,10 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_concerts", step("concerts", fail=True))
     monkeypatch.setattr(leisure_hub, "_warm_movie_premieres", step("movies"))
     monkeypatch.setattr(leisure_books, "get_book_premieres", step("books"))
-    monkeypatch.setattr(leisure_games, "get_game_premieres", step("games"))
     monkeypatch.setattr(leisure_movies, "get_current_movie", step("movie_reco"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "games", "movie_reco"]
+    assert calls == ["concerts", "movies", "books", "movie_reco"]
 
 
 def test_premieres_and_library_submenus():
@@ -188,16 +179,16 @@ def test_premieres_and_library_submenus():
     library = leisure_ui.leisure_library_menu()
 
     assert _labels(premieres.reply_markup) == [
-        ["🎟️ Премьеры кино"], ["🆕 Премьеры книг"], ["🆕 Премьеры игр"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎟️ Премьеры кино"], ["🆕 Премьеры книг"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(premieres.reply_markup) == [
-        "movie_premieres", "book_premieres", "vg_premieres", "a_concerts_find", "m_leisure", "m_menu",
+        "movie_premieres", "book_premieres", "a_concerts_find", "m_leisure", "m_menu",
     ]
     assert _labels(library.reply_markup) == [
-        ["🎬 Кино"], ["📚 Книги"], ["👾 Игры"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Кино"], ["📚 Книги"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(library.reply_markup) == [
-        "movie_favorites", "book_favorites", "vg_set", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
+        "movie_favorites", "book_favorites", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
     ]
     for collection in ("cinema_favorites", "books_favorites", "music_favorite_artists"):
         assert cleanup.COLLECTIONS[collection]["back"] == "lz_lib"
@@ -254,7 +245,10 @@ def _dispatch(monkeypatch, data, module, name):
     ("book_next", leisure_books, "_advance_book"),
     ("music_reco", bot_callbacks.leisure_music, "send_listen"),
     ("music_next", bot_callbacks.leisure_music, "listen_next"),
-    ("vg_reco", leisure_games, "send_game_recommendation"),
+    # Старые кнопки игр из истории чата открывают хаб.
+    ("vg_reco", leisure_hub, "send_hub"),
+    ("vg_premieres", leisure_hub, "send_hub"),
+    ("nov_game", leisure_hub, "send_hub"),
 ])
 def test_hub_buttons_route_to_existing_flows(monkeypatch, data, module, name):
     assert len(_dispatch(monkeypatch, data, module, name)) == 1

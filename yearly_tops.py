@@ -7,7 +7,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import config
 import google_books
-import igdb
 import open_library
 import tmdb
 from ui import leisure as leisure_ui
@@ -26,20 +25,6 @@ _BOOKS_2025 = (
     {"title": "One Day, Everyone Will Have Always Been Against This", "author": "Omar El Akkad", "genre": "эссе",
      "summary": "Личное и острое размышление о справедливости, принадлежности и политическом разочаровании."},
 )
-
-_GAMES_2025 = (
-    {"title": "Clair Obscur: Expedition 33", "genre": "RPG",
-     "summary": "Пошаговая RPG с реактивными боями, выразительным миром и сильной историей об обречённой экспедиции."},
-    {"title": "Hades II", "genre": "рогалик · экшен",
-     "summary": "Стремительный мифологический экшен, где каждый новый забег продолжает историю и открывает новые стили боя."},
-    {"title": "Hollow Knight: Silksong", "genre": "метроидвания",
-     "summary": "Точное платформенное приключение с быстрыми боями, сложными маршрутами и загадочным насекомым королевством."},
-    {"title": "Kingdom Come: Deliverance II", "genre": "RPG · открытый мир",
-     "summary": "Приземлённое средневековое приключение, в котором решения, репутация и подготовка важны не меньше владения мечом."},
-    {"title": "Death Stranding 2: On the Beach", "genre": "приключение · экшен",
-     "summary": "Необычное путешествие о связях между людьми с масштабными ландшафтами и глубокой системой доставки."},
-)
-
 
 def previous_year() -> int:
     return datetime.now(config.TZ).year - 1
@@ -73,10 +58,6 @@ async def get_items(kind):
     if kind == "book":
         return await asyncio.gather(*(
             asyncio.to_thread(_enrich_book, item) for item in _BOOKS_2025
-        ))
-    if kind == "game":
-        return await asyncio.gather(*(
-            asyncio.to_thread(igdb.enrich_game_recommendation, item) for item in _GAMES_2025
         ))
     return []
 

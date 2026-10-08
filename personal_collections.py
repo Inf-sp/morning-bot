@@ -33,7 +33,6 @@ _COLLECTIONS = {
     "movies": (config.FAVORITE_MOVIES_KEY, "cinema_favorites"),
     "books": (config.FAVORITE_BOOKS_KEY, "books_favorites"),
     "artists": (config.FAVORITE_ARTISTS_KEY, "music_favorite_artists"),
-    "games": (config.FAVORITE_GAMES_KEY, "games_favorites"),
 }
 
 
@@ -218,7 +217,6 @@ async def love_add_start(bot, cid, key, origin="base"):
         "movies": "фильм или сериал",
         "artists": "артиста",
         "books": "книгу",
-        "games": "игру",
     }[key]
     if key == "books":
         text = (
@@ -229,8 +227,6 @@ async def love_add_start(bot, cid, key, origin="base"):
         text = "Напиши фильм или сериал — добавлю в 🎚️ Моё кино."
     elif key == "artists":
         text = "Напиши артиста — добавлю в 🎚️ Мои артисты."
-    elif key == "games":
-        text = "Напиши игру — добавлю в 🎚️ Мой набор игр."
     else:
         text = f"Напиши {name} — добавлю в любимые."
     await bot.send_message(chat_id=cid, text=text)
@@ -240,7 +236,6 @@ async def _analyze_collection_candidates(key, text):
     kind_rules = {
         "books": "Книги: value строго в формате «Название — Автор»; label содержит название, автора и год.",
         "movies": "Кино: различай фильм и сериал; value строго «Название (фильм, ГГГГ)» или «Название (сериал, ГГГГ)»; label содержит название, тип и год.",
-        "games": "Игры: value содержит только точное официальное название; label содержит название, год и платформу.",
         "artists": "Артисты: value содержит только точное сценическое имя; label содержит имя и короткий отличительный признак.",
     }
     prompt = f"""
@@ -349,7 +344,7 @@ async def _offer_collection_choices(bot, cid, key, text, origin):
         "created_at": now, "choices": choices,
     }
     names = {"books": "книгу", "movies": "фильм или сериал",
-             "games": "игру", "artists": "артиста"}
+             "artists": "артиста"}
     rows = [[InlineKeyboardButton(
         item["label"], callback_data=f"collection_pick:{token}:{index}",
     )] for index, item in enumerate(choices)]
@@ -391,11 +386,6 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
 
         await leisure_books.offer_manual_favorite_book(bot, cid, text, origin)
         return
-    if key == "games" and not confirmed:
-        import leisure_games
-
-        await leisure_games.offer_manual_favorite_game(bot, cid, text, origin)
-        return
     if not confirmed and key in {"movies", "artists"}:
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
@@ -427,27 +417,6 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
                 text="Не получилось подтвердить этот фильм или сериал. Уточни название и год.",
             )
             return
-    elif key == "games":
-        import asyncio
-        import leisure_games
-
-        items = [leisure_games.normalize_favorite_game(item) for item in items]
-        items = [item for item in items if item]
-        items = await asyncio.gather(*(
-            asyncio.to_thread(leisure_games.enrich_favorite_game, item)
-            for item in items
-        ))
-        items = [
-            item for item in items
-            if item.get("platforms") and item.get("genres")
-        ]
-        if not items:
-            store.pending_input[str(cid)] = "loveadd_games"
-            await bot.send_message(
-                chat_id=cid,
-                text="Не получилось подтвердить эту игру. Уточни полное название или год выпуска.",
-            )
-            return
     elif key != "books":
         items = [plain_label(item) for item in items if plain_label(item)]
     existing = {
@@ -471,12 +440,6 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
         import leisure_movies
 
         await leisure_movies.send_favorite_movies_added_card(bot, cid, added)
-        return
-    if key == "games" and added:
-        import leisure_games
-
-        leisure_games._reset_game_daily(cid)
-        await leisure_games.send_favorite_games_added_card(bot, cid, added)
         return
     if key == "books" and added:
         import leisure_books

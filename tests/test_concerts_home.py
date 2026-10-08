@@ -226,7 +226,6 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
     monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: [festival])
     monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
     monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
-    monkeypatch.setattr(leisure_concerts.leisure_games, "get_game_premieres", lambda _cid: _async([]))
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
     assert "Romy" in msg.text
@@ -260,7 +259,6 @@ def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypa
     monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: other_events)
     monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
     monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
-    monkeypatch.setattr(leisure_concerts.leisure_games, "get_game_premieres", lambda _cid: _async([]))
 
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
@@ -287,7 +285,6 @@ def test_weekly_events_notification_has_category_buttons(monkeypatch):
         [("🎬 Кино", "movie_premieres")],
         [("🎫 Концерты", "a_concerts_find")],
         [("📚 Книги", "book_premieres")],
-        [("👾 Игры", "vg_premieres")],
         [("#️⃣ Главная", "m_menu")],
     ]
     assert sent[0]["disable_web_page_preview"] is True

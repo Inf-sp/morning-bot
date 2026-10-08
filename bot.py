@@ -27,7 +27,6 @@ import learning
 import settings
 import leisure_movies
 import leisure_books
-import leisure_games
 import leisure_collection
 import leisure_concerts
 import weather
@@ -389,18 +388,6 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 @ai.background_job
-async def job_warm_game_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Ночью готовит игровые премьеры под платформы каждого пользователя."""
-    for cid in access.get_allowed_cids():
-        if tracking.has_active_actions():
-            logging.info("game premieres warm skipped: user action active")
-            return
-        try:
-            await leisure_games.warm_game_premieres_cache(cid)
-        except Exception:
-            logging.exception("job_warm_game_premieres_cache failed for cid=%s", cid)
-
-
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words"):
@@ -660,10 +647,6 @@ def _build_application():
     jq.run_daily(
         job_warm_book_premieres_cache, time=_t("02:20"), days=(0,),
         **_job_options("book_premieres_cache_weekly"),
-    )
-    jq.run_daily(
-        job_warm_game_premieres_cache, time=_t("02:30"), days=(0,),
-        **_job_options("game_premieres_cache_weekly"),
     )
     jq.run_daily(
         job_refresh_concerts_cache, time=_t("09:00"), days=(4,),

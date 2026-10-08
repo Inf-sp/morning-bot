@@ -12,7 +12,6 @@ import ai
 import api_usage
 import config
 import leisure_books
-import leisure_games
 import leisure_movies
 import provider_runtime
 import rich_delivery
@@ -1161,10 +1160,9 @@ async def _build_weekly_events_msg(cid):
     results = await asyncio.gather(
         leisure_movies.get_movie_premieres(cid),
         leisure_books.get_book_premieres(),
-        leisure_games.get_game_premieres(cid),
         return_exceptions=True,
     )
-    labels = ("movie", "book", "game")
+    labels = ("movie", "book")
     loaded = {}
     for label, result in zip(labels, results):
         if isinstance(result, Exception):
@@ -1174,7 +1172,7 @@ async def _build_weekly_events_msg(cid):
             loaded[label] = list(result or [])
 
     return leisure_ui.weekly_events_card(
-        loaded["movie"], concert_items, loaded["book"], loaded["game"],
+        loaded["movie"], concert_items, loaded["book"],
     )
 
 
@@ -1184,8 +1182,7 @@ async def send_weekend_events(bot, cid):
     kb = settings.notification_markup("weekend_events", [
         [InlineKeyboardButton("🎬 Кино", callback_data="movie_premieres"),
          InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
-        [InlineKeyboardButton("📚 Книги", callback_data="book_premieres"),
-         InlineKeyboardButton("👾 Игры", callback_data="vg_premieres")],
+        [InlineKeyboardButton("📚 Книги", callback_data="book_premieres")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await bot.send_message(

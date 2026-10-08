@@ -15,7 +15,6 @@ def test_external_showcases_have_automatic_refresh_jobs(monkeypatch):
     assert {
         "movie_premieres_cache_weekly",
         "book_premieres_cache_weekly",
-        "game_premieres_cache_weekly",
         "concerts_cache_weekly",
     } <= names
 

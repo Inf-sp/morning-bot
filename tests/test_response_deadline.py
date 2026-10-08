@@ -376,10 +376,9 @@ def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
     assert retries[0][1]["data"] == "myday"
 
 
-def test_nightly_premieres_warm_movies_books_and_games(monkeypatch):
+def test_nightly_premieres_warm_movies_and_books(monkeypatch):
     movie_calls = []
     book_calls = []
-    game_calls = []
 
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42", "43", "44"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
@@ -394,38 +393,17 @@ def test_nightly_premieres_warm_movies_books_and_games(monkeypatch):
     async def warm_books():
         book_calls.append(True)
 
-    async def warm_games(cid):
-        game_calls.append(cid)
-
     monkeypatch.setattr(bot.leisure_movies, "warm_movie_premieres_cache", warm_movie)
     monkeypatch.setattr(bot.leisure_books, "warm_book_premieres_cache", warm_books)
-    monkeypatch.setattr(bot.leisure_games, "warm_game_premieres_cache", warm_games)
     monkeypatch.setattr(bot.settings, "notif_on", lambda *_args: True)
 
     asyncio.run(bot.job_warm_movie_premieres_cache(object()))
     asyncio.run(bot.job_warm_book_premieres_cache(object()))
-    asyncio.run(bot.job_warm_game_premieres_cache(object()))
 
     assert movie_calls == ["42", "44"]
     assert book_calls == [True]
-    assert game_calls == ["42", "43", "44"]
 
 
-def test_nightly_game_premieres_warm_without_weekend_notification(monkeypatch):
-    calls = []
-
-    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
-    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
-    monkeypatch.setattr(bot.settings, "notif_on", lambda *_args: False)
-
-    async def warm(cid):
-        calls.append(cid)
-
-    monkeypatch.setattr(bot.leisure_games, "warm_game_premieres_cache", warm)
-
-    asyncio.run(bot.job_warm_game_premieres_cache(object()))
-
-    assert calls == ["42"]
 
 
 def _patch_mutate_kv(monkeypatch, store):

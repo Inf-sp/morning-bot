@@ -1,7 +1,7 @@
-"""«Новинка» в меню «Выбрать жанр»: премьера кино, книги, игры или свежий альбом.
+"""«Новинка» в меню «Выбрать жанр»: премьера кино, книги или свежий альбом.
 
 Данные — только из реальных источников, которые уже собирает бот (TMDB,
-книжная и игровая витрины премьер) и Apple Music для музыки. Показанные новинки
+книжная витрина премьер) и Apple Music для музыки. Показанные новинки
 идут по кругу без повторов; «Не нравится» убирает новинку навсегда.
 """
 import asyncio
@@ -13,7 +13,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import apple_music
 import leisure_books
-import leisure_games
 import leisure_movies
 import leisure_music
 import recommendation_rotation as rotation
@@ -25,10 +24,10 @@ from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
 
-KINDS = ("movie", "book", "game", "music")
+KINDS = ("movie", "book", "music")
 _OTHER_LABEL = {
     "movie": "✨ Другой фильм", "book": "✨ Другая книга",
-    "game": "✨ Другая игра", "music": "✨ Другой артист",
+    "music": "✨ Другой артист",
 }
 
 
@@ -38,11 +37,9 @@ def genre_picker(cid, kind, back="m_leisure"):
         return leisure_movies._movie_genre_menu_kb(back=back)
     if kind == "book":
         return leisure_books._book_genre_menu_kb(back=back)
-    if kind == "game":
-        return leisure_games._genre_keyboard(back=back)
     return leisure_music._music_genre_menu_kb(cid, back=back)
 # Тип записи стоп-листа: альбом музыки не должен скрывать артиста.
-_STOP_KIND = {"movie": "movie", "book": "book", "game": "game", "music": "album"}
+_STOP_KIND = {"movie": "movie", "book": "book", "music": "album"}
 _SEEN_KEY = "novelty_seen"
 _SEEN_LIMIT = 50
 
@@ -64,8 +61,6 @@ async def _items(cid, kind) -> list[dict]:
                 if str(item.get("date") or "")[:10] <= today]
     if kind == "book":
         return [dict(item) for item in await leisure_books._book_premieres_with_covers()]
-    if kind == "game":
-        return [dict(item) for item in await leisure_games.get_game_premieres(cid)]
     styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)
     cc = str(store.get_settings(cid).get("cc") or "nl")
     # Одна лента страны на все жанры: после первого запроса остальные берут её из кэша.

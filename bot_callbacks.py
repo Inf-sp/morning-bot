@@ -16,7 +16,6 @@ import learning_settings
 import learning_router
 import leisure_books
 import leisure_concerts
-import leisure_games
 import leisure_hub
 import leisure_movies
 import leisure_music
@@ -70,8 +69,6 @@ def _status_stages(data):
         return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
     elif data.startswith(("game", "a_game")):
         return progress("🕵️ Ищу загадку...", "📖 Проверяю текст...", "🧩 Собираю загадку...")
-    elif data.startswith("vg_"):
-        return progress("👾 Ищу игру...", "🎮 Сверяю платформы...", "📝 Готовлю карточку...")
     elif data.startswith(("a_dict", "word_")):
         return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "📝 Готовлю карточку...")
     elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
@@ -259,7 +256,7 @@ async def _action(c):
 
 async def _yearly_tops(c):
     _prefix, kind, page = c.data.split(":", 2)
-    if kind not in ("movie", "tv", "book", "game"):
+    if kind not in ("movie", "tv", "book"):
         return
     if page == "open":
         await c.status(lambda status: yearly_tops.send(c.bot, c.cid, kind, status=status))
@@ -268,32 +265,12 @@ async def _yearly_tops(c):
         await yearly_tops.show_page(c.q, kind, int(page))
 
 
-def _games(**kwargs):
-    return lambda c: c.status(lambda status: leisure_games.send_game_recommendation(
-        c.bot, c.cid, status=status, **kwargs))
-
-
-def _games_genre(prefix, **kwargs):
-    return lambda c: c.status(lambda status: leisure_games.send_game_recommendation(
-        c.bot, c.cid, status=status, refresh=True, genre=c.data[len(prefix):], **kwargs))
-
-
 def _food_recipe(c):
     """food_go_<приём пищи>_<кухня|any>: новый рецепт под выбор, предпочтения не меняются."""
     meal, _sep, cuisine = c.data[len("food_go_"):].partition("_")
     return c.status(lambda status: menu.send_food_menu(
         c.bot, c.cid, status=status, refresh=True, meal=meal,
         cuisine=None if cuisine in ("", "any") else cuisine))
-
-
-def _games_on_platform(c):
-    """vg_pg_<платформа>_<жанр|any>: подбор на выбранной платформе, без сохранения выбора."""
-    platform, _sep, genre = c.data[len("vg_pg_"):].partition("_")
-    board = platform == "board"
-    _label, platforms = leisure_games.PLATFORM_GROUPS.get(platform, ("", None))
-    return c.status(lambda status: leisure_games.send_game_recommendation(
-        c.bot, c.cid, status=status, refresh=True, genre=None if genre in ("", "any") else genre,
-        board=board, platforms=None if board else platforms))
 
 
 def _card_args(c):
@@ -359,8 +336,11 @@ ROUTES = (
         c.bot, c.cid, c.q, c.data), sub="personal_collections"),
     R(("book_add_ok:*", "book_add_next:*"), lambda c: leisure_books.handle_manual_book_add_callback(
         c.bot, c.cid, c.q, c.data)),
-    R(("game_add_ok:*", "game_add_next:*"), lambda c: leisure_games.handle_manual_game_add_callback(
-        c.bot, c.cid, c.q, c.data)),
+    # Раздела игр больше нет: старые кнопки игр из истории чата открывают хаб «Досуг».
+    R(("game_add_ok:*", "game_add_next:*", "game_premiere_page:*", "game_prefs", "game_love",
+       "game_no", "vg_*",
+       "nov_game", "nov_pick_game", "nov_card_game", "nov_no_game", "lz_cfg_game"),
+      lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     # Старые callbacks карточек не меняют данные и ведут к актуальному экрану.
     R("fav_*", lambda c: personal_collections.handle_collection_callback(
         c.bot, c.cid, c.q, c.data), sub="personal_collections"),
@@ -469,36 +449,10 @@ ROUTES = (
     R("music_task_*", lambda c: c.status(lambda status: leisure_music.send_music_task(
         c.bot, c.cid, c.data[len("music_task_"):], status=status))),
     R("music_genre_menu", _acked(lambda c: leisure_music.send_music_genre_menu(c.bot, c.cid, c.q))),
-    # Игры: «Во что поиграть» — подбор недели; «✨ Другая игра» — vg_next.
-    R("vg_reco", _games()),
-    R("vg_set", lambda c: leisure_games.send_game_set(c.bot, c.cid, q=c.q)),
     # «Настроить» под карточкой Досуга: настройки раздела новым сообщением, карточка остаётся.
     R("lz_cfg_movie", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid)),
     R("lz_cfg_book", lambda c: leisure_books.send_favorite_books(c.bot, c.cid)),
-    R("lz_cfg_game", lambda c: leisure_games.send_game_set(c.bot, c.cid)),
     R("lz_cfg_music", lambda c: cleanup.open_collection(c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
-    R("vg_setg:*", lambda c: leisure_games.send_game_set_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
-    R("vg_seti:*", lambda c: leisure_games.send_game_set_card(c.bot, c.cid, *_card_args(c))),
-    R("vg_setd:*", lambda c: leisure_games.confirm_game_set_delete(c.bot, c.cid, *_card_args(c), q=c.q)),
-    R("vg_setdok:*", lambda c: leisure_games.delete_game_set_item(c.bot, c.cid, *_token_id(c), q=c.q)),
-    R("vg_board", _picked(_games(refresh=True, genre="board"))),
-    R("vg_next", _picked(_games(refresh=True))),
-    R("vg_next_*", _picked(_games_genre("vg_next_"))),
-    # «Другая игра»: сначала на чём играть (vg_plat_*), затем жанр (vg_pg_<платформа>_<жанр|any>).
-    R("vg_pick_b", _swap_kb(lambda c: leisure_games._platform_keyboard(back="vg_card_b"))),
-    R("vg_pick", _swap_kb(lambda c: leisure_games._platform_keyboard(back="vg_card"))),
-    R("vg_plat_*", _swap_kb(lambda c: leisure_games._genre_keyboard(
-        platform=c.data[len("vg_plat_"):], back="vg_pick"))),
-    R("vg_pg_*", _picked(_games_on_platform)),
-    R("vg_card_b", _swap_kb(lambda c: leisure_games._game_keyboard(board=True))),
-    R("vg_card", _swap_kb(lambda c: leisure_games._game_keyboard())),
-    R("vg_premieres", lambda c: c.status(
-        lambda status: leisure_games.send_game_premieres(c.bot, c.cid, status=status))),
-    R("game_premiere_page:*", lambda c: leisure_games.show_game_premiere_page(c.cid, c.q, _page(c))),
-    R("vg_genres", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q))),
-    R("vg_genres_board", _acked(lambda c: leisure_games.send_game_genres(c.bot, c.cid, c.q, board=True))),
-    R("vg_gb_*", _picked(_games_genre("vg_gb_", board=True))),
-    R("vg_g_*", _picked(_games_genre("vg_g_"))),
     R("music_g_*", _picked(lambda c: c.status(lambda status: leisure_music.send_music_by_genre(
         c.bot, c.cid, c.data[len("music_g_"):], status=status)))),
     # Избранное кино и книги.
@@ -517,7 +471,6 @@ ROUTES = (
     R("bfdok:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_token_id(c), q=c.q)),
     # Предпочтения.
     R("book_prefs", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
-    R("game_prefs", lambda c: leisure_games.send_game_preferences(c.bot, c.cid, c.q)),
     R("bookpref_*", _acked(lambda c: leisure_books.toggle_book_preference(c.bot, c.cid, c.data, c.q))),
     R("artist_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
@@ -547,8 +500,6 @@ ROUTES = (
     # Реакции на карточки.
     R("movie_love_*", lambda c: leisure_movies.movie_love(c.bot, c.cid, _tail_int(c), c.q)),
     R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
-    R("game_love", lambda c: leisure_games.game_love(c.bot, c.cid, c.q)),
-    R("game_no", lambda c: c.status(lambda status: leisure_games.game_dislike(c.bot, c.cid, status=status))),
     # «Новинка» из выбора жанра: nov_pick_*, nov_card_* и nov_no_* раньше nov_*.
     R("nov_pick_*", _swap_kb(lambda c: leisure_novelty.genre_picker(
         c.cid, c.data[len("nov_pick_"):], back=f"nov_card_{c.data[len('nov_pick_'):]}"))),

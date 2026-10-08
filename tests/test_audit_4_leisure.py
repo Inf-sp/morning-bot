@@ -61,17 +61,24 @@ def test_tmdb_error_body_is_not_returned_as_data(monkeypatch):
     assert tmdb._get("/movie/1", {}) is None
 
 
-def test_legacy_games_collection_callback_opens_games_list(monkeypatch):
+def test_legacy_games_collection_callback_no_longer_opens_games(monkeypatch):
+    # Раздела игр больше нет: старая кнопка ведёт в Настройки, а не в список игр.
     calls = []
 
-    async def open_collection(_bot, _cid, collection_id, back=None):
-        calls.append((collection_id, back))
+    async def open_collection(*_args, **_kwargs):
+        calls.append("collection")
+
+    async def send_home(_bot, _cid, *_args, **_kwargs):
+        calls.append("settings")
+
+    import settings
 
     monkeypatch.setattr(cleanup, "open_collection", open_collection)
+    monkeypatch.setattr(settings, "send_home", send_home)
 
     asyncio.run(personal_collections.handle_collection_callback(object(), "42", None, "as_love_games"))
 
-    assert calls == [("games_favorites", "lz_lib")]
+    assert calls == ["settings"]
 
 
 def test_yearly_top_counter_matches_the_number_of_found_items():

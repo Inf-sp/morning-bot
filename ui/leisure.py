@@ -88,253 +88,10 @@ def favorite_book_delete_confirmation(title):
     return b.build_stripped()
 
 
-def game_set_home(total, genres):
-    b = MessageBuilder()
-    b.title(f"🎚️ Мой набор игр · {total} {_pluralize_games(total)}")
-    for group in genres or []:
-        names = [str(name or "").strip() for name in group.get("names") or [] if str(name or "").strip()]
-        if not names:
-            continue
-        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
-        b.newline()
-        b.line(", ".join(names))
-        b.spacer()
-    if not total:
-        b.line("Добавь любимые игры — следующие рекомендации станут точнее.")
-    return b.build_stripped()
-
-
-def _pluralize_games(n):
-    return ru_plural(n, "игра", "игры", "игр")
-
-
-def game_set_card(data):
-    data = data or {}
-    b = MessageBuilder()
-    b.text_line("👾 ")
-    b.bold(str(data.get("name") or "Игра"))
-    b.newline()
-    meta = [str(data.get("genre_label") or "").strip()]
-    if data.get("year"):
-        meta.append(str(data["year"]))
-    platforms = " · ".join(str(value) for value in data.get("platform_labels") or [])
-    if platforms:
-        meta.append(platforms)
-    meta = [value for value in meta if value]
-    if meta:
-        b.spacer()
-        b.line(" · ".join(meta))
-    if data.get("description"):
-        b.spacer()
-        b.line(str(data["description"]).strip())
-    return b.build_stripped()
-
-
-def game_delete_confirmation(name):
-    b = MessageBuilder()
-    b.line(f"Удалить «{str(name or 'Игра').strip()}»?")
-    return b.build_stripped()
-
-
-def favorite_game_added_card(data):
-    b = MessageBuilder()
-    b.line("✅ Добавлена в «🎚️ Мой набор игр»")
-    b.spacer()
-    b.bold(str((data or {}).get("name") or "Игра"))
-    b.newline()
-    meta = [str((data or {}).get("genre_label") or "").strip()]
-    platforms = " · ".join(str(value) for value in (data or {}).get("platform_labels") or [])
-    if platforms:
-        meta.append(platforms)
-    if (data or {}).get("year"):
-        meta.append(str(data["year"]))
-    meta = [value for value in meta if value]
-    if meta:
-        b.line(" · ".join(meta))
-    return b.build_stripped()
-
-
-def game_card(data):
-    """Компактная рекомендация игры в том же ритме, что кино и музыка."""
-    data = data or {}
-    b = MessageBuilder()
-    if not data:
-        b.section("👾 Игра не нашлась")
-        b.line("Для выбранных платформ пока нет варианта в этом жанре.")
-        return b.build_stripped()
-    platforms = " · ".join(str(value) for value in data.get("platform_labels") or [])
-    b.text_line("👾 ")
-    b.bold("Игра для тебя" + (f" · {platforms}" if platforms else ""))
-    b.newline()
-    b.spacer()
-    name = str(data.get("name") or "Игра")
-    trailer_url = str(data.get("trailer_url") or "").strip()
-    if trailer_url:
-        b.link(name, trailer_url)
-    else:
-        b.bold(name)
-    meta = [str(data.get("genre_label") or "").strip()]
-    try:
-        year = int(data.get("year") or 0)
-    except (TypeError, ValueError):
-        year = 0
-    try:
-        rating = float(data.get("rating") or 0)
-    except (TypeError, ValueError):
-        rating = 0
-    if rating:
-        meta.append(f"⭐ {rating:.1f}/10")
-    meta = [value for value in meta if value]
-    if meta:
-        b.text_line(f" · {' · '.join(meta)}")
-    b.newline()
-    if year:
-        b.labeled_line("Дата выхода", str(year), lowercase=False)
-    if data.get("lgbt"):
-        b.line("🏳️‍🌈 ЛГБТ")
-    description = str(data.get("description") or "").strip()
-    if description:
-        b.spacer()
-        b.line(description)
-    reasons = [str(value).strip() for value in data.get("reasons") or [] if str(value).strip()]
-    if reasons:
-        b.spacer()
-        b.bold("Почему тебе:")
-        b.newline()
-        for reason in reasons[:2]:
-            b.bullet(reason)
-    start = str(data.get("start") or "").strip()
-    if start:
-        b.spacer()
-        b.labeled_line("С чего начать", start, lowercase=False)
-    return b.build_stripped()
-
-
-def board_game_card(data):
-    """Текстовая карточка настолки: заголовок → мета → о чём → почему → старт."""
-    data = data or {}
-    b = MessageBuilder()
-    if not data:
-        b.section("🎲 Настолка не нашлась")
-        b.line("В этом жанре пока нет варианта.")
-        return b.build_stripped()
-    b.text_line("🎲 ")
-    b.bold("Настолка для тебя")
-    b.newline()
-    b.spacer()
-    name = str(data.get("name") or "Настолка")
-    trailer_url = str(data.get("trailer_url") or "").strip()
-    if trailer_url:
-        b.link(name, trailer_url)
-    else:
-        b.bold(name)
-    b.newline()
-    meta = []
-    try:
-        rating = float(data.get("rating") or 0)
-    except (TypeError, ValueError):
-        rating = 0
-    if rating:
-        meta.append(f"⭐ {rating:.1f}")
-    meta.extend(str(value) for value in data.get("genre_labels") or [] if str(value).strip())
-    if data.get("year"):
-        meta.append(str(data["year"]))
-    if data.get("is_new"):
-        meta.append("🆕 Новинка")
-    if data.get("lgbt"):
-        meta.append("🏳️‍🌈 ЛГБТ")
-    if meta:
-        b.line(" · ".join(meta[:5]))
-    description = str(data.get("description") or "").strip()
-    if description:
-        b.spacer()
-        b.line(description)
-    reasons = [str(value).strip() for value in data.get("reasons") or [] if str(value).strip()]
-    if reasons:
-        b.spacer()
-        b.bold("Почему стоит:")
-        b.newline()
-        for reason in reasons[:2]:
-            b.bullet(reason)
-    start = str(data.get("start") or "").strip()
-    if start:
-        b.spacer()
-        b.labeled_line("С чего начать", start, lowercase=False)
-    return b.build_stripped()
-
-
-def game_genres_screen():
-    b = MessageBuilder()
-    b.section("🎭 Жанр игры")
-    b.line("Выбери настроение — подберу игру для твоих платформ.")
-    return b.build_stripped()
-
-
-def game_preferences(current, recency, rating):
-    b = MessageBuilder()
-    b.section("👾 Игры")
-    b.line("Это приоритеты для рекомендаций и премьер, а не жёсткие ограничения.")
-    b.spacer()
-    b.labeled_line(
-        "Платформы", " · ".join(current) if current else "все популярные", lowercase=False,
-    )
-    b.labeled_line("Период", recency or "Любые годы", lowercase=False)
-    b.labeled_line("Рейтинг", rating or "любая", lowercase=False)
-    return b.build_stripped()
-
-
-_PLATFORM_EMOJI_RE = re.compile(r"[^\w\s·,/+.-]+\s*")
-
-
-def _plain_platforms(value) -> str:
-    """«💻 ПК · 🎮 PS5» → «ПК · PS5»: у новых игр платформы без эмодзи."""
-    return " ".join(_PLATFORM_EMOJI_RE.sub("", str(value or "")).split())
-
-
-def game_premieres_screen(items):
-    b = MessageBuilder()
-    b.section("🎮 Премьеры игр")
-    if not items:
-        b.line("Пока не удалось подтвердить ближайшие релизы.")
-        return b.build_stripped()
-    for item in items[:7]:
-        card = MessageBuilder()
-        title = str(item.get("title") or "").strip()
-        if not title:
-            continue
-        url = str(item.get("trailer_url") or item.get("url") or "").strip()
-        if url:
-            card.link(title, url)
-        else:
-            card.bold(title)
-        card.newline()
-        meta = " · ".join(
-            str(value).strip()
-            for value in (item.get("date_label"), _plain_platforms(item.get("platform_label")),
-                          item.get("genre"))
-            if str(value or "").strip()
-        )
-        if meta:
-            card.line(meta)
-        summary = _movie_premiere_summary(item.get("summary"), limit=90)
-        if summary:
-            if summary[-1] not in ".!?…":
-                summary += "."
-            card.line(summary)
-        card = card.build_stripped()
-        # Подпись нативной Telegram-галереи ограничена 1024 UTF-16 единицами.
-        # Последнюю карточку не обрываем: она либо помещается целиком, либо не
-        # попадает в подпись альбома.
-        if u16_len(b.text) + 2 + u16_len(card.text) > 1024:
-            break
-        b.embed(card)
-    return b.build_stripped()
-
-
 def yearly_top_screen(kind, year, item):
     labels = {
         "movie": "Фильмы", "tv": "Сериалы",
-        "book": "Книги", "game": "Игры",
+        "book": "Книги",
     }
     b = MessageBuilder()
     b.section(f"🏆 Топ-5 · {labels.get(kind, 'Лучшее')} {year}")
@@ -1177,26 +934,13 @@ def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     return bool(rows)
 
 
-def _game_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    rows = [item for item in list(items or []) if item.get("title")][:limit]
-    if rows:
-        b.section(title)
-    for item in rows:
-        _weekly_item(
-            b, item.get("title"), item.get("trailer_url") or item.get("url"),
-            (item.get("genre"), _event_date_label(item.get("date")) or item.get("date_label"),
-             _plain_platforms(item.get("platform_label"))),
-        )
-    return bool(rows)
-
-
 def _event_sections(b: MessageBuilder, sections) -> bool:
     """Пишет блоки (заголовок, writer, items, limit); пустой блок скрыт."""
     added = [writer(b, title, items, limit) for title, writer, items, limit in sections]
     return any(added)
 
 
-def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
+def weekly_events_card(movies, concerts, books) -> MessageSpec:
     """Одна строка на событие; для концертов — до шести ближайших афиш."""
     b = MessageBuilder()
     b.title("🎲 Ближайшие события")
@@ -1204,7 +948,6 @@ def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
         ("🎬 Кино", _movie_event_rows, movies, 3),
         ("🎫 Концерты", _concert_event_rows, concerts, 6),
         ("📚 Книги", _book_event_rows, books, 3),
-        ("👾 Игры", _game_event_rows, games, 3),
     )):
         b.line("Пока нет подтверждённых премьер и событий.")
     return b.build_stripped()
@@ -1213,7 +956,7 @@ def weekly_events_card(movies, concerts, books, games) -> MessageSpec:
 LEISURE_HUB_LIMIT = 3
 
 
-def leisure_hub_screen(concerts, movies, books, games, reply_markup=None) -> MessageSpec:
+def leisure_hub_screen(concerts, movies, books, reply_markup=None) -> MessageSpec:
     """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты."""
     b = MessageBuilder()
     b.title(ui_label("leisure", "Досуг"))
@@ -1221,9 +964,8 @@ def leisure_hub_screen(concerts, movies, books, games, reply_markup=None) -> Mes
         ("🎫 Концерты", _concert_event_rows, concerts, LEISURE_HUB_LIMIT),
         ("🎟️ Премьеры кино", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
         ("📚 Новые книги", _book_event_rows, books, LEISURE_HUB_LIMIT),
-        ("👾 Новые игры", _game_event_rows, games, LEISURE_HUB_LIMIT),
     )):
-        b.line("Выбери, что посмотреть, почитать, поиграть или послушать.")
+        b.line("Выбери, что посмотреть, почитать или послушать.")
     return b.build_stripped(reply_markup=reply_markup)
 
 
@@ -1239,7 +981,6 @@ def leisure_hub_kb():
     rows = _column_kb((
         ("🎬 Подобрать кино", "movie_reco"),
         ("📚 Подобрать книгу", "book_reco"),
-        ("👾 Подобрать игру", "vg_reco"),
         ("🎧 Подобрать музыку", "music_reco"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
@@ -1255,7 +996,6 @@ def leisure_premieres_menu() -> MessageSpec:
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
         ("🎟️ Премьеры кино", "movie_premieres"),
         ("🆕 Премьеры книг", "book_premieres"),
-        ("🆕 Премьеры игр", "vg_premieres"),
         ("🎫 Концерты", "a_concerts_find"),
     )).inline_keyboard, nav_row("m_leisure")]))
 
@@ -1263,11 +1003,10 @@ def leisure_premieres_menu() -> MessageSpec:
 def leisure_library_menu() -> MessageSpec:
     b = MessageBuilder()
     b.title("🎚️ Моя библиотека")
-    b.line("Любимое кино, книги, игры и артисты — по ним подбираю рекомендации.")
+    b.line("Любимое кино, книги и артисты — по ним подбираю рекомендации.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
         ("🎬 Кино", "movie_favorites"),
         ("📚 Книги", "book_favorites"),
-        ("👾 Игры", "vg_set"),
         ("🎧 Музыка", "artist_favorites"),
         ("🎫 Концерты", "a_concerts_find"),
     )).inline_keyboard, nav_row("m_leisure")]))
@@ -1277,7 +1016,6 @@ def leisure_library_menu() -> MessageSpec:
 _NOVELTY_EMPTY = {
     "movie": "Свежих премьер в кино пока нет — загляни позже.",
     "book": "Свежих книжных премьер пока нет — загляни позже.",
-    "game": "Свежих игровых премьер пока нет — загляни позже.",
     "music": "Свежих альбомов в твоих жанрах пока нет — загляни позже.",
 }
 
@@ -1292,16 +1030,11 @@ def _novelty_status(kind, item) -> str:
     """Плашка новинки: идёт сейчас или выходит позже, дата — как в хабе."""
     day = _parse_event_date(str(_item_value(item, "date", "") or _item_value(item, "published_date", ""))[:10])
     label = _event_date_label(day.isoformat()) if day else ""
-    released = day is not None and day <= date.today()
     if kind == "movie":
         # В «Новинку» попадают только вышедшие фильмы; дата премьеры — в строке жанров.
         return "🎬 Уже в кино"
     if kind == "book":
         return f"📚 Новая книга · {label}" if label else "📚 Новая книга"
-    if kind == "game":
-        if not label:
-            return "👾 Новая игра"
-        return f"👾 Вышла {label}" if released else f"👾 Выходит {label}"
     return f"🎧 Новый альбом · {label}" if label else "🎧 Новый альбом"
 
 
@@ -1329,9 +1062,6 @@ def novelty_card(kind, item) -> MessageSpec:
     elif kind == "book":
         meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]
         summary = _book_premiere_summary(str(_item_value(item, "summary", "") or ""), limit=300)
-    elif kind == "game":
-        meta = [str(item.get("genre") or ""), _plain_platforms(item.get("platform_label"))]
-        summary = str(item.get("summary") or "")
     else:
         meta = []
         summary = ""

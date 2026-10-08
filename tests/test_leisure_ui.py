@@ -11,7 +11,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import cleanup
 import config
 import leisure_books
-import leisure_games
 import leisure_movies
 import movie_discovery
 import movie_recommendation
@@ -42,7 +41,6 @@ def test_recommendation_cards_have_no_refresh_label():
         (leisure_movies._movie_kb(0), "✨ Другой фильм", "movie_pick_0"),
         (leisure_books._book_kb(0), "✨ Другая книга", "book_pick_0"),
         (leisure_music._listen_kb(), "✨ Другой артист", "music_pick"),
-        (leisure_games._game_keyboard(), "✨ Другая игра", "vg_pick"),
     ):
         first = keyboard.inline_keyboard[0][0]
         assert (first.text, first.callback_data) == (other, callback)
@@ -53,7 +51,6 @@ def test_recommendation_cards_have_no_refresh_label():
         (leisure_movies._movie_kb(3), "movie_no_3"),
         (leisure_books._book_kb(3), "book_no_3"),
         (leisure_music._listen_kb(), "listen_no"),
-        (leisure_games._game_keyboard(), "game_no"),
     ):
         dislike = keyboard.inline_keyboard[-3][0]
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
@@ -87,7 +84,7 @@ def test_global_preferences_has_all_recommendation_sections():
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
-        ["🎬 Кино"], ["📚 Книги"], ["👾 Игры"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -772,10 +769,6 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
         ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
         ["Триллер"], ["Романтика"], ["Драма"],
     ]
-    assert _labels(leisure_games._genre_keyboard())[:-1] == [
-        ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
-        ["Приключения"], ["Уютные"], ["Хоррор"],
-    ]
 
 
 def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
@@ -1006,27 +999,18 @@ def test_weekly_events_are_one_line_per_item_across_all_categories():
             "url": f"https://example.com/book/{index}",
             "summary": "Описание не должно попасть в рассылку.",
         } for index in items],
-        [{
-            "title": f"Игра {index}", "genre": "RPG", "date_label": "1 сентября 2026",
-            "platform_label": "💻 ПК", "url": f"https://example.com/game/{index}",
-            "trailer_url": f"https://www.youtube.com/watch?v=game{index}",
-            "summary": "Описание не должно попасть в рассылку.",
-        } for index in items],
     )
 
     assert message.text.startswith("🎲 Ближайшие события\n\n🎬 Кино")
     assert message.text.count("• «Фильм") == 3
     assert message.text.count("• Концерт") == 6
     assert message.text.count("• «Книга") == 3
-    assert message.text.count("• Игра") == 3
+    assert "Игр" not in message.text
     assert "• «Фильм 0» · драма\n" in message.text
     assert "⭐" not in message.text.split("🎫")[0]
     assert "«Книга 0» · Фэнтези · ⭐ 4.4/5" in message.text
     assert "Описание не должно" not in message.text
-    assert "https://www.youtube.com/watch?v=game0" in {
-        entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK
-    }
-    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 15
+    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 12
 
 
 def test_movie_premieres_fit_one_message_without_cutting_descriptions():
@@ -1273,13 +1257,6 @@ def test_book_premiere_summary_is_separated_from_date_by_blank_line():
     assert "Премьера: 1 сентября 2026\n\nИстория двух братьев" in text
 
 
-def test_new_game_cards_show_platforms_without_emoji():
-    item = {"title": "Игра", "genre": "RPG", "platform_label": "💻 ПК · 🎮 PS5", "date": "2026-11-01"}
-
-    novelty = leisure_movies.leisure_ui.novelty_card("game", item)
-
-    assert "ПК · PS5" in novelty.text
-    assert "💻" not in novelty.text and "🎮" not in novelty.text
 
 
 def test_other_opens_plain_genre_picker_and_back_returns_card_buttons():
@@ -1290,8 +1267,6 @@ def test_other_opens_plain_genre_picker_and_back_returns_card_buttons():
     assert genres and all(not button.api_kwargs for button in genres)
     assert rows[0][0].callback_data == "nov_movie"  # «Новинка» — первой
     assert rows[-1][0].callback_data == "movie_card_3"
-    assert leisure_games._genre_keyboard(board=True).inline_keyboard[0][0].callback_data.startswith("vg_gb_")
-    assert all("Новинка" not in b.text for row in leisure_games._genre_keyboard(board=True).inline_keyboard for b in row)
 
 
 def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
@@ -1421,24 +1396,5 @@ def test_book_card_shows_author_country_year_and_genre():
     assert text.startswith("Проект «Аве Мария»\n\nЭнди Вейер · США · 2021\nЖанр: Фантастика")
 
 
-def test_other_game_asks_platform_first_then_genre_on_that_platform():
-    platforms = leisure_games._platform_keyboard(back="vg_card").inline_keyboard
-    assert [row[0].text for row in platforms[:-1]] == ["Мобильные", "Консоль", "ПК", "Настолки"]
-    assert all(row[0].api_kwargs == {"style": "success"} for row in platforms[:-1])
-
-    genres = leisure_games._genre_keyboard(platform="console", back="vg_pick").inline_keyboard
-    assert genres[0][0].callback_data == "nov_game" and genres[1][0].callback_data.startswith("vg_pg_console_")
-    assert genres[-2][0].callback_data.startswith("vg_pg_console_")
-    board = leisure_games._genre_keyboard(platform="board").inline_keyboard
-    assert all("Новинка" not in b.text for row in board for b in row)
-    assert all("Настолки" not in b.text for row in leisure_games._game_keyboard().inline_keyboard for b in row)
 
 
-def test_platform_pick_filters_games_without_saving_preferences(monkeypatch):
-    monkeypatch.setattr(leisure_games, "_effective_platforms", lambda _cid: ["pc"])
-    consoles = {"ps5", "xbox", "switch"}
-
-    pool = leisure_games._eligible_games("platform-test", platforms=consoles)
-
-    assert pool and all(consoles & set(item["platforms"]) for item in pool)
-    assert leisure_games._effective_platforms("platform-test") == ["pc"]

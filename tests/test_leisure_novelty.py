@@ -5,7 +5,6 @@ from datetime import date, timedelta
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 
 import apple_music
-import leisure_games
 import leisure_novelty
 import recommendation_stoplist
 from ui import leisure as leisure_ui
@@ -61,14 +60,13 @@ def test_movie_novelty_card_says_now_in_cinema_and_has_actions(monkeypatch):
     assert picker[-1][0].callback_data == "nov_card_movie"
 
 
-def test_upcoming_movie_and_game_show_date_like_concerts():
+def test_upcoming_movie_and_book_show_date_like_concerts():
     later = date.today() + timedelta(days=10)
     label = leisure_ui._event_date_label(later.isoformat())
 
     assert leisure_ui._novelty_status("movie", {"date": later.isoformat()}) == "🎬 Уже в кино"
     card = leisure_ui.novelty_card("movie", {"title": "Дюна", "date": later.isoformat(), "genres": "фантастика"})
     assert f"фантастика · {label}" in card.text
-    assert leisure_ui._novelty_status("game", {"date": later.isoformat()}) == f"👾 Выходит {label}"
     assert leisure_ui._novelty_status("book", {"published_date": "2026-09-01"}).startswith("📚 Новая книга · 1 сентября")
 
 
@@ -129,15 +127,6 @@ def test_empty_novelty_offers_genres(monkeypatch):
     assert sent["reply_markup"].inline_keyboard[0][0].callback_data == "nov_book"
 
 
-def test_disliked_game_is_not_recommended_again(monkeypatch):
-    cid = "game-dislike-test"
-    name = leisure_games._GAME_CATALOG[0]["name"]
-    monkeypatch.setattr(leisure_games, "_effective_platforms", lambda _cid: ["pc", "ps5", "xbox", "switch", "mobile"])
-    assert any(item["name"] == name for item in leisure_games._eligible_games(cid))
-
-    recommendation_stoplist.add(cid, "game", name, "hidden")
-
-    assert all(item["name"] != name for item in leisure_games._eligible_games(cid))
 
 
 def test_movie_novelty_only_offers_films_already_in_cinemas(monkeypatch):
