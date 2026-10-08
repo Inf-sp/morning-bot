@@ -499,7 +499,7 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     })
     rows = [[(f"{index}. {c['item'][:40]}", f"w_buy_i:{c['id']}")] for index, c in enumerate(batch, 1)]
     if len(pool) > len(batch):
-        rows.append([("✨ Другие варианты", "w_buy_more")])
+        rows.append([("✨ Другие покупки", "w_buy_more")])
     rows.append([("🔎 Стоит ли покупать…", "w_check")])
     rows.append([("⬅️ Назад", "w_closet")])
     store.pending_input[str(cid)] = "wardrobe_buy"

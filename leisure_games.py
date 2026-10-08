@@ -975,8 +975,8 @@ async def _show_manual_game_candidate(bot, cid, token, index, *, q=None):
     card = _prepare_manual_game_card(choices[index])
     msg = leisure_ui.game_set_card(card)
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Добавить", callback_data=f"game_add_ok:{token}:{index}"),
-        InlineKeyboardButton("❌ Удалить", callback_data=f"game_add_next:{token}:{index}"),
+        InlineKeyboardButton("✅ Добавить игру", callback_data=f"game_add_ok:{token}:{index}"),
+        InlineKeyboardButton("✨ Другая игра", callback_data=f"game_add_next:{token}:{index}"),
     ]])
     if q is not None:
         try:

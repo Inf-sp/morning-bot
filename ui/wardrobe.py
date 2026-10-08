@@ -41,7 +41,7 @@ def outfit_header(primary_style=""):
     """Единый заголовок образа: эмодзи отражает выбранный стиль."""
     style = _clean_text(primary_style)
     emoji = outfit_emoji(style)
-    return f"{emoji} Образ на сегодня" + (f" · {style}" if style else "")
+    return f"{emoji} Надень сегодня" + (f" · {style}" if style else "")
 
 
 def outfit_emoji(primary_style=""):
@@ -60,7 +60,7 @@ def empty_wardrobe():
 
 
 def render_wardrobe_message(look_data, *, news=None):
-    """Образ на сегодня: три базовые вещи и выбранные дополнения.
+    """Образ дня одним списком «Надень сегодня»: базовые вещи, затем дополнения.
 
     Погодная строка намеренно не показывается.
 
@@ -73,25 +73,15 @@ def render_wardrobe_message(look_data, *, news=None):
     b.section(outfit_header(primary_style))
 
     slots = _outfit_slots(look_data.get("items") or [])
-    if any(slots.values()):
+    items = [
+        *slots["Верх"], *slots["Низ"], *slots["Обувь"], *slots["Верхняя одежда"],
+        *(item for item in slots["Аксессуары"] if "носк" not in item.casefold()),
+        *slots["Другое"],
+    ]
+    if items:
         b.spacer()
-        b.bold("Надень:")
-        b.newline()
-        for zone in ("Верх", "Низ", "Обувь"):
-            for item in slots[zone]:
-                b.line(f"- {item}")
-
-        extras = [
-            *slots["Верхняя одежда"],
-            *(item for item in slots["Аксессуары"] if "носк" not in item.casefold()),
-            *slots["Другое"],
-        ]
-        if extras:
-            b.spacer()
-            b.bold("Дополнительно:")
-            b.newline()
-            for item in extras:
-                b.line(f"- {item}")
+        for item in items:
+            b.line(f"- {item}")
 
     selected_socks = next(
         (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",

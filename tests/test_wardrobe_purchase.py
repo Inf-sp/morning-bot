@@ -130,7 +130,7 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     best = wardrobe._purchase_state(cid)["pool"][0]
     assert (best["zone"], best["gain"]) == ("Обувь", 16)
     assert labels[0] == [f"1. {best['item']}"]
-    assert labels[3:] == [["✨ Другие варианты"], ["🔎 Стоит ли покупать…"], ["⬅️ Назад"]]
+    assert labels[3:] == [["✨ Другие покупки"], ["🔎 Стоит ли покупать…"], ["⬅️ Назад"]]
     assert f"🛒 Самое полезное сейчас\n1. {best['item']} · +16 образов" in message["text"]
     callbacks = [b.callback_data for row in message["reply_markup"].inline_keyboard for b in row]
     assert all(len(data.encode()) <= 64 and "кед" not in data for data in callbacks)

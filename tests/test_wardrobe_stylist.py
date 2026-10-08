@@ -60,7 +60,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
 
     assert _entities(message, MessageEntity.ITALIC) == []
     assert "Жарко и сухо" not in message.text
-    assert "Надень:" in message.text
+    assert "Надень сегодня" in message.text
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
@@ -116,9 +116,9 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    assert "Дополнительно:\n- Цепочка со значком сторон света" in message.text
+    assert "- Цепочка со значком сторон света" in message.text and "Дополнительно" not in message.text
     assert "- Футболка Levi's" in message.text
-    assert "Надень:" in message.text
+    assert "Надень сегодня" in message.text
 
 
 def test_outfit_card_shows_selected_accessories_after_main_items():
@@ -133,7 +133,7 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
 
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
-    assert "Дополнительно:\n- Синие носки" not in message.text
+    assert "- Синие носки" not in message.text
     assert "Главный акцент: синие носки поддержат обувь и соберут образ." in message.text
 
 
@@ -190,18 +190,18 @@ def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
         ],
     })
 
-    assert "Надень:\n- Фиолетовая футболка" in message.text
-    assert "Дополнительно:\n- Лёгкая ветровка" in message.text
+    assert "Надень сегодня\n\n- Фиолетовая футболка" in message.text
+    assert "- Белые кеды\n- Лёгкая ветровка" in message.text
     assert "Верхняя одежда:" not in message.text
 
 
 def test_outfit_header_uses_emoji_of_selected_style():
-    assert outfit_header("Минимализм") == "👕 Образ на сегодня · Минимализм"
-    assert outfit_header("Городской") == "🧢 Образ на сегодня · Городской"
-    assert outfit_header("Повседневный") == "👖 Образ на сегодня · Повседневный"
-    assert outfit_header("Скандинавский") == "🧥 Образ на сегодня · Скандинавский"
-    assert outfit_header("Классический") == "👔 Образ на сегодня · Классический"
-    assert outfit_header("Спортивный") == "👟 Образ на сегодня · Спортивный"
+    assert outfit_header("Минимализм") == "👕 Надень сегодня · Минимализм"
+    assert outfit_header("Городской") == "🧢 Надень сегодня · Городской"
+    assert outfit_header("Повседневный") == "👖 Надень сегодня · Повседневный"
+    assert outfit_header("Скандинавский") == "🧥 Надень сегодня · Скандинавский"
+    assert outfit_header("Классический") == "👔 Надень сегодня · Классический"
+    assert outfit_header("Спортивный") == "👟 Надень сегодня · Спортивный"
 
 
 def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypatch):

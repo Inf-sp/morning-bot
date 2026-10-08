@@ -169,7 +169,7 @@ def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
     assert message["photo"] == "https://images.test/martian.jpg"
     assert "Марсианин" in message["caption"]
     assert "Энди Вейер · 2011" in message["caption"]
-    assert _labels(message["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+    assert _labels(message["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
 
 
 def test_manual_book_add_accepts_bare_title_even_from_existing_choice(monkeypatch):
@@ -196,7 +196,7 @@ def test_manual_book_add_accepts_bare_title_even_from_existing_choice(monkeypatc
     ))
 
     assert bot.messages[0]["photo"] == "https://images.test/martian.jpg"
-    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
 
 
 def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch):
@@ -220,7 +220,7 @@ def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch)
     assert added == []
     assert query.edits[0]["media"].media == "https://images.test/dumaurier.jpg"
     assert "Джордж Дюморье · 1897" in query.edits[0]["media"].caption
-    assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить", "❌ Другая"]]
+    assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
 
 
 def test_manual_book_candidates_keep_one_best_edition_per_author(monkeypatch):
@@ -687,7 +687,7 @@ def test_manual_game_is_saved_only_after_card_confirmation(monkeypatch):
     asyncio.run(leisure_games.offer_manual_favorite_game(bot, "42", "The Sims"))
 
     assert added == []
-    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить", "❌ Удалить"]]
+    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить игру", "✨ Другая игра"]]
     token = next(iter(leisure_games._manual_game_choices))
     asyncio.run(leisure_games.handle_manual_game_add_callback(
         bot, "42", _Query(), f"game_add_ok:{token}:0",

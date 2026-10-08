@@ -509,8 +509,8 @@ async def _find_manual_book_candidates(query):
 
 def _manual_book_add_kb(token, index):
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Добавить", callback_data=f"book_add_ok:{token}:{index}"),
-        InlineKeyboardButton("❌ Другая", callback_data=f"book_add_next:{token}:{index}"),
+        InlineKeyboardButton("✅ Добавить книгу", callback_data=f"book_add_ok:{token}:{index}"),
+        InlineKeyboardButton("✨ Другая книга", callback_data=f"book_add_next:{token}:{index}"),
     ]])
 
 

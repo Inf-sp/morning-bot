@@ -306,7 +306,7 @@ async def do_user_delete(bot, cid, target_cid, q=None):
 
 async def send_invite(bot, cid, q=None):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Создать", callback_data="adm_invite_create")],
+        [InlineKeyboardButton("✅ Создать инвайт", callback_data="adm_invite_create")],
         nav_row("adm_users"),
     ])
     msg = ui.invite_prompt()

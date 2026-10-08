@@ -43,12 +43,13 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [[button["text"] for button in row] for row in rows]
     assert texts == [
-        ["Другой фильм"], ["Добавить слово"], ["✅ Комедия", "❌ Не добавлять"],
-        ["Удалить", "2/5"], ["⬅️ Назад"],
+        ["Другой фильм"], ["Добавить слово"], ["✅ Комедия", "Не добавлять"],
+        ["Удалить", "2/5"], ["Назад"],
     ]
     styles = {button["text"]: button.get("style") for row in rows for button in row}
     assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
-    assert styles["Другой фильм"] == "primary" and styles["✅ Комедия"] is None
+    assert styles["Другой фильм"] == "success" and styles["✅ Комедия"] is None
+    assert styles["Назад"] == "primary"
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
 
@@ -94,7 +95,7 @@ def test_not_modified_error_is_not_retried(sent):
     assert len(sent) == 1 and telegram_runtime._buttons_enhanced is True
 
 
-def test_refresh_buttons_are_blue_without_emoji_and_on_top(sent):
+def test_refresh_buttons_are_green_without_emoji_and_on_top(sent):
     bot = telegram_runtime.MenuCleanupBot("1:x")
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("💳 Что докупить", callback_data="w_buy")],
@@ -108,7 +109,27 @@ def test_refresh_buttons_are_blue_without_emoji_and_on_top(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [row[0]["text"] for row in rows]
     assert texts == [
-        "Обновить", "Подобрать новые слова", "Обновить карточки", "💳 Что докупить", "✨ Разное",
+        "Обновить", "Подобрать новые слова", "Обновить карточки", "Что докупить", "Разное",
     ]
-    assert all(row[0].get("style") == "primary" for row in rows[:3])
+    assert all(row[0].get("style") == "success" for row in rows[:3])
     assert "style" not in rows[4][0]
+
+
+def test_meaningful_emoji_stay_and_main_menu_is_untouched():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎚️ Мой шкаф", callback_data="w_closet")],
+        [InlineKeyboardButton("□ Драма", callback_data="p1"), InlineKeyboardButton("🟢 Яйца", callback_data="f1")],
+        [InlineKeyboardButton("⬅️", callback_data="prev"), InlineKeyboardButton("🇳🇱 Нидерланды", callback_data="nl")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [[button["text"] for button in row] for row in rows] == [
+        ["Мой шкаф"], ["□ Драма", "🟢 Яйца"], ["⬅️", "🇳🇱 Нидерланды"], ["Главная"],
+    ]
+    assert rows[3][0]["style"] == "primary"
+
+    main = InlineKeyboardMarkup([
+        [InlineKeyboardButton("☀️ Мой день", callback_data="m_myday")],
+        [InlineKeyboardButton("🧵 Гардероб", callback_data="m_wardrobe")],
+    ])
+    assert telegram_runtime._enhance_markup(main) is None

@@ -85,60 +85,95 @@ class RetryingHTTPXRequest(HTTPXRequest):
             return await super().do_request(*args, **kwargs)
 
 
-# Кнопки действий с данными (Bot API 9.4): эмодзи убирается, цвет задаёт смысл.
-# Отметки выбора («✅ Комедия», «❌ Не добавлять») не трогаем — только глаголы.
-_ADD_RE = re.compile(r"^✅\s*((?:Добавить|Создать)\b.*)$", re.S)
-_DELETE_RE = re.compile(r"^❌\s*((?:Удалить|Очистить|Убрать)\b.*)$", re.S)
-# «Обновить / подобрать новую рекомендацию» — синяя, без эмодзи и в самом верху.
-_REFRESH_RE = re.compile(
-    r"^(?:✨|🔄)\s*((?:Обновить|Подобрать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b.*)$",
-    re.S,
+# Оформление кнопок по контракту AGENTS.md (Bot API 9.4): на кнопках нет эмодзи,
+# цвет задаёт смысл. Главное меню разделов остаётся с эмодзи.
+_MAIN_MENU_CALLBACKS = {"m_myday", "m_wardrobe", "m_food", "m_learn", "m_leisure", "m_settings"}
+# Ведущие эмодзи: пиктограммы, символы, вариационный селектор, ZWJ, тон кожи, keycap «#️⃣».
+_LEADING_EMOJI_RE = re.compile(
+    r"^(?:[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2190-\u21FF\u2300-\u23FF"
+    r"\u2934\u2935\u3030\u303D\u3297\u3299\u00A9\u00AE\u203C\u2049\u2122\u2139]"
+    r"[\uFE0F\u200D\U0001F3FB-\U0001F3FF]*|[#*0-9]\uFE0F?\u20E3)+\s*"
 )
+# Исключения: отметки состояния, стрелки листания и флаги несут смысл, а не украшают.
+_STATE_MARKS = ("✅", "□", "☑", "🟢", "🔴")
+_ARROWS = ("⬅", "➡", "◀", "▶", "⏪", "⏩", "↩", "↪", "⬆", "⬇")
+_DELETE_RE = re.compile(r"^(?:Удалить|Очистить|Убрать)\b")
+_ADD_RE = re.compile(r"^(?:Добавить|Создать)\b")
+# Всё, что подбирает или создаёт новое, — зелёная кнопка в самом верху.
+_REFRESH_RE = re.compile(
+    r"^(?:Обновить|Подобрать|Друг(?:ой|ая|ое|ие)|Ещё|Следующ\w*|Нов(?:ый|ая|ое|ые))\b"
+)
+_NAV_RE = re.compile(r"^(?:Главная|Назад)$")
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
-# эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта,
-# но эмодзи у «Добавить/Удалить» не возвращаются никогда.
+# эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта.
 _KEYBOARD_ERRORS = ("button", "keyboard", "reply markup", "reply_markup", "style", "disabled")
 _buttons_enhanced = True  # совместимость: False — уже только текстовый уровень
 _button_level = 2
 
 
+def _is_flag(text):
+    return len(text) >= 2 and all("\U0001F1E6" <= char <= "\U0001F1FF" for char in text[:2])
+
+
+def _plain_label(text):
+    """Подпись без декоративного эмодзи; None — эмодзи несёт смысл и остаётся."""
+    if _is_flag(text) or text.startswith(_ARROWS) and not _NAV_RE.match(
+            _LEADING_EMOJI_RE.sub("", text)):
+        return None
+    stripped = _LEADING_EMOJI_RE.sub("", text).strip()
+    if not stripped:
+        return None  # кнопка из одного значка
+    is_action = _ADD_RE.match(stripped) or _DELETE_RE.match(stripped)
+    if text.startswith(_STATE_MARKS) and not is_action:
+        return None  # «✅ Комедия», «🟢 Яйца» — состояние, а не украшение
+    return stripped
+
+
 def _enhance_markup(markup, level=2):
     """Inline-клавиатура по контракту кнопок из AGENTS.md, либо None без изменений.
 
-    «Добавить» — зелёная, без эмодзи и всегда в верхнем ряду; «Удалить» — красная
-    без эмодзи; ``noop``-кнопки (счётчик страниц, индикатор ожидания) становятся
-    disabled (Bot API 10.3) и ничего не отправляют боту.
+    Без эмодзи (кроме главного меню и исключений выше); зелёные — «Другой…/Ещё…/
+    Подобрать…/Обновить» (самый верх) и «Добавить…» (под ними); красные —
+    «Удалить…»; синие — «Главная» и «Назад»; ``noop``-кнопки (счётчик страниц,
+    индикатор ожидания) становятся disabled (Bot API 10.3).
     """
     if not isinstance(markup, InlineKeyboardMarkup):
         return None
     rows = markup.to_dict().get("inline_keyboard", [])
+    callbacks = {button.get("callback_data") for row in rows for button in row}
+    if callbacks and callbacks <= _MAIN_MENU_CALLBACKS:
+        return None
     changed = False
     add_rows = set()
     refresh_rows = set()
     for index, row in enumerate(rows):
         for button in row:
+            text = str(button.get("text") or "")
+            label = _plain_label(text)
+            if label is not None and label != text:
+                button["text"] = text = label
+                changed = True
             if level >= 2 and button.get("callback_data") == "noop":
                 button.pop("callback_data")
                 button["disabled"] = {}
                 changed = True
                 continue
-            text = str(button.get("text") or "")
-            for pattern, style in (
-                (_ADD_RE, "success"), (_DELETE_RE, "danger"), (_REFRESH_RE, "primary"),
+            if label is None:
+                continue
+            for pattern, style, bucket in (
+                (_REFRESH_RE, "success", refresh_rows), (_ADD_RE, "success", add_rows),
+                (_DELETE_RE, "danger", None), (_NAV_RE, "primary", None),
             ):
-                match = pattern.match(text)
-                if match:
-                    button["text"] = match.group(1).strip()
-                    if level >= 1:
-                        button.setdefault("style", style)
-                    changed = True
-                    if style == "success":
-                        add_rows.add(index)
-                    elif style == "primary":
-                        refresh_rows.add(index)
+                if pattern.match(text):
+                    if level >= 1 and "style" not in button:
+                        button["style"] = style
+                        changed = True
+                    if bucket is not None:
+                        bucket.add(index)
+                    break
     if not changed:
         return None
-    # Сверху «Обновить/Другой…», затем «Добавить», дальше исходный порядок.
+    # Сверху «Другой/Обновить…», затем «Добавить…», дальше исходный порядок.
     order = sorted(range(len(rows)), key=lambda index: (
         index not in refresh_rows, index not in add_rows,
     ))
