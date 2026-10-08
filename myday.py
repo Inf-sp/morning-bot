@@ -859,6 +859,16 @@ def _day_wind_text(wind_ms):
     label = "Сильный ветер" if value > 10 else "Ветер"
     return f"{label} до {value:.0f} м/с"
 
+def _rail_works(cid):
+    """Работы NS на станциях города; любой сбой NS — просто без строки."""
+    try:
+        import ns_alerts
+        return ns_alerts.todays_works(cid)
+    except Exception:
+        _log.warning("myday: NS works unavailable cid=%s", cid, exc_info=True)
+        return []
+
+
 def _build_day_text(cid, *, refresh_current=False):
     s = store.get_settings(cid)
     try:
@@ -955,6 +965,7 @@ def _build_day_text(cid, *, refresh_current=False):
         lifehack=hack_text,
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),
+        rail_works=_rail_works(cid),
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

@@ -4,6 +4,7 @@
 неожиданный ответ даёт пустой результат: рассылка просто ничего не присылает.
 """
 import logging
+from datetime import date
 
 import requests
 
@@ -34,28 +35,31 @@ def _get(path, params=None):
         return None
 
 
-def station_code(city):
-    """Код станции NS по названию города («Alkmaar» → «AMR»); не найдено → ""."""
+def station_codes(city):
+    """Коды всех станций города: «Alkmaar» → ["AMR", "AMRN"] (Alkmaar и Alkmaar Noord)."""
     city = str(city or "").strip()
     if not city:
-        return ""
-    cached = util.ttl_get("ns_station", city.casefold(), _STATION_TTL)
+        return []
+    cached = util.ttl_get("ns_stations", city.casefold(), _STATION_TTL)
     if cached is not None:
-        return cached
-    data = _get("/nsapp-stations/v3", {"q": city, "countryCodes": "NL", "limit": 10})
+        return list(cached)
+    data = _get("/nsapp-stations/v3", {"q": city, "countryCodes": "NL", "limit": 20})
     stations = (data or {}).get("payload") or [] if isinstance(data, dict) else []
     wanted = city.casefold()
 
-    def names(station):
-        values = (station.get("names") or {}).values() if isinstance(station.get("names"), dict) else ()
-        return {str(value).casefold() for value in values}
+    def belongs(station):
+        names = (station.get("names") or {}).values() if isinstance(station.get("names"), dict) else ()
+        return any(str(name).casefold() == wanted or str(name).casefold().startswith(f"{wanted} ")
+                   for name in names)
 
-    exact = next((s for s in stations if isinstance(s, dict) and wanted in names(s)), None)
-    station = exact or next((s for s in stations if isinstance(s, dict)), None)
-    code = str(((station or {}).get("id") or {}).get("code") or "") if station else ""
+    codes = list(dict.fromkeys(
+        str((station.get("id") or {}).get("code") or "")
+        for station in stations if isinstance(station, dict) and belongs(station)
+    ))
+    codes = [code for code in codes if code]
     if data is not None:
-        util.ttl_set("ns_station", city.casefold(), code)
-    return code
+        util.ttl_set("ns_stations", city.casefold(), codes)
+    return codes
 
 
 def _label(value):
@@ -88,3 +92,44 @@ def active_disruptions(code):
         return None
     rows = data if isinstance(data, list) else (data.get("payload") or []) if isinstance(data, dict) else []
     return [item for item in map(parse_disruption, rows) if item and item["id"]]
+
+
+_WORKS_TTL = 3600
+
+
+def _day(value):
+    try:
+        return date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None
+
+
+def parse_works(raw, today):
+    """Плановые работы (MAINTENANCE), идущие сегодня: {id, title, start, end} или None."""
+    if not isinstance(raw, dict) or raw.get("type") != "MAINTENANCE":
+        return None
+    spans = [span for span in raw.get("timespans") or [] if isinstance(span, dict)]
+    starts = [day for day in (_day(span.get("start")) for span in spans) if day]
+    ends = [day for day in (_day(span.get("end")) for span in spans) if day]
+    if not starts or not ends:
+        return None
+    start, end = min(starts), max(ends)
+    if not start <= today <= end:
+        return None
+    return {"id": str(raw.get("id") or ""), "title": str(raw.get("title") or "").strip(),
+            "start": start, "end": end}
+
+
+def planned_works(code, today):
+    """Работы на станции, идущие сегодня; список NS кэшируется на час. Сбой NS → []."""
+    if not code:
+        return []
+    cache_key = f"{code}|{today.isoformat()}"
+    rows = util.ttl_get("ns_works", cache_key, _WORKS_TTL)
+    if rows is None:
+        data = _get(f"/disruptions/v3/station/{code}")
+        if data is None:
+            return []
+        rows = data if isinstance(data, list) else (data.get("payload") or []) if isinstance(data, dict) else []
+        util.ttl_set("ns_works", cache_key, rows)
+    return [item for item in (parse_works(row, today) for row in rows) if item and item["id"]]

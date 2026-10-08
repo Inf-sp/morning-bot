@@ -11,6 +11,21 @@ def _compact_line(b, emoji, label, content):
     b.spacer()
 
 
+_MONTHS_GENITIVE = ("", "января", "февраля", "марта", "апреля", "мая", "июня",
+                    "июля", "августа", "сентября", "октября", "ноября", "декабря")
+
+
+def _works_period(start, end):
+    """10–12 октября; 30 сентября – 2 октября; один день — 10 октября."""
+    if not start or not end:
+        return ""
+    if start == end:
+        return f"{start.day} {_MONTHS_GENITIVE[start.month]}"
+    if start.month == end.month and start.year == end.year:
+        return f"{start.day}–{end.day} {_MONTHS_GENITIVE[end.month]}"
+    return f"{start.day} {_MONTHS_GENITIVE[start.month]} – {end.day} {_MONTHS_GENITIVE[end.month]}"
+
+
 def _split_word_translation(value):
     """Разделяет иностранную фразу и перевод для отдельного spoiler-entity."""
     value = str(value or "")
@@ -35,6 +50,7 @@ def day_summary(
     lifehack="",
     quote_text="",
     quote_author="",
+    rail_works=None,
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -51,6 +67,16 @@ def day_summary(
 
     if weather_line:
         _compact_line(b, weather_icon, "Погода", weather_line)
+
+    # Плановые работы NS на станциях города — только в дни работ.
+    for works in rail_works or []:
+        title = str(works.get("title") or "").strip()
+        period = _works_period(works.get("start"), works.get("end"))
+        text = " · ".join(part for part in (title, period) if part)
+        if text:
+            b.text_line("🚧 ")
+            b.labeled_line("Работы на ЖД", text, lowercase=False)
+            b.spacer()
 
     if word_line:
         term, translation = _split_word_translation(word_line)

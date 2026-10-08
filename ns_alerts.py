@@ -63,10 +63,14 @@ async def check_user(bot, cid):
     city = str(settings_data.get("city") or "")
     if str(settings_data.get("cc") or "").upper() != "NL" or not city:
         return
-    code = await asyncio.to_thread(ns_api.station_code, city)
-    current = await asyncio.to_thread(ns_api.active_disruptions, code)
-    if current is None:  # NS не ответил — состояние не трогаем
+    codes = await asyncio.to_thread(ns_api.station_codes, city)
+    if not codes:
         return
+    feeds = await asyncio.gather(*(asyncio.to_thread(ns_api.active_disruptions, code) for code in codes))
+    if any(feed is None for feed in feeds):  # NS не ответил — состояние не трогаем
+        return
+    # Один сбой на нескольких станциях города (Alkmaar и Alkmaar Noord) — одно предупреждение.
+    current = list({item["id"]: item for feed in feeds for item in feed}.values())
     previous = (store.get_profile(cid).get(_STATE_KEY) or {}).get("active") or {}
     current_by_id = {item["id"]: item for item in current}
     for item in current:
@@ -85,3 +89,20 @@ async def check_user(bot, cid):
             return profile, None
 
         store.mutate_profile(cid, save)
+
+
+MAX_WORKS_LINES = 2
+
+
+def todays_works(cid, today=None):
+    """Плановые работы на станциях города для «Моего дня»: только в дни работ, без AI."""
+    settings_data = store.get_settings(cid) or {}
+    city = str(settings_data.get("city") or "")
+    if not config.NS_API_KEY or str(settings_data.get("cc") or "").upper() != "NL" or not city:
+        return []
+    today = today or datetime.now(config.TZ).date()
+    works = {}
+    for code in ns_api.station_codes(city):
+        for item in ns_api.planned_works(code, today):
+            works.setdefault(item["id"], item)
+    return sorted(works.values(), key=lambda item: (item["end"], item["title"]))[:MAX_WORKS_LINES]

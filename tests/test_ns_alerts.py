@@ -36,15 +36,16 @@ def test_parse_keeps_disruptions_and_calamities_but_not_maintenance():
     assert ns_api.parse_disruption({**RAW, "isActive": False}) is None
 
 
-def test_station_code_prefers_exact_city_name(monkeypatch):
+def test_all_city_stations_are_watched(monkeypatch):
     monkeypatch.setattr(ns_api.util, "ttl_get", lambda *_a: None)
     monkeypatch.setattr(ns_api.util, "ttl_set", lambda *_a: None)
     monkeypatch.setattr(ns_api, "_get", lambda *_a, **_k: {"payload": [
-        {"id": {"code": "AMRN"}, "names": {"long": "Alkmaar Noord"}},
         {"id": {"code": "AMR"}, "names": {"long": "Alkmaar", "medium": "Alkmaar"}},
+        {"id": {"code": "AMRN"}, "names": {"long": "Alkmaar Noord"}},
+        {"id": {"code": "HLM"}, "names": {"long": "Haarlem"}},
     ]})
 
-    assert ns_api.station_code("Alkmaar") == "AMR"
+    assert ns_api.station_codes("Alkmaar") == ["AMR", "AMRN"]
 
 
 def test_alert_card_is_russian_with_section_cause_and_time():
@@ -67,7 +68,7 @@ def _user(monkeypatch, cc="NL"):
         profile.update(updated)
 
     monkeypatch.setattr(ns_alerts.store, "mutate_profile", mutate)
-    monkeypatch.setattr(ns_alerts.ns_api, "station_code", lambda _city: "AMR")
+    monkeypatch.setattr(ns_alerts.ns_api, "station_codes", lambda _city: ["AMR", "AMRN"])
     monkeypatch.setattr(ns_alerts, "_translate", lambda item: item)
     return profile
 
@@ -107,3 +108,48 @@ def test_checks_run_only_from_six_to_twenty_three():
     assert ns_alerts.is_active_time(datetime(2026, 10, 8, 6, 0))
     assert ns_alerts.is_active_time(datetime(2026, 10, 8, 22, 59))
     assert not ns_alerts.is_active_time(datetime(2026, 10, 8, 23, 0))
+
+
+from datetime import date as _date
+
+from ui import myday as myday_ui
+
+WORKS = {"id": "w1", "type": "MAINTENANCE", "title": "Alkmaar – Den Helder",
+         "timespans": [{"start": "2026-10-10T01:00:00+0200", "end": "2026-10-12T05:00:00+0200"}]}
+
+
+def test_planned_works_only_on_their_dates():
+    assert ns_api.parse_works(WORKS, _date(2026, 10, 9)) is None
+    assert ns_api.parse_works(WORKS, _date(2026, 10, 10))["end"] == _date(2026, 10, 12)
+    assert ns_api.parse_works(WORKS, _date(2026, 10, 13)) is None
+    assert ns_api.parse_works(RAW, _date(2026, 10, 10)) is None  # сбой — не плановые работы
+
+
+def test_day_summary_shows_works_period_under_weather():
+    msg = myday_ui.day_summary("Сб, 10 окт", "Alkmaar", weather_line="до +15°C", rail_works=[
+        {"title": "Alkmaar – Den Helder", "start": _date(2026, 10, 10), "end": _date(2026, 10, 12)},
+        {"title": "Alkmaar – Uitgeest", "start": _date(2026, 9, 30), "end": _date(2026, 10, 2)},
+    ])
+
+    assert "Погода: до +15°C\n\n🚧 Работы на ЖД: Alkmaar – Den Helder · 10–12 октября" in msg.text
+    assert "🚧 Работы на ЖД: Alkmaar – Uitgeest · 30 сентября – 2 октября" in msg.text
+
+
+def test_todays_works_cover_all_city_stations_once(monkeypatch):
+    monkeypatch.setattr(ns_alerts.config, "NS_API_KEY", "key")
+    monkeypatch.setattr(ns_alerts.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(ns_alerts.ns_api, "station_codes", lambda _city: ["AMR", "AMRN"])
+    item = ns_api.parse_works(WORKS, _date(2026, 10, 11))
+    monkeypatch.setattr(ns_alerts.ns_api, "planned_works", lambda _code, _today: [item])
+
+    assert ns_alerts.todays_works("42", today=_date(2026, 10, 11)) == [item]
+
+    monkeypatch.setattr(ns_alerts.store, "get_settings", lambda _cid: {"city": "Berlin", "cc": "DE"})
+    assert ns_alerts.todays_works("42", today=_date(2026, 10, 11)) == []
+
+
+def test_ns_failure_gives_no_works_line(monkeypatch):
+    monkeypatch.setattr(ns_api.util, "ttl_get", lambda *_a: None)
+    monkeypatch.setattr(ns_api, "_get", lambda *_a, **_k: None)
+
+    assert ns_api.planned_works("AMR", _date(2026, 10, 11)) == []
