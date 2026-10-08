@@ -116,15 +116,19 @@ def title_similarity(query, item):
 STRICT_TITLE_SIMILARITY = 0.75
 
 
-def lookup_title(title, title_en="", strict=False):
+def lookup_title(title, title_en="", strict=False, kind="", year=""):
     """Нормализовать название в данные карточки через TMDb с суточным кэшем.
 
     Кандидаты ранжируются по совпадению названия, затем по популярности.
     strict — только уверенное совпадение (добавление в «Моё кино»), иначе None.
+    kind («movie»/«tv») и year, если пользователь их указал, отсекают одноимённые
+    проекты другого типа и при равном совпадении названия поднимают нужный год.
     """
     if not config.TMDB_API_KEY:
         return None
-    cache_key = f"english-poster-v3|{int(strict)}|{title_en}|{title}".strip().lower()
+    kind = kind if kind in ("movie", "tv") else ""
+    year = str(year or "").strip()
+    cache_key = f"english-poster-v4|{int(strict)}|{kind}|{year}|{title_en}|{title}".strip().lower()
     cached = util.ttl_get("tmdb_lookup", cache_key, 86400)
     if cached is not None:
         return cached
@@ -140,11 +144,19 @@ def lookup_title(title, title_en="", strict=False):
             and not item.get("adult")
             and not any(part in (item.get("title") or item.get("name") or "").lower()
                         for part in _BAD)
+            and (not kind or item.get("media_type") == kind)
         ]
         if not candidates:
             continue
+
+        def year_distance(value):
+            if not year.isdigit() or not str(_year(value)).isdigit():
+                return 0
+            return min(abs(int(_year(value)) - int(year)), 99)
+
         candidates.sort(key=lambda value: (
-            -round(title_similarity(query, value), 2), -float(value.get("popularity") or 0),
+            -round(title_similarity(query, value), 2), year_distance(value),
+            -float(value.get("popularity") or 0),
         ))
         item = candidates[0]
         if strict and title_similarity(query, item) < STRICT_TITLE_SIMILARITY:

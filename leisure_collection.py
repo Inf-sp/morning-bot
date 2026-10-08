@@ -53,7 +53,7 @@ def _movie_parts(value):
     )
 
 
-def _resolve_movie_label(title, *, allow_ai=False):
+def _resolve_movie_label(title, *, allow_ai=False, kind="", year=""):
     """Данные TMDb только при уверенном совпадении названия, иначе None.
 
     allow_ai (добавление пользователем): если по написанному названию совпадения нет —
@@ -64,11 +64,14 @@ def _resolve_movie_label(title, *, allow_ai=False):
     try:
         import tmdb
 
-        found = tmdb.lookup_title(title, strict=True)
+        tmdb_kind = {"сериал": "tv", "фильм": "movie"}.get(kind, kind)
+        found = tmdb.lookup_title(title, strict=True, kind=tmdb_kind, year=year)
         if found or not allow_ai:
             return found
         original = _ai_original_title(title)
-        return tmdb.lookup_title(title, original, strict=True) if original else None
+        return tmdb.lookup_title(
+            title, original, strict=True, kind=tmdb_kind, year=year,
+        ) if original else None
     except Exception:
         return None
 

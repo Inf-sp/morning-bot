@@ -16,7 +16,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import ai
 import config
 from leisure_collection import (
-    _resolve_movie_label, canonical_movie_label, movie_title_for_lookup,
+    _movie_parts, _resolve_movie_label, canonical_movie_label, movie_title_for_lookup,
     plain_label,
 )
 import secure
@@ -271,8 +271,68 @@ JSON: {{"items": [{{"value": "точный поисковый запрос", "la
     return result[:3]
 
 
+_MOVIE_KIND_WORDS = {
+    "сериал": "сериал", "сериала": "сериал", "series": "сериал", "show": "сериал", "tv": "сериал",
+    "фильм": "фильм", "фильма": "фильм", "film": "фильм", "movie": "фильм",
+}
+
+
+def _movie_query_candidates(text):
+    """«Взрослые Adults сериал 2025» → «Adults (сериал, 2025)», «Взрослые (сериал, 2025)».
+
+    Тип и год из запроса не теряются, а русское и английское названия ищутся отдельно.
+    """
+    parsed_title, parsed_kind, parsed_year = _movie_parts(text)
+    if parsed_kind or parsed_year:  # уже «Название (сериал, 2025)»
+        details = ", ".join(part for part in (parsed_kind, parsed_year) if part)
+        return [{"value": f"{parsed_title} ({details})", "label": parsed_title}]
+    words = str(text or "").replace(",", " ").split()
+    year = next((word for word in words if re.fullmatch(r"(?:19|20)\d{2}", word)), "")
+    kind = next((_MOVIE_KIND_WORDS[word.casefold()] for word in words
+                 if word.casefold() in _MOVIE_KIND_WORDS), "")
+    rest = [word for word in words if word != year and word.casefold() not in _MOVIE_KIND_WORDS]
+    latin = " ".join(word for word in rest if re.search(r"[A-Za-z]", word))
+    cyrillic = " ".join(word for word in rest if re.search(r"[А-Яа-яЁё]", word))
+    details = ", ".join(part for part in (kind, year) if part)
+    titles = [title for title in (latin, cyrillic) if title] or [" ".join(rest)]
+    return [
+        {"value": f"{title} ({details})" if details else title, "label": title}
+        for title in dict.fromkeys(titles) if title
+    ]
+
+
+async def _verified_movie_choices(choices):
+    """Оставляет только варианты, найденные в TMDb; подпись — настоящее название, тип и год."""
+    import asyncio
+
+    async def resolve(choice):
+        title, kind, year = _movie_parts(choice["value"])
+        try:
+            metadata = await asyncio.wait_for(asyncio.to_thread(
+                _resolve_movie_label, title, allow_ai=False, kind=kind, year=year,
+            ), timeout=8.0)
+        except Exception:
+            metadata = None
+        return metadata
+
+    resolved = await asyncio.gather(*(resolve(choice) for choice in choices))
+    result, seen = [], set()
+    for choice, metadata in zip(choices, resolved):
+        if not metadata or metadata.get("id") in seen:
+            continue
+        seen.add(metadata.get("id"))
+        label = canonical_movie_label(choice["value"], metadata)
+        result.append({"value": label, "label": label[:60]})
+    return result[:3]
+
+
 async def _offer_collection_choices(bot, cid, key, text, origin):
     choices = await _analyze_collection_candidates(key, text)
+    if key == "movies":
+        # Разбор самого запроса — первым: AI иногда теряет тип, год или второе название.
+        local = _movie_query_candidates(text)
+        verified = await _verified_movie_choices([*local, *choices])
+        choices = verified or [*local, *choices]
     if not choices:
         choices = [{"value": " ".join(str(text or "").split()).strip(),
                     "label": " ".join(str(text or "").split()).strip()}]
@@ -340,16 +400,20 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
     store_key, collection_id = collection
-    items = _unique_items(re.split(r"[,;\n]+", text or ""))
+    # Подтверждённый вариант — одна запись: «Adults (сериал, 2025)» нельзя резать по запятой.
+    items = [text] if confirmed else _unique_items(re.split(r"[,;\n]+", text or ""))
     if key == "movies":
         import asyncio
 
         try:
             verified = []
             for item in items:
-                title = movie_title_for_lookup(item)
+                title, kind, year = _movie_parts(item)
                 metadata = await asyncio.wait_for(
-                    asyncio.to_thread(_resolve_movie_label, title, allow_ai=True), timeout=12.0,
+                    asyncio.to_thread(
+                        _resolve_movie_label, title, allow_ai=True, kind=kind, year=year,
+                    ),
+                    timeout=12.0,
                 )
                 if metadata:
                     verified.append(canonical_movie_label(item, metadata))
