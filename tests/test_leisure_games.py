@@ -109,6 +109,7 @@ def test_board_genre_card_keyboard_is_board_style_without_set_button():
     assert labels == [
         ["✨ Другая игра"],
         ["Не нравится"],
+        ["🎚️ Настроить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert callbacks[0] == "vg_pick_b"
@@ -222,8 +223,8 @@ def test_game_recommendation_keeps_genres_inside_card(monkeypatch):
     assert "👾 Игра для тебя" in status.call[0]
     assert _labels(status.call[1]["reply_markup"]) == [
         ["✨ Другая игра"],
-        ["🎲 Настолки"],
         ["Не нравится"],
+        ["🎚️ Настроить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
@@ -251,6 +252,7 @@ def test_board_recommendation_keeps_genre_picker_without_set_button(monkeypatch)
     assert labels == [
         ["✨ Другая игра"],
         ["Не нравится"],
+        ["🎚️ Настроить"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert all("Мой набор игр" not in line for lines in labels for line in lines)

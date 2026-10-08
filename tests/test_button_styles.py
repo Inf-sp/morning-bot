@@ -228,3 +228,13 @@ def test_forecast_buttons_are_green():
     assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
         ("Полный прогноз на сегодня", "success"), ("Погода на неделю", "success"), ("Главная", "primary"),
     ]
+
+
+def test_explicitly_styled_button_keeps_its_place():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Любой жанр", callback_data="movie_next", api_kwargs={"style": "success"})],
+        [InlineKeyboardButton("Драма", callback_data="movie_g_18", api_kwargs={"style": "success"})],
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie", api_kwargs={"style": "success"})],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [row[0]["text"] for row in rows] == ["Любой жанр", "Драма", "Новинка"]

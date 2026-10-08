@@ -577,9 +577,24 @@ def _ensure_game_trailer_url(item):
     return prepared
 
 
-def _eligible_games(cid, genre=None, board=False):
+# Выбор «на чём играть» после «Другая игра» — только для этого подбора, без сохранения.
+PLATFORM_GROUPS = {
+    "mobile": ("Мобильные", {"mobile"}),
+    "console": ("Консоль", {"ps5", "xbox", "switch"}),
+    "pc": ("ПК", {"pc"}),
+    "board": ("Настолки", {"board"}),
+}
+
+
+def _platform_set(cid, board, platforms):
+    if board:
+        return {"board"}
+    return set(platforms) if platforms else set(_effective_platforms(cid))
+
+
+def _eligible_games(cid, genre=None, board=False, platforms=None):
     board_platform = board or genre == "board"
-    platforms = {"board"} if board_platform else set(_effective_platforms(cid))
+    platforms = _platform_set(cid, board_platform, platforms)
     hidden = {value.casefold() for value in recommendation_stoplist.values(cid, "game")}
     candidates = [
         item for item in _GAME_CATALOG
@@ -607,9 +622,9 @@ def _eligible_games(cid, genre=None, board=False):
     return filtered or candidates
 
 
-def _decorate_game(item, cid, *, genre=None, board=False):
+def _decorate_game(item, cid, *, genre=None, board=False, platforms=None):
     board_platform = board or genre == "board"
-    platforms = {"board"} if board_platform else set(_effective_platforms(cid))
+    platforms = _platform_set(cid, board_platform, platforms)
     visible_platforms = [key for key in item["platforms"] if key in platforms]
     primary_genre = item["genres"][0] if item.get("genres") else ""
     return {
@@ -624,7 +639,7 @@ def _board_style(item):
     return genres[0] if genres else ""
 
 
-def pick_game(cid, *, genre=None, refresh=False, board=False):
+def pick_game(cid, *, genre=None, refresh=False, board=False, platforms=None):
     """Локальный подбор без AI: платформы + жанр + защита от недавних повторов."""
     profile = store.get_profile(cid)
     today = datetime.now(config.TZ).date()
@@ -632,11 +647,11 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
     week_key = f"{year}-W{week:02d}"
     signature = _game_signature(cid)
     cached = profile.get("game_daily") or {}
-    if (not refresh and not genre and cached.get("week") == week_key
+    if (not refresh and not genre and not platforms and cached.get("week") == week_key
             and cached.get("signature") == signature and isinstance(cached.get("item"), dict)):
         return _decorate_game(cached["item"], cid, genre=genre, board=board)
 
-    pool = _eligible_games(cid, genre=genre, board=board)
+    pool = _eligible_games(cid, genre=genre, board=board, platforms=platforms)
     if not pool:
         return {}
     favorites = _favorite_games(cid)
@@ -684,24 +699,23 @@ def pick_game(cid, *, genre=None, refresh=False, board=False):
         current["game_seen"] = rotation.remember(
             current.get("game_seen", []), item["id"], limit=200,
         )
-        if not genre:
+        if not genre and not platforms:
             current["game_daily"] = daily_entry
         return current, None
 
     store.mutate_profile(cid, save_selection)
-    return _decorate_game(item, cid, genre=genre, board=board)
+    return _decorate_game(item, cid, genre=genre, board=board, platforms=platforms)
 
 
 def _game_keyboard(*, no_match=False, genre=None, board=False):
     """«Другая игра» меняет кнопки под карточкой на выбор жанра (vg_pick / vg_pick_b)."""
     board = board or genre == "board"
     rows = [[InlineKeyboardButton("✨ Другая игра", callback_data="vg_pick_b" if board else "vg_pick")]]
-    if not board:
-        rows.append([InlineKeyboardButton("🎲 Настолки", callback_data="vg_board")])
     if no_match:
         rows.append([InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="game_prefs")])
     else:
         rows.append([InlineKeyboardButton("Не нравится", callback_data="game_no", api_kwargs={"style": "danger"})])
+    rows.append([InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_game")])
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 
@@ -714,6 +728,7 @@ async def game_dislike(bot, cid, *, status=None):
         _reset_game_daily(cid)
         await send_game_recommendation(
             bot, cid, status=status, refresh=True, genre=rec.get("genre"), board=bool(rec.get("board")),
+            platforms=set(rec.get("platforms") or []) or None,
         )
         return
     await send_game_recommendation(bot, cid, status=status, refresh=True)
@@ -1050,11 +1065,27 @@ async def handle_manual_game_add_callback(bot, cid, q, data):
     await send_favorite_games_added_card(bot, cid, [item])
 
 
-def _genre_keyboard(board=False, back="m_leisure"):
-    """Выбор после «Другая игра»: любой жанр по вкусу, новинка (не у настолок) или жанр; всё зелёное."""
+def _platform_keyboard(back="vg_card"):
+    """Первый шаг «Другой игры»: на чём играть; затем выбор жанра."""
     green = {"style": "success"}
-    prefix = "vg_gb_" if board else "vg_g_"
-    rows = [[InlineKeyboardButton("Любой жанр", callback_data="vg_board" if board else "vg_next", api_kwargs=green)]]
+    rows = [[InlineKeyboardButton(label, callback_data=f"vg_plat_{key}", api_kwargs=green)]
+            for key, (label, _platforms) in PLATFORM_GROUPS.items()]
+    rows.append(nav_row(back))
+    return InlineKeyboardMarkup(rows)
+
+
+def _genre_keyboard(board=False, back="m_leisure", platform=None):
+    """Выбор после «Другая игра»: новинка (не у настолок) или жанр; всё зелёное.
+
+    platform — выбранная на первом шаге группа: жанры подбираются только на ней.
+    """
+    green = {"style": "success"}
+    if platform:
+        board = platform == "board"
+        prefix = f"vg_pg_{platform}_"
+    else:
+        prefix = "vg_gb_" if board else "vg_g_"
+    rows = []
     if not board:  # премьеры — видеоигры, у настолок новинки нет
         rows.append([InlineKeyboardButton("🆕 Новинка", callback_data="nov_game")])
     rows.extend([InlineKeyboardButton(label, callback_data=f"{prefix}{key}", api_kwargs=green)]
@@ -1080,19 +1111,20 @@ async def _deliver(bot, cid, msg, markup, *, q=None, status=None):
 
 
 async def send_game_recommendation(
-    bot, cid, *, q=None, status=None, refresh=False, genre=None, board=False,
+    bot, cid, *, q=None, status=None, refresh=False, genre=None, board=False, platforms=None,
 ):
     item = None
     if inclusive_recommendations.is_due(cid, "game"):
         candidate = next((
-            value for value in _eligible_games(cid, genre=genre, board=board)
+            value for value in _eligible_games(cid, genre=genre, board=board, platforms=platforms)
             if inclusive_recommendations.is_inclusive("game", value.get("name"))
         ), None)
         if candidate:
-            item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre, board=board)
-    item = item or pick_game(cid, genre=genre, refresh=refresh, board=board)
+            item = _decorate_game({**candidate, "lgbt": True}, cid, genre=genre, board=board, platforms=platforms)
+    item = item or pick_game(cid, genre=genre, refresh=refresh, board=board, platforms=platforms)
     if item:
-        store.last_recos[str(cid)] = {"kind": "game", "items": [item["name"]], "genre": genre, "board": board}
+        store.last_recos[str(cid)] = {"kind": "game", "items": [item["name"]], "genre": genre, "board": board,
+                                      "platforms": sorted(platforms or [])}
     if board or genre == "board":
         await _send_board_game(bot, cid, item, genre=genre, q=q, status=status)
         return
@@ -1341,6 +1373,8 @@ def cached_season_premieres(cid, *, allow_stale=True):
     )
     if items is None:
         return None
+    # В Досуге — только игры текущего года: релизы следующего года ещё рано советовать.
+    items = [item for item in items if str(item.get("date") or "")[:4] == str(today.year)]
     return [
         {**item, "trailer_url": str(item.get("trailer_url") or "").strip()
          or _youtube_trailer_search_url(item.get("title"))}

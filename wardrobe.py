@@ -374,7 +374,7 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard():
     rows = [
-        [("✨ Другой образ", "w_look")],  # новый образ дня; в чате — зелёная без эмодзи
+        [("✨ Другой образ", "w_pick")],  # выбор стиля под образом; в чате — зелёная без эмодзи
         [("💳 Что докупить", "w_buy")],
         [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "w_closet")],
     ]
@@ -382,6 +382,16 @@ def build_wardrobe_keyboard():
 
 
 _wardrobe_home_kb = build_wardrobe_keyboard
+
+
+def style_picker_kb():
+    """«Другой образ»: направление — любой стиль или один из шести; всё зелёное."""
+    green = {"style": "success"}
+    rows = [[InlineKeyboardButton("Любой стиль", callback_data="w_lookst_any", api_kwargs=green)]]
+    rows.extend([InlineKeyboardButton(name, callback_data=f"w_lookst_{index}", api_kwargs=green)]
+                for index, name in enumerate(_settings.STYLES))
+    rows.append(nav_row("w_card"))
+    return InlineKeyboardMarkup(rows)
 
 
 def _cancel_wardrobe_input(cid):
@@ -521,7 +531,8 @@ def _no_outfit_screen(result_kb, alternative=False):
 
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
-                     previous_style=None, previous_main_accent=None, q=None, silent=False):
+                     previous_style=None, previous_main_accent=None, q=None, silent=False,
+                     style=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
@@ -618,8 +629,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
-    selected_styles = _settings.wardrobe_styles(cid)
-    if previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
+    # style — разовый выбор направления из «Другой образ»; предпочтения не меняются.
+    selected_styles = [style] if style else _settings.wardrobe_styles(cid)
+    if not style and previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
         next_index = (selected_styles.index(previous_style) + 1) % len(selected_styles)
         selected_styles = [selected_styles[next_index]]
     wardrobe_history = store.get_wardrobe_history(cid)

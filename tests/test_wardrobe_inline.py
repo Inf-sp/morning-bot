@@ -327,7 +327,7 @@ def test_wardrobe_home_actions_use_one_column():
         ["💳 Что докупить"],
         ["#️⃣ Главная", "🎚️ Настроить"],
     ]
-    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_look"
+    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_pick"
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_buy"
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
@@ -727,3 +727,37 @@ def test_delete_removes_item_at_once_without_confirmation(monkeypatch):
 
     assert removed == [("42", ["it_1"]), ("42", ["it_2"]), ("42", ["it_3"])]
     assert shown == ["42", "42", "42"]
+
+
+def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
+    import wardrobe_router
+
+    kb = wardrobe.style_picker_kb().inline_keyboard
+    assert kb[0][0].text == "Любой стиль" and kb[-1][0].callback_data == "w_card"
+    assert [row[0].text for row in kb[1:-1]] == list(wardrobe._settings.STYLES)
+    assert all(row[0].api_kwargs == {"style": "success"} for row in kb[:-1])
+
+    styles = []
+
+    async def send_looks(_bot, _cid, **kwargs):
+        styles.append(kwargs.get("style"))
+
+    monkeypatch.setattr(wardrobe, "send_looks", send_looks)
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(wardrobe_router.store, "clear_wardrobe_daylook", lambda _cid: None)
+
+    class Status:
+        async def stop(self, delete=True):
+            return None
+
+    for data in ("w_lookst_2", "w_lookst_any"):
+        asyncio.run(wardrobe_router.handle_callback(object(), "42", None, data, status=Status()))
+
+    assert styles == [wardrobe._settings.STYLES[2], None]
+
+
+def test_listen_button_is_green():
+    import dictionary_views
+
+    row = dictionary_views._dict_tts_row({"id": "w1", "term": "wazig", "lang": "nl"})
+    assert row and row[0][0].api_kwargs == {"style": "success"}

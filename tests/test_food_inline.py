@@ -55,7 +55,7 @@ def test_other_recipe_refreshes_current_meal_in_inline_status(monkeypatch):
         async def replace(self, text, **kwargs):
             calls.append((text, kwargs))
 
-    def generate(cid, now, refresh):
+    def generate(cid, now, refresh, cuisine=None):
         generated.append((cid, recipe_generation.current_meal(now), refresh))
         return {"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
             "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}
@@ -189,7 +189,7 @@ def _refresh_with(monkeypatch, llm_name, local_name):
             "month": "2026-10", "signature": "p", "ideas": [_recipe("Сырники"), _recipe("Омлет")],
         }},
     }
-    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda _cid, now=None: context)
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda _cid, now=None, cuisine=None: context)
     monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: profile)
     monkeypatch.setattr(recipe_generation.store, "mutate_profile", lambda *_args: None)
     monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_args, **_kw: [])
@@ -216,3 +216,52 @@ def test_local_fallback_skips_shown_recipes_when_ai_is_down():
     assert recipe_generation._fallback_leftovers_recipe(
         "яйца", meal="lunch", avoid=["Яичная сковорода с овощами", "Омлет"],
     )["name"] == "Яичная сковорода с овощами"
+
+
+def test_other_recipe_asks_meal_then_cuisine():
+    from ui import menu as menu_ui
+
+    card = menu_ui.food_card_kb().inline_keyboard
+    assert (card[0][0].text, card[0][0].callback_data) == ("✨ Другой рецепт", "food_pick")
+    meals = menu_ui.food_meal_kb().inline_keyboard
+    assert [row[0].text for row in meals[:-1]] == ["Завтрак", "Обед", "Ужин"]
+    assert meals[-1][0].callback_data == "food_card"
+    cuisines = menu_ui.food_cuisine_kb("dinner", [("italian", "🍕 Итальянская")]).inline_keyboard
+    assert [(row[0].text, row[0].callback_data) for row in cuisines[:-1]] == [
+        ("Любая кухня", "food_go_dinner_any"), ("🍕 Итальянская", "food_go_dinner_italian"),
+    ]
+    assert all(row[0].api_kwargs == {"style": "success"} for row in cuisines[:-1])
+    assert cuisines[-1][0].callback_data == "food_pick"
+
+
+def test_chosen_cuisine_changes_prompt_but_not_day_cache_signature(monkeypatch):
+    monkeypatch.setattr(recipe_generation.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "любые")
+
+    base = recipe_generation._home_idea_context("42")
+    chosen = recipe_generation._home_idea_context("42", cuisine="italian")
+
+    assert chosen["signature"] == base["signature"]
+    assert chosen["cuisine_codes"] == ["italian"] and "Итальянская" in chosen["cuisines"]
+
+
+def test_food_go_passes_meal_and_cuisine_to_one_recipe(monkeypatch):
+    import bot_callbacks
+    from types import SimpleNamespace
+
+    calls = []
+
+    async def send_food_menu(_bot, cid, **kwargs):
+        calls.append((cid, kwargs["meal"], kwargs["cuisine"], kwargs["refresh"]))
+
+    async def status_call(call, **_kw):
+        return await call(None)
+
+    monkeypatch.setattr(bot_callbacks.menu, "send_food_menu", send_food_menu)
+    c = SimpleNamespace(bot=None, cid="42", data="food_go_lunch_eastern_european", status=status_call)
+    asyncio.run(bot_callbacks._food_recipe(c))
+    c.data = "food_go_dinner_any"
+    asyncio.run(bot_callbacks._food_recipe(c))
+
+    assert calls == [("42", "lunch", "eastern_european", True), ("42", "dinner", None, True)]

@@ -75,7 +75,8 @@ def _seed_caches(monkeypatch):
     start, end, _season = leisure_games._game_season(today)
     leisure_games._premiere_cache_set(
         leisure_games._premiere_signature("42", start, end), today,
-        [{"title": "Hades II", "url": "https://games.example/hades"}],
+        [{"title": "Hades II", "url": "https://games.example/hades", "date": f"{today.year}-11-20"},
+         {"title": "Next Year Game", "url": "https://games.example/next", "date": f"{today.year + 1}-02-03"}],
     )
 
 
@@ -146,6 +147,8 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     text = bot.sent[0]["text"]
     for value in ("Muse", "«Дюна»", "«Новая книга»", "Hades II"):
         assert value in text
+    # В Досуге только игры текущего года.
+    assert "Next Year Game" not in text
     assert bot.sent[0]["disable_web_page_preview"] is True
 
 

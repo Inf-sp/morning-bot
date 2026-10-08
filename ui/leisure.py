@@ -387,7 +387,7 @@ def movie_card(item, tm):
 
     Иерархия сверху вниз: что это (заголовок) → стоит ли смотреть и что за жанр
     (рейтинг · тип · жанры) → о чём (короткое описание) → почему именно мне
-    (персональная причина) → дата выхода последней строкой. Длительность фильма,
+    (персональная причина). Дата выхода — в строке рейтинга. Длительность фильма,
     страна и подпись «Подборка в жанре…» не показываются.
     """
     item = item if isinstance(item, dict) else {"title": str(item)}
@@ -399,7 +399,7 @@ def movie_card(item, tm):
     b = MessageBuilder()
 
     # 1. Что это — заголовок.
-    b.text_line(f"{ui_label('cinema', '')} ")
+    b.text_line(f"{ui_label('cinema', '').strip()} ")
     b.bold(title)
     b.newline()
 
@@ -415,6 +415,10 @@ def movie_card(item, tm):
         meta_parts.append("🏳️‍🌈 ЛГБТ")
     if tm and tm.get("genres"):
         meta_parts.append(tm["genres"])
+    # Дата выхода — в той же строке: полная дата премьеры, если известна, иначе год.
+    release = (_event_date_label((tm or {}).get("release_date")) if tm else "") or year
+    if release:
+        meta_parts.append(release)
     if meta_parts:
         b.spacer()
         b.line(" · ".join(meta_parts))
@@ -436,10 +440,12 @@ def movie_card(item, tm):
         b.spacer()
         b.line(reason)
 
-    # 6. Дата выхода — последняя строка карточки.
-    if year:
+    # 6. Трейлер — ссылка, спрятанная в тексте, последней строкой.
+    trailer = str((tm or {}).get("trailer_url") or "").strip()
+    if trailer:
         b.spacer()
-        b.labeled_line("Дата выхода", year, lowercase=False)
+        b.link("Посмотреть трейлер", trailer)
+        b.newline()
 
     return title, b.build_stripped()
 
@@ -476,10 +482,7 @@ def _reason_line(item, tm):
             return ""
         if kind == "mood":
             return f"Подборка для настроения «{label}»"
-    because = tm.get("because")
-    if because and tm.get("via") == "similar":
-        genres = ", ".join(tm.get("shared_genres") or [])
-        return f"Подходит по жанрам: {genres}" if genres else ""
+    # «Подходит по жанрам: …» не пишем: жанры уже в строке рейтинга.
     hook = (item.get("hook") or "").strip()
     return hook if hook else ""
 
@@ -525,8 +528,9 @@ def _fmt_date(iso):
 
 
 def book_text(item):
-    """Compact book card: title → author/original/year → genre → plot."""
+    """Карточка книги: название → автор · страна · год · оригинал → жанр → сюжет."""
     author = str(item.get("author") or "").strip()
+    country = str(item.get("country") or "").strip()
     title = str(item.get("title") or "Книга").strip()
     original = str(
         item.get("original_title") or item.get("title_en") or item.get("alternative_title") or ""
@@ -541,16 +545,18 @@ def book_text(item):
         "thrillers": "Триллер", "romance": "Романтика", "history": "История",
         "biography & autobiography": "Биография", "psychology": "Психология",
     }
-    genre = next((genre_names.get(str(value).casefold(), str(value).strip())
-                  for value in categories if str(value).strip()), "")
+    genre = str(item.get("genre") or "").strip() or next(
+        (genre_names.get(str(value).casefold(), str(value).strip())
+         for value in categories if str(value).strip()), "")
 
     b = MessageBuilder()
     b.bold(title)
     b.newline()
     metadata = [value for value in (
         author,
-        original if original.casefold() != title.casefold() else "",
+        country,
         year,
+        original if original.casefold() != title.casefold() else "",
     ) if value]
     if metadata:
         b.line(" · ".join(metadata))
@@ -1277,7 +1283,8 @@ def _novelty_status(kind, item) -> str:
     label = _event_date_label(day.isoformat()) if day else ""
     released = day is not None and day <= date.today()
     if kind == "movie":
-        return "🎬 Сейчас в кино" if released else f"🎬 Скоро в кино · {label}" if label else "🎬 Скоро в кино"
+        # В «Новинку» попадают только вышедшие фильмы; дата премьеры — в строке жанров.
+        return "🎬 Уже в кино"
     if kind == "book":
         return f"📚 Новая книга · {label}" if label else "📚 Новая книга"
     if kind == "game":
@@ -1305,7 +1312,8 @@ def novelty_card(kind, item) -> MessageSpec:
     b.newline()
     if kind == "movie":
         # Премьеры кино — без оценок: у свежих фильмов они ещё не устоялись.
-        meta = [_movie_genres_for_line(item).replace(", ", " · ")]
+        meta = [_movie_genres_for_line(item).replace(", ", " · "),
+                _event_date_label(str(_item_value(item, "date", "") or ""))]
         summary = _movie_premiere_summary(_item_value(item, "overview", ""), limit=300)
     elif kind == "book":
         meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]

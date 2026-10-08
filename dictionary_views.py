@@ -517,7 +517,7 @@ async def send_dict_search_prompt(bot, cid, lang, q=None):
 
 def _dict_tts_row(entry):
     if entry.get("lang") == "nl" and entry.get("id"):
-        return [[InlineKeyboardButton("🔊 Прослушать", callback_data=f"tts_word:{entry['id']}")]]
+        return [[InlineKeyboardButton("🔊 Прослушать", callback_data=f"tts_word:{entry['id']}", api_kwargs={"style": "success"})]]
     return []
 
 

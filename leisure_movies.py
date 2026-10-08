@@ -308,6 +308,8 @@ def _movie_kb(i, category=None):
         [InlineKeyboardButton("✨ Другой фильм", callback_data=f"movie_pick_{i}")],
         # «Не нравится» — в чёрный список, сразу следующая рекомендация.
         [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
+        # «Настроить» — «Моё кино» новым сообщением, карточка остаётся.
+        [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_movie")],
     ]
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
@@ -321,12 +323,12 @@ _GENRE_MENU = [
 ]
 
 def _movie_genre_menu_kb(back="m_leisure"):
-    """Выбор после «Другой фильм»: любой жанр по вкусу, новинка или жанр; всё зелёное."""
+    """Выбор после «Другой фильм»: жанры и новинка; всё зелёное."""
     rows = [
-        [InlineKeyboardButton("Любой жанр", callback_data="movie_next", api_kwargs={"style": "success"})],
-        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")],
         *[[InlineKeyboardButton(label, callback_data=f"movie_g_{gid}", api_kwargs={"style": "success"})]
           for label, gid in _GENRE_MENU],
+        # Новинка — последней, после жанров; цвет явный, чтобы не всплывала наверх.
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie", api_kwargs={"style": "success"})],
     ]
     rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
@@ -429,9 +431,13 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
             tm = None
     if tm and tm.get("id"):
         tm = dict(tm)
-        tm["poster"] = await asyncio.to_thread(
-            tmdb.english_poster, tm.get("id"), tm.get("kind") or "movie",
+        kind = tm.get("kind") or "movie"
+        poster, trailer = await asyncio.gather(
+            asyncio.to_thread(tmdb.english_poster, tm.get("id"), kind),
+            asyncio.to_thread(tmdb.trailer_url, tm.get("id"), kind),
         )
+        tm["poster"] = poster or tm.get("poster")
+        tm["trailer_url"] = trailer or ""
     title, msg = _movie_card(it, tm)
     kb = _movie_kb(i, category=category)
     if tm and tm.get("poster"):

@@ -49,14 +49,15 @@ CID = "novelty-test"
 def test_movie_novelty_card_says_now_in_cinema_and_has_actions(monkeypatch):
     sent = _send(monkeypatch, "movie", _movies(1))
 
-    assert sent["text"].startswith("🎬 Сейчас в кино\n\n«Фильм 0»\nдрама\n\nПервое предложение.")
+    today = leisure_ui._event_date_label(date.today().isoformat())
+    assert sent["text"].startswith(f"🎬 Уже в кино\n\n«Фильм 0»\nдрама · {today}\n\nПервое предложение.")
     rows = sent["reply_markup"].inline_keyboard
     assert [(row[0].text, row[0].callback_data) for row in rows[:2]] == [
         ("✨ Другой фильм", "nov_pick_movie"), ("Не нравится", "nov_no_movie"),
     ]
     assert rows[1][0].api_kwargs == {"style": "danger"}
     picker = leisure_novelty.genre_picker(CID, "movie", back="nov_card_movie").inline_keyboard
-    assert [row[0].text for row in picker[:2]] == ["Любой жанр", "🆕 Новинка"]
+    assert picker[-2][0].text == "🆕 Новинка" and all("Любой" not in r[0].text for r in picker)
     assert picker[-1][0].callback_data == "nov_card_movie"
 
 
@@ -64,7 +65,9 @@ def test_upcoming_movie_and_game_show_date_like_concerts():
     later = date.today() + timedelta(days=10)
     label = leisure_ui._event_date_label(later.isoformat())
 
-    assert leisure_ui._novelty_status("movie", {"date": later.isoformat()}) == f"🎬 Скоро в кино · {label}"
+    assert leisure_ui._novelty_status("movie", {"date": later.isoformat()}) == "🎬 Уже в кино"
+    card = leisure_ui.novelty_card("movie", {"title": "Дюна", "date": later.isoformat(), "genres": "фантастика"})
+    assert f"фантастика · {label}" in card.text
     assert leisure_ui._novelty_status("game", {"date": later.isoformat()}) == f"👾 Выходит {label}"
     assert leisure_ui._novelty_status("book", {"published_date": "2026-09-01"}).startswith("📚 Новая книга · 1 сентября")
 
@@ -123,7 +126,7 @@ def test_empty_novelty_offers_genres(monkeypatch):
 
     assert sent["text"] == "Свежих книжных премьер пока нет — загляни позже."
     # Новинок нет — под сообщением сразу выбор жанра.
-    assert sent["reply_markup"].inline_keyboard[0][0].callback_data == "book_next"
+    assert sent["reply_markup"].inline_keyboard[0][0].callback_data == "nov_book"
 
 
 def test_disliked_game_is_not_recommended_again(monkeypatch):
@@ -135,3 +138,17 @@ def test_disliked_game_is_not_recommended_again(monkeypatch):
     recommendation_stoplist.add(cid, "game", name, "hidden")
 
     assert all(item["name"] != name for item in leisure_games._eligible_games(cid))
+
+
+def test_movie_novelty_only_offers_films_already_in_cinemas(monkeypatch):
+    today = date.today()
+
+    async def premieres(_cid):
+        return [{"title": "Вышел", "date": (today - timedelta(days=3)).isoformat()},
+                {"title": "Скоро", "date": (today + timedelta(days=5)).isoformat()}]
+
+    monkeypatch.setattr(leisure_novelty.leisure_movies, "get_movie_premieres", premieres)
+
+    items = asyncio.run(leisure_novelty._items("42", "movie"))
+
+    assert [item["title"] for item in items] == ["Вышел"]

@@ -11,8 +11,16 @@ async def ingest(bot, cid, text):
     await wardrobe.add_item(bot, cid, text)
 
 
+def _settings_style(choice):
+    """w_lookst_<индекс стиля|any> → название стиля или None (любой)."""
+    import settings
+    return settings.STYLES[int(choice)] if choice.isdigit() and int(choice) < len(settings.STYLES) else None
+
+
 async def handle_callback(bot, cid, q, data, status=None):
-    if data == "w_look":
+    if data == "w_look" or data.startswith("w_lookst_"):
+        choice = data[len("w_lookst_"):] if data.startswith("w_lookst_") else ""
+        style = (_settings_style(choice))
         previous = wardrobe._get_cached_look(cid) or {}
         previous_style_tip = (previous.get("look_data") or {}).get("style_tip") or None
         previous_style = (previous.get("look_data") or {}).get("primary_style") or None
@@ -32,6 +40,7 @@ async def handle_callback(bot, cid, q, data, status=None):
                 previous_style_tip=previous_style_tip,
                 previous_style=previous_style,
                 previous_main_accent=previous_main_accent,
+                style=style,
             )
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_wardrobe")

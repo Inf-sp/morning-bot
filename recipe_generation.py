@@ -652,7 +652,9 @@ def _home_idea_complete(idea) -> bool:
     return bool(idea.get("reason") and idea.get("tip"))
 
 
-def _home_idea_context(cid, now=None) -> dict:
+def _home_idea_context(cid, now=None, cuisine=None) -> dict:
+    """cuisine — разовый выбор кухни из «Другой рецепт»: меняет подсказку модели,
+    но не подпись кэша, поэтому новый рецепт становится рецептом дня этого приёма пищи."""
     now = now or datetime.now(TZ)
     raw_fridge = store.get_list(config.FRIDGE_KEY, str(cid))
     fridge = _fridge_migrate(raw_fridge)
@@ -689,8 +691,13 @@ def _home_idea_context(cid, now=None) -> dict:
     pool_signature = hashlib.sha256(
         json.dumps(pool_signature_data, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
+    override = {}
+    if cuisine:
+        label = next((label for key, label in cooking_settings.CUISINE_OPTIONS if key == cuisine), cuisine)
+        override = {"cuisine_codes": [cuisine], "cuisines": f"только {label.split(' ', 1)[-1]} кухня"}
     return {
         **signature_data,
+        **override,
         "has_fridge": bool(fridge),
         "signature": signature,
         "month": pool_signature_data["month"],
@@ -840,9 +847,9 @@ def warm_cooking_home_ideas(cid, now=None) -> dict:
     return result
 
 
-def get_cooking_home_idea(cid, now=None, refresh=False) -> dict:
+def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
-    context = _home_idea_context(cid, now=now)
+    context = _home_idea_context(cid, now=now, cuisine=cuisine)
     profile = store.get_profile(cid)
     entries = profile.get("cooking_home_ideas") or {}
     cached = entries.get(context["meal"]) if isinstance(entries, dict) else None

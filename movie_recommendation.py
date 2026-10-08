@@ -139,8 +139,7 @@ def _reason_text(tm):
     because = tm.get("because")
     if because:
         if tm.get("via") == "similar":
-            genres = ", ".join(tm.get("shared_genres") or [])
-            return f"Подходит по жанрам: {genres}" if genres else ""
+            return ""  # «Подходит по жанрам» не пишем: жанры уже в строке рейтинга
         return f"Потому что вам понравился «{because}»"
     return ""
 

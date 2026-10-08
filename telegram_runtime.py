@@ -196,10 +196,12 @@ def _enhance_markup(markup, level=2):
                 (_DELETE_RE, "danger", None), (_NAV_RE, "primary", None),
             ):
                 if pattern.match(text):
-                    if level >= 1 and "style" not in button:
+                    # Явно заданный в коде цвет — и явно заданное место: не поднимаем наверх.
+                    explicit = "style" in button
+                    if level >= 1 and not explicit:
                         button["style"] = style
                         changed = True
-                    if bucket is not None:
+                    if bucket is not None and not explicit:
                         bucket.add(index)
                     break
     if not changed:

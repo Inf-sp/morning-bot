@@ -128,9 +128,11 @@ def lookup_title(title, title_en=""):
             details = _get(f"/{kind}/{item.get('id')}", {}, timeout=10, language="ru-RU") or {}
             overview = details.get("overview", "")
         value = {
+            "id": item.get("id"),
             "name": item.get("title") or item.get("name") or query,
             "name_en": item.get("original_title") or item.get("original_name") or "",
             "year": _year(item),
+            "release_date": item.get("release_date") or item.get("first_air_date") or "",
             "rating": item.get("vote_average") or 0,
             "vote_count": int(item.get("vote_count") or 0),
             "popularity": item.get("popularity") or 0,

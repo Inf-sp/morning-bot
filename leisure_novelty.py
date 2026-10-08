@@ -6,6 +6,7 @@
 """
 import asyncio
 import logging
+from datetime import date
 from itertools import zip_longest
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -57,7 +58,10 @@ def _marker(value) -> str:
 
 async def _items(cid, kind) -> list[dict]:
     if kind == "movie":
-        return [dict(item) for item in await leisure_movies.get_movie_premieres(cid)]
+        # Только фильмы, которые уже идут в кино: будущие премьеры не советуем.
+        today = date.today().isoformat()
+        return [dict(item) for item in await leisure_movies.get_movie_premieres(cid)
+                if str(item.get("date") or "")[:10] <= today]
     if kind == "book":
         return [dict(item) for item in await leisure_books._book_premieres_with_covers()]
     if kind == "game":
@@ -95,6 +99,7 @@ def card_keyboard(kind):
         [InlineKeyboardButton(_OTHER_LABEL[kind], callback_data=f"nov_pick_{kind}")],
         [InlineKeyboardButton("Не нравится", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("🎚️ Настроить", callback_data=f"lz_cfg_{kind}")],
         nav_row("m_leisure"),
     ])
 

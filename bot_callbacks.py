@@ -35,6 +35,7 @@ import wardrobe
 import weather
 import yearly_tops
 from util import ack_loading as _ack
+from ui import menu as menu_ui
 
 _log = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def _status_stages(data):
     def progress(first, second, final):
         return ((0, first), (2, second), (6, final))
 
-    if data in ("m_food", "m_food_next"):
+    if data in ("m_food", "m_food_next") or data.startswith("food_go_"):
         return progress("🍳 Подбираю рецепт...", "🧊 Сверяю холодильник...", "📝 Готовлю рецепт...")
     if data.startswith(("as_food", "as_fridge_cook", "food_")):
         first = "⏳ Ищу рецепт..."
@@ -277,6 +278,24 @@ def _games_genre(prefix, **kwargs):
         c.bot, c.cid, status=status, refresh=True, genre=c.data[len(prefix):], **kwargs))
 
 
+def _food_recipe(c):
+    """food_go_<приём пищи>_<кухня|any>: новый рецепт под выбор, предпочтения не меняются."""
+    meal, _sep, cuisine = c.data[len("food_go_"):].partition("_")
+    return c.status(lambda status: menu.send_food_menu(
+        c.bot, c.cid, status=status, refresh=True, meal=meal,
+        cuisine=None if cuisine in ("", "any") else cuisine))
+
+
+def _games_on_platform(c):
+    """vg_pg_<платформа>_<жанр|any>: подбор на выбранной платформе, без сохранения выбора."""
+    platform, _sep, genre = c.data[len("vg_pg_"):].partition("_")
+    board = platform == "board"
+    _label, platforms = leisure_games.PLATFORM_GROUPS.get(platform, ("", None))
+    return c.status(lambda status: leisure_games.send_game_recommendation(
+        c.bot, c.cid, status=status, refresh=True, genre=None if genre in ("", "any") else genre,
+        board=board, platforms=None if board else platforms))
+
+
 def _card_args(c):
     """token, short_id, genre_index, page из «op:token:id:genre:page»."""
     _op, token, short_id, genre_index, page = c.data.split(":", 4)
@@ -359,6 +378,11 @@ ROUTES = (
     # Гардероб: инлайн-кабинет.
     R("w_look", lambda c: c.status(
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)), sub="wardrobe"),
+    # «Другой образ»: выбор направления под образом, затем новый образ в этом стиле.
+    R("w_pick", _swap_kb(lambda c: wardrobe.style_picker_kb())),
+    R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard())),
+    R("w_lookst_*", _picked(lambda c: c.status(
+        lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)))),
     R("w_*", lambda c: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data), sub="wardrobe"),
     R("colr:*", _open_collection_route),
     # Настройки обучения и общие настройки.
@@ -373,6 +397,12 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
+    # «Другой рецепт»: приём пищи → кухня → новый рецепт (выбор только для этого рецепта).
+    R("food_pick", _swap_kb(lambda c: menu_ui.food_meal_kb())),
+    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb())),
+    R("food_meal_*", _swap_kb(lambda c: menu_ui.food_cuisine_kb(
+        c.data[len("food_meal_"):], [(key, label) for key, label in settings.CUISINE_OPTIONS]))),
+    R("food_go_*", _picked(_food_recipe)),
     R("m_menu", _main_menu),
     # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.
     R("weather_myday", lambda c: c.status(lambda status: myday.send_plany(c.bot, c.cid, status=status))),
@@ -442,6 +472,11 @@ ROUTES = (
     # Игры: «Во что поиграть» — подбор недели; «✨ Другая игра» — vg_next.
     R("vg_reco", _games()),
     R("vg_set", lambda c: leisure_games.send_game_set(c.bot, c.cid, q=c.q)),
+    # «Настроить» под карточкой Досуга: настройки раздела новым сообщением, карточка остаётся.
+    R("lz_cfg_movie", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid)),
+    R("lz_cfg_book", lambda c: leisure_books.send_favorite_books(c.bot, c.cid)),
+    R("lz_cfg_game", lambda c: leisure_games.send_game_set(c.bot, c.cid)),
+    R("lz_cfg_music", lambda c: cleanup.open_collection(c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
     R("vg_setg:*", lambda c: leisure_games.send_game_set_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("vg_seti:*", lambda c: leisure_games.send_game_set_card(c.bot, c.cid, *_card_args(c))),
     R("vg_setd:*", lambda c: leisure_games.confirm_game_set_delete(c.bot, c.cid, *_card_args(c), q=c.q)),
@@ -449,8 +484,12 @@ ROUTES = (
     R("vg_board", _picked(_games(refresh=True, genre="board"))),
     R("vg_next", _picked(_games(refresh=True))),
     R("vg_next_*", _picked(_games_genre("vg_next_"))),
-    R("vg_pick_b", _swap_kb(lambda c: leisure_games._genre_keyboard(board=True, back="vg_card_b"))),
-    R("vg_pick", _swap_kb(lambda c: leisure_games._genre_keyboard(back="vg_card"))),
+    # «Другая игра»: сначала на чём играть (vg_plat_*), затем жанр (vg_pg_<платформа>_<жанр|any>).
+    R("vg_pick_b", _swap_kb(lambda c: leisure_games._platform_keyboard(back="vg_card_b"))),
+    R("vg_pick", _swap_kb(lambda c: leisure_games._platform_keyboard(back="vg_card"))),
+    R("vg_plat_*", _swap_kb(lambda c: leisure_games._genre_keyboard(
+        platform=c.data[len("vg_plat_"):], back="vg_pick"))),
+    R("vg_pg_*", _picked(_games_on_platform)),
     R("vg_card_b", _swap_kb(lambda c: leisure_games._game_keyboard(board=True))),
     R("vg_card", _swap_kb(lambda c: leisure_games._game_keyboard())),
     R("vg_premieres", lambda c: c.status(

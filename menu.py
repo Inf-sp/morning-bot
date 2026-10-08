@@ -81,7 +81,7 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None):
+async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None, cuisine=None):
     """Главный экран Готовки: рецепт из холодильника на текущий приём пищи.
 
     Рецепт дня берётся из кэша мгновенно (ночной прогрев готовит все три);
@@ -124,7 +124,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
                 bot, cid, stages=util.StatusManager.TOPIC_STAGES["food"])
     try:
         idea = await asyncio.to_thread(
-            recipe_generation.get_cooking_home_idea, cid, recipe_now, refresh)
+            recipe_generation.get_cooking_home_idea, cid, recipe_now, refresh, cuisine)
         msg = menu_ui.food_menu(idea, meal=meal, news=news)
         await status.replace(
             msg.text,

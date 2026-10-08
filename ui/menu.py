@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from .builder import MessageBuilder, MessageSpec
 from .constants import LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
+from .navigation import nav_row
 from .news import append_weekly_news
 
 UI_MYDAY = ui_label("myday", "").strip()
@@ -265,11 +266,36 @@ def food_menu(idea=None, *, meal="", news=None):
         b.labeled_line("Полезно", tip)
 
     append_weekly_news(b, news)
-    rows = [
-        [("✨ Другой рецепт", "m_food_next")],
+    return b.build_stripped(reply_markup=food_card_kb())
+
+
+def food_card_kb():
+    """Кнопки рецепта: «Другой рецепт» открывает выбор приёма пищи и кухни под рецептом."""
+    return ikb([
+        [("✨ Другой рецепт", "food_pick")],
         [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "as_fridge_home")],
-    ]
-    return b.build_stripped(reply_markup=ikb(rows))
+    ])
+
+
+_FOOD_MEALS = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
+_GREEN = {"style": "success"}
+
+
+def food_meal_kb():
+    """Шаг 1 «Другого рецепта»: приём пищи."""
+    rows = [[InlineKeyboardButton(label, callback_data=f"food_meal_{key}", api_kwargs=_GREEN)]
+            for key, label in _FOOD_MEALS]
+    rows.append(nav_row("food_card"))
+    return InlineKeyboardMarkup(rows)
+
+
+def food_cuisine_kb(meal, cuisines):
+    """Шаг 2: кухня для выбранного приёма пищи; cuisines — [(код, подпись)]."""
+    rows = [[InlineKeyboardButton("Любая кухня", callback_data=f"food_go_{meal}_any", api_kwargs=_GREEN)]]
+    rows.extend([InlineKeyboardButton(label, callback_data=f"food_go_{meal}_{key}", api_kwargs=_GREEN)]
+                for key, label in cuisines)
+    rows.append(nav_row("food_pick"))
+    return InlineKeyboardMarkup(rows)
 
 
 def food_empty_menu():

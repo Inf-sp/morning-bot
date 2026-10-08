@@ -55,10 +55,13 @@ def test_recommendation_cards_have_no_refresh_label():
         (leisure_music._listen_kb(), "listen_no"),
         (leisure_games._game_keyboard(), "game_no"),
     ):
-        dislike = keyboard.inline_keyboard[-2][0]
+        dislike = keyboard.inline_keyboard[-3][0]
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
             "Не нравится", callback, {"style": "danger"},
         )
+        # Под «Не нравится» — синяя «Настроить» своего раздела, затем «Назад | Главная».
+        assert keyboard.inline_keyboard[-2][0].text == "🎚️ Настроить"
+        assert keyboard.inline_keyboard[-2][0].callback_data.startswith("lz_cfg_")
         assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
@@ -436,8 +439,9 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
 
     assert bot.photos[-1]["photo"] == "https://img/paterson.jpg"
     assert "Патерсон" in bot.photos[-1]["caption"]
-    assert "Дата выхода: 2016" in bot.photos[-1]["caption"]
-    assert "Фильм · драма, комедия" in bot.photos[-1]["caption"]
+    assert "Дата выхода" not in bot.photos[-1]["caption"]
+    assert "Фильм · драма, комедия · 2016" in bot.photos[-1]["caption"]
+    assert bot.photos[-1]["caption"].startswith("🎬 Патерсон")
     assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
     assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
 
@@ -756,18 +760,18 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
         lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
     )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
-        ["Любой жанр"], ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
+        ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
         ["Романтика"], ["История"], ["Биографии"], ["Психология"],
     ]
     assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
-        ["Любой жанр"], ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
+        ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
     ]
     assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
-        ["Любой жанр"], ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
-        ["Триллер"], ["Романтика"], ["Драма"],
+        ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["Триллер"], ["Романтика"], ["Драма"], ["🆕 Новинка"],
     ]
     assert _labels(leisure_games._genre_keyboard())[:-1] == [
-        ["Любой жанр"], ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
+        ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
         ["Приключения"], ["Уютные"], ["Хоррор"],
     ]
 
@@ -776,7 +780,7 @@ def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
-        ["Любой жанр"], ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -887,7 +891,7 @@ def test_book_card_has_modern_compact_hierarchy():
     })
     assert message.text == (
         "Ночной город\n\n"
-        "Автор · Night Night Fawn · 2026\n"
+        "Автор · 2026 · Night Night Fawn\n"
         "Жанр: Фэнтези\n\n"
         "Сюжет\n"
         "Первое предложение. Второе предложение. Третье предложение."
@@ -1279,10 +1283,10 @@ def test_new_game_cards_show_platforms_without_emoji():
 def test_other_opens_green_genre_picker_and_back_returns_card_buttons():
     picker = leisure_movies._movie_genre_menu_kb(back="movie_card_3")
     rows = picker.inline_keyboard
-    assert (rows[0][0].text, rows[0][0].callback_data) == ("Любой жанр", "movie_next")
-    assert all(row[0].api_kwargs == {"style": "success"} for row in rows[2:-1])
+    assert all(row[0].text != "Любой жанр" for row in rows)
+    assert all(row[0].api_kwargs == {"style": "success"} for row in rows[:-1])
     assert rows[-1][0].callback_data == "movie_card_3"
-    assert leisure_games._genre_keyboard(board=True).inline_keyboard[0][0].callback_data == "vg_board"
+    assert leisure_games._genre_keyboard(board=True).inline_keyboard[0][0].callback_data.startswith("vg_gb_")
     assert all("Новинка" not in b.text for row in leisure_games._genre_keyboard(board=True).inline_keyboard for b in row)
 
 
@@ -1323,7 +1327,7 @@ def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
         return message.markups
 
     picker = click("movie_pick_3")[0]
-    assert picker.inline_keyboard[0][0].text == "Любой жанр"
+    assert picker.inline_keyboard[0][0].text == "Комедия"
     assert click("movie_card_3")[0].inline_keyboard[0][0].callback_data == "movie_pick_3"
     assert click("movie_g_35") == [None] and shown == ["35"]
 
@@ -1352,3 +1356,84 @@ def test_book_genre_pick_uses_library_taste_first(monkeypatch):
     items = asyncio.run(leisure_books._book_candidates("42", {"value": "scifi"}))
 
     assert asked == [("Фантастика", "Science fiction")] and items == [{"title": "Dune"}]
+
+
+def test_movie_card_puts_full_release_date_into_rating_line():
+    _title, msg = leisure_movies.leisure_ui.movie_card({"title": "Дюна"}, {
+        "name": "Дюна", "year": "2021", "release_date": "2021-09-15", "kind": "movie",
+        "rating": 7.8, "vote_count": 900, "genres": "фантастика, драма",
+    })
+
+    assert "⭐ 7.8 · Фильм · фантастика, драма · 15 сентября 2021" in msg.text
+    assert "Дата выхода" not in msg.text
+
+
+def test_movie_card_hides_genre_match_and_links_trailer_in_text():
+    _title, msg = leisure_movies.leisure_ui.movie_card({"title": "Дюна"}, {
+        "name": "Дюна", "year": "2021", "kind": "movie", "genres": "фантастика, драма",
+        "because": "Интерстеллар", "via": "similar", "shared_genres": ["драма", "фантастика"],
+        "trailer_url": "https://www.youtube.com/watch?v=abc",
+    })
+
+    assert "Подходит по жанрам" not in msg.text
+    assert msg.text.endswith("Посмотреть трейлер")
+    link = next(e for e in msg.entities if e.type == "text_link")
+    assert link.url == "https://www.youtube.com/watch?v=abc"
+
+
+def test_configure_under_card_opens_section_settings_as_new_message(monkeypatch):
+    import bot_callbacks
+    from types import SimpleNamespace
+
+    opened = []
+
+    async def favorites(_bot, _cid, q=None):
+        opened.append(("movie", q))
+
+    async def answer(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.leisure_movies, "send_favorite_movies", favorites)
+    query = SimpleNamespace(data="lz_cfg_movie", message=SimpleNamespace(chat_id="42", message_id=1), answer=answer)
+    asyncio.run(bot_callbacks.handle(SimpleNamespace(callback_query=query), SimpleNamespace(bot=object()), None))
+
+    assert opened == [("movie", None)]
+    assert leisure_novelty_card_cfg() == "lz_cfg_book"
+
+
+def leisure_novelty_card_cfg():
+    import leisure_novelty
+    return leisure_novelty.card_keyboard("book").inline_keyboard[-2][0].callback_data
+
+
+def test_book_card_shows_author_country_year_and_genre():
+    text = leisure_movies.leisure_ui.book_text({
+        "title": "Проект «Аве Мария»", "author": "Энди Вейер", "country": "США",
+        "year": "2021", "genre": "Фантастика", "plot": "Учёный просыпается на корабле.",
+    }).text
+
+    assert text.startswith("Проект «Аве Мария»\n\nЭнди Вейер · США · 2021\nЖанр: Фантастика")
+
+
+def test_other_game_asks_platform_first_then_genre_on_that_platform():
+    platforms = leisure_games._platform_keyboard(back="vg_card").inline_keyboard
+    assert [row[0].text for row in platforms[:-1]] == ["Мобильные", "Консоль", "ПК", "Настолки"]
+    assert all(row[0].api_kwargs == {"style": "success"} for row in platforms[:-1])
+
+    genres = leisure_games._genre_keyboard(platform="console", back="vg_pick").inline_keyboard
+    assert genres[0][0].callback_data == "nov_game" and genres[1][0].callback_data.startswith("vg_pg_console_")
+    assert genres[-2][0].callback_data.startswith("vg_pg_console_")
+    board = leisure_games._genre_keyboard(platform="board").inline_keyboard
+    assert all("Новинка" not in b.text for row in board for b in row)
+    assert all("Настолки" not in b.text for row in leisure_games._game_keyboard().inline_keyboard for b in row)
+
+
+def test_platform_pick_filters_games_without_saving_preferences(monkeypatch):
+    monkeypatch.setattr(leisure_games, "_effective_platforms", lambda _cid: ["pc"])
+    consoles = {"ps5", "xbox", "switch"}
+
+    pool = leisure_games._eligible_games("platform-test", platforms=consoles)
+
+    assert pool and all(consoles & set(item["platforms"]) for item in pool)
+    assert leisure_games._effective_platforms("platform-test") == ["pc"]
