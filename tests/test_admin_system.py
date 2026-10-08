@@ -379,18 +379,22 @@ def _patch_mutate_kv(monkeypatch, store):
     monkeypatch.setattr(store, "mutate_kv", mutate)
 
 
-def test_api_check_rows_format_ok_fail_skip_with_comma_latency():
+def test_api_check_rows_format_ok_fail_limit_with_comma_latency():
     msg = admin_ui.api_check([
         {"label": "Gemini", "status": "ok", "seconds": 0.83, "detail": ""},
         {"label": "Groq", "status": "fail", "seconds": 3.0, "detail": "ошибка авторизации"},
-        {"label": "SerpApi", "status": "skip", "seconds": None, "detail": "ключ не настроен"},
+        {"label": "SerpApi", "status": "fail", "seconds": None, "detail": "ключ не настроен"},
+        {"label": "Tavily", "status": "limit", "seconds": None, "detail": "лимит исчерпан"},
+        {"label": "YouTube", "status": "ok", "seconds": None, "detail": "по реальным запросам"},
     ])
 
     assert msg.text.splitlines() == [
         "🩺 Проверка API", "",
         "✅ Gemini · 0,8 с",
         "❌ Groq · 3,0 с · ошибка авторизации",
-        "⏭ SerpApi · ключ не настроен",
+        "❌ SerpApi · ключ не настроен",
+        "⚠️ Tavily · лимит исчерпан",
+        "✅ YouTube · по реальным запросам",
     ]
 
 

@@ -271,15 +271,15 @@ def logs(rows, errors_24h, updated_at, updated_unix=None):
 
 # ================= ПРОВЕРКА API =================
 
-_API_CHECK_MARKS = {"ok": "✅", "fail": "❌", "skip": "⏭"}
+_API_CHECK_MARKS = {"ok": "✅", "fail": "❌", "limit": "⚠️"}
 
 
 def api_check_row(result):
     parts = [f"{_API_CHECK_MARKS.get(result.get('status'), '❌')} {result.get('label') or '—'}"]
     seconds = result.get("seconds")
-    if result.get("status") != "skip" and seconds is not None:
+    if seconds is not None:
         parts.append(f"{float(seconds):.1f} с".replace(".", ","))
-    if result.get("status") != "ok" and result.get("detail"):
+    if result.get("detail"):
         parts.append(str(result["detail"]))
     return " · ".join(parts)
 

@@ -119,17 +119,16 @@ def test_exhausted_quota_is_yellow(monkeypatch):
     )
 
 
-def test_unclassified_openrouter_monitor_result_is_neutral(monkeypatch):
-    """Непонятный probe не является доказательством поломки последнего резерва."""
+def test_unclassified_failure_without_later_success_is_yellow_not_white(monkeypatch):
+    """Непонятный сбой проверки — 🟡 с причиной, а не нейтральный ⚪."""
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
     provider_runtime.record_result(
         "openrouter", False, status_code=400, error="HTTP 400", record_history=False,
     )
 
-    assert service_monitor.format_row("openrouter") == (
-        "⚪ OpenRouter · Резерв 3 · 0 сегодня"
-    )
+    row = service_monitor.format_row("openrouter")
+    assert row.startswith("🟡 OpenRouter · Резерв 3 · ") and "⚪" not in row
 
 
 def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
@@ -242,16 +241,25 @@ def test_openrouter_row_shows_requests_not_money(monkeypatch):
     assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 3 · 12 сегодня"
 
 
-def test_groq_unclassified_error_is_neutral_not_yellow(monkeypatch):
+def test_unclassified_failure_after_real_success_is_green(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
     state = provider_runtime.blank_state("groq")
     state.update({
         "status": provider_runtime.WARNING, "error_type": "unknown",
         "last_error": "не удалось определить статус", "quota_remaining": 999, "quota_total": 1000,
+        "incident_started_at": 1000, "last_real_success": 2000,
     })
 
-    assert service_monitor.format_row("groq", state) == "⚪ Groq · Резерв 1 · 999/1 000 осталось"
+    assert service_monitor.format_row("groq", state) == "🟢 Groq · Резерв 1 · 999/1 000 осталось"
+
+
+def test_service_without_any_data_has_no_status_icon(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+
+    row = service_monitor.format_row("openweather", provider_runtime.blank_state("openweather"))
+    assert row.startswith("OpenWeather · ")
 
 
 def test_gemini_usage_does_not_expose_internal_model_name(monkeypatch):
@@ -480,13 +488,20 @@ def test_live_check_all_times_out_one_slow_service(monkeypatch):
     assert results["groq"]["status"] == "ok"
 
 
-def test_live_check_skips_unconfigured_and_quota_spending_services(monkeypatch):
+def test_live_check_uses_real_requests_for_paid_probes(monkeypatch):
+    _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor.config, "SERP_API_KEY", "")
+    monkeypatch.setattr(service_monitor, "_configured", lambda service: service != "serpapi")
     monkeypatch.setattr(service_monitor, "probe", lambda _s: (_ for _ in ()).throw(AssertionError))
 
-    assert service_monitor.live_check("serpapi")["detail"] == "ключ не настроен"
-    assert service_monitor.live_check("cloudflare")["status"] == "skip"
-    assert service_monitor.live_check("youtube")["detail"] == "проверяется реальными запросами"
+    assert service_monitor.live_check("serpapi") == {
+        "service": "serpapi", "label": "SerpApi", "status": "fail",
+        "seconds": None, "detail": "ключ не настроен",
+    }
+    assert service_monitor.live_check("youtube") is None  # реальных запросов ещё не было
+    provider_runtime.record_result("cloudflare", True)
+    assert service_monitor.live_check("cloudflare")["status"] == "ok"
+    assert service_monitor.live_check("cloudflare")["detail"] == "по реальным запросам"
 
 
 def test_live_check_failure_is_friendly_and_has_no_secrets(monkeypatch):

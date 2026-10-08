@@ -21,6 +21,24 @@ OK = provider_runtime.OK
 WARNING = provider_runtime.WARNING
 DOWN = provider_runtime.DOWN
 _DOT = provider_runtime.DOT
+
+
+def _display_status(state: dict) -> str:
+    """Статус строки админки: без нейтрального ⚪.
+
+    Неклассифицированный сбой проверки (``error_type == "unknown"``) — 🟢, если
+    после него был успешный реальный запрос, иначе 🟡 «сервис не ответил».
+    """
+    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    if state.get("error_type") == "unknown":
+        failed_at = int(state.get("incident_started_at") or state.get("last_check") or 0)
+        return OK if int(state.get("last_real_success") or 0) >= failed_at > 0 else WARNING
+    return status
+
+
+def _row(status: str, text: str) -> str:
+    """Строка со значком статуса; без данных о сервисе значка нет."""
+    return text if status == UNKNOWN else f"{_DOT[status]} {text}"
 _configured = provider_runtime.is_configured
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
@@ -130,7 +148,7 @@ def _status_detail(service: str, state: dict) -> str:
 def format_row(service: str, state: dict | None = None) -> str:
     spec = SPEC_BY_KEY[service]
     state = state or provider_runtime.get_state(service)
-    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    status = _display_status(state)
     if service == "groq":
         return _format_groq_row(state)
     if service in ("gemini", "cloudflare", "openrouter"):
@@ -143,11 +161,11 @@ def format_row(service: str, state: dict | None = None) -> str:
         if not _configured(service):
             return "🔴 Google Books · Книги · API-ключ не настроен"
         if status in (WARNING, DOWN):
-            return " · ".join([
-                f"{_DOT[status]} {spec.label}", spec.category, _status_detail(service, state),
-            ])
+            return _row(status, " · ".join([
+                spec.label, spec.category, _status_detail(service, state),
+            ]))
         return f"🟢 Google Books · Книги · {_number(remaining)}/1 000 осталось"
-    parts = [f"{_DOT[status]} {spec.label}"]
+    parts = [spec.label]
     category = _DATA_CATEGORIES.get(service, spec.category)
     if category:
         parts.append(category)
@@ -155,7 +173,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
         parts[-1] = f"{parts[-1]} → {SPEC_BY_KEY[fallback].label}"
-    return " · ".join(parts)
+    return _row(status, " · ".join(parts))
 
 
 def _format_groq_row(state: dict | None = None) -> str:
@@ -164,10 +182,7 @@ def _format_groq_row(state: dict | None = None) -> str:
     if not _configured("groq"):
         return "🔴 Groq · Резерв 1 · API-ключ не настроен"
     remaining, total = _confirmed_quota("groq", state)
-    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
-    # Как у остальных AI-строк: неклассифицированный сбой — нейтральный ⚪, а не жёлтый без причины.
-    if state.get("error_type") == "unknown":
-        status = UNKNOWN
+    status = _display_status(state)
     if (status in (OK, UNKNOWN) and remaining is not None and total
             and int(remaining) * 2 < int(total)):
         status = WARNING
@@ -179,23 +194,18 @@ def _format_groq_row(state: dict | None = None) -> str:
             for model in {model for _kind, model, _role in _GROQ_MODELS}
         )
         detail = f"{_number(used)} сегодня"
-    if status in (WARNING, DOWN) and state.get("error_type") not in ("", "quota", "unknown"):
+    if status in (WARNING, DOWN) and state.get("error_type") not in ("", "quota"):
         detail = str(state.get("last_error") or "сервис не ответил")
-    return f"{_DOT[status]} Groq · Резерв 1 · {detail}"
+    return _row(status, f"Groq · Резерв 1 · {detail}")
 
 
 def _format_ai_row(service: str, state: dict | None = None) -> str:
     state = state or provider_runtime.get_state(service)
     label = SPEC_BY_KEY[service].label
     role = _AI_ROLES[service]
-    status = state.get("status") if state.get("status") in _DOT else UNKNOWN
+    status = _display_status(state)
     if not _configured(service):
         return f"🔴 {label} · {role} · API-ключ не настроен"
-    # Неопределённый результат фонового probe — не подтверждённая поломка
-    # сервиса. Показываем нейтральное состояние, пока не придёт реальная
-    # ошибка (авторизация, лимит, сеть или 5xx) либо успешная проверка.
-    if state.get("error_type") == "unknown":
-        status = UNKNOWN
     quota_remaining, quota_total = (
         (None, None) if service == "openrouter"
         else _confirmed_quota(service, state)
@@ -220,13 +230,12 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
                     "RPM": "слишком много запросов",
                     "TPM": "лимит токенов",
                 }.get(str(cooldown.get("cooldown_scope") or "").upper(), detail)
-    elif (status in (DOWN, WARNING)
-            and state.get("error_type") not in ("quota", "unknown")):
-        detail = str(state.get("last_error") or detail)
+    elif status in (DOWN, WARNING) and state.get("error_type") != "quota":
+        detail = str(state.get("last_error") or "сервис не ответил")
     fallback = str(state.get("fallback") or "")
     if fallback and fallback in SPEC_BY_KEY:
         detail = f"{detail} → {SPEC_BY_KEY[fallback].label}"
-    return f"{_DOT[status]} {label} · {role} · {detail}"
+    return _row(status, f"{label} · {role} · {detail}")
 
 
 def rows() -> list[str]:
@@ -432,7 +441,7 @@ async def monitoring_job(_context) -> None:
 
 # ================= Ручная проверка API (🩺 Проверить API) =================
 
-LIVE_CHECK_TIMEOUT = 10  # секунд на один сервис; весь прогон ≈ самый медленный
+LIVE_CHECK_TIMEOUT = 15  # секунд на один сервис; весь прогон ≈ самый медленный
 # Cloudflare probe — реальный вызов модели (тратит нейроны), YouTube search стоит
 # 100 единиц дневной квоты. Их состояние обновляют только реальные запросы.
 _LIVE_CHECK_REAL_ONLY = ("cloudflare", "youtube")
@@ -440,20 +449,27 @@ _LIVE_CHECK_REAL_ONLY = ("cloudflare", "youtube")
 _LIVE_CHECK_EXCLUDED = ("telegram",)
 
 
-def live_check(service: str) -> dict:
+def live_check(service: str) -> dict | None:
     """Один синхронный probe для админской проверки; запись — через probe()."""
     def result(status, seconds=None, detail=""):
         return {"service": service, "label": SPEC_BY_KEY[service].label,
                 "status": status, "seconds": seconds, "detail": detail}
 
-    if service in _LIVE_CHECK_REAL_ONLY:
-        return result("skip", detail="проверяется реальными запросами")
     if not _configured(service):
-        return result("skip", detail="не подключена" if service == "database" else "ключ не настроен")
+        return result("fail", detail="не подключена" if service == "database" else "ключ не настроен")
+    if service in _LIVE_CHECK_REAL_ONLY:
+        # Платный probe не делаем: статус — по последнему реальному запросу.
+        state = provider_runtime.get_state(service)
+        status = _display_status(state)
+        if status == UNKNOWN:
+            return None
+        if status == OK:
+            return result("ok", detail="по реальным запросам")
+        return result("fail", detail=state.get("last_error") or "сервис не ответил")
     if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
-        return result("skip", detail="лимит исчерпан")
+        return result("limit", detail="лимит исчерпан")
     if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
-        return result("skip", detail="лимит исчерпан")
+        return result("limit", detail="лимит исчерпан")
     if service == "database":
         try:
             return result("ok", storage_driver.query_latency())
@@ -493,7 +509,8 @@ async def live_check_all() -> list[dict]:
                     "seconds": None, "detail": "не удалось проверить"}
 
     try:
-        return list(await asyncio.gather(*(one(service) for service in services)))
+        results = await asyncio.gather(*(one(service) for service in services))
+        return [result for result in results if result is not None]
     finally:
         # Зависший probe дорабатывает в фоне и сам запишет результат.
         pool.shutdown(wait=False)
