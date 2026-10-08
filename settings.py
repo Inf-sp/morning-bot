@@ -20,6 +20,7 @@ NOTIF_TYPES = [
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
+    ("news_digest",     "Главные новости"),
 ]
 
 CUISINE_OPTIONS = [
@@ -469,6 +470,9 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "ns_disruptions":
         import ns_alerts
         await ns_alerts.check_user(bot, cid)
+    elif kind == "news_digest":
+        import news_digest
+        await news_digest.send_digest(bot, cid)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -509,6 +513,7 @@ _ADMIN_NOTIFICATION_META = {
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
+    "news_digest":     ("19:00", "Главные новости"),
 }
 
 

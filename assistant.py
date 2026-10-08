@@ -156,6 +156,12 @@ _GENERIC_RECIPE_INGREDIENTS = {"этого", "того", "них", "холоди
 
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
 _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
+# «Добавь сериал X» — глагол сразу перед категорией: слово «любимые» не обязательно.
+_DIRECT_ADD_RE = re.compile(
+    r"^\s*(?:добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\s+(?:мне\s+)?"
+    r"(?:фильм|сериал|кино|книг|книжк|музыкант|исполнител|артист|групп)",
+    re.I,
+)
 
 # (regex категории, config-ключ хранилища, человекочитаемая папка для подтверждения)
 _LOVE_CATEGORIES = [
@@ -182,7 +188,8 @@ def _detect_love_add(text: str):
     Триггер строго требует и глагол добавления, и слово «любим*» — иначе
     «люблю фильмы про космос» не должно случайно матчиться."""
     text = text or ""
-    if not _LOVE_ADD_VERB_RE.search(text) or not _LOVE_WORD_RE.search(text):
+    loved = _LOVE_ADD_VERB_RE.search(text) and _LOVE_WORD_RE.search(text)
+    if not loved and not _DIRECT_ADD_RE.search(text):
         return None
     category = next(
         ((key, label) for pattern, key, label in _LOVE_CATEGORIES if pattern.search(text)),
@@ -208,15 +215,27 @@ async def try_add_love_from_chat(bot, cid, text):
     if not detected:
         return False
     store_key, folder_label, title = detected
-    from leisure_collection import movie_title_for_lookup, normalize_movie_items, plain_label
+    from leisure_collection import (
+        _resolve_movie_label, canonical_movie_label, movie_title_for_lookup, plain_label,
+    )
 
     if store_key == "movies":
+        # Тот же строгий поиск, что при ручном добавлении: чужой фильм не сохраняется.
         try:
-            title = (await asyncio.wait_for(
-                asyncio.to_thread(normalize_movie_items, [title]), timeout=4.0,
-            ))[0]
+            metadata = await asyncio.wait_for(
+                asyncio.to_thread(_resolve_movie_label, movie_title_for_lookup(title), allow_ai=True),
+                timeout=12.0,
+            )
         except asyncio.TimeoutError:
-            title = plain_label(title)
+            metadata = None
+        if not metadata:
+            await bot.send_message(
+                chat_id=cid,
+                text=f"Не нашёл «{plain_label(title)}» среди фильмов и сериалов. Уточни название — "
+                     "можно оригинальное.",
+            )
+            return True
+        title = canonical_movie_label(title, metadata)
     else:
         title = plain_label(title)
     key_map = {
@@ -316,6 +335,9 @@ def _detect_intent(text: str):
         "как запомнить", "как различать", "в чём разница", "в чем разница",
         "чем отличается", "чем отличаются", "различие между", "разница между",
         "что значит", "что означает", "объясни", "объясните",
+        # Вопрос о конкретном фильме или человеке — ответ ассистента, не подборка.
+        "что за ", "кто такой", "кто такая", "кто такие", "расскажи", "о чём", "о чем",
+        "про что", "сколько сезонов", "чем закончил",
     )
     if any(marker in t for marker in informational_markers):
         return None

@@ -436,6 +436,18 @@ async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_ns_disruptions failed for cid=%s", cid)
 
 
+@ai.background_job
+async def job_news_digest(context: ContextTypes.DEFAULT_TYPE):
+    """19:00: 3–5 главных новостей дня (NOS, NU.nl, NH Nieuws)."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "news_digest"):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, "news_digest")
+        except Exception:
+            logging.exception("job_news_digest failed for cid=%s", cid)
+
+
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "evening_weather"):
@@ -660,6 +672,7 @@ def _build_application():
     )
     jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
     jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
+    jq.run_daily(job_news_digest, time=_t("19:00"), days=tuple(range(7)), **_job_options("news_digest_daily"))
     jq.run_daily(
         job_evening_weather,
         time=_t(settings.EVENING_WEATHER_TIME),

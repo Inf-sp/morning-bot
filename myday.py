@@ -13,6 +13,7 @@ import config
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
 import store
+import sun
 import ai
 import weather
 import learning
@@ -859,6 +860,16 @@ def _day_wind_text(wind_ms):
     label = "Сильный ветер" if value > 10 else "Ветер"
     return f"{label} до {value:.0f} м/с"
 
+def _holidays(settings_data):
+    """Праздники страны из Настроек (Nager.Date); сбой — просто без строки."""
+    try:
+        import public_holidays
+        return public_holidays.holiday_lines(settings_data.get("cc"), datetime.now(config.TZ).date())
+    except Exception:
+        _log.warning("myday: holidays unavailable", exc_info=True)
+        return []
+
+
 def _rail_works(cid):
     """Работы NS на станциях города; любой сбой NS — просто без строки."""
     try:
@@ -921,6 +932,9 @@ def _build_day_text(cid, *, refresh_current=False):
             rain_part = ""
         wind_part = _day_wind_text(display_wind_ms)
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
+        golden = sun.evening_golden_start(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
+        if golden:
+            weather_line += f" · золотой час {golden}"
     else:
         rain = 0
         rain_mm = None
@@ -966,6 +980,7 @@ def _build_day_text(cid, *, refresh_current=False):
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),
         rail_works=_rail_works(cid),
+        holidays=_holidays(s),
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

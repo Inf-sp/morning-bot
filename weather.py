@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
+import sun
 import ai
 from util import cap_sentence, flag_from_cc, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
 from ui import weather as weather_ui
@@ -411,6 +412,9 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             else f"Закат {sunset}" if sunset
             else ""
         )
+        # Золотой и синий час — расчёт по координатам города, без внешних API.
+        golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(TZ).date(), TZ)
+        sunrise_line = "\n".join(line for line in (sunrise_line, golden) if line)
         sunset_line = ""
         tomorrow = {
             "code": d["weathercode"][1],

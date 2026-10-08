@@ -51,6 +51,7 @@ def day_summary(
     quote_text="",
     quote_author="",
     rail_works=None,
+    holidays=None,
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -67,6 +68,11 @@ def day_summary(
 
     if weather_line:
         _compact_line(b, weather_icon, "Погода", weather_line)
+
+    # Праздники страны — в день праздника и накануне.
+    for line in holidays or []:
+        b.line(f"🎉 {line}")
+        b.spacer()
 
     # Плановые работы NS на станциях города — только в дни работ.
     for works in rail_works or []:
