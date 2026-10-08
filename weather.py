@@ -412,9 +412,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             else f"Закат {sunset}" if sunset
             else ""
         )
-        # Золотой и синий час — расчёт по координатам города, без внешних API.
+        # Вечерний золотой час — по координатам города, без внешних API; идёт в «Полезно».
         golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(TZ).date(), TZ)
-        sunrise_line = "\n".join(line for line in (sunrise_line, golden) if line)
         sunset_line = ""
         tomorrow = {
             "code": d["weathercode"][1],
@@ -426,6 +425,12 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             "wind": d["windspeed_10m_max"][1] or 0,
         }
         advice = _qualitative_outlook([tomorrow], "Завтра")
+        if golden:
+            # Золотой час — последним предложением строки «Полезно».
+            advice = str(advice or "").strip()
+            if advice and advice[-1] not in ".!?…":
+                advice += "."
+            advice = f"{advice} {golden}.".strip()
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
             nav_row("m_myday"),
