@@ -1217,8 +1217,8 @@ def leisure_hub_kb():
         ("🆕 Премьеры и концерты", "lz_prem"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
-        InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+        InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
     ]])
 
 

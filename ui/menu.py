@@ -95,7 +95,7 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("🎚️ Настроить", "w_closet"), ("#️⃣ Главная", "m_menu")],
+            [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "w_closet")],
         ],
     ),
     "m_food": (
@@ -104,7 +104,7 @@ _SCREENS = {
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
             [("🍳 Что приготовить", "m_food")],
-            [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+            [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "as_fridge_home")],
         ],
     ),
 }
@@ -178,7 +178,7 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Тренажёр", f"a_train_{code}")],
         [(ui_label("game", "Угадай персонажа"), "a_game")],
-        [("🎚️ Настроить", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
+        [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", f"a_dictlang_{code}_from_menu")],
     ]))
 
 
@@ -272,7 +272,7 @@ def food_menu(idea=None, *, meal="", news=None):
     append_weekly_news(b, news)
     rows = [
         [("✨ Другой рецепт", "m_food_next")],
-        [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+        [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "as_fridge_home")],
     ]
     return b.build_stripped(reply_markup=ikb(rows))
 
