@@ -343,10 +343,10 @@ _GENRE_MENU = [
 def _movie_genre_menu_kb(back="m_leisure"):
     """Выбор после «Другой фильм»: жанры (стандартные, без цвета) и зелёная новинка."""
     rows = [
+        # Новинка — первой, как в книгах, музыке и играх.
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")],
         *[[InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")]
           for label, gid in _GENRE_MENU],
-        # Новинка — последней, после жанров; цвет явный, чтобы не всплывала наверх.
-        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie", api_kwargs={"style": "success"})],
     ]
     rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)

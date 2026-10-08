@@ -769,8 +769,8 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
         ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
     ]
     assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
-        ["Комедия"], ["Ужасы"], ["Фантастика"],
-        ["Триллер"], ["Романтика"], ["Драма"], ["🆕 Новинка"],
+        ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["Триллер"], ["Романтика"], ["Драма"],
     ]
     assert _labels(leisure_games._genre_keyboard())[:-1] == [
         ["🆕 Новинка"], ["RPG"], ["Экшен"], ["Стратегии"],
@@ -1288,7 +1288,7 @@ def test_other_opens_plain_genre_picker_and_back_returns_card_buttons():
     assert all(row[0].text != "Любой жанр" for row in rows)
     genres = [row[0] for row in rows[:-1] if row[0].callback_data.startswith("movie_g_")]
     assert genres and all(not button.api_kwargs for button in genres)
-    assert rows[-2][0].api_kwargs == {"style": "success"}  # «Новинка» остаётся зелёной
+    assert rows[0][0].callback_data == "nov_movie"  # «Новинка» — первой
     assert rows[-1][0].callback_data == "movie_card_3"
     assert leisure_games._genre_keyboard(board=True).inline_keyboard[0][0].callback_data.startswith("vg_gb_")
     assert all("Новинка" not in b.text for row in leisure_games._genre_keyboard(board=True).inline_keyboard for b in row)
@@ -1331,7 +1331,8 @@ def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
         return message.markups
 
     picker = click("movie_pick_3")[0]
-    assert picker.inline_keyboard[0][0].text == "Комедия"
+    assert picker.inline_keyboard[0][0].text == "🆕 Новинка"
+    assert picker.inline_keyboard[1][0].text == "Комедия"
     assert click("movie_card_3")[0].inline_keyboard[0][0].callback_data == "movie_pick_3"
     assert click("movie_g_35") == [None] and shown == ["35"]
 
