@@ -834,8 +834,6 @@ def series_premiere_screen(item):
     release_date = _movie_premiere_date(item)
     if release_date:
         meta.append(release_date)
-    rating = float(_item_value(item, "rating", 0) or 0)
-    meta.append(f"⭐ {rating:.1f}/10")
     genres = _movie_genres_for_line(item)
     if genres:
         meta.append(genres.replace(", ", " · "))
@@ -1118,11 +1116,8 @@ def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         if not url and movie_id:
             url = f"https://www.themoviedb.org/movie/{movie_id}"
         genres = _movie_genres_for_line(item).replace(", ", " · ")
-        rating = _weekly_rating(
-            _item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10,
-        )
         _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url,
-                     (genres, _event_date_label(_item_value(item, "date", "")), rating))
+                     (genres, _event_date_label(_item_value(item, "date", ""))))
     return bool(rows)
 
 
@@ -1300,8 +1295,8 @@ def novelty_card(kind, item) -> MessageSpec:
         b.bold(heading)
     b.newline()
     if kind == "movie":
-        meta = [_movie_genres_for_line(item).replace(", ", " · "),
-                _weekly_rating(_item_value(item, "rating", 0), _item_value(item, "vote_count", 0), 10)]
+        # Премьеры кино — без оценок: у свежих фильмов они ещё не устоялись.
+        meta = [_movie_genres_for_line(item).replace(", ", " · ")]
         summary = _movie_premiere_summary(_item_value(item, "overview", ""), limit=300)
     elif kind == "book":
         meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]

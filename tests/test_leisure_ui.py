@@ -1013,7 +1013,8 @@ def test_weekly_events_are_one_line_per_item_across_all_categories():
     assert message.text.count("• Концерт") == 6
     assert message.text.count("• «Книга") == 3
     assert message.text.count("• Игра") == 3
-    assert "«Фильм 0» · драма · ⭐ 7.5/10" in message.text
+    assert "• «Фильм 0» · драма\n" in message.text
+    assert "⭐" not in message.text.split("🎫")[0]
     assert "«Книга 0» · Фэнтези · ⭐ 4.4/5" in message.text
     assert "Описание не должно" not in message.text
     assert "https://www.youtube.com/watch?v=game0" in {
@@ -1197,7 +1198,7 @@ def test_book_premiere_carousel_edits_the_same_message(monkeypatch):
     ]
 
 
-def test_series_premiere_card_marks_favorite_season_and_rating():
+def test_series_premiere_card_marks_favorite_season_without_rating():
     message = leisure_movies.leisure_ui.series_premiere_screen({
         "name": "Разделение",
         "season_number": 3,
@@ -1210,7 +1211,8 @@ def test_series_premiere_card_marks_favorite_season_and_rating():
     })
 
     assert "📺 Премьеры сериалов" in message.text
-    assert "3 сезон · из Моего кино · 12 сентября 2026 · ⭐ 8.4/10" in message.text
+    assert "3 сезон · из Моего кино · 12 сентября 2026 · драма" in message.text
+    assert "⭐" not in message.text
     assert "драма · фантастика" in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
