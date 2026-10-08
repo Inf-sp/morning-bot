@@ -104,6 +104,7 @@ _REFRESH_RE = re.compile(
 )
 # «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
 _PREFS_RE = re.compile(r"^Выбрать предпочтения$")
+_BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить|Показать списком|Показать карточками)$")
 # Листание: эмодзи-стрелки ◀️/▶️ → синие «←»/«→».
 _PAGER_ARROWS = {"◀️": "←", "◀": "←", "⬅️": "←", "⬅": "←", "▶️": "→", "▶": "→", "➡️": "→", "➡": "→"}
@@ -200,7 +201,7 @@ def _enhance_markup(markup, level=2):
                 continue
             for pattern, style, bucket in (
                 (_REFRESH_RE, "success", refresh_rows), (_ADD_RE, "success", add_rows),
-                (_PREFS_RE, "success", prefs_rows),
+                (_PREFS_RE, "primary", prefs_rows),
                 (_DELETE_RE, "danger", None), (_NAV_RE, "primary", None),
             ):
                 if pattern.match(text):
@@ -214,10 +215,18 @@ def _enhance_markup(markup, level=2):
                     break
     if not changed:
         return None
-    # Сверху «Другой/Обновить…», затем «Добавить…», «Выбрать предпочтения», дальше исходный порядок.
-    order = sorted(range(len(rows)), key=lambda index: (
-        index not in refresh_rows, index not in add_rows, index not in prefs_rows,
-    ))
+    # Сверху «Другой/Обновить…», затем «Добавить…», дальше исходный порядок;
+    # «Выбрать предпочтения» (синяя) — прямо над «Назад | Главная».
+    order = sorted(
+        (index for index in range(len(rows)) if index not in prefs_rows),
+        key=lambda index: (index not in refresh_rows, index not in add_rows),
+    )
+    nav_at = next(
+        (position for position, index in enumerate(order)
+         if any(_BACK_HOME_RE.match(str(button.get("text") or "")) for button in rows[index])),
+        len(order),
+    )
+    order[nav_at:nav_at] = sorted(prefs_rows)
     return {"inline_keyboard": [rows[index] for index in order]}
 
 

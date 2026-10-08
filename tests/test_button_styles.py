@@ -178,7 +178,7 @@ def test_what_to_buy_is_green():
     assert rows[0][0] == {"text": "Что докупить", "callback_data": "w_buy", "style": "success"}
 
 
-def test_preferences_button_is_green_right_under_add():
+def test_preferences_button_is_blue_right_above_back_and_home():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Мои фильмы", callback_data="list")],
         [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="movie_prefs")],
@@ -187,8 +187,8 @@ def test_preferences_button_is_green_right_under_add():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [(row[0]["text"], row[0].get("style")) for row in rows] == [
-        ("Добавить фильм", "success"), ("Выбрать предпочтения", "success"),
-        ("Мои фильмы", None), ("Назад", "primary"),
+        ("Добавить фильм", "success"), ("Мои фильмы", None),
+        ("Выбрать предпочтения", "primary"), ("Назад", "primary"),
     ]
 
 
