@@ -71,6 +71,7 @@ def test_golden_hour_matches_known_sun_times():
     assert abs((sets.hour * 60 + sets.minute) - (16 * 60 + 29)) <= 2
 
     line = sun.golden_hour_line(52.63, 4.75, date(2026, 10, 8), TZ)
-    assert line.startswith("🌅 Золотой час: ") and " и " in line and "синий час" in line
-    assert sun.evening_golden_start(52.63, 4.75, date(2026, 10, 8), TZ) == line.split(" и ")[1][:5]
+    assert line.startswith("Золотой час: ") and " и " not in line and "синий" not in line
+    assert line.count("–") == 1
+    assert sun.evening_golden_start(52.63, 4.75, date(2026, 10, 8), TZ) == line[len("Золотой час: "):][:5]
     assert sun.golden_hour_line(None, None, date(2026, 10, 8), TZ) == ""

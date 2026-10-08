@@ -1,4 +1,4 @@
-"""Золотой и синий час по высоте солнца (формулы NOAA), без внешних API.
+"""Золотой час по высоте солнца (формулы NOAA), без внешних API.
 
 Золотой час — солнце между −4° и +6° над горизонтом, синий час — между −6° и −4°.
 Точность — около минуты, этого достаточно для съёмки.
@@ -58,15 +58,11 @@ def _span(window):
 
 
 def golden_hour_line(lat, lon, day: date, tz) -> str:
-    """«🌅 Золотой час: 07:30–08:25 и 18:05–18:55 · синий час 18:55–19:20» для полного прогноза."""
+    """«Золотой час: 18:05–18:55» — только вечернее окно, без эмодзи и синего часа."""
     if lat is None or lon is None:
         return ""
-    windows = light_windows(float(lat), float(lon), day, tz)
-    golden = " и ".join(part for part in (_span(windows["morning_golden"]), _span(windows["evening_golden"])) if part)
-    if not golden:
-        return ""
-    blue = _span(windows["evening_blue"])
-    return f"🌅 Золотой час: {golden}" + (f" · синий час {blue}" if blue else "")
+    golden = _span(light_windows(float(lat), float(lon), day, tz)["evening_golden"])
+    return f"Золотой час: {golden}" if golden else ""
 
 
 def evening_golden_start(lat, lon, day: date, tz) -> str:
