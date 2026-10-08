@@ -4,6 +4,8 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
+from telegram import InlineKeyboardButton
+
 import config
 import dictionary_morning
 import dictionary_import
@@ -243,23 +245,23 @@ def test_normalize_dictionary_merges_same_term_with_different_translations(monke
     }]
 
 
-def test_daily_learning_notification_has_learning_and_home_buttons(monkeypatch):
+def test_daily_word_has_delete_home_and_notification_settings(monkeypatch):
     sent = []
+    delete = InlineKeyboardButton("❌ Удалить слово", callback_data="a_dictdelid_w1")
 
     monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
     monkeypatch.setattr(
         dictionary_morning,
         "_build_morning_word",
-        lambda *_args: (MessageSpec(text="🇳🇱 Слово дня"), []),
+        lambda *_args: (MessageSpec(text="🇳🇱 Слово дня"), [[delete]]),
     )
 
     asyncio.run(settings._send_scheduled_notification(RecordingBot(sent), "42", "daily_words"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("🔕 Отключить уведомления", "set_notifpush_daily_words")],
-        [("🧠 Обучение", "notify_learning")],
-        [("#️⃣ Главная", "m_menu")],
+        [("❌ Удалить слово", "a_dictdelid_w1")],
+        [("#️⃣ Главная", "m_menu"), ("🎚️ Настройки уведомлений", "set_notif_new")],
     ]
 
 
@@ -423,3 +425,15 @@ def test_placeholder_daily_word_uses_compact_saved_word_and_is_not_migrated(monk
     assert "русская транскрипция" not in msg.text
     assert words[0]["daily_word_shown_at"]
     assert migrate_legacy_study_card(words[0]) is False
+
+
+def test_morning_word_offers_delete_with_confirmation(monkeypatch):
+    monkeypatch.setattr(dictionary_morning, "build_daily_practice", lambda *_a, **_k: {
+        "flag": "🇳🇱", "entries": [{"id": "w1", "term": "Wazig", "translation": "размытый"}],
+    })
+
+    _msg, rows = dictionary_morning._build_morning_word("42", "nl")
+
+    assert [(b.text, b.callback_data) for row in rows for b in row] == [
+        ("❌ Удалить слово", "a_dictdelid_w1"),
+    ]

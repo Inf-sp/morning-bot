@@ -145,3 +145,13 @@ def test_meaningful_emoji_stay_and_main_menu_is_untouched():
         [InlineKeyboardButton("🧵 Гардероб", callback_data="m_wardrobe")],
     ])
     assert telegram_runtime._enhance_markup(main) is None
+
+
+def test_disable_button_is_red(sent):
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔕 Отключить уведомления", callback_data="off")]])
+    bot = telegram_runtime.MenuCleanupBot("1:x")
+    asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
+
+    assert sent[0]["reply_markup"]["inline_keyboard"][0][0] == {
+        "text": "Отключить уведомления", "callback_data": "off", "style": "danger",
+    }

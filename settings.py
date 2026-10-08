@@ -453,11 +453,7 @@ async def _send_scheduled_notification(bot, cid, kind):
                 reply_markup=kb,
             )
     elif kind == "daily_words":
-        kb = notification_markup("daily_words", [[
-            InlineKeyboardButton("🧠 Обучение", callback_data="notify_learning"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]])
-        await dictionary_morning.send_daily_practice(bot, cid, reply_markup=kb)
+        await dictionary_morning.send_daily_practice(bot, cid)
     elif kind == "weekend_events":
         import leisure_concerts
         await leisure_concerts.send_weekend_events(bot, cid)
@@ -999,6 +995,8 @@ async def handle_callback(bot, cid, data, q=None):
         await menu.send_food_menu(bot, cid)
     elif data == "set_notif":
         await send_notif(bot, cid, q)
+    elif data == "set_notif_new":
+        await send_notif(bot, cid)
     elif data in (
         "set_refresh_data",
         "set_refresh_review", "set_refresh_review_apply",

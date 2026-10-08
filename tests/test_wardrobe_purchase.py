@@ -76,7 +76,7 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
     assert text.startswith("💳 Что докупить\n\n👔 Твой шкаф · 9 вещей · 16 образов\n")
     assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
     assert "1. Белые кожаные кеды · +14 образов" in text
-    assert "Или напиши вещь, которую присматриваешь" in text
+    assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
     assert two_shoes["weaknesses"][0] == "2 пары обуви на все случаи"
@@ -130,13 +130,14 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     best = wardrobe._purchase_state(cid)["pool"][0]
     assert (best["zone"], best["gain"]) == ("Обувь", 16)
     assert labels[0] == [f"1. {best['item']}"]
-    assert labels[3:] == [["✨ Другие покупки"], ["🔎 Стоит ли покупать…"], ["⬅️ Назад"]]
+    assert labels[3:] == [["⬅️ Назад"]]
     assert f"🛒 Самое полезное сейчас\n1. {best['item']} · +16 образов" in message["text"]
     callbacks = [b.callback_data for row in message["reply_markup"].inline_keyboard for b in row]
     assert all(len(data.encode()) <= 64 and "кед" not in data for data in callbacks)
     assert all(routing.resolve_callback_handler(data)["handled"] for data in callbacks if data.startswith("w_"))
     assert wardrobe.store.pending_input[cid] == "wardrobe_buy"
 
+    # Старая кнопка «Другие покупки» из истории чата всё ещё работает.
     query = Query()
     asyncio.run(wardrobe.handle_callback(bot, cid, query, "w_buy_more"))
     first = {row[0] for row in labels[:3]}
@@ -197,7 +198,7 @@ def test_not_needed_is_persisted_and_replaced(monkeypatch):
     assert profile["wardrobe_purchase_rejections"] == {"items": ["Белые кожаные кеды"]}
     assert "Белые кожаные кеды" not in query.edited[0]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
-    assert len(query.edited[0]["reply_markup"].inline_keyboard) == 6
+    assert len(query.edited[0]["reply_markup"].inline_keyboard) == 4
     wardrobe.store.pending_input.pop(cid, None)
 
 

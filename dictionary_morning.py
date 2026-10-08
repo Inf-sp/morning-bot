@@ -15,7 +15,10 @@ from dictionary_model import (
     study_card_data,
     study_card_is_complete,
 )
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from ui import learning as learning_ui
+from ui.constants import delete_label
 
 _code = dictionary._code
 
@@ -114,20 +117,27 @@ def _build_morning_word(cid, language):
     msg = learning_ui.morning_words(
         practice["flag"], entries=practice["entries"], empty_hint=not practice["entries"],
     )
-    return msg, []
+    word_id = str(practice["entries"][0].get("id") or "")
+    # Удаление идёт через общее подтверждение словаря.
+    return msg, ([[InlineKeyboardButton(
+        delete_label("Удалить слово"), callback_data=f"a_dictdelid_{word_id}")]] if word_id else [])
 
 
-async def send_daily_practice(bot, cid, reply_markup=None):
+async def send_daily_practice(bot, cid):
     """11:00 — одно слово с глубоким разбором, без блока «Живой язык»."""
     import settings
     language = settings.study_lang(cid)
-    word_msg, _del_row = _build_morning_word(cid, language)
+    word_msg, del_row = _build_morning_word(cid, language)
     if word_msg is None:
         return False
     await bot.send_message(
         chat_id=cid,
         text=word_msg.text,
         entities=word_msg.entities,
-        reply_markup=reply_markup,
+        reply_markup=InlineKeyboardMarkup([*del_row, [
+            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+            # Отдельным сообщением: слово дня остаётся в истории.
+            InlineKeyboardButton("🎚️ Настройки уведомлений", callback_data="set_notif_new"),
+        ]]),
     )
     return True

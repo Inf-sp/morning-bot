@@ -292,8 +292,6 @@ def purchase_screen(data):
     else:
         b.spacer()
         b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
-    b.spacer()
-    b.line("Или напиши вещь, которую присматриваешь, — подскажу цвет и сочетания.")
     return b.build_stripped()
 
 
