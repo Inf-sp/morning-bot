@@ -102,3 +102,9 @@ def test_lookup_title_filters_kind_and_prefers_requested_year(monkeypatch):
     found = tmdb.lookup_title("Adults", strict=True, kind="tv", year="2025")
 
     assert found["id"] == 3
+
+
+def test_movie_card_reason_never_says_because_you_liked():
+    import movie_recommendation
+
+    assert movie_recommendation._reason_text({"because": "Элита", "via": "recommendations"}) == ""

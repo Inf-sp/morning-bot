@@ -249,3 +249,9 @@ def test_pager_arrows_become_blue_side_arrows_and_list_button_is_blue():
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [(b["text"], b.get("style")) for b in rows[0]] == [("←", "primary"), ("2/5", None), ("→", "primary")]
     assert (rows[1][0]["text"], rows[1][0]["style"]) == ("Показать списком", "primary")
+
+
+def test_cancel_button_is_red():
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton("Отмена", callback_data="cancel")]])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert rows[0][0] == {"text": "Отмена", "callback_data": "cancel", "style": "danger"}

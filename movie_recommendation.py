@@ -136,11 +136,8 @@ def _reason_text(tm):
     reason = tm.get("reason")
     if reason:
         return _reason_label(reason)
-    because = tm.get("because")
-    if because:
-        if tm.get("via") == "similar":
-            return ""  # «Подходит по жанрам» не пишем: жанры уже в строке рейтинга
-        return f"Потому что вам понравился «{because}»"
+    # Строку «Потому что вам понравился …» в карточке не пишем; «Подходит по жанрам» —
+    # тоже: жанры уже в строке рейтинга. Связь с любимым остаётся только в ранжировании.
     return ""
 
 
