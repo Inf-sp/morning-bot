@@ -539,12 +539,6 @@ async def global_error_handler(update, context):
     )
 
 
-async def job_check_polling_lease(context):
-    # После рестарта Postgres lock может забрать другой процесс — выходим, systemd перезапустит.
-    if not await asyncio.to_thread(context.job.data.is_held):
-        context.application.stop_running()
-
-
 def _build_application():
     request = _RetryingHTTPXRequest(
         connection_pool_size=16,
@@ -689,23 +683,18 @@ def main():
         ai.FREE_CHAT_ROUTE_VERSION,
         identity["hostname"], identity["started_at"],
     )
+    storage_driver.check_backend()
     lease = PollingLease()
     if not lease.acquire():
         raise SystemExit("Polling lease was not acquired")
     app = None
     try:
         app = _build_application()
-        app.job_queue.run_repeating(
-            job_check_polling_lease, interval=60, first=60, data=lease,
-            **_job_options("polling_lease_check"),
-        )
         _log.info(
             "Polling starting pid=%s hostname=%s deployment=%s application=%s",
             identity["pid"], identity["hostname"], identity["deployment"], id(app),
         )
         app.run_polling(drop_pending_updates=True, bootstrap_retries=0)
-        if lease.lost:
-            raise SystemExit("Polling lease lost")
     finally:
         _log.info(
             "Process stopping pid=%s hostname=%s deployment=%s",

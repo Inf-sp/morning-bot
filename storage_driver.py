@@ -1,8 +1,10 @@
-"""KV-драйвер PostgreSQL с локальным in-memory backend для разработки."""
+"""KV-хранилище в SQLite-файле на VM с in-memory backend для локальной разработки."""
 
 import copy
 import json
 import logging
+import os
+import sqlite3
 import threading
 import time
 
@@ -14,16 +16,16 @@ _memory = {}
 _memory_locks = {}
 _connection_lock = threading.RLock()
 _PRELOAD_MAX_BYTES = 1_000_000
-_CONNECT_TIMEOUT = 5
+_BUSY_TIMEOUT_SECONDS = 10
 _read_cache = {}
 
 
 class StorageUnavailableError(RuntimeError):
-    """Настроенное постоянное хранилище временно недоступно."""
+    """Настроенное постоянное хранилище недоступно."""
 
 
 def _json_safe(value):
-    """Приводит поддерживаемые контейнеры к виду, который одинаково хранится в памяти и JSONB."""
+    """Приводит поддерживаемые контейнеры к виду, который одинаково хранится в памяти и JSON."""
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -38,10 +40,31 @@ def _legacy_keys(key):
     return tuple(getattr(config, "LEGACY_STORAGE_KEYS", {}).get(key, ()))
 
 
+def _persistent():
+    """SQLite при DATABASE_PATH; память — только локально без настроек БД.
+
+    Старый DATABASE_URL без DATABASE_PATH означает, что данные ещё не перенесены:
+    молча работать в памяти нельзя — бот «потерял» бы пользователей.
+    """
+    if config.DATABASE_PATH:
+        return True
+    if config.DATABASE_URL:
+        raise StorageUnavailableError(
+            "DATABASE_PATH is not set: run tools/migrate_to_sqlite.py --apply first"
+        )
+    return False
+
+
+def check_backend():
+    """Проверка при старте: настроенное хранилище открывается, иначе исключение."""
+    if _persistent():
+        db()
+
+
 # Бот — единственный процесс, который пишет в kv, и каждая запись проходит через
 # save/mutate/delete ниже, обновляя этот кэш. Поэтому значения не устаревают и
-# читаются из PostgreSQL один раз за жизнь процесса. Ручные правки БД в обход
-# бота видны после рестарта сервиса.
+# читаются из файла один раз за жизнь процесса. Ручные правки БД в обход бота
+# видны после рестарта сервиса.
 def _cache_get(key):
     cached = _read_cache.get(key)
     return None if cached is None else copy.deepcopy(cached)
@@ -51,128 +74,64 @@ def _cache_set(key, value):
     _read_cache[key] = copy.deepcopy(value)
 
 
-def db():
-    global _connection
-
-    if not config.DATABASE_URL:
-        return None
-
-    with _connection_lock:
-        if _connection is not None and not _connection.closed:
-            return _connection
-
-        try:
-            import psycopg2
-
-            # Публичный прокси Railway может молча оборвать простаивающий TCP:
-            # keepalive выявляет мёртвый сокет, connect_timeout не даёт
-            # подключению надолго повесить event loop.
-            _connection = psycopg2.connect(
-                config.DATABASE_URL,
-                connect_timeout=_CONNECT_TIMEOUT,
-                keepalives=1,
-                keepalives_idle=30,
-                keepalives_interval=10,
-                keepalives_count=3,
-            )
-            _connection.autocommit = True
-
-            with _connection.cursor() as cursor:
-                cursor.execute(
-                    "CREATE TABLE IF NOT EXISTS kv "
-                    "(key TEXT PRIMARY KEY, value JSONB)"
-                )
-
-            return _connection
-
-        except Exception as error:
-            _invalidate_connection()
-            _log.warning(
-                "storage: DB connect failed; persistent backend unavailable: %s",
-                error,
-            )
-            return None
-
-
-def _connection_lost(connection, error):
-    if getattr(connection, "closed", 0):
-        return True
-    return any(
-        cls.__name__ in ("OperationalError", "InterfaceError")
-        for cls in type(error).__mro__
+def _connect(path):
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    connection = sqlite3.connect(
+        path, timeout=_BUSY_TIMEOUT_SECONDS, check_same_thread=False, isolation_level=None,
     )
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    return connection
 
 
-def _run(operation, can_retry=lambda: True):
-    """Выполняет operation(connection) под локом соединения.
-
-    Оборванное соединение (рестарт Postgres, обрыв прокси) закрывается и
-    открывается заново; идемпотентная операция повторяется один раз.
-    """
-    for attempt in range(2):
-        with _connection_lock:
-            connection = db()
-            if connection is None:
-                raise StorageUnavailableError("PostgreSQL connection unavailable")
+def db():
+    """Общее соединение с файлом БД (потоки делят его под _connection_lock)."""
+    global _connection
+    if not _persistent():
+        return None
+    with _connection_lock:
+        if _connection is None:
             try:
-                return operation(connection)
-            except Exception as error:
-                if not _connection_lost(connection, error):
-                    raise
-                _invalidate_connection()
-                if attempt or not can_retry():
-                    raise
-                _log.warning("storage: DB connection lost, reconnecting: %s", error)
+                _connection = _connect(config.DATABASE_PATH)
+            except sqlite3.Error as error:
+                raise StorageUnavailableError(f"SQLite open failed: {error}") from error
+        return _connection
+
+
+def _run(operation, action):
+    with _connection_lock:
+        try:
+            return operation(db())
+        except StorageUnavailableError:
+            raise
+        except sqlite3.Error as error:
+            _log.warning("storage: %s DB error: %s", action, error)
+            raise StorageUnavailableError(f"SQLite {action} failed") from error
+
+
+def _dumps(value):
+    return json.dumps(value, ensure_ascii=False)
 
 
 def ping():
-    """Проверяет именно активный backend, не маскируя PostgreSQL памятью."""
-    if not config.DATABASE_URL:
+    """Проверяет именно активный backend, не маскируя файл БД памятью."""
+    if not _persistent():
         return True
-
-    def operation(connection):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            return cursor.fetchone()
-
-    try:
-        row = _run(operation)
-    except StorageUnavailableError:
-        raise
-    except Exception as error:
-        raise StorageUnavailableError("PostgreSQL health check failed") from error
+    row = _run(lambda connection: connection.execute("SELECT 1").fetchone(), "ping")
     return bool(row and row[0] == 1)
 
 
 def query_latency():
-    """Время SELECT 1 на отдельном соединении — для админской проверки.
-
-    Общее соединение занято под локом другими записями, поэтому ping через него
-    меряет очередь, а не базу. Возвращает секунды одного запроса.
-    """
-    import psycopg2
-
-    connection = psycopg2.connect(config.DATABASE_URL, connect_timeout=_CONNECT_TIMEOUT)
+    """Время SELECT 1 на отдельном соединении — для админской проверки."""
+    connection = sqlite3.connect(config.DATABASE_PATH, timeout=_BUSY_TIMEOUT_SECONDS)
     try:
-        with connection.cursor() as cursor:
-            started = time.monotonic()
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-            return time.monotonic() - started
+        started = time.monotonic()
+        connection.execute("SELECT 1").fetchone()
+        return time.monotonic() - started
     finally:
         connection.close()
-
-
-def _invalidate_connection():
-    global _connection
-
-    connection, _connection = _connection, None
-
-    if connection is not None:
-        try:
-            connection.close()
-        except Exception:
-            _log.debug("_invalidate_connection: ignored error", exc_info=True)
 
 
 def load(key):
@@ -180,7 +139,7 @@ def load(key):
     if cached is not None:
         return cached
 
-    if not config.DATABASE_URL:
+    if not _persistent():
         if key not in _memory:
             for legacy_key in _legacy_keys(key):
                 if legacy_key in _memory:
@@ -196,30 +155,21 @@ def load(key):
         return value
 
     def operation(connection):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT value FROM kv WHERE key = %s", (key,))
-            row = cursor.fetchone()
+        row = connection.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        if row is not None:
+            # Кэш ставится под локом: иначе параллельный mutate мог бы
+            # записать свежее значение, а этот поток затёр бы его старым.
+            value = json.loads(row[0])
+            _cache_set(key, value)
+            return value, False
+        for legacy_key in _legacy_keys(key):
+            row = connection.execute("SELECT value FROM kv WHERE key = ?", (legacy_key,)).fetchone()
             if row is not None:
-                # Кэш ставится под локом: иначе параллельный mutate мог бы
-                # записать свежее значение, а этот поток затёр бы его старым.
-                _cache_set(key, row[0])
-                return row[0], False
-            for legacy_key in _legacy_keys(key):
-                cursor.execute("SELECT value FROM kv WHERE key = %s", (legacy_key,))
-                row = cursor.fetchone()
-                if row is not None:
-                    return row[0], True
+                return json.loads(row[0]), True
         _cache_set(key, {})
         return {}, False
 
-    try:
-        value, migrated = _run(operation)
-    except StorageUnavailableError:
-        raise
-    except Exception as error:
-        _log.warning("storage: load(%s) DB error: %s", key, error)
-        raise StorageUnavailableError(f"PostgreSQL load failed for {key}") from error
-
+    value, migrated = _run(operation, f"load({key})")
     if migrated:
         # Копируем, а не удаляем старый ключ: откат версии остаётся
         # безопасным, а новая версия дальше работает только с canonical key.
@@ -229,55 +179,44 @@ def load(key):
 
 def preload(max_bytes=_PRELOAD_MAX_BYTES):
     """Одним запросом кладёт в кэш все небольшие ключи, чтобы меню открывались без БД."""
-    if not config.DATABASE_URL:
+    if not _persistent():
         return 0
 
     def operation(connection):
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT key, value FROM kv WHERE pg_column_size(value) <= %s",
-                (max_bytes,),
-            )
-            rows = cursor.fetchall()
+        rows = connection.execute(
+            "SELECT key, value FROM kv WHERE length(value) <= ?", (max_bytes,),
+        ).fetchall()
         for key, value in rows:
             if key not in _read_cache:
-                _cache_set(key, value)
+                _cache_set(key, json.loads(value))
         return len(rows)
 
-    return _run(operation)
+    return _run(operation, "preload")
 
 
 def save(key, data):
     data = _json_safe(data)
 
-    if not config.DATABASE_URL:
+    if not _persistent():
         _memory[key] = copy.deepcopy(data)
         _cache_set(key, data)
         return
 
     def operation(connection):
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO kv (key, value) VALUES (%s, %s) "
-                "ON CONFLICT (key) "
-                "DO UPDATE SET value = EXCLUDED.value",
-                (key, json.dumps(data, ensure_ascii=False)),
-            )
+        connection.execute(
+            "INSERT INTO kv (key, value) VALUES (?, ?) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (key, _dumps(data)),
+        )
         _cache_set(key, data)
 
-    try:
-        _run(operation)
-    except StorageUnavailableError:
-        raise
-    except Exception as error:
-        _log.warning("storage: save(%s) DB error: %s", key, error)
-        raise StorageUnavailableError(f"PostgreSQL save failed for {key}") from error
+    _run(operation, f"save({key})")
 
 
 def mutate(key, mutator):
     """Атомарно загружает, изменяет и сохраняет одну JSON KV-запись."""
 
-    if not config.DATABASE_URL:
+    if not _persistent():
         lock = _memory_locks.setdefault(key, threading.Lock())
 
         with lock:
@@ -293,72 +232,40 @@ def mutate(key, mutator):
 
             return result
 
-    mutator_called = []
-
     def operation(connection):
-        # Advisory lock координирует несколько процессов, а _connection_lock
-        # не допускает параллельных транзакций на общем соединении.
-        connection.autocommit = False
+        # BEGIN IMMEDIATE берёт блокировку записи файла сразу: второй процесс
+        # (ручной скрипт) не прочитает устаревшее значение посреди изменения.
+        connection.execute("BEGIN IMMEDIATE")
         try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT pg_advisory_xact_lock(hashtext(%s))",
-                    (key,),
-                )
-                cursor.execute(
-                    "SELECT value FROM kv WHERE key = %s FOR UPDATE",
-                    (key,),
-                )
-                row = cursor.fetchone()
-                current = row[0] if row else {}
-                mutator_called.append(True)
-                new_value, result = mutator(
-                    current if isinstance(current, dict) else {}
-                )
-                new_value = _json_safe(new_value)
-                cursor.execute(
-                    "INSERT INTO kv (key, value) VALUES (%s, %s) "
-                    "ON CONFLICT (key) "
-                    "DO UPDATE SET value = EXCLUDED.value",
-                    (key, json.dumps(new_value, ensure_ascii=False)),
-                )
-            connection.commit()
-        except Exception:
-            if not connection.closed:
-                connection.rollback()
+            row = connection.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+            current = json.loads(row[0]) if row else {}
+            new_value, result = mutator(current if isinstance(current, dict) else {})
+            new_value = _json_safe(new_value)
+            connection.execute(
+                "INSERT INTO kv (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (key, _dumps(new_value)),
+            )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
             raise
-        finally:
-            if not connection.closed:
-                connection.autocommit = True
         _cache_set(key, new_value)
         return result
 
-    try:
-        # Повтор только если обрыв случился до вызова mutator: у mutator
-        # бывают побочные эффекты, и второй прогон мог бы их задвоить.
-        return _run(operation, can_retry=lambda: not mutator_called)
-    except Exception as error:
-        _log.exception("storage: mutate(%s) DB error: %s", key, error)
-        raise
+    return _run(operation, f"mutate({key})")
 
 
 def delete(key):
     """Удаляет KV-запись из активного backend."""
 
-    if not config.DATABASE_URL:
+    if not _persistent():
         _memory.pop(key, None)
         _read_cache.pop(key, None)
         return
 
     def operation(connection):
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM kv WHERE key = %s", (key,))
+        connection.execute("DELETE FROM kv WHERE key = ?", (key,))
         _read_cache.pop(key, None)
 
-    try:
-        _run(operation)
-    except StorageUnavailableError:
-        raise
-    except Exception as error:
-        _log.warning("storage: delete(%s) DB error: %s", key, error)
-        raise StorageUnavailableError(f"PostgreSQL delete failed for {key}") from error
+    _run(operation, f"delete({key})")

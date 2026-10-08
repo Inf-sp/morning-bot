@@ -254,7 +254,7 @@ def rows() -> list[str]:
     for service in ("telegram", "database"):
         state = current.get(service) or provider_runtime.get_state(service)
         if state.get("status") not in (OK, UNKNOWN):
-            label = "PostgreSQL" if service == "database" else "Telegram"
+            label = "База данных" if service == "database" else "Telegram"
             detail = "нет подключения" if service == "database" else "ошибка отправки"
             out.append(f"🔴 {label} · {detail}")
     return out
@@ -307,7 +307,7 @@ def probe(service: str) -> bool:
     if service == "database":
         try:
             if not storage_driver.ping():
-                raise storage_driver.StorageUnavailableError("PostgreSQL ping returned no row")
+                raise storage_driver.StorageUnavailableError("database ping returned no row")
         except Exception as exc:
             provider_runtime.record_result(
                 service, False, error=str(exc) or type(exc).__name__,

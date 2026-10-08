@@ -78,7 +78,7 @@ SPECS = (
     ProviderSpec("pexels", "Pexels", ("Гардероб", "Обучение"), ("unsplash",)),
     ProviderSpec("unsplash", "Unsplash", ("Обучение",), ()),
     ProviderSpec("telegram", "Telegram", ("Мой день", "Питание", "Обучение"), ()),
-    ProviderSpec("database", "PostgreSQL", ("Мой день", "Питание", "Обучение"), ()),
+    ProviderSpec("database", "База данных", ("Мой день", "Питание", "Обучение"), ()),
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
 LABELS = {spec.key: spec.label for spec in SPECS}
@@ -106,7 +106,7 @@ def is_configured(provider: str) -> bool:
         "pexels": config.PEXELS_API_KEY,
         "unsplash": config.UNSPLASH_ACCESS_KEY,
         "telegram": config.TELEGRAM_TOKEN,
-        "database": config.DATABASE_URL,
+        "database": config.DATABASE_PATH,
     }
     return bool(values.get(provider))
 

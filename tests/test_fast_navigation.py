@@ -16,41 +16,6 @@ from telegram.error import TimedOut
 from telegram.request import HTTPXRequest
 
 
-def test_storage_reuses_connection_without_probe_and_caches_reads(monkeypatch):
-    class Cursor:
-        def __init__(self, connection):
-            self.connection = connection
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def execute(self, query, params=None):
-            self.connection.queries.append(query)
-
-        def fetchone(self):
-            return ({"value": 1},)
-
-    class Connection:
-        closed = False
-        queries = []
-
-        def cursor(self):
-            return Cursor(self)
-
-    connection = Connection()
-    monkeypatch.setattr(config, "DATABASE_URL", "postgres://test")
-    monkeypatch.setattr(storage_driver, "_connection", connection)
-    storage_driver._read_cache.pop("fast-key", None)
-
-    assert storage_driver.load("fast-key") == {"value": 1}
-    assert storage_driver.load("fast-key") == {"value": 1}
-    assert len(connection.queries) == 1
-    assert "SELECT 1" not in connection.queries
-
-
 def test_canonical_key_copies_legacy_memory_data_without_deleting_it(monkeypatch):
     legacy_key = "watchlist.json"
     canonical_key = config.FAVORITE_MOVIES_KEY

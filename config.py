@@ -52,6 +52,8 @@ CF_API_TOKEN = _env_first("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN")
 CF_ACCOUNT_ID = _env_first("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")
 CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
 CHAT_ID = os.environ.get("CHAT_ID", "")
+DATABASE_PATH = os.environ.get("DATABASE_PATH", "").strip()  # SQLite-файл KV на VM
+# Старая PostgreSQL на Railway: нужна только скрипту tools/migrate_to_sqlite.py.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_DICTIONARY_MODEL = os.environ.get(

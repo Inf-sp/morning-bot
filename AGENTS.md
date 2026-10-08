@@ -33,8 +33,9 @@ python -m pytest -q path::test    # только целевые тесты
 ```
 
 Прод — GCE VM `morning-bot` (`us-east1-b`): systemd-сервис `morning-bot` запускает
-`python bot.py` из `/opt/morning-bot`, env — `/etc/morning-bot.env`. PostgreSQL остаётся
-на Railway (публичный URL). Код обновляется сам: таймер `morning-bot-update.timer`
+`python bot.py` из `/opt/morning-bot`, env — `/etc/morning-bot.env`. База — SQLite-файл
+`/var/lib/morning-bot/bot.db` (`DATABASE_PATH`) на той же VM; ежедневная копия —
+`/var/backups/morning-bot/`. Код обновляется сам: таймер `morning-bot-update.timer`
 раз в 5 минут запускает `deploy/gce/update.sh` (установлен копией в
 `/usr/local/sbin/morning-bot-update`): fetch → pip при изменении `requirements.txt` →
 fast-forward → restart. Обновить сразу: `sudo systemctl start morning-bot-update`,
@@ -84,8 +85,10 @@ LLM нужен для персонализации, свободного тек�
   повторов, текущая карточка не возвращается первой после полного круга.
 - Не перезаписывай весь профиль ради одного поля; новые поля имеют fallback, старые
   профили продолжают работать.
-- PostgreSQL — основной backend при `DATABASE_URL`; memory fallback допустим только
-  локально без этой переменной.
+- SQLite-файл (`DATABASE_PATH`) — основной backend; memory fallback допустим только
+  локально без `DATABASE_PATH` и `DATABASE_URL`. Старый `DATABASE_URL` без
+  `DATABASE_PATH` останавливает старт: данные сначала переносит
+  `tools/migrate_to_sqlite.py`.
 
 Автоматический внешний поиск формируется на английском. Источники читаются на
 английском или языке оригинала; пользователь получает русский текст. Имена людей,
