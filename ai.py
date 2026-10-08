@@ -46,6 +46,7 @@ FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "gemini": 5.0,
     "cerebras": 4.0,
+    "github": 4.0,
     "groq": 4.0,
     "groq_standard": 4.0,
     "cf": 4.0,
@@ -272,6 +273,7 @@ def _is_temporary_exception(exc):
 _TIMEOUT_CAPS = {
     "gemini": 6.0,
     "cerebras": 5.0,
+    "github": 5.0,
     "groq": 5.0,
     "cf": 4.0,
 }
@@ -439,8 +441,8 @@ def _provider_model_name(provider: str) -> str:
         return _resolve_model(config.GROQ_STANDARD_MODEL)
     if provider == "cf":
         return config.CF_MODEL
-    if provider == "cerebras":
-        return _resolve_model(config.CEREBRAS_MODEL)
+    if provider in _OPENAI_COMPATIBLE:
+        return _resolve_model(_OPENAI_COMPATIBLE[provider][2]())
     return ""
 
 
@@ -546,7 +548,13 @@ def _is_json_validation_error(status_code, body="") -> bool:
 # постоянный алиас Google на актуальную Flash и стабильная модель Groq.
 GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
 GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
-CEREBRAS_FALLBACK_MODEL = "llama3.1-8b"
+# OpenAI-совместимые резервы: (адрес, ключ, модель из config, запасная модель при 404).
+_OPENAI_COMPATIBLE = {
+    "cerebras": ("https://api.cerebras.ai/v1/chat/completions",
+                 lambda: config.CEREBRAS_API_KEY, lambda: config.CEREBRAS_MODEL, "llama3.1-8b"),
+    "github": ("https://models.github.ai/inference/chat/completions",
+               lambda: config.GITHUB_API_KEY, lambda: config.GITHUB_MODEL, "openai/gpt-4o-mini"),
+}
 _MODEL_OVERRIDES = {}
 
 
@@ -573,8 +581,8 @@ def _fallback_request(service, status, body, url, payload):
             config_["thinkingConfig"] = _gemini_thinking(new)
         payload = {**payload, "generationConfig": config_} if config_ else payload
         url = url.replace(f"models/{old}:", f"models/{new}:")
-    elif service in ("groq", "cerebras") and payload.get("model"):
-        new = GROQ_FALLBACK_MODEL if service == "groq" else CEREBRAS_FALLBACK_MODEL
+    elif (service == "groq" or service in _OPENAI_COMPATIBLE) and payload.get("model"):
+        new = GROQ_FALLBACK_MODEL if service == "groq" else _OPENAI_COMPATIBLE[service][3]
         if payload["model"] == new or (service == "groq" and "model_not_found" not in body):
             return None
         old = payload["model"]
@@ -1126,23 +1134,25 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
     return r.json()["choices"][0]["message"]["content"]
 
 
-def _gen_cerebras(prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
-    """Cerebras: OpenAI-совместимый API, бесплатный тариф без карты."""
-    if not config.CEREBRAS_API_KEY:
-        raise LLMProviderError("cerebras", "no cerebras", error_type="credentials")
-    payload = {
-        "model": _provider_model_name("cerebras"),
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+def _compat_request(provider, messages, max_tokens, temperature):
+    """Адрес, заголовки и тело запроса к OpenAI-совместимому резерву; без ключа — ошибка."""
+    url, key, _model, _fallback = _OPENAI_COMPATIBLE[provider]
+    if not key():
+        raise LLMProviderError(provider, f"no {provider} key", error_type="credentials")
+    headers = {"Authorization": f"Bearer {key()}", "Content-Type": "application/json"}
+    payload = {"model": _provider_model_name(provider), "messages": messages,
+               "max_tokens": max_tokens, "temperature": temperature}
+    return url, headers, payload
+
+
+def _gen_compat(provider, prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
+    """Cerebras и GitHub Models: бесплатные OpenAI-совместимые резервы."""
+    url, headers, payload = _compat_request(
+        provider, [{"role": "user", "content": prompt}], max_tokens, temperature)
     if response_mode == "json":
         payload["response_format"] = {"type": "json_object"}
-    r = _post(
-        "https://api.cerebras.ai/v1/chat/completions",
-        {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}", "Content-Type": "application/json"},
-        payload, 40, "cerebras", suppress_json_validation_failure=response_mode == "json",
-    )
+    r = _post(url, headers, payload, 40, provider,
+              suppress_json_validation_failure=response_mode == "json")
     return r.json()["choices"][0]["message"]["content"]
 
 
@@ -1298,7 +1308,7 @@ def _reserve_gemini_for_action() -> bool:
 
 # Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
 # попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
-AI_ORDER = ("gemini", "cerebras", "groq", "cf", "openrouter")
+AI_ORDER = ("gemini", "cerebras", "groq", "cf", "github", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
@@ -1311,6 +1321,7 @@ FOOD_ORDER = COMPLEX_ORDER
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
     "cerebras": AI_ORDER,
+    "github": AI_ORDER,
     "cf": AI_ORDER,
     "groq": AI_ORDER,
     "gemini": AI_ORDER,
@@ -1448,7 +1459,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
         ),
         "groq": lambda: _gen_groq(prompt, max_tokens, temperature, response_mode),
         "cf": lambda: _gen_cf(prompt, max_tokens),
-        "cerebras": lambda: _gen_cerebras(prompt, max_tokens, temperature, response_mode),
+        **{name: (lambda name=name: _gen_compat(name, prompt, max_tokens, temperature, response_mode))
+           for name in _OPENAI_COMPATIBLE},
     }
     errs = []
     temporary_errs = []
@@ -1760,17 +1772,10 @@ def _chat(provider, history, system, timeout_cap=None):
             timeout_cap=bounded_cap(5),
         )
         return r.json()["choices"][0]["message"]["content"]
-    if provider == "cerebras":
-        if not config.CEREBRAS_API_KEY:
-            raise LLMProviderError("cerebras", "no cerebras", error_type="credentials")
-        r = _post(
-            "https://api.cerebras.ai/v1/chat/completions",
-            {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}", "Content-Type": "application/json"},
-            {"model": _provider_model_name("cerebras"),
-             "messages": [{"role": "system", "content": system}] + history,
-             "max_tokens": FREE_CHAT_MAX_TOKENS, "temperature": 0.8},
-            40, "cerebras", timeout_cap=bounded_cap(5),
-        )
+    if provider in _OPENAI_COMPATIBLE:
+        url, headers, payload = _compat_request(
+            provider, [{"role": "system", "content": system}] + history, FREE_CHAT_MAX_TOKENS, 0.8)
+        r = _post(url, headers, payload, 40, provider, timeout_cap=bounded_cap(5))
         return r.json()["choices"][0]["message"]["content"]
     if provider == "cf":
         if not (config.CF_API_TOKEN and config.CF_ACCOUNT_ID):
@@ -1823,17 +1828,10 @@ def _chat_stream(provider, history, system, emit, timeout_cap=None):
             bounded_cap(5), provider, emit,
             usage_service=api_usage.groq_model_service(_provider_model_name(provider)),
         )
-    if provider == "cerebras":
-        if not config.CEREBRAS_API_KEY:
-            raise LLMProviderError(provider, "no cerebras", error_type="credentials")
+    if provider in _OPENAI_COMPATIBLE:
+        url, headers, compat = _compat_request(provider, messages, FREE_CHAT_MAX_TOKENS, 0.8)
         return _stream_openai_chat(
-            "https://api.cerebras.ai/v1/chat/completions",
-            {
-                "Authorization": f"Bearer {config.CEREBRAS_API_KEY}",
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-            },
-            {**payload, "model": _provider_model_name(provider)},
+            url, {**headers, "Accept": "text/event-stream"}, {**compat, "stream": True},
             bounded_cap(5), provider, emit,
         )
     if provider == "openrouter":

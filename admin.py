@@ -382,7 +382,7 @@ def _llm_failure_reason(entry):
     raw_values.append(str(entry.get("error") or entry.get("msg") or ""))
     raw = " ; ".join(raw_values).casefold()
     providers = (
-        ("groq", "Groq"), ("gemini", "Gemini"), ("cerebras", "Cerebras"),
+        ("groq", "Groq"), ("gemini", "Gemini"), ("cerebras", "Cerebras"), ("github", "GitHub Models"),
         ("cloudflare", "Cloudflare AI"), ("cf:", "Cloudflare AI"),
         ("openrouter", "OpenRouter"),
     )

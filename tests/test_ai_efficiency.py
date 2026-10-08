@@ -186,7 +186,7 @@ def test_openrouter_uses_ordered_model_fallbacks(monkeypatch):
 
 def test_central_chain_is_gemini_then_reserves_in_documented_order():
     # docs/admin.md: Gemini, затем Groq, Cloudflare AI и OpenRouter.
-    assert ai.AI_ORDER == ("gemini", "cerebras", "groq", "cf", "openrouter")
+    assert ai.AI_ORDER == ("gemini", "cerebras", "groq", "cf", "github", "openrouter")
 
 
 def test_all_central_routes_use_the_single_ai_chain():

@@ -201,3 +201,18 @@ def test_learning_actions_are_green():
     assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
         ("Запустить тренировку", "success"), ("Угадать персонажа", "success"),
     ]
+
+
+def test_leisure_hub_picks_are_green_and_keep_their_order():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Что посмотреть", callback_data="movie_reco")],
+        [InlineKeyboardButton("📚 Что почитать", callback_data="book_reco")],
+        [InlineKeyboardButton("👾 Во что поиграть", callback_data="vg_reco")],
+        [InlineKeyboardButton("🎧 Что послушать", callback_data="music_reco")],
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
+        ("Что посмотреть", "success"), ("Что почитать", "success"),
+        ("Во что поиграть", "success"), ("Что послушать", "success"), ("Главная", "primary"),
+    ]

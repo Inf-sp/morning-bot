@@ -57,14 +57,16 @@ class ProviderSpec:
 # exhausted; search never bounces back from Tavily to Firecrawl.
 SPECS = (
     ProviderSpec("gemini", "Gemini", ("Питание", "Обучение", "Ассистент"),
-                 ("cerebras", "groq", "cloudflare", "openrouter"), 3600, role="Основной"),
+                 ("cerebras", "groq", "cloudflare", "github", "openrouter"), 3600, role="Основной"),
     ProviderSpec("cerebras", "Cerebras", ("Питание", "Обучение", "Ассистент"),
-                 ("groq", "cloudflare", "openrouter"), 3600, role="Резерв 1"),
+                 ("groq", "cloudflare", "github", "openrouter"), 3600, role="Резерв 1"),
     ProviderSpec("groq", "Groq", ("Питание", "Обучение", "Ассистент"),
                  ("cloudflare", "openrouter"), 3600, role="Резерв 2"),
     ProviderSpec("openrouter", "OpenRouter", ("AI",), (), 3600, role="Резерв"),
     ProviderSpec("cloudflare", "Cloudflare AI", ("Ассистент",),
                  ("openrouter",), 3600, role="Резерв 3"),
+    ProviderSpec("github", "GitHub Models", ("Ассистент",),
+                 ("openrouter",), 3600, role="Резерв 4"),
     ProviderSpec("openweather", "OpenWeather", ("Мой день", "Гардероб"), ()),
     ProviderSpec("firecrawl", "Firecrawl", ("Поиск", "Концерты"), (), 900),
     ProviderSpec("tavily", "Tavily", ("Поиск",), ("firecrawl",)),
@@ -83,13 +85,14 @@ SPECS = (
     ProviderSpec("database", "База данных", ("Мой день", "Питание", "Обучение"), ()),
 )
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
-AI_PROVIDERS = {"gemini", "cerebras", "groq", "openrouter", "cloudflare"}
+AI_PROVIDERS = {"gemini", "cerebras", "groq", "openrouter", "cloudflare", "github"}
 
 
 def is_configured(provider: str) -> bool:
     values = {
         "gemini": config.GEMINI_API_KEY,
         "cerebras": config.CEREBRAS_API_KEY,
+        "github": config.GITHUB_API_KEY,
         "groq": config.GROQ_API_KEY,
         "openrouter": config.OPENROUTER_API_KEY,
         "cloudflare": config.CF_API_TOKEN and config.CF_ACCOUNT_ID,

@@ -129,7 +129,7 @@ def test_unclassified_failure_without_later_success_is_yellow_not_white(monkeypa
     )
 
     row = service_monitor.format_row("openrouter")
-    assert row.startswith("🟡 OpenRouter · Резерв 4 · ") and "⚪" not in row
+    assert row.startswith("🟡 OpenRouter · Резерв 5 · ") and "⚪" not in row
 
 
 def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
@@ -239,7 +239,7 @@ def test_openrouter_row_shows_requests_not_money(monkeypatch):
     state = provider_runtime.blank_state("openrouter")
     state.update({"status": provider_runtime.OK})
 
-    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 4 · 12 сегодня"
+    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 5 · 12 сегодня"
 
 
 def test_unclassified_failure_after_real_success_is_green(monkeypatch):
@@ -303,7 +303,7 @@ def test_active_ai_reserves_are_shown_in_main_rows(monkeypatch):
 
     rows = service_monitor.rows()
 
-    assert service_monitor._AI_SERVICES == ("gemini", "cerebras", "groq", "cloudflare", "openrouter")
+    assert service_monitor._AI_SERVICES == ("gemini", "cerebras", "groq", "cloudflare", "github", "openrouter")
     assert any("Groq" in row for row in rows)
     assert not any("gpt-oss" in row or "qwen" in row for row in rows)
     assert any("Cloudflare AI" in row for row in rows)

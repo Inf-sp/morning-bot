@@ -40,7 +40,7 @@ def providers(monkeypatch):
         return run
 
     monkeypatch.setattr(ai, "_gen_gemini", fake("gemini"))
-    monkeypatch.setattr(ai, "_gen_cerebras", fake("cerebras"))
+    monkeypatch.setattr(ai, "_gen_compat", lambda name, *_a, **_k: fake(name)())
     monkeypatch.setattr(ai, "_gen_groq", fake("groq"))
     monkeypatch.setattr(ai, "_gen_cf", fake("cf"))
     monkeypatch.setattr(ai, "_openrouter_plain_text_fallback", fake("openrouter"))
@@ -53,7 +53,7 @@ def _error(name, error_type):
 
 
 def test_default_order_is_gemini_groq_cf_openrouter():
-    assert ai.AI_ORDER == ("gemini", "cerebras", "groq", "cf", "openrouter")
+    assert ai.AI_ORDER == ("gemini", "cerebras", "groq", "cf", "github", "openrouter")
 
 
 def test_each_failed_provider_hands_over_to_the_next_in_order(providers):
@@ -63,11 +63,12 @@ def test_each_failed_provider_hands_over_to_the_next_in_order(providers):
         "cerebras": _error("cerebras", "http_error"),
         "groq": _error("groq", "rate_limit"),
         "cf": _error("cf", "temporary"),
+        "github": _error("github", "rate_limit"),
         "openrouter": "резерв",
     })
 
     assert ai.llm("q", module="food", fallback_allowed=True, budget_seconds=30) == "резерв"
-    assert calls == ["gemini", "cerebras", "groq", "cf", "openrouter"]
+    assert calls == ["gemini", "cerebras", "groq", "cf", "github", "openrouter"]
 
 
 def test_first_working_provider_answers_and_later_ones_are_not_called(providers):
@@ -96,13 +97,13 @@ def test_unconfigured_provider_is_skipped_without_a_call(providers, monkeypatch)
 
 def test_all_providers_down_raises_after_trying_every_one(providers):
     calls, behaviour = providers
-    for name in ("gemini", "cerebras", "groq", "cf"):
+    for name in ("gemini", "cerebras", "groq", "cf", "github"):
         behaviour[name] = _error(name, "temporary")
     behaviour["openrouter"] = ""
 
     with pytest.raises(Exception):
         ai.llm("q", module="food", fallback_allowed=True, budget_seconds=30)
-    assert calls == ["gemini", "cerebras", "groq", "cf", "openrouter"]
+    assert calls == ["gemini", "cerebras", "groq", "cf", "github", "openrouter"]
 
 
 def test_legacy_unknown_status_text_is_not_shown_in_admin(monkeypatch):
@@ -182,3 +183,15 @@ def test_cerebras_key_is_redacted_and_provider_registered(monkeypatch):
     assert "csk-secret-123" not in ai.secure.redact("auth csk-secret-123")
     assert "cerebras" in provider_runtime.AI_PROVIDERS
     assert provider_runtime.is_configured("cerebras")
+
+
+def test_github_models_missing_model_switches_to_fallback_and_key_is_hidden(monkeypatch):
+    calls = _fake_post(monkeypatch, "openai/gpt-4.1-mini")
+    response = ai._post("https://models.github.ai/inference/chat/completions", {},
+                        {"model": "openai/gpt-4.1-mini"}, 5, "github")
+
+    assert response.status_code == 200
+    assert calls[-1][1]["model"] == "openai/gpt-4o-mini"
+    monkeypatch.setattr(ai.config, "GITHUB_API_KEY", "github_pat_secret")
+    assert "github_pat_secret" not in ai.secure.redact("token github_pat_secret")
+    assert provider_runtime.is_configured("github")

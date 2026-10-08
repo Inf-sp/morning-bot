@@ -43,7 +43,7 @@ _configured = provider_runtime.is_configured
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("gemini", "cerebras", "groq", "cloudflare", "openrouter")
+_AI_SERVICES = ("gemini", "cerebras", "groq", "cloudflare", "github", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "pexels", "unsplash",
@@ -66,7 +66,8 @@ _AI_ROLES = {
     "gemini": "Основной",
     "cerebras": "Резерв 1",
     "cloudflare": "Резерв 3",
-    "openrouter": "Резерв 4",
+    "github": "Резерв 4",
+    "openrouter": "Резерв 5",
 }
 _GROQ_MODELS = (
     ("simple", config.GROQ_SIMPLE_MODEL, "Основной"),
@@ -152,7 +153,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     status = _display_status(state)
     if service == "groq":
         return _format_groq_row(state)
-    if service in ("gemini", "cerebras", "cloudflare", "openrouter"):
+    if service in ("gemini", "cerebras", "cloudflare", "github", "openrouter"):
         return _format_ai_row(service, state)
     if service == "google_books":
         usage = api_usage.google_books_requests()
@@ -268,6 +269,7 @@ def _probe_request(service: str):
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
         "cerebras": ("GET", "https://api.cerebras.ai/v1/models", {"headers": {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}"}}),
+        "github": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
         "cloudflare": (
             "POST",
