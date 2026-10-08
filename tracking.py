@@ -206,13 +206,6 @@ def finish_action(trace=None, *, ok=True) -> None:
             _current_action.set(None)
 
 
-def get_action_latencies(limit=100) -> list:
-    try:
-        rows = (store._load(config.ACTION_LATENCY_KEY) or {}).get("log", [])
-        return list(rows[-max(1, int(limit)):])
-    except Exception:
-        return []
-
 _SECTION_BY_MODULE = {
     "myday": "Мой день", "weather": "Мой день", "weather_provider": "Мой день",
     "cooking": "Питание", "recipe_generation": "Питание", "spoonacular": "Питание",

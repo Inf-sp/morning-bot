@@ -93,14 +93,6 @@ def _mark_logs_viewed(cid, errors):
 
 # ================= ДОМ =================
 
-def _home_speed_line():
-    try:
-        import home_cache
-        return home_cache.today_open_stats_line()
-    except Exception:
-        _log.warning("home open stats unavailable", exc_info=True)
-        return ""
-
 
 async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
@@ -114,7 +106,6 @@ async def send_home(bot, cid, q=None):
         system_rows=monitor_rows,
         error_rows=_active_error_rows(limit=5),
         version_line=deploy_report.version_line(),
-        speed_line=_home_speed_line(),
     )
     await _show(bot, cid, msg, kb, q)
 

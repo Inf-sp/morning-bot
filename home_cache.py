@@ -6,20 +6,14 @@
 """
 import logging
 from datetime import datetime
-from statistics import median
 
 import config
-import tracking
 
 _log = logging.getLogger(__name__)
 
 SECTION_BY_CALLBACK = {
     "m_myday": "myday", "m_wardrobe": "wardrobe", "m_food": "cooking",
     "m_learn": "learning", "m_leisure": "leisure",
-}
-SECTION_LABELS = {
-    "myday": "Мой день", "wardrobe": "Гардероб", "cooking": "Готовка",
-    "learning": "Обучение", "leisure": "Досуг",
 }
 
 
@@ -62,25 +56,3 @@ def is_ready(section, cid) -> bool:
         return False
 
 
-def _fmt_seconds(value):
-    return f"{value:.1f}".replace(".", ",")
-
-
-def today_open_stats_line(now=None) -> str:
-    """«⏱ Разделы сегодня: …» из журнала задержек действий; пусто без данных."""
-    now = now or datetime.now(config.TZ)
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    rows = [
-        (row.get("duration_ms") / 1000, SECTION_BY_CALLBACK[row.get("action")])
-        for row in tracking.get_action_latencies(limit=500)
-        if row.get("action") in SECTION_BY_CALLBACK
-        and isinstance(row.get("duration_ms"), (int, float))
-        and float(row.get("ts") or 0) >= day_start
-    ]
-    if not rows:
-        return ""
-    worst_seconds, worst_section = max(rows)
-    return (
-        f"⏱ Разделы сегодня: медиана {_fmt_seconds(median(s for s, _ in rows))} с · "
-        f"худший {_fmt_seconds(worst_seconds)} с ({SECTION_LABELS[worst_section]})"
-    )

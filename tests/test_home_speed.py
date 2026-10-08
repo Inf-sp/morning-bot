@@ -1,7 +1,6 @@
 """Главные экраны: дневной кэш без сети, фоновые прогревы и замер открытия."""
 import asyncio
 import os
-from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -9,13 +8,10 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import ai
 import bot
 import bot_maintenance
-import config
-import home_cache
 import leisure_books
 import leisure_games
 import leisure_movies
 import tracking
-from ui import admin as admin_ui
 
 
 def _boom(*_args, **_kwargs):
@@ -118,36 +114,6 @@ def test_background_jobs_propagate_mode_into_threads(monkeypatch):
                 bot.job_refresh_concerts_cache, bot.job_retry_dictionary_adds,
                 bot.job_requested_dictionary_rechecks):
         assert hasattr(job, "__wrapped__"), job.__name__
-
-
-def test_home_open_stats_line_uses_today_latency_journal(monkeypatch):
-    now = datetime(2026, 10, 6, 12, 0, tzinfo=config.TZ)
-    today = now.timestamp() - 3600
-    rows = [
-        {"ts": today, "action": "m_leisure", "duration_ms": 3100},
-        {"ts": today, "action": "m_myday", "duration_ms": 400},
-        {"ts": today, "action": "m_wardrobe", "duration_ms": 300},
-        {"ts": today, "action": "movie_reco", "duration_ms": 9000},
-        {"ts": now.timestamp() - 86400, "action": "m_leisure", "duration_ms": 9000},
-    ]
-    monkeypatch.setattr(tracking, "get_action_latencies", lambda limit=100: rows)
-
-    assert home_cache.today_open_stats_line(now) == (
-        "⏱ Разделы сегодня: медиана 0,4 с · худший 3,1 с (Досуг)"
-    )
-
-
-def test_home_open_stats_line_is_empty_without_data(monkeypatch):
-    monkeypatch.setattr(tracking, "get_action_latencies", lambda limit=100: [])
-
-    assert home_cache.today_open_stats_line() == ""
-
-
-def test_admin_home_shows_speed_line_under_version():
-    msg = admin_ui.home(system_rows=[], version_line="v1.2.3",
-                        speed_line="⏱ Разделы сегодня: медиана 0,4 с · худший 3,1 с (Кино)")
-
-    assert "v1.2.3\n⏱ Разделы сегодня: медиана 0,4 с" in msg.text
 
 
 def test_bounded_timeout_follows_live_action_budget():
