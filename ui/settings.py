@@ -44,21 +44,14 @@ def wardrobe_style(styles):
     return b.build_stripped()
 
 
-def settings_home(city="", notifications=(), language=""):
-    """Главный экран Настроек: город, язык обучения и список включённых уведомлений."""
+def settings_home(city="", language=""):
+    """Главный экран Настроек: город и язык обучения; уведомления — по своей кнопке."""
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
     b.line(f"Город: {city or 'не выбран'}")
     if language:
         b.line(f"Язык обучения: {language[:1].upper()}{language[1:]}")
-    notifications = [str(name).strip() for name in notifications or () if str(name).strip()]
-    if not notifications:
-        b.line("Уведомления: выключены")
-        return b.build_stripped()
-    b.line("Уведомления:")
-    for name in notifications:
-        b.line(f"- {name}")
     return b.build_stripped()
 
 

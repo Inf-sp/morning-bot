@@ -198,9 +198,7 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
-    enabled = [item.button_label for item in get_notification_options()
-               if notification_available(cid, item.key) and notif_on(cid, item.key)]
-    msg = settings_ui.settings_home(city, enabled, study_lang(cid))
+    msg = settings_ui.settings_home(city, study_lang(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:

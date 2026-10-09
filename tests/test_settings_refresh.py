@@ -47,7 +47,7 @@ def test_old_refresh_button_returns_to_current_settings(monkeypatch):
     assert "🔄 Обновить" not in _labels(edits[0][1]["reply_markup"])
 
 
-def test_settings_home_lists_enabled_notifications_and_language(monkeypatch):
+def test_settings_home_shows_city_and_language_without_notifications(monkeypatch):
     sent = []
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Алкмар"})
     monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
@@ -56,10 +56,7 @@ def test_settings_home_lists_enabled_notifications_and_language(monkeypatch):
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
     text = sent[0]["text"]
-    assert "Город: Алкмар\nЯзык обучения: Нидерландский\nУведомления:\n- Погода на завтра · 20:00" in text
+    assert text == "🎚️ Настройки\n\nГород: Алкмар\nЯзык обучения: Нидерландский"
     callbacks = [b.callback_data for row in sent[0]["reply_markup"].inline_keyboard for b in row]
     assert "set_learning_global" in callbacks
-
-    monkeypatch.setattr(settings, "notif_on", lambda _cid, _kind: False)
-    asyncio.run(settings.send_home(RecordingBot(sent), "42"))
-    assert sent[-1]["text"].endswith("\nУведомления: выключены")
+    assert "set_notif" in callbacks
