@@ -374,17 +374,11 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     assert all("✏️ Изменить" not in row for row in rows)
 
 
-def test_favorite_movies_home_groups_russian_titles_by_genre():
-    message = leisure_movies.leisure_ui.favorite_movies_home(3, [
-        {"genre": "Драма", "titles": ["Патерсон", "Развод Надера и Симин"]},
-        {"genre": "Комедия", "titles": ["Амели"]},
-    ])
-
-    assert message.text == (
-        "🎚️ Моё кино · 3 фильма/сериала\n\n"
-        "Драма:\nПатерсон, Развод Надера и Симин\n\n"
-        "Комедия:\nАмели"
-    )
+def test_favorite_movies_and_books_home_show_only_title_line():
+    ui = leisure_movies.leisure_ui
+    assert ui.favorite_movies_home(3).text == "🎚️ Моё кино · 3 фильма/сериала"
+    assert ui.favorite_books_home(5).text == "🎚️ Мои книги · 5 книг"
+    assert ui.favorite_movies_home(0).text.startswith("🎚️ Моё кино · 0 фильмов/сериалов\n\nДобавь")
 
 
 def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
@@ -416,11 +410,7 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     asyncio.run(leisure_movies.send_favorite_movies(bot, "42"))
 
     labels = _labels(bot.messages[0]["reply_markup"])
-    assert bot.messages[0]["text"] == (
-        "🎚️ Моё кино · 2 фильма/сериала\n\n"
-        "Комедия:\nАмели\n\n"
-        "Драма:\nПатерсон"
-    )
+    assert bot.messages[0]["text"] == "🎚️ Моё кино · 2 фильма/сериала"
     assert labels[0] == ["✅ Добавить фильм"]
     assert ["📝 Выбрать предпочтения"] in labels
     genre_callback = next(
@@ -542,11 +532,7 @@ def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
     bot = Bot()
     asyncio.run(leisure_books.send_favorite_books(bot, "42"))
 
-    assert bot.messages[0]["text"] == (
-        "🎚️ Мои книги · 2 книги\n\n"
-        "Фантастика:\nДюна\n\n"
-        "Романтика:\nГордость и предубеждение"
-    )
+    assert bot.messages[0]["text"] == "🎚️ Мои книги · 2 книги"
     genre_callback = next(
         row[0].callback_data for row in bot.messages[0]["reply_markup"].inline_keyboard
         if row[0].text.startswith("Фантастика")

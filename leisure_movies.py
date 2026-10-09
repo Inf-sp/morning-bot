@@ -177,11 +177,7 @@ def _favorite_movie_view(cid, token):
 async def send_favorite_movies(bot, cid, q=None):
     records = await _favorite_movie_records(cid)
     token, view = _new_favorite_movie_view(cid, records)
-    summaries = [
-        {"genre": genre, "titles": [item["title"] for item in items]}
-        for genre, items in view["genres"]
-    ]
-    msg = leisure_ui.favorite_movies_home(len(records), summaries)
+    msg = leisure_ui.favorite_movies_home(len(records))
     rows = [[InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")]]
     rows.extend([
         [InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"mfg:{token}:{index}:0")]

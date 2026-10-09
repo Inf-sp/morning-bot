@@ -820,10 +820,7 @@ def _favorite_book_view(cid, token):
 async def send_favorite_books(bot, cid, q=None):
     records = await _favorite_book_records(cid)
     token, view = _new_favorite_book_view(cid, records)
-    msg = leisure_ui.favorite_books_home(len(records), [
-        {"genre": genre, "titles": [item["title"] for item in items]}
-        for genre, items in view["genres"]
-    ])
+    msg = leisure_ui.favorite_books_home(len(records))
     rows = [[InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")],
             *[[InlineKeyboardButton(
         f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",

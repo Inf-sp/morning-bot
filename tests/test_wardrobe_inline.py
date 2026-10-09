@@ -628,7 +628,8 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
-    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nФутболки и рубашки:\nФутболка"
+    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь"
+    assert ["Футболки и рубашки · 1"] in labels and ["Обувь · 0"] in labels
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
     assert ["💳 Что докупить"] not in labels
@@ -653,7 +654,7 @@ def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypat
     home_labels = _labels(bot.messages[-1]["reply_markup"])
 
     assert all("Другое" not in row for row in home_labels)
-    assert "Аксессуары:\nСтаринная брошь" in bot.messages[-1]["text"]
+    assert bot.messages[-1]["text"] == "🎚️ Мой шкаф · 1 вещь"
 
     asyncio.run(wardrobe.send_category(bot, "closet-test", "acc"))
     category_labels = _labels(bot.messages[-1]["reply_markup"])
@@ -661,7 +662,7 @@ def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypat
     assert category_labels[1] == ["Старинная брошь"]
 
 
-def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
+def test_closet_screen_shows_only_the_title_line(monkeypatch):
     monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
         "zones": {
             "Верх": {"Футболки": [
@@ -675,11 +676,7 @@ def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
     bot = RecordingBot()
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
-    assert bot.message["text"] == (
-        "🎚️ Мой шкаф · 3 вещи\n\n"
-        "Футболки и рубашки:\nБелая футболка, Синяя рубашка\n\n"
-        "Брюки и шорты:\nЧёрные брюки"
-    )
+    assert bot.message["text"] == "🎚️ Мой шкаф · 3 вещи"
 
 
 def test_closet_category_has_add_item_button_above_navigation(monkeypatch):

@@ -338,21 +338,9 @@ def _pluralize_dative_items(n):
     return "вещам"
 
 
-def wardrobe_home_screen(total, categories=None):
+def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.title(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
-    for category in categories or []:
-        names = [
-            _clean_text(_item_display(item))
-            for item in (category.get("items") or [])
-            if _clean_text(_item_display(item))
-        ]
-        if not names:
-            continue
-        b.bold(f"{_clean_text(category.get('zone'))}:")
-        b.newline()
-        b.line(", ".join(names))
-        b.spacer()
     return b.build_stripped()
 
 

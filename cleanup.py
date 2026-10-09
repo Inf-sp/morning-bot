@@ -27,6 +27,7 @@ from wardrobe_model import ZONE_SUBCATS
 from util import esc
 from ui.constants import delete_label, ui_label
 from ui.navigation import nav_row
+from ui.text import ru_plural
 import rich_delivery
 
 _log = logging.getLogger(__name__)
@@ -672,8 +673,9 @@ async def _render_view(bot, cid, view_id, q=None):
     else:
         count_line = f"Всего: {total}"
     lines = [f"<b>{esc(title)}</b>", "", count_line]
-    if ctx == "music_favorite_artists" and total:
-        lines.append("По жанрам")
+    if ctx == "music_favorite_artists" and not sel:
+        # Как «Моё кино» и «Мои книги»: одна строка, артисты — кнопками по жанрам.
+        lines = [f"<b>{esc(title)} · {total} {ru_plural(total, 'артист', 'артиста', 'артистов')}</b>"]
     elif ctx == "cinema_favorites" and total > 1:
         lines.append("По алфавиту")
     if total:
@@ -730,7 +732,7 @@ async def _render_view(bot, cid, view_id, q=None):
         )])
     rows.append(nav_row(view["back"]))
     kb = InlineKeyboardMarkup(rows)
-    text = "\n".join(lines)
+    text = "\n".join(lines).strip()
     if q is not None:
         try:
             await q.message.edit_text(text, parse_mode="HTML", reply_markup=kb)

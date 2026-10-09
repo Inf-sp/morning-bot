@@ -46,34 +46,20 @@ def favorite_movie_list(genre, total):
     return b.build_stripped()
 
 
-def favorite_movies_home(total, genres):
+def favorite_movies_home(total):
     b = MessageBuilder()
     b.title(f"🎚️ Моё кино · {total} {_pluralize_titles(total)}")
-    for group in genres or []:
-        titles = [str(title or "").strip() for title in group.get("titles") or [] if str(title or "").strip()]
-        if not titles:
-            continue
-        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
-        b.newline()
-        b.line(", ".join(titles))
-        b.spacer()
     if not total:
+        b.spacer()
         b.line("Добавь любимые фильмы и сериалы — подбор станет точнее.")
     return b.build_stripped()
 
 
-def favorite_books_home(total, genres):
+def favorite_books_home(total):
     b = MessageBuilder()
     b.title(f"🎚️ Мои книги · {total} {_pluralize_books(total)}")
-    for group in genres or []:
-        titles = [str(title or "").strip() for title in group.get("titles") or [] if str(title or "").strip()]
-        if not titles:
-            continue
-        b.bold(f"{str(group.get('genre') or 'Без жанра').strip()}:")
-        b.newline()
-        b.line(", ".join(titles))
-        b.spacer()
     if not total:
+        b.spacer()
         b.line("Добавь любимые книги — следующие рекомендации станут точнее.")
     return b.build_stripped()
 

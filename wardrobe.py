@@ -720,33 +720,23 @@ ZONE_BY_SLUG = {slug: zone for zone, slug in ZONE_SLUG.items()}
 
 
 async def send_wardrobe_zones(bot, cid, q=None):
-    """«Мой шкаф»: действия и непустые категории на одном экране."""
+    """«Мой шкаф»: заголовок с числом вещей и кнопки категорий."""
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    flat_items = _flat_wardrobe_items(w)
-    category_summaries = [
-        {
-            "zone": public_zone_name(zone),
-            "items": [
-                item for item_zone, _subcat, item in flat_items
-                if item_zone == zone or (zone == "Аксессуары" and item_zone == "Другое")
-            ],
-        }
-        for zone in CLOSET_ZONE_ORDER
-        if counts.get(zone) or (zone == "Аксессуары" and counts.get("Другое"))
-    ]
     rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")]]
     for zone in CLOSET_ZONE_ORDER:
+        # «Другое» показывается внутри «Аксессуаров» — и считается там же.
+        count = counts.get(zone, 0) + (counts.get("Другое", 0) if zone == "Аксессуары" else 0)
         rows.append([InlineKeyboardButton(
-            public_zone_name(zone),
+            f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
     rows.append([InlineKeyboardButton(
         "📝 Выбрать предпочтения", callback_data="set_pref_style",
     )])
     rows.append(nav_row("m_wardrobe"))
-    msg = wardrobe_ui.wardrobe_home_screen(total, category_summaries)
+    msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)
     # Экран шкафа служебный. Отправляем его отдельно, чтобы карточка образа,
     # из которой пользователь пришёл, осталась в истории как полезный результат.
