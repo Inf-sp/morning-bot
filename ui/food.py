@@ -199,12 +199,8 @@ def fridge_home(available):
 def fridge_category(label, total, available):
     b = MessageBuilder()
     b.bold(label)
-    b.text_line(
-        f" · {total} {_products_label(total)} · {available} в наличии\n\n"
-        "Нажми продукт, чтобы изменить наличие.\n\n"
-        "✅ — есть в наличии  □ — закончилось"
-    )
-    return b.build()
+    b.text_line(f" · {total} {_products_label(total)} · {available} в наличии")
+    return b.build_stripped()
 
 
 def fridge_category_choice(name):

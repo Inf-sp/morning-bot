@@ -111,7 +111,7 @@ def test_fridge_category_uses_status_dots_without_delete(monkeypatch):
 
     message = bot.messages[-1]
     assert message["text"].startswith("Мясо и рыба · 2 продукта · 1 в наличии")
-    assert "✅ — есть в наличии  □ — закончилось" in message["text"]
+    assert message["text"] == "Мясо и рыба · 2 продукта · 1 в наличии"
     rows = _labels(message["reply_markup"])
     assert rows[:2] == [["✅ курица"], ["□ лосось"]]
     assert rows[-2] == ["✏️ Изменить"]
