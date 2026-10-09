@@ -587,3 +587,13 @@ def test_one_broken_row_does_not_break_the_whole_admin_screen(monkeypatch):
     rows = service_monitor.rows()
 
     assert "Gemini · нет данных" in rows and "AI" in rows
+
+
+def test_youtube_row_has_no_category(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+    provider_runtime.record_result("youtube", True)
+
+    row = service_monitor.format_row("youtube")
+
+    assert row.split(" ", 1)[1].startswith("YouTube · ") and "Музыка" not in row

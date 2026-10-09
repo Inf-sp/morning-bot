@@ -57,7 +57,7 @@ _DATA_CATEGORIES = {
     "tavily": "Поиск",
     "tmdb": "Кино",
     "google_books": "Книги",
-    "youtube": "Музыка",
+    "youtube": "",  # «YouTube · 3 сегодня» — без категории
     "languagetool": "Обучение",
     "spoonacular": "Питание",
     "gtts": "Озвучка",
