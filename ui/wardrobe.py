@@ -347,7 +347,7 @@ def wardrobe_home_screen(total):
 def category_screen(zone, items, total=None):
     b = MessageBuilder()
     count = len(items) if total is None else total
-    b.section(f"👕 {_clean_text(zone)} · {count} {_pluralize_items(count)}")
+    b.section(f"{_clean_text(zone)} · {count} {_pluralize_items(count)}")
     return b.build_stripped()
 
 

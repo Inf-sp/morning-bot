@@ -708,7 +708,7 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
     assert labels[1:3] == [["Вещь 9"], ["Вещь 10"]]
     assert labels[-2] == ["◀️", "2/2", "▶️"]
     assert labels[0] == ["✅ Добавить вещь"]
-    assert bot.message["text"].startswith("👕 Футболки и рубашки · 10 вещей")
+    assert bot.message["text"].startswith("Футболки и рубашки · 10 вещей")
 
 
 def test_delete_removes_item_at_once_without_confirmation(monkeypatch):

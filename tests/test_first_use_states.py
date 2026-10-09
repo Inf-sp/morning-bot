@@ -220,7 +220,7 @@ def test_dictionary_pagination_shows_current_page(monkeypatch):
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2, page=1))
 
-    assert bot.message["text"].startswith("🇳🇱 Существительные · 2/21")
+    assert bot.message["text"].startswith("Существительные · 2/21")
     assert "Word1 → Слово 1" in bot.message["text"]
     assert ["◀️", "2 / 21", "▶️"] in _labels(bot.message["reply_markup"])
     navigation = bot.message["reply_markup"].inline_keyboard[1]
@@ -242,7 +242,7 @@ def test_dictionary_category_opens_a_full_word_card(monkeypatch):
 
     asyncio.run(learning_dictionary.send_dict_category(bot, "42", "nl", 2))
 
-    assert bot.message["text"].startswith("🇳🇱 Существительные · 1/1")
+    assert bot.message["text"].startswith("Существительные · 1/1")
     assert "Het huis → Дом" in bot.message["text"]
     assert "Разбор: существительное · het-слово" in bot.message["text"]
     assert "Множественное число: de huizen" in bot.message["text"]

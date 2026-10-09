@@ -205,7 +205,7 @@ def fridge_category(label, total, available):
 
 def fridge_category_choice(name):
     b = MessageBuilder()
-    b.section("🧊 Выбери категорию")
+    b.section("Выбери категорию")
     b.line(f"Не удалось уверенно определить категорию для «{name}».")
     b.line("Куда добавить продукт?")
     return b.build_stripped()

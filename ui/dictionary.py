@@ -37,10 +37,8 @@ def dict_deleted(removed=None):
 
 def dict_category_entry(category, index, total, entry):
     """Одна полная карточка внутри перелистываемой категории словаря."""
-    lang = str((entry or {}).get("lang") or "nl")
-    flag = "🇬🇧" if lang == "en" else "🇳🇱"
     b = MessageBuilder()
-    b.section(f"{flag} {category} · {index + 1}/{total}")
+    b.section(f"{category} · {index + 1}/{total}")
     if study_card_is_complete(entry):
         render_study_card(b, entry or {})
     else:
