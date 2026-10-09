@@ -79,7 +79,7 @@ def _error_signature(entry):
 
 # ================= ДОМ =================
 
-# Основные действия админки — зелёные кнопки (явный цвет, не по подписи).
+# «Инвайт» — зелёная кнопка (явный цвет, не по подписи).
 _GREEN = {"style": "success"}
 
 
@@ -87,8 +87,8 @@ async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
-        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check", api_kwargs=_GREEN)],
-        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users", api_kwargs=_GREEN)],
+        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(

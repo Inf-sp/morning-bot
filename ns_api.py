@@ -62,6 +62,11 @@ def station_codes(city):
     return codes
 
 
+def _title(raw):
+    """Участок без хвостовой точки: NS иногда пишет «Alkmaar - Hoorn.»."""
+    return str(raw.get("title") or "").strip().rstrip(".").strip()
+
+
 def _label(value):
     return str((value or {}).get("label") or "").strip() if isinstance(value, dict) else ""
 
@@ -75,7 +80,7 @@ def parse_disruption(raw):
     return {
         "id": str(raw.get("id") or ""),
         "type": raw["type"],
-        "title": str(raw.get("title") or "").strip(),
+        "title": _title(raw),
         "cause": _label(timespan.get("cause")),
         "situation": _label(timespan.get("situation")) or str(raw.get("description") or "").strip(),
         "until": str(expected.get("endTime") or timespan.get("end") or ""),
@@ -116,7 +121,7 @@ def parse_works(raw, today):
     start, end = min(starts), max(ends)
     if not start <= today <= end:
         return None
-    return {"id": str(raw.get("id") or ""), "title": str(raw.get("title") or "").strip(),
+    return {"id": str(raw.get("id") or ""), "title": _title(raw),
             "start": start, "end": end}
 
 

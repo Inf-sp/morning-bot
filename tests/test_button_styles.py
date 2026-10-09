@@ -113,17 +113,16 @@ def test_refresh_buttons_are_green_without_emoji_and_on_top(sent):
         [InlineKeyboardButton("✨ Разное", callback_data="cat")],
         [InlineKeyboardButton("✨ Обновить", callback_data="w_look")],
         [InlineKeyboardButton("✨ Подобрать новые слова", callback_data="seed")],
-        [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm")],
     ])
     asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
 
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [row[0]["text"] for row in rows]
     assert texts == [
-        "Обновить", "Подобрать новые слова", "Обновить карточки", "Разное",
+        "Обновить", "Подобрать новые слова", "Разное",
     ]
-    assert all(row[0].get("style") == "success" for row in rows[:3])
-    assert "style" not in rows[3][0]
+    assert all(row[0].get("style") == "success" for row in rows[:2])
+    assert "style" not in rows[2][0]
 
 
 def test_meaningful_emoji_stay_and_main_menu_is_untouched():
@@ -226,7 +225,8 @@ def test_cancel_button_is_red():
 
 def test_main_section_actions_have_standard_color():
     labels = ("✨ Другой образ", "💳 Что докупить", "✨ Другой рецепт", "🎯 Запустить тренировку",
-              "🕵️ Угадать персонажа", "🎬 Подобрать кино", "📚 Подобрать книгу", "🎧 Подобрать музыку")
+              "🕵️ Угадать персонажа", "🎬 Подобрать кино", "📚 Подобрать книгу", "🎧 Подобрать музыку",
+              "🔄 Обновить карточки")
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"x{i}")]
                                    for i, label in enumerate(labels)])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]

@@ -153,3 +153,10 @@ def test_ns_failure_gives_no_works_line(monkeypatch):
     monkeypatch.setattr(ns_api, "_get", lambda *_a, **_k: None)
 
     assert ns_api.planned_works("AMR", _date(2026, 10, 11)) == []
+
+
+def test_section_title_has_no_trailing_dot():
+    works = ns_api.parse_works({**WORKS, "title": "Alkmaar - Hoorn."}, _date(2026, 10, 11))
+    alert = ns_api.parse_disruption({**RAW, "title": "Alkmaar - Hoorn."})
+
+    assert works["title"] == alert["title"] == "Alkmaar - Hoorn"
