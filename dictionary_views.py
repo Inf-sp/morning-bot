@@ -7,7 +7,6 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
-import learning_dictionary
 import store
 from dictionary_management import dict_entry_view_kb as _dict_entry_view_kb
 from dictionary_model import (
@@ -658,3 +657,8 @@ async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
     await _show_screen(
         bot, cid, msg.text, msg.entities, _dict_entry_view_kb(match, page, ""),
         q=q, persistent_inline=True)
+
+
+# В конце: learning_dictionary сам импортирует имена отсюда, поэтому к этому моменту
+# они уже должны быть определены (иначе цикл ломается при импорте dictionary_views первым).
+import learning_dictionary  # noqa: E402
