@@ -111,6 +111,16 @@ _SCREENS = {
 }
 
 
+def _without_period(value) -> str:
+    """«Geen probleem.» → «Geen probleem»; «!» и «?» остаются."""
+    return str(value or "").strip().rstrip(".").strip()
+
+
+def _with_period(value) -> str:
+    value = str(value or "").strip()
+    return value if not value or value[-1] in ".!?…" else value + "."
+
+
 def learning_menu(home: dict):
     """Главный экран обучения: материал дня, прогресс и следующий шаг."""
     if home.get("disabled"):
@@ -146,28 +156,26 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Одна мысль: фраза → пример с ней → правило из примера → одно действие.
+    # Фраза дня → грамматика → ещё пример; перевод везде через «→».
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
-        # Фраза и перевод — одной цитатой: «Dat is de druppel! — Это последняя капля.»
-        b.quote(f"{str(phrase['text']).strip()} — {str(phrase['translation']).strip()}")
+        b.bold("Фраза дня:")
+        b.text_line(f" {_without_period(phrase['text'])} → {_with_period(phrase['translation'])}")
         b.newline()
-        if phrase.get("example"):
-            b.spacer()
-            b.italic(str(phrase["example"]).strip())
-            b.newline()
-        if phrase.get("rule"):
-            b.spacer()
-            b.bold("Грамматика:")
-            b.newline()
-            # _слово_ — пример на изучаемом языке, выделяется курсивом.
-            for index, part in enumerate(re.split(r"_([^_]+)_", str(phrase["rule"]).strip())):
-                (b.italic if index % 2 else b.text_line)(part)
-            b.newline()
-        if phrase.get("tip"):
-            b.spacer()
-            b.line(str(phrase['tip']).strip())
+    if phrase.get("rule"):
+        b.spacer()
+        b.bold("Грамматика:")
+        b.text_line(" ")
+        # _слово_ — пример на изучаемом языке, выделяется курсивом.
+        for index, part in enumerate(re.split(r"_([^_]+)_", str(phrase["rule"]).strip())):
+            (b.italic if index % 2 else b.text_line)(part)
+        b.newline()
+    if phrase.get("more") and phrase.get("more_translation"):
+        b.spacer()
+        b.bold("Ещё пример:")
+        b.text_line(f" {_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+        b.newline()
 
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],

@@ -332,19 +332,6 @@ def _trainer_display_term(data):
     return display_term(term, entry.get("article") or "")
 
 
-async def confirm_remove_from_training(bot, cid, task_id="", q=None):
-    state = trainer_session.get(cid)
-    data = _answered_task(state, task_id) if state else None
-    if data is None:
-        return
-    text = f"Удалить «{_trainer_display_term(data)}» из обучения?"
-    markup = _keyboard([
-        [("❌ Удалить", f"ex_remove_confirm_{task_id}")],
-        [("Отмена", f"ex_remove_cancel_{task_id}")],
-    ])
-    await rich_delivery.show(bot, cid, text, reply_markup=markup, query=q)
-
-
 async def cancel_remove_from_training(bot, cid, task_id="", q=None):
     state = trainer_session.get(cid)
     data = _answered_task(state, task_id) if state else None

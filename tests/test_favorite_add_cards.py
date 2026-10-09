@@ -170,7 +170,7 @@ def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
     assert message["photo"] == "https://images.test/martian.jpg"
     assert "Марсианин" in message["caption"]
     assert "Энди Вейер · 2011" in message["caption"]
-    assert _labels(message["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
+    assert _labels(message["reply_markup"]) == [["✅ Добавить книгу"], ["✨ Другая книга"]]
 
 
 def test_manual_book_add_accepts_bare_title_even_from_existing_choice(monkeypatch):
@@ -197,7 +197,7 @@ def test_manual_book_add_accepts_bare_title_even_from_existing_choice(monkeypatc
     ))
 
     assert bot.messages[0]["photo"] == "https://images.test/martian.jpg"
-    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
+    assert _labels(bot.messages[0]["reply_markup"]) == [["✅ Добавить книгу"], ["✨ Другая книга"]]
 
 
 def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch):
@@ -221,7 +221,7 @@ def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch)
     assert added == []
     assert query.edits[0]["media"].media == "https://images.test/dumaurier.jpg"
     assert "Джордж Дюморье · 1897" in query.edits[0]["media"].caption
-    assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить книгу", "✨ Другая книга"]]
+    assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить книгу"], ["✨ Другая книга"]]
 
 
 def test_manual_book_candidates_keep_one_best_edition_per_author(monkeypatch):
@@ -571,7 +571,7 @@ def test_manual_book_query_uses_premium_ai_and_keeps_explicit_year(monkeypatch):
 
     assert query == {
         "title": "Марсианин", "alternative_title": "The Martian",
-        "author": "", "year": "2011",
+        "author": "", "year": "2011", "title_ru": "Марсианин",
     }
     assert captured["tier"] == "leisure"
     assert captured["module"] == "leisure_collection_add"
@@ -670,3 +670,108 @@ def test_collection_migration_updates_saved_movie_list(monkeypatch):
 
     assert leisure_collection.normalize_favorite_collections(resolve_movies=True) is True
     assert saved[config.FAVORITE_MOVIES_KEY]["42"] == ["Укрытие (сериал, 2023)"]
+
+
+
+def test_russian_title_is_resolved_through_wikidata_without_ai(monkeypatch):
+    import wikidata_books
+
+    async def no_ai(*_a, **_k):
+        raise AssertionError("AI is not needed when Wikidata knows the book")
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", no_ai)
+    monkeypatch.setattr(wikidata_books, "lookup", lambda title, language="ru": {
+        "title_ru": "Остров доктора Моро", "title_en": "The Island of Dr Moreau",
+        "title_original": "The Island of Doctor Moreau", "author_en": "H. G. Wells",
+        "author_ru": "Герберт Уэллс", "year": "1895",
+    })
+
+    query = asyncio.run(leisure_books._analyze_manual_book_query("Остров доктора Моро"))
+
+    assert query == {
+        "title": "Остров доктора Моро", "alternative_title": "The Island of Dr Moreau",
+        "author": "", "year": "", "title_ru": "Остров доктора Моро",
+    }
+
+
+def test_newest_edition_and_russian_title_are_chosen(monkeypatch):
+    def volume(title, year, author="H. G. Wells"):
+        return {"title": title, "author": author, "authors": [author], "year": year,
+                "cover_url": f"https://books.google.com/books/content?id={year}", "categories": ["Fiction"],
+                "description": "A shipwrecked man lands on an island."}
+
+    monkeypatch.setattr(leisure_books.google_books, "find_volumes", lambda *_a, **_k: [
+        volume("The Island of Doctor Moreau", "1996"),
+        volume("The Island of Doctor Moreau", "2021"),
+        volume("The Island of Doctor Moreau and Other Stories", "2023"),
+    ])
+
+    async def genres(items):
+        return items
+
+    monkeypatch.setattr(leisure_books, "_determine_manual_book_genres", genres)
+    query = {"title": "Остров доктора Моро", "alternative_title": "The Island of Doctor Moreau",
+             "author": "", "year": "", "title_ru": "Остров доктора Моро"}
+
+    choices = asyncio.run(leisure_books._find_manual_book_candidates(query))
+
+    assert [(item["title"], item["year"]) for item in choices] == [("The Island of Doctor Moreau", "2021")]
+    assert choices[0]["title_ru"] == "Остров доктора Моро"
+
+
+def test_recommendation_skips_owned_book_by_any_title(monkeypatch):
+    monkeypatch.setattr(leisure_books.store, "get_list", lambda key, _cid: (
+        [{"value": "The Island of Dr. Moreau", "title_ru": "Остров доктора Моро"}]
+        if key == leisure_books.config.FAVORITE_BOOKS_KEY else []))
+    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_a: [])
+    used = leisure_books._book_used("42")
+
+    assert leisure_books._is_used({"title": "Остров доктора Моро"}, used)
+    assert leisure_books._is_used({"title": "Остров", "title_en": "The Island of Doctor Moreau"}, used)
+    assert not leisure_books._is_used({"title": "Машина времени", "title_en": "The Time Machine"}, used)
+
+
+def test_my_books_use_picker_genres_and_russian_titles():
+    assert leisure_books._MANUAL_BOOK_GENRES[-1] == "Проза"
+    assert leisure_books._favorite_book_genre({"genre_label": "Художественная проза"}) == "Проза"
+    assert leisure_books._favorite_book_genre({"genre_label": "Биография"}) == "Биографии"
+    assert leisure_books._favorite_book_genre({"categories": ["Fiction"]}) == "Проза"
+    assert leisure_books._favorite_book_genre({"categories": ["Cooking"]}) == "Без жанра"  # определит AI
+
+
+def test_russian_titles_are_filled_from_wikidata(monkeypatch):
+    import wikidata_books
+    saved = [{"id": "b1", "value": "Dune"}, {"id": "b2", "value": "Неизвестная книга"},
+             {"id": "b3", "value": "Obscure", "title_ru_checked": True}]
+    monkeypatch.setattr(leisure_books.store, "ensure_list_ids", lambda *_a: [dict(item) for item in saved])
+    monkeypatch.setattr(leisure_books.store, "set_list", lambda _key, _cid, items: saved.__setitem__(slice(None), items))
+    calls = []
+    monkeypatch.setattr(wikidata_books, "lookup", lambda title, language="ru": calls.append(title) or {
+        "title_ru": "Дюна", "title_en": "Dune", "title_original": "Dune",
+        "author_en": "Frank Herbert", "author_ru": "Фрэнк Герберт", "year": "1965"})
+
+    assert asyncio.run(leisure_books._fill_russian_titles("42")) == 1
+    assert calls == ["Dune"]  # русское и уже проверенное не запрашиваются
+    assert saved[0]["title_ru"] == "Дюна" and saved[0]["title_ru_checked"] is True
+
+
+def test_my_books_card_has_delete_and_no_add_button(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(kwargs)
+
+    token = "t1"
+    leisure_books._favorite_book_views[token] = {
+        "cid": "42", "created_at": __import__("time").time(),
+        "genres": [("Фантастика", [{"id": "abcdef12", "title": "Дюна", "book": {
+            "title": "Дюна", "original_title": "Dune", "author": "Frank Herbert",
+            "cover_url": "https://x/cover.jpg"}}])],
+    }
+
+    asyncio.run(leisure_books.send_favorite_book_genre(Bot(), "42", token, 0, 0))
+
+    labels = [b.text for row in sent[0]["reply_markup"].inline_keyboard for b in row]
+    assert labels[0] == "❌ Удалить" and "✅ Добавить книгу" not in labels
+    assert sent[0]["caption"].startswith("Дюна\n") and "Dune" in sent[0]["caption"]

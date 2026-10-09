@@ -379,3 +379,11 @@ def test_youtube_key_is_redacted(monkeypatch):
     assert "youtube-secret-key-123" not in secure.redact(
         "key=youtube-secret-key-123",
     )
+
+
+def test_cover_is_the_large_version_without_curl():
+    url = google_books._cover_url({"thumbnail": "http://books.google.com/books/content?id=x&printsec=frontcover"
+                                                "&img=1&zoom=1&edge=curl&source=gbs_api"})
+
+    assert url == ("https://books.google.com/books/content?id=x&printsec=frontcover&img=1&zoom=1"
+                   "&source=gbs_api&fife=w800")

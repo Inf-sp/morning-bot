@@ -68,12 +68,6 @@ def _pluralize_books(n):
     return ru_plural(n, "книга", "книги", "книг")
 
 
-def favorite_book_delete_confirmation(title):
-    b = MessageBuilder()
-    b.line(f"Удалить «{str(title or 'Книга').strip()}»?")
-    return b.build_stripped()
-
-
 def yearly_top_screen(kind, year, item):
     labels = {
         "movie": "Фильмы", "tv": "Сериалы",
@@ -291,10 +285,10 @@ def book_text(item):
     if isinstance(categories, str):
         categories = [categories]
     genre_names = {
-        "fiction": "Художественная проза", "fantasy": "Фэнтези",
+        "fiction": "Проза", "fantasy": "Фэнтези",
         "science fiction": "Фантастика", "mystery & detective": "Детектив",
         "thrillers": "Триллер", "romance": "Романтика", "history": "История",
-        "biography & autobiography": "Биография", "psychology": "Психология",
+        "biography & autobiography": "Биографии", "psychology": "Психология",
     }
     genre = str(item.get("genre") or "").strip() or next(
         (genre_names.get(str(value).casefold(), str(value).strip())
@@ -318,7 +312,8 @@ def book_text(item):
     if plot_source:
         plot = " ".join(str(plot_source).split()).strip()
         sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", plot) if part.strip()]
-        plot = " ".join(sentences[:5])
+        # Короткое описание: 1–2 предложения, не длиннее нескольких строк.
+        plot = clip(" ".join(sentences[:2]), limit=320)
         if plot and plot[-1] not in ".!?…":
             plot += "."
         b.spacer()

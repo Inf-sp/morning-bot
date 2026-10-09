@@ -101,7 +101,7 @@ _ADD_RE = re.compile(r"^(?:Добавить|Создать)\b")
 # Всё, что подбирает или создаёт новое, — зелёная кнопка в самом верху.
 # Главные действия разделов — стандартного цвета, хотя подпись похожа на «Другой… / Подобрать…».
 _PLAIN_RE = re.compile(
-    r"^(?:Новый образ|Новый рецепт|Новое меню|Новые премьеры|Другой фильм|Другая книга|Другой артист|"
+    r"^(?:Новый образ|Новый рецепт|Новое меню|Новые премьеры|Ещё одна загадка|Другой фильм|Другая книга|Другой артист|"
     r"Что докупить|Запустить тренировку|Угадать персонажа|"
     r"Обновить карточки)$"
 )
@@ -142,7 +142,8 @@ def _toggle(text):
     label = _LEADING_EMOJI_RE.sub("", text[1:].lstrip("\uFE0F").lstrip()).strip()
     if not label or _ADD_RE.match(label) or _DELETE_RE.match(label):
         return None
-    return label, "success" if text.startswith(_TOGGLE_ON) else "danger"
+    # Выбрано — зелёная, не выбрано — стандартного цвета (не красная).
+    return label, "success" if text.startswith(_TOGGLE_ON) else None
 
 
 def _plain_label(text):
@@ -193,7 +194,8 @@ def _enhance_markup(markup, level=2):
             toggle = _toggle(text) if level >= 1 else None
             if toggle:
                 button["text"] = toggle[0]
-                button.setdefault("style", toggle[1])
+                if toggle[1]:
+                    button.setdefault("style", toggle[1])
                 changed = True
                 continue
             label = _plain_label(text)

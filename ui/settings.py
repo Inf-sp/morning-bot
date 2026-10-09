@@ -133,13 +133,6 @@ def lifehack_edit_input(text):
     return b.build_stripped()
 
 
-def lifehack_delete_confirm(text):
-    b = MessageBuilder()
-    b.section("❌ Удалить лайфхак?")
-    b.line(text)
-    return b.build_stripped()
-
-
 def mydata_section(title, hint=""):
     b = MessageBuilder().section(title)
     if hint:

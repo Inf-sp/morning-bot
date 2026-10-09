@@ -746,7 +746,7 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
     )
     assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
         ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
-        ["Романтика"], ["История"], ["Биографии"], ["Психология"],
+        ["Романтика"], ["История"], ["Биографии"], ["Психология"], ["Проза"],
     ]
     assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
         ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
@@ -875,7 +875,7 @@ def test_book_card_has_modern_compact_hierarchy():
         "Автор · 2026 · Night Night Fawn\n"
         "Жанр: Фэнтези\n\n"
         "Сюжет\n"
-        "Первое. Второе. Третье. Четвёртое. Пятое."
+        "Первое. Второе."  # короткое описание: 1–2 предложения
     )
     assert "⭐" not in message.text
     assert "Почему стоит читать" not in message.text

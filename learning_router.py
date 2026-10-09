@@ -30,7 +30,8 @@ async def handle_callback(bot, cid, data, run_with_status, q=None):
             bot, cid, task_id=data[len("ex_remove_cancel_"):], q=q,
         )
     elif data.startswith("ex_remove_"):
-        await trainer.confirm_remove_from_training(
+        # Удаление из обучения сразу, без отдельного подтверждения.
+        await trainer.remove_from_training(
             bot, cid, task_id=data[len("ex_remove_"):], q=q,
         )
     elif data.startswith("ex_next_"):
@@ -157,7 +158,7 @@ async def handle_action(bot, cid, q, act, run_with_status):
         parts = act[len("dictcatdel_"):].split("_", 3)
         if (len(parts) == 4 and parts[0] in ("nl", "en")
                 and parts[1].isdigit() and parts[2].isdigit()):
-            await dictionary.confirm_delete_dict_category_entry(
+            await dictionary.del_dict_category_entry(  # сразу, без подтверждения
                 bot, cid, parts[0], int(parts[1]), int(parts[2]), parts[3], q=q,
             )
     elif act.startswith("dictcatlist_"):
@@ -218,13 +219,14 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictmoveid_"):
         await dictionary.confirm_move_dict_entry_by_id(bot, cid, act[len("dictmoveid_"):], q=q)
     elif act.startswith("dictdelid_"):
-        await dictionary.confirm_delete_dict_entry_by_id(bot, cid, act[len("dictdelid_"):], q=q)
+        # Удаление из словаря сразу, без отдельного подтверждения.
+        await dictionary.del_dict_entry_by_id(bot, cid, act[len("dictdelid_"):], q=q)
     elif act.startswith("dictdelok_"):
         _, lang, term_key = act.split("_", 2)
         await dictionary.del_dict_entry_by_term(bot, cid, lang, term_key, q=q)
     elif act.startswith("dictdel_"):
         _, lang, term_key = act.split("_", 2)
-        await dictionary.confirm_delete_dict_entry(bot, cid, lang, term_key, q=q)
+        await dictionary.del_dict_entry_by_term(bot, cid, lang, term_key, q=q)
     elif act.startswith("dicteditpage_"):
         lang, page = act[len("dicteditpage_"):].rsplit("_", 1)
         await dictionary.send_dict_manage(bot, cid, lang, page=int(page), q=q)

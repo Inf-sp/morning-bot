@@ -54,8 +54,16 @@ def _cover_url(image_links: dict) -> str:
     for key in ("extraLarge", "large", "medium", "small", "thumbnail", "smallThumbnail"):
         url = str((image_links or {}).get(key) or "").strip()
         if url:
-            return re.sub(r"^http://", "https://", url)
+            return _large_cover(re.sub(r"^http://", "https://", url))
     return ""
+
+
+def _large_cover(url: str) -> str:
+    """Превью Google 128×198 → та же обложка шириной 800 px, без «загнутого уголка»."""
+    if "books.google" not in url or "?" not in url or "fife=" in url:
+        return url
+    url = re.sub(r"&edge=curl", "", url)
+    return f"{url}&fife=w800"
 
 
 def _plain_description(value: str) -> str:

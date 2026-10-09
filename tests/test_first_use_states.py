@@ -83,10 +83,10 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         "has_material": True, "lang_code": "nl", "kind": "word",
         "term": "morgen", "translation": "завтра",
         "live_language": {
-            "text": "Dat is de druppel!", "translation": "Это последняя капля.",
-            "example": "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
-            "rule": "После _eerst_ и _toen_ подлежащее и глагол меняются местами: _Toen morste ik koffie._",
-            "tip": "придумай своё предложение с «eerst… toen…» и скажи его вслух.",
+            "text": "Geen probleem.", "translation": "Без проблем.",
+            "rule": "_Zodra_ — как только. В придаточном предложении глагол стоит в конце: _zodra ik thuis ben_.",
+            "more": "Ik bel je terug zodra ik klaar ben.",
+            "more_translation": "Я перезвоню тебе, как только закончу",
         },
         "daily_practice": {
             "entries": [{"term": "Inmiddels", "translation": "Уже"}],
@@ -104,10 +104,9 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Dat is de druppel! — Это последняя капля.",
-        "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
-        "Грамматика:\nПосле eerst и toen подлежащее и глагол меняются местами: Toen morste ik koffie.",
-        "придумай своё предложение с «eerst… toen…» и скажи его вслух.",
+        "Фраза дня: Geen probleem → Без проблем.",
+        "Грамматика: Zodra — как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
+        "Ещё пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
     ]
 
     def marked(kind):
@@ -115,11 +114,8 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("blockquote") == ["Dat is de druppel! — Это последняя капля."]
-    assert marked("italic") == [
-        "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
-        "eerst", "toen", "Toen morste ik koffie.",
-    ]
+    assert marked("bold")[1:] == ["Фраза дня:", "Грамматика:", "Ещё пример:"]
+    assert marked("italic") == ["Zodra", "zodra ik thuis ben"]
     assert marked("spoiler") == []
 
 
@@ -584,11 +580,12 @@ def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
     assert opened == [(cid, False)]
 
 
-def test_each_daily_phrase_has_its_own_example_rule_and_action():
+def test_each_daily_phrase_has_grammar_and_another_example():
     import live_language
 
     for phrases in live_language._DAILY_PHRASES.values():
         for phrase in phrases:
-            assert phrase["text"].rstrip(".!").casefold() in phrase["example"].casefold()
-            assert phrase["translation"] and phrase["tip"]
+            assert phrase["translation"] and phrase["more"] and phrase["more_translation"]
             assert phrase["rule"].count("_") % 2 == 0 and "_" in phrase["rule"]
+            assert " — " in phrase["rule"] or phrase["rule"].startswith(("Present", "Третий"))
+            assert phrase["more"] != phrase["text"]

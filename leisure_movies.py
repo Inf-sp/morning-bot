@@ -301,32 +301,6 @@ async def send_favorite_movie_card(bot, cid, token, short_id, genre_index, page)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
-async def send_favorite_movie_delete_confirmation(bot, cid, token, short_id, genre_index, page, q=None):
-    item = _favorite_movie_from_view(cid, token, short_id)
-    if item is None:
-        await send_favorite_movies(bot, cid, q=q)
-        return
-    text = f"Удалить «{item['title']}»?"
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "❌ Удалить",
-            callback_data=f"mfdok:{token}:{short_id}:{genre_index}:{page}",
-        )],
-        [InlineKeyboardButton("Отмена", callback_data=f"mfg:{token}:{genre_index}:{page}"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    if q is not None:
-        try:
-            if getattr(q.message, "photo", None):
-                await q.message.edit_caption(caption=text, reply_markup=kb)
-            else:
-                await q.message.edit_text(text, reply_markup=kb)
-            return
-        except Exception:
-            _log.debug("send_favorite_movie_delete_confirmation: ignored error", exc_info=True)
-    await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
-
-
 async def delete_favorite_movie(bot, cid, token, short_id, genre_index=None, page=0, q=None):
     item = _favorite_movie_from_view(cid, token, short_id)
     if item is not None:

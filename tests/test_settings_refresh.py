@@ -19,11 +19,11 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
 
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
-    labels = _labels(sent[0]["reply_markup"])
-    assert "🔄 Обновить" not in labels
-    assert labels == [
-        "📍 Выбрать город", "🧠 Выбрать язык обучения", "🔔 Уведомления", "☀️ Мой день", "📰 Новости",
-        "📤 Экспорт данных", "#️⃣ Главная",
+    rows = [[b.text for b in row] for row in sent[0]["reply_markup"].inline_keyboard]
+    assert "🔄 Обновить" not in [label for row in rows for label in row]
+    assert rows == [
+        ["📍 Город", "🧠 Язык обучения"], ["🔔 Уведомления", "☀️ Мой день"],
+        ["📰 Новости", "📤 Экспорт"], ["#️⃣ Главная"],
     ]
 
 

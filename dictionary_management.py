@@ -27,68 +27,6 @@ def _loose_text(lang, word):
     return value
 
 
-async def confirm_delete_dict_entry(bot, cid, lang, term_key, q=None):
-    dictionary = _dictionary()
-    await dictionary._show_screen(
-        bot, cid, "Точно удалить это из словаря?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelok_{lang}_{term_key}")],
-            nav_row(f"a_dictlang_{lang}"),
-        ]), q=q,
-    )
-
-
-async def confirm_delete_dict_entry_by_id(bot, cid, word_id, q=None):
-    dictionary = _dictionary()
-    entry = dictionary._entry_by_id(cid, word_id)
-    if not entry:
-        await dictionary.send_dict(bot, cid, q=q)
-        return
-    display = display_term(dictionary._entry_term(entry), entry.get("article") or "")
-    await dictionary._show_screen(
-        bot, cid, f"Удалить «{display}» из словаря?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"a_dictdelokid_{word_id}")],
-            [InlineKeyboardButton("Отмена", callback_data=f"a_dictlang_{dictionary._dict_lang(entry)}")],
-        ]), q=q,
-    )
-
-
-async def confirm_delete_dict_category_entry(
-    bot, cid, lang, category_index, page, word_id, q=None,
-):
-    """Подтверждает удаление и сохраняет позицию в перелистываемой категории."""
-    dictionary = _dictionary()
-    if not 0 <= category_index < len(dictionary._DICT_CATEGORY_ORDER):
-        await dictionary.send_dict_lang(bot, cid, lang, q=q)
-        return
-    category = dictionary._DICT_CATEGORY_ORDER[category_index]
-    entry = dictionary._entry_by_id(cid, word_id)
-    if (not entry or dictionary._dict_lang(entry) != lang
-            or dictionary._dictionary_category(entry) != category):
-        await dictionary.send_dict_category(
-            bot, cid, lang, category_index, page=page, q=q,
-        )
-        return
-    display = display_term(dictionary._entry_term(entry), entry.get("article") or "")
-    await dictionary._show_screen(
-        bot, cid, f"Удалить «{display}» из словаря?", None,
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                delete_label("Удалить"),
-                callback_data=(
-                    f"a_dictcatdelok_{lang}_{category_index}_{page}_{word_id}"
-                ),
-            )],
-            [InlineKeyboardButton(
-                "Отмена",
-                callback_data=f"a_dictcat_{lang}_{category_index}_{page}",
-            )],
-        ]),
-        q=q,
-    )
-
-
 async def confirm_move_dict_entry_by_id(bot, cid, word_id, q=None):
     dictionary = _dictionary()
     entry = dictionary._entry_by_id(cid, word_id)

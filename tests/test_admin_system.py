@@ -61,7 +61,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки"], ["🩺 Проверить API"], ["👥 Пользователи"], ["#️⃣ Главная"],
+        ["🔄 Обновить карточки"], ["👥 Пользователи"], ["#️⃣ Главная"],
     ]
 
 

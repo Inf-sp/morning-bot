@@ -10,7 +10,7 @@ import telegram_runtime
 
 def _markup():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё одна загадка", callback_data="again")],
+        [InlineKeyboardButton("✨ Ещё один вариант", callback_data="again")],
         [InlineKeyboardButton("✅ Комедия", callback_data="pref"),
          InlineKeyboardButton("❌ Не добавлять", callback_data="skip")],
         [InlineKeyboardButton("❌ Удалить", callback_data="del"),
@@ -43,12 +43,12 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [[button["text"] for button in row] for row in rows]
     assert texts == [
-        ["Ещё одна загадка"], ["Добавить слово"], ["Комедия", "Не добавлять"],
+        ["Ещё один вариант"], ["Добавить слово"], ["Комедия", "Не добавлять"],
         ["Удалить", "2/5"], ["Назад"],
     ]
     styles = {button["text"]: button.get("style") for row in rows for button in row}
     assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
-    assert styles["Ещё одна загадка"] == "success" and styles["Комедия"] == "success"
+    assert styles["Ещё один вариант"] == "success" and styles["Комедия"] == "success"
     assert styles["Назад"] == "primary"
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
@@ -136,7 +136,7 @@ def test_meaningful_emoji_stay_and_main_menu_is_untouched():
     assert [[button["text"] for button in row] for row in rows] == [
         ["Мой шкаф"], ["Драма", "🟢 Яйца"], ["←", "🇳🇱 Нидерланды"], ["Главная"],
     ]
-    assert rows[3][0]["style"] == "primary" and rows[1][0]["style"] == "danger"
+    assert rows[3][0]["style"] == "primary" and "style" not in rows[1][0]  # не выбрано — стандартная
 
     main = InlineKeyboardMarkup([
         [InlineKeyboardButton("☀️ Мой день", callback_data="m_myday")],
@@ -155,15 +155,15 @@ def test_disable_button_is_red(sent):
     }
 
 
-def test_toggles_become_green_or_red_without_marks_and_keep_marks_without_color():
+def test_toggles_become_green_or_standard_without_marks_and_keep_marks_without_color():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ 🇳🇱 Нидерландский", callback_data="nl")],
         [InlineKeyboardButton("□ ⭐️ 7+", callback_data="r7")],
         [InlineKeyboardButton("✅ Добавить отмеченные", callback_data="add")],
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
-        ("Добавить отмеченные", "success"), ("Нидерландский", "success"), ("7+", "danger"),
+    assert [(row[0]["text"], row[0].get("style")) for row in rows] == [
+        ("Добавить отмеченные", "success"), ("Нидерландский", "success"), ("7+", None),
     ]
 
     plain = telegram_runtime._enhance_markup(markup, level=0)["inline_keyboard"]
@@ -233,10 +233,12 @@ def test_main_section_actions_have_standard_color():
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [row[0].get("style") for row in rows] == [None] * len(labels)
     assert [row[0]["text"] for row in rows] == [label.split(" ", 1)[1] for label in labels]
-    # Остальные «Другой … / Подобрать …» по-прежнему зелёные.
+    # «Ещё одна загадка» тоже стандартная; остальные «Другой … / Ещё …» по-прежнему зелёные.
     other = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё одна загадка", callback_data="m")]]))["inline_keyboard"]
-    assert other[0][0]["style"] == "success"
+        [InlineKeyboardButton("✨ Ещё одна загадка", callback_data="m")],
+        [InlineKeyboardButton("✨ Ещё один вариант", callback_data="v")]]))["inline_keyboard"]
+    styles = {row[0]["text"]: row[0].get("style") for row in other}
+    assert styles == {"Ещё одна загадка": None, "Ещё один вариант": "success"}
 
 
 def test_leisure_dislike_row_goes_above_other_recommendation():

@@ -337,13 +337,13 @@ def settings_summary(cid) -> str:
 
 async def send_home(bot, cid, q=None):
     rows = [
-        [InlineKeyboardButton("📍 Выбрать город", callback_data="set_city")],
-        # Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
-        [InlineKeyboardButton("🧠 Выбрать язык обучения", callback_data="set_learning_global")],
-        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
-        [InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
-        [InlineKeyboardButton("📰 Новости", callback_data="set_news")],
-        [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
+        # Два столбца. Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
+        [InlineKeyboardButton("📍 Город", callback_data="set_city"),
+         InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
+        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif"),
+         InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
+        [InlineKeyboardButton("📰 Новости", callback_data="set_news"),
+         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
@@ -501,22 +501,6 @@ async def start_lifehack_edit(bot, cid, record_id):
     store.pending_input[str(cid)] = f"lifehack_edit_{record_id}"
     msg = settings_ui.lifehack_edit_input(record.get("text", ""))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-
-
-async def confirm_lifehack_delete(bot, cid, record_id):
-    import myday
-
-    record = next((item for item in myday.lifehack_records() if item.get("id") == record_id), None)
-    if record is None:
-        await send_lifehacks(bot, cid)
-        return
-    msg = settings_ui.lifehack_delete_confirm(record.get("text", ""))
-    rows = [[
-        InlineKeyboardButton("❌ Удалить", callback_data=f"set_lh_delete_yes_{record_id}"),
-        InlineKeyboardButton("Отмена", callback_data="set_lifehacks"),
-    ]]
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup(rows), transient=True)
 
 
 async def delete_lifehack(bot, cid, record_id):
@@ -1205,7 +1189,7 @@ async def handle_callback(bot, cid, data, q=None):
     elif data.startswith("set_lh_delete_yes_"):
         await delete_lifehack(bot, cid, data[len("set_lh_delete_yes_"):])
     elif data.startswith("set_lh_delete_"):
-        await confirm_lifehack_delete(bot, cid, data[len("set_lh_delete_"):])
+        await delete_lifehack(bot, cid, data[len("set_lh_delete_"):])  # сразу, без подтверждения
     elif data in {"set_mydata_leisure", "set_mydata_leisure_p", "set_mydata_cinema", "set_mydata_books", "set_mydata_music"}:
         # Кнопки из старых сообщений: общая страница «Досуг» больше не существует.
         await send_home(bot, cid)

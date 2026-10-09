@@ -87,7 +87,6 @@ async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
-        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

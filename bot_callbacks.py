@@ -465,14 +465,13 @@ ROUTES = (
     R("mfg:*", lambda c: leisure_movies.send_favorite_movie_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("mfl:*", lambda c: leisure_movies.send_favorite_movie_list(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("mfi:*", lambda c: leisure_movies.send_favorite_movie_card(c.bot, c.cid, *_card_args(c))),
-    R("mfd:*", lambda c: leisure_movies.send_favorite_movie_delete_confirmation(
-        c.bot, c.cid, *_card_args(c), q=c.q)),
+    # Удаление сразу, без отдельного подтверждения (mfdok/bfdok — кнопки старых сообщений).
+    R("mfd:*", _delete_favorite_movie),
     R("mfdok:*", _delete_favorite_movie),
     R("book_favorites", lambda c: leisure_books.send_favorite_books(c.bot, c.cid, q=c.q)),
     R("bfg:*", lambda c: leisure_books.send_favorite_book_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("bfi:*", lambda c: leisure_books.send_favorite_book_card(c.bot, c.cid, *_card_args(c))),
-    R("bfd:*", lambda c: leisure_books.send_favorite_book_delete_confirmation(
-        c.bot, c.cid, *_card_args(c), q=c.q)),
+    R("bfd:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_card_args(c)[:2], q=c.q)),
     R("bfdok:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_token_id(c), q=c.q)),
     # Предпочтения.
     R("book_prefs", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),

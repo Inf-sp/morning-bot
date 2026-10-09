@@ -34,9 +34,6 @@ from dictionary_model import (
     merged_srs_block,
 )
 from dictionary_management import (
-    confirm_delete_dict_entry,
-    confirm_delete_dict_category_entry,
-    confirm_delete_dict_entry_by_id,
     confirm_move_dict_entry_by_id,
     del_dict_entry_by_id,
     del_dict_category_entry,
@@ -49,8 +46,7 @@ from dictionary_management import (
 _HERE = Path(__file__).parent
 _log = logging.getLogger(__name__)
 __all__ = [
-    "confirm_delete_dict_entry", "confirm_delete_dict_category_entry",
-    "confirm_delete_dict_entry_by_id", "confirm_move_dict_entry_by_id",
+    "confirm_move_dict_entry_by_id",
     "del_dict_category_entry", "del_dict_entry_by_id", "del_dict_entry_by_term",
     "del_word", "move_dict_entry_by_id",
 ]
