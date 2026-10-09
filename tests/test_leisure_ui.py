@@ -1336,9 +1336,11 @@ def test_movie_card_hides_genre_match_and_links_trailer_in_text():
     })
 
     assert "Подходит по жанрам" not in msg.text
-    assert msg.text.endswith("Посмотреть трейлер")
+    assert "Посмотреть трейлер" not in msg.text
     link = next(e for e in msg.entities if e.type == "text_link")
     assert link.url == "https://www.youtube.com/watch?v=abc"
+    utf16 = msg.text.encode("utf-16-le")
+    assert utf16[link.offset * 2:(link.offset + link.length) * 2].decode("utf-16-le") == "Дюна"
 
 
 def test_configure_under_card_opens_section_settings_as_new_message(monkeypatch):

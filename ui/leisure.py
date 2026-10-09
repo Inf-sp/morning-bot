@@ -151,10 +151,14 @@ def movie_card(item, tm):
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
 
     b = MessageBuilder()
+    trailer = str((tm or {}).get("trailer_url") or "").strip()
 
-    # 1. Что это — заголовок.
+    # 1. Что это — заголовок; трейлер спрятан в названии.
     b.text_line(f"{ui_label('cinema', '').strip()} ")
-    b.bold(title)
+    if trailer:
+        b.bold_link(title, trailer)
+    else:
+        b.bold(title)
     b.newline()
 
     # 2. Стоит ли смотреть + что за жанр — одна строка-якорь без источника рейтинга.
@@ -193,13 +197,6 @@ def movie_card(item, tm):
     if reason:
         b.spacer()
         b.line(reason)
-
-    # 6. Трейлер — ссылка, спрятанная в тексте, последней строкой.
-    trailer = str((tm or {}).get("trailer_url") or "").strip()
-    if trailer:
-        b.spacer()
-        b.link("Посмотреть трейлер", trailer)
-        b.newline()
 
     return title, b.build_stripped()
 
