@@ -198,7 +198,8 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
-    enabled = [item.button_label for item in get_notification_options() if notif_on(cid, item.key)]
+    enabled = [item.button_label for item in get_notification_options()
+               if notification_available(cid, item.key) and notif_on(cid, item.key)]
     msg = settings_ui.settings_home(city, enabled, study_lang(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -536,6 +537,13 @@ def _time_sort_key(value: str) -> int:
     return int(m.group(1)) * 60 + int(m.group(2))
 
 
+def notification_available(cid, kind) -> bool:
+    """«Поезда NS» — только для Нидерландов: в другой стране рассылка всё равно молчит."""
+    if kind == "ns_disruptions":
+        return str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL"
+    return True
+
+
 def get_notification_options() -> list:
     """Все реально существующие уведомления с короткими универсальными названиями.
     Берём из NOTIF_TYPES (тот же список, что видит пользователь в своих настройках),
@@ -567,6 +575,8 @@ def _notif_schedule(kind: str) -> str:
 async def send_notif(bot, cid, q=None):
     rows = []
     for opt in get_notification_options():
+        if not notification_available(cid, opt.key):
+            continue
         on = notif_on(cid, opt.key)
         mark = "✅" if on else "□"
         rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])

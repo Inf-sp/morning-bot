@@ -163,3 +163,23 @@ def test_section_title_has_no_trailing_dot():
     alert = ns_api.parse_disruption({**RAW, "title": "Alkmaar - Hoorn."})
 
     assert works["title"] == alert["title"] == "Alkmaar - Hoorn"
+
+
+def test_ns_toggle_is_shown_only_for_the_netherlands(monkeypatch):
+    import asyncio
+    import settings
+
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(settings, "notif_on", lambda *_a: True)
+    for cc in ("NL", "DE"):
+        monkeypatch.setattr(settings.store, "get_settings", lambda _cid, cc=cc: {"cc": cc, "city": "Alkmaar"})
+        asyncio.run(settings.send_notif(Bot(), "42"))
+
+    nl, de = ([b.text for row in message["reply_markup"].inline_keyboard for b in row] for message in sent)
+    assert any("Поезда NS" in label for label in nl)
+    assert not any("Поезда NS" in label for label in de)
