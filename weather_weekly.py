@@ -61,6 +61,6 @@ def week_overview(days):
         description += ", временами ветрено"
     elif avg_wind >= 5:
         description += ", умеренный ветер"
-    return description
+    return description + "…"
 
 
