@@ -8,6 +8,7 @@ import config
 import store
 import wardrobe_rules as rules
 from wardrobe_model import (
+    CLOTHING_ZONES,
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
     public_item_name,
@@ -263,8 +264,8 @@ def select_outfit_candidates(w, weather_ctx):
     вернуть пустой список кандидатов, даже если в шкафу есть куртки."""
     candidates = {}
     for zone in ZONE_ORDER:
-        if zone == "Другое":
-            continue
+        if zone not in CLOTHING_ZONES:
+            continue  # аксессуары не подбираются из шкафа — советом по погоде в строке-причине
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
         # Жёсткие правила погоды: шорты в дождь и ветер, тёплое в жару и т. п. — исключаются.
         items = [it for it in items if not _temp_conflicts(it, weather_ctx) and rules.allowed(it, weather_ctx)]
@@ -547,7 +548,7 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
     def _combos():
         import itertools
         pools = [_top_candidates(candidates[z], selected_styles=selected_styles) for z in required]
-        optional_zones = [z for z in ("Верхняя одежда", "Аксессуары") if candidates.get(z)]
+        optional_zones = [z for z in ("Верхняя одежда",) if candidates.get(z)]
         for zone in optional_zones:
             top = _top_candidates(candidates[zone], limit=2, selected_styles=selected_styles)
             # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.
@@ -568,23 +569,21 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
     ]
     combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
     if previous_item_ids:
-        # «Новый образ» должен менять основу комплекта, а не одну случайную вещь.
-        # Для полного набора из 4–5 элементов требуем минимум две замены; для
-        # маленького шкафа оставляем честную возможность заменить хотя бы одну.
-        min_changes = 2 if any(len(combo) >= 4 for combo in combos) else 1
+        # «Новый образ» должен менять основу комплекта, а не одну случайную вещь:
+        # минимум две замены; маленькому шкафу оставляем честную одну замену.
         previous_was_layered = any(
             _has_light_shirt_layer(combo)
             and {it.get("id") for it in combo if it.get("id")} == previous_item_ids
             for combo in combos
         )
-        combos = [
-            combo for combo in combos
-            if len(previous_item_ids - {it.get("id") for it in combo}) >= min_changes
-            or (
-                previous_was_layered != _has_light_shirt_layer(combo)
-                and len(previous_item_ids - {it.get("id") for it in combo}) >= 1
-            )
-        ]
+
+        def changed_enough(combo, min_changes):
+            changes = len(previous_item_ids - {it.get("id") for it in combo})
+            return changes >= min_changes or (
+                previous_was_layered != _has_light_shirt_layer(combo) and changes >= 1)
+
+        combos = ([combo for combo in combos if changed_enough(combo, 2)]
+                  or [combo for combo in combos if changed_enough(combo, 1)])
     scored = [(
         score_outfit(combo, weather_ctx, wardrobe_history, prefs_text, selected_styles), combo,
     ) for combo in combos]

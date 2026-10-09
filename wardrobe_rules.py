@@ -175,8 +175,28 @@ def harmony_score(items):
 
 
 # ---------- строка-причина ----------
+FROST_FEELS = 0    # °C «ощущается»: шапка и перчатки
+COLD_FEELS = 6     # °C: шарф
+WINDY_COLD_FEELS = 12
+
+
+def accessory_advice(ctx):
+    """Аксессуары по погоде — советом, а не вещами из шкафа: зонт, очки, шарф, шапка и перчатки."""
+    low, high = feels_low(ctx), feels_high(ctx)
+    advice = []
+    if ctx.get("has_rain"):
+        advice.append("зонт")
+    if low is not None and low <= FROST_FEELS:
+        advice.append("шапка и перчатки")
+    elif low is not None and (low <= COLD_FEELS or (ctx.get("strong_wind") and low < WINDY_COLD_FEELS)):
+        advice.append("шарф")
+    if not ctx.get("has_rain") and (ctx.get("sunny") or (summer_weather(ctx) and high is not None and high >= 24)):
+        advice.append("солнечные очки")
+    return advice
+
+
 def weather_reason(ctx, items):
-    """Одна строка, только когда погода реально повлияла на выбор; иначе ""."""
+    """Одна строка с точкой в конце, только когда погода повлияла на выбор; иначе ""."""
     parts, consequences = [], []
     if ctx.get("has_rain"):
         hour = ctx.get("rain_from")
@@ -198,11 +218,15 @@ def weather_reason(ctx, items):
     if not parts and summer_weather(ctx) and feels_high(ctx) is not None and feels_high(ctx) >= 24:
         parts.append(f"Тепло до {round(feels_high(ctx)):+d}° и сухо")
         consequences.append("лёгкие вещи")
+    low = feels_low(ctx)
+    if not parts and low is not None and low <= COLD_FEELS:
+        parts.append(f"Холодно, ощущается {round(low):+d}°")
+    consequences.extend(accessory_advice(ctx))
     if not parts:
         return ""
     text = ", ".join(parts)
     text = text[:1].upper() + text[1:]
     if consequences:
         text += " — " + ", ".join(dict.fromkeys(consequences))
-    return text
+    return text + "."
 

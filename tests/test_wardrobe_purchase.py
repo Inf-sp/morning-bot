@@ -186,7 +186,8 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     assert "Белые кожаные кеды" in names
     assert query.edited[0]["text"].startswith("✅ «Белые кожаные кеды» — в шкафу")
     assert wardrobe._purchase_state(cid)["key"] != old_key
-    assert "👔 Твой шкаф · 10 вещей" in bot.sent[-1]["text"]
+    # «Часы» в шкаф не попадают (только одежда и обувь): 8 вещей + кеды.
+    assert "👔 Твой шкаф · 9 вещей" in bot.sent[-1]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
     wardrobe.store.pending_input.pop(cid, None)
 
@@ -354,6 +355,8 @@ def test_disliked_picks_are_replaced_by_fresh_ai_ideas_when_pool_runs_out(monkey
         return {"items": [
             {"item": "Бордовый шерстяной шарф", "zone": "Аксессуары", "subcategory": "Шарфы",
              "color": "бордовый", "why": "Добавит цвет к тёмной верхней одежде.", "tip": "Бери длинный."},
+            {"item": "Бордовый свитер", "zone": "Верх", "subcategory": "Свитеры",
+             "color": "бордовый", "why": "Добавит цвет к тёмным брюкам.", "tip": "Бери однотонный."},
         ]}
 
     monkeypatch.setattr(ai, "allm_json", ideas)
@@ -365,6 +368,7 @@ def test_disliked_picks_are_replaced_by_fresh_ai_ideas_when_pool_runs_out(monkey
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
 
     labels = [row[0].text for row in bot.sent[-1]["reply_markup"].inline_keyboard[:-1]]
-    assert len(labels) == 3 and "Бордовый шерстяной шарф" in labels
+    # Аксессуары не предлагаются даже от AI: на свободное место встаёт свитер.
+    assert len(labels) == 3 and "Бордовый свитер" in labels and "Бордовый шерстяной шарф" not in labels
     assert set(pool[:-2]) <= set(asked[0])
     wardrobe.store.pending_input.pop(cid, None)

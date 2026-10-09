@@ -638,28 +638,19 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     assert all("✏️ Изменить" not in row for row in labels)
 
 
-def test_closet_hides_other_category_but_keeps_legacy_items_accessible(monkeypatch):
-    class Bot:
-        messages = []
+def test_closet_has_no_accessories_tab_and_old_accessories_are_removed():
+    cid = "closet-no-accessories"
+    wardrobe.store.save_wardrobe({"_v": 3, "zones": {
+        "Верх": {"Футболки": [{"id": "t1", "zone": "Верх", "name": "Футболка"}]},
+        "Аксессуары": {"Часы": [{"id": "a1", "zone": "Аксессуары", "name": "Часы"}]},
+        "Другое": {"Другое": [{"id": "o1", "zone": "Другое", "name": "Старинная брошь"}]},
+    }}, cid)
 
-        async def send_message(self, **kwargs):
-            self.messages.append(kwargs)
+    w = wardrobe.store.load_wardrobe(cid)
 
-    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {
-        "zones": {"Другое": {"Другое": [{"id": "legacy-1", "name": "Старинная брошь"}]}},
-    })
-
-    bot = Bot()
-    asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
-    home_labels = _labels(bot.messages[-1]["reply_markup"])
-
-    assert all("Другое" not in row for row in home_labels)
-    assert bot.messages[-1]["text"] == "🎚️ Мой шкаф · 1 вещь"
-
-    asyncio.run(wardrobe.send_category(bot, "closet-test", "acc"))
-    category_labels = _labels(bot.messages[-1]["reply_markup"])
-    assert category_labels[0] == ["✅ Добавить вещь"]
-    assert category_labels[1] == ["Старинная брошь"]
+    assert set(w["zones"]) == {"Верх"} and w["_v"] == 4
+    assert set(wardrobe.store.load_wardrobe(cid)["zones"]) == {"Верх"}  # удаление сохранено
+    assert "Аксессуары" not in wardrobe.CLOSET_ZONE_ORDER
 
 
 def test_closet_screen_shows_only_the_title_line(monkeypatch):

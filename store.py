@@ -321,11 +321,26 @@ def load_wardrobe(cid=None):
         if "zones" not in w:
             w = _migrate_legacy_wardrobe(w)
             _save(key, w)
+        if _drop_non_clothing(w):
+            _save(key, w)
         # В in-memory fallback-режиме _load не делает глубокую копию вложенных dict
         # (только list верхнего уровня) — без неё мутация возвращённого объекта до
         # save_wardrobe могла бы незаметно повлиять на _mem напрямую.
         return copy.deepcopy(w)
     return _load(config.WARDROBE_FILE) or {}
+
+def _drop_non_clothing(w) -> bool:
+    """Одноразово убирает из шкафа аксессуары и «Другое»: шкаф — только одежда и обувь."""
+    from wardrobe_model import CLOTHING_ZONES
+    zones = w.get("zones") or {}
+    extra = [zone for zone in zones if zone not in CLOTHING_ZONES]
+    if not extra:
+        return False
+    for zone in extra:
+        zones.pop(zone, None)
+    w["_v"] = int(w.get("_v", 0)) + 1  # версия меняется — кэш образа с аксессуарами пересоберётся
+    return True
+
 
 def save_wardrobe(w, cid=None):
     if cid is not None:
@@ -364,8 +379,12 @@ def add_wardrobe_items(cid, items: list) -> list:
     import uuid
     added = []
 
+    from wardrobe_model import is_clothing
+
     def _mut(w):
         for it in items:
+            if not is_clothing(it):
+                continue  # аксессуары в шкаф не добавляются
             it = dict(it)
             it["id"] = uuid.uuid4().hex
             bucket = w.setdefault("zones", {}).setdefault(it["zone"], {}).setdefault(it["subcategory"], [])

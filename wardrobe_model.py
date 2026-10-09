@@ -11,6 +11,12 @@ ZONE_SUBCATS = {
     "Другое": ["Другое"],
 }
 ZONE_ORDER = ["Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары", "Другое"]
+# Шкаф хранит только одежду и обувь: аксессуары — советом по погоде в образе.
+CLOTHING_ZONES = ("Верх", "Низ", "Верхняя одежда", "Обувь")
+
+
+def is_clothing(item) -> bool:
+    return isinstance(item, dict) and item.get("zone") in CLOTHING_ZONES
 ZONE_PUBLIC_LABELS = {
     "Верх": "Футболки и рубашки",
     "Низ": "Брюки и шорты",

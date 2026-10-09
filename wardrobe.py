@@ -15,6 +15,7 @@ import wardrobe_weather
 from ui import wardrobe as wardrobe_ui
 from ui.constants import delete_label, ui_label
 from wardrobe_model import (
+    CLOTHING_ZONES,
     ZONE_SUBCATS,
     flat_items as _flat_wardrobe_items,
     has_rain_outerwear as _has_rain_outerwear,
@@ -40,7 +41,7 @@ WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 13
 PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
-CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
+CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь")
 _PURCHASE_IDEAS = (
     {
         "item": "Тёмно-синий оверсайз-пиджак",
@@ -65,18 +66,6 @@ _PURCHASE_IDEAS = (
         "category": "Верх", "style": "Минимализм", "season": "Всесезон",
         "reason": "даст светлый верх для денима, брюк и многослойных комплектов",
         "markers": ("молочная рубашка", "белая рубашка"),
-    },
-    {
-        "item": "Структурная сумка через плечо",
-        "category": "Аксессуары", "style": "Городской", "season": "Всесезон",
-        "reason": "соберёт повседневные комплекты и добавит им чёткую городскую линию",
-        "markers": ("сумка",),
-    },
-    {
-        "item": "Кожаный ремень средней ширины",
-        "category": "Аксессуары", "style": "Кэжуал", "season": "Всесезон",
-        "reason": "свяжет обувь с брюками и поможет сделать свободный силуэт собраннее",
-        "markers": ("ремень",),
     },
 )
 
@@ -709,7 +698,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         )
 # Extracted to wardrobe_management.py: def get_wardrobe_gaps.
 
-_ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.items())
+_ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.items()
+                        if z in CLOTHING_ZONES)
 
 
 # Extracted to wardrobe_management.py: def _local_text_item.
@@ -726,8 +716,7 @@ async def send_wardrobe_zones(bot, cid, q=None):
     total, counts = wardrobe_stats(w)
     rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")]]
     for zone in CLOSET_ZONE_ORDER:
-        # «Другое» показывается внутри «Аксессуаров» — и считается там же.
-        count = counts.get(zone, 0) + (counts.get("Другое", 0) if zone == "Аксессуары" else 0)
+        count = counts.get(zone, 0)
         rows.append([InlineKeyboardButton(
             f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
@@ -750,7 +739,7 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
         await send_wardrobe_zones(bot, cid, q=q)
         return
     items = [item for item_zone, _subcat, item in _flat_wardrobe_items(store.load_wardrobe(cid))
-             if item_zone == zone or (zone == "Аксессуары" and item_zone == "Другое")]
+             if item_zone == zone]
     total = len(items)
     pages = max(1, (total + WARDROBE_CATEGORY_PAGE_SIZE - 1) // WARDROBE_CATEGORY_PAGE_SIZE)
     page = max(0, min(int(page), pages - 1))

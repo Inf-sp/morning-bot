@@ -97,23 +97,17 @@ def test_no_success_confirmation_when_store_did_not_save_item(monkeypatch):
     assert "✅ Вещь добавлена" not in bot.messages[0]["text"]
 
 
-def test_text_accessory_is_saved_when_ai_parser_is_unavailable(monkeypatch):
+def test_accessory_is_not_added_to_the_wardrobe(monkeypatch):
     stored_items = []
 
     async def unavailable(*_args, **_kwargs):
         raise Exception("⚠️ ИИ временно недоступен — попробуй снова через пару минут.")
 
-    def save(_cid, items):
-        stored_items.extend(items)
-        return [{**items[0], "id": "chain-1"}]
-
     monkeypatch.setattr(ai, "allm_json", unavailable)
-    monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", save)
+    monkeypatch.setattr(wardrobe.store, "add_wardrobe_items", lambda _cid, items: stored_items.extend(items) or [])
     bot = _Bot()
 
     asyncio.run(wardrobe.add_item(bot, "wardrobe-chain", "Цепочка со значком сторон света"))
 
-    assert stored_items[0]["zone"] == "Аксессуары"
-    assert stored_items[0]["subcategory"] == "Украшения"
-    assert bot.messages[0]["text"].startswith("✅ Вещь добавлена в «🎚️ Мой шкаф»")
-    assert "Категория: Аксессуары\nСтиль: Повседневный" in bot.messages[0]["text"]
+    assert stored_items == []
+    assert bot.messages[0]["text"].startswith("В шкаф добавляю только одежду и обувь.")

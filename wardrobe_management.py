@@ -18,7 +18,10 @@ import wardrobe_purchase as purchase_logic
 from ui import wardrobe as wardrobe_ui
 from ui.constants import delete_label
 from wardrobe_model import flat_items as _flat_wardrobe_items
-from wardrobe_model import normalize_parsed_item, public_item_name, wardrobe_stats
+from wardrobe_model import is_clothing, normalize_parsed_item, public_item_name, wardrobe_stats
+
+_ONLY_CLOTHING = ("В шкаф добавляю только одежду и обувь. Аксессуары подскажу в образе по погоде: "
+                  "очки в солнце, зонт в дождь, шапку и перчатки в мороз.")
 
 _log = logging.getLogger(__name__)
 
@@ -111,6 +114,9 @@ async def add_item(bot, cid, text, *, return_to_home=False):
     if not items:
         await bot.send_message(chat_id=cid, text="Не удалось распознать вещь. Опиши её одним сообщением.", reply_markup=_wardrobe._back_kb())
         return
+    if not any(is_clothing(item) for item in items):
+        await bot.send_message(chat_id=cid, text=_ONLY_CLOTHING, reply_markup=_wardrobe._back_kb())
+        return
     saved = store.add_wardrobe_items(cid, items)
     if return_to_home and saved:
         await _wardrobe.send_home(bot, cid)
@@ -126,7 +132,7 @@ async def add_item_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=
         parsed = await ai.allm_image_json(
             image_bytes,
             mime_type,
-            f"""Распознай только предметы одежды и аксессуары на фото. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
+            f"""Распознай только предметы одежды и обувь на фото. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
 Зоны и подкатегории: {_wardrobe._ZONES_DESC}
 Для каждого отчётливо видимого предмета верни zone, subcategory, name, brand, color, color_secondary,
 material, length, warmth (строго лёгкие/обычные/тёплые), fit, season, rain_ok, wind_ok,
@@ -146,6 +152,9 @@ JSON: {{"items":[{{"zone":"","subcategory":"","name":"","brand":"","color":"","c
     if not items:
         store.pending_input[str(cid)] = "wardrobe_add"
         await bot.send_message(chat_id=cid, text="Не удалось уверенно распознать вещь. Опиши её одним сообщением.", reply_markup=_wardrobe._back_kb())
+        return
+    if not any(is_clothing(item) for item in items):
+        await bot.send_message(chat_id=cid, text=_ONLY_CLOTHING, reply_markup=_wardrobe._back_kb())
         return
     saved = store.add_wardrobe_items(cid, items)
     await _show_added_items(bot, cid, saved)

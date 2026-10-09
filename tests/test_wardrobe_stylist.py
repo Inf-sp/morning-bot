@@ -234,15 +234,14 @@ def test_other_outfit_changes_the_base_not_one_random_item():
         "Верх": {"Футболки": [_item("t1", "Верх", "Белая футболка"), _item("t2", "Верх", "Серая футболка")]},
         "Низ": {"Брюки": [_item("b1", "Низ", "Бежевые брюки"), _item("b2", "Низ", "Синие брюки")]},
         "Обувь": {"Кеды": [_item("s1", "Обувь", "Белые кеды"), _item("s2", "Обувь", "Серые кеды")]},
-        "Аксессуары": {"Часы": [_item("a1", "Аксессуары", "Чёрные часы"), _item("a2", "Аксессуары", "Серебристые часы")]},
     }}
     weather = {"tmax": 22, "has_rain": False, "strong_wind": False, "warm": True}
 
     alternative = pick_best_outfit(
-        wardrobe, weather, [], "", previous_item_ids={"t1", "b1", "s1", "a1"})
+        wardrobe, weather, [], "", previous_item_ids={"t1", "b1", "s1"})
 
     assert alternative is not None
-    assert len({"t1", "b1", "s1", "a1"} - {item["id"] for item in alternative}) >= 2
+    assert len({"t1", "b1", "s1"} - {item["id"] for item in alternative}) >= 2
 
 
 def test_hot_dry_weather_prioritizes_shorts_over_trousers():
@@ -267,7 +266,7 @@ def test_hot_dry_weather_prioritizes_shorts_over_trousers():
     assert {item["id"] for item in outfit} == {"top", "shorts", "shoes"}
 
 
-def test_suitable_accessory_is_preferred_when_it_is_available():
+def test_accessories_are_never_picked_from_the_wardrobe():
     wardrobe_data = {"zones": {
         "Верх": {"Футболки": [_item("t1", "Верх", "Белая футболка")]},
         "Низ": {"Брюки": [_item("b1", "Низ", "Бежевые брюки")]},
@@ -282,7 +281,7 @@ def test_suitable_accessory_is_preferred_when_it_is_available():
         "",
     )
 
-    assert any(item["id"] == "a1" for item in outfit)
+    assert {item["id"] for item in outfit} == {"t1", "b1", "s1"}
 
 
 def test_layer_misfiled_as_top_is_completed_with_a_base_top():

@@ -422,7 +422,7 @@ def test_fill_wardrobe_returns_to_the_normal_home_after_saving(monkeypatch):
     opened = []
 
     async def parse(_text):
-        return [{"name": "Белая футболка"}]
+        return [{"name": "Белая футболка", "zone": "Верх"}]
 
     async def send_home(_bot, cid):
         opened.append(cid)
@@ -454,7 +454,7 @@ def test_fill_wardrobe_text_input_opens_normal_home(monkeypatch):
     opened = []
 
     async def parse(_text):
-        return [{"name": "Белая футболка"}]
+        return [{"name": "Белая футболка", "zone": "Верх"}]
 
     async def send_home(_bot, routed_cid):
         opened.append(routed_cid)

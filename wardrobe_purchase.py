@@ -16,7 +16,7 @@ PROFILE_KEY = "wardrobe_purchase_screen"
 MIN_ITEMS = 5
 BATCH_SIZE = 3
 # Зона считается закрытой, когда вещей в ней уже достаточно для разнообразия.
-_ZONE_COVERED = {"Верх": 12, "Низ": 8, "Обувь": 6, "Верхняя одежда": 4, "Аксессуары": 6}
+_ZONE_COVERED = {"Верх": 12, "Низ": 8, "Обувь": 6, "Верхняя одежда": 4}
 _SUBCATEGORY_COVERED = 3
 _WARM_OUTER_MARKERS = ("пуховик", "пальто", "парк", "утепл", "дублён", "дублен", "шуб")
 _COLOR_MARKERS = (
@@ -29,7 +29,6 @@ _TIP_BY_ZONE = {
     "Низ": "Выбирай посадку, которая не спорит с объёмом твоего верха.",
     "Верх": "Бери однотонный вариант — он проще сочетается с тем, что уже есть.",
     "Верхняя одежда": "Примеряй поверх самого объёмного свитера — так слой точно сядет в холод.",
-    "Аксессуары": "Выбирай цвет, который уже есть в обуви или ремне, — так деталь свяжет образ.",
 }
 _TIP_FORBIDDEN_RE = re.compile(r"\d|₽|€|\$|руб|цен|скидк|бренд", re.IGNORECASE)
 
@@ -107,7 +106,6 @@ def wardrobe_facts(wardrobe, *, cold_season):
         "bottoms": sum(zone(it) == "Низ" for it in items),
         "shoes": sum(zone(it) == "Обувь" for it in items),
         "outer": len(outer),
-        "accessories": sum(zone(it) in ("Аксессуары", "Другое") for it in items),
         "warm_outer": any(_is_warm_outer(it) for it in outer),
         "light": any(
             it.get("warmth") == "лёгкие" or it.get("subcategory") == "Шорты"
@@ -135,7 +133,6 @@ def analysis(facts):
         (f["shoes"] >= 3, "обувь на разные случаи"),
         (f["cold_season"] and f["warm_outer"], "есть тёплая верхняя одежда к зиме"),
         (enough_colors and share is not None and share >= 0.7, "спокойная палитра — вещи легко сочетаются"),
-        (f["accessories"] >= 3, "есть аксессуары для акцентов"),
     ) if ok]
     bottoms = f["bottoms"]
     weaknesses = [text for ok, text in (
@@ -148,7 +145,6 @@ def analysis(facts):
         (f["tops"] <= 2, "мало верха"),
         (enough_colors and share is not None and share <= 0.3, "мало нейтральной базы"),
         (enough_colors and share == 1.0, "нет цветных акцентов"),
-        (f["accessories"] == 0, "нет аксессуаров"),
     ) if ok]
     return {
         "total": f["total"],
@@ -195,8 +191,8 @@ def _normalize_candidate(raw, source):
         return None
     zone = next((value for value in (raw.get("zone"), raw.get("category"))
                  if value in ZONE_SUBCATS and value != "Другое"), None) or zone_of(name)
-    if zone == "Другое":
-        return None
+    if zone not in _ZONE_COVERED:
+        return None  # только одежда и обувь: аксессуары не предлагаются
     candidate = {
         "id": item_id(name),
         "item": name[:1].upper() + name[1:],
@@ -320,10 +316,7 @@ def _fallback_why(candidate, facts):
             return "Верхней одежды в шкафу нет — без неё к зиме не собрать ни одного образа."
         return (f"Тёплой верхней одежды нет: на холод сейчас только {count} "
                 f"{ru_plural(count, 'вещь', 'вещи', 'вещей')} без утепления.")
-    if zone == "Верхняя одежда":
-        return f"Верхней одежды сейчас {count} {ru_plural(count, 'вещь', 'вещи', 'вещей')} — новый слой добавит образов на прохладные дни."
-    count = facts["accessories"]
-    return f"Аксессуаров сейчас {count} — одна деталь соберёт уже имеющиеся комплекты."
+    return f"Верхней одежды сейчас {count} {ru_plural(count, 'вещь', 'вещи', 'вещей')} — новый слой добавит образов на прохладные дни."
 
 
 def card(wardrobe, candidate, facts):
@@ -347,7 +340,7 @@ def ai_facts_text(facts, analysis_data):
     """Короткие факты для AI-промпта; числа берутся только отсюда."""
     return (
         f"вещей: {facts['total']}; верх: {facts['tops']}; низ: {facts['bottoms']}; "
-        f"обувь: {facts['shoes']}; верхняя одежда: {facts['outer']}; аксессуары: {facts['accessories']}; "
+        f"обувь: {facts['shoes']}; верхняя одежда: {facts['outer']}; "
         f"тёплая верхняя одежда: {'есть' if facts['warm_outer'] else 'нет'}; "
         f"ближайший сезон: {'холодный' if facts['cold_season'] else 'тёплый'}; "
         f"слабые места: {', '.join(analysis_data['weaknesses']) or 'нет'}"
