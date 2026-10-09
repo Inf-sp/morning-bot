@@ -560,7 +560,6 @@ async def show_purchase_card(bot, cid, item_id, q=None):
         return
     msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Добавить в шкаф", callback_data=f"w_buy_got:{item_id}")],
         # «Не нравится» убирает вещь навсегда, на её место встаёт следующая.
         [InlineKeyboardButton("Не нравится", callback_data=f"w_buy_no:{item_id}",
                               api_kwargs={"style": "danger"})],

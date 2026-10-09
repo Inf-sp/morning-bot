@@ -164,11 +164,11 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     assert "Готовые образы:\n• серая футболка + синие джинсы" in text
     assert "💡 " in text and "http" not in text and "€" not in text
     assert _labels(query.edited[0]["reply_markup"]) == [
-        ["✅ Добавить в шкаф"], ["Не нравится"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["Не нравится"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     keyboard = query.edited[0]["reply_markup"].inline_keyboard
-    assert keyboard[1][0].api_kwargs == {"style": "danger"}
-    assert keyboard[1][0].callback_data == first.replace("w_buy_i:", "w_buy_no:")
+    assert keyboard[0][0].api_kwargs == {"style": "danger"}
+    assert keyboard[0][0].callback_data == first.replace("w_buy_i:", "w_buy_no:")
     wardrobe.store.pending_input.pop(cid, None)
 
 
