@@ -93,14 +93,14 @@ def test_other_menu_does_not_repeat_current_dishes(monkeypatch):
 
 
 def test_day_menu_screen_lists_three_dishes_without_recipes():
-    msg = menu_ui.day_menu({"dishes": {
+    msg = menu_ui.day_menu({"cuisine": "italian", "dishes": {
         "breakfast": {"name": "Crostata", "note": "Песочный пирог с джемом"},
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
         "dinner": {"name": "Lasagna", "note": ""},
     }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.")
 
     assert msg.text == (
-        "🍳 Меню на сегодня · Итальянская кухня\n\n"
+        "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
         "Завтрак: Crostata — песочный пирог с джемом\n\n"
         "Обед: Pasta al pomodoro — паста с томатами\n\n"
         "Ужин: Lasagna\n\n"

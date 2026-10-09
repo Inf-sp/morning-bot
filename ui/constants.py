@@ -94,6 +94,14 @@ UI_EMOJI = {
 # локальных вариантов, чтобы подписи не расходились между разделами.
 PREFERENCES_LABEL = "📝 Предпочтения"
 
+# Флаг страны кухни — для заголовка «Меню на сегодня».
+CUISINE_FLAG = {
+    "italian": "🇮🇹", "japanese": "🇯🇵", "thai": "🇹🇭", "mexican": "🇲🇽", "indian": "🇮🇳",
+    "chinese": "🇨🇳", "turkish": "🇹🇷", "french": "🇫🇷", "russian": "🇷🇺", "georgian": "🇬🇪",
+    "korean": "🇰🇷", "vietnamese": "🇻🇳", "greek": "🇬🇷", "spanish": "🇪🇸", "german": "🇩🇪",
+    "american": "🇺🇸", "canadian": "🇨🇦", "british": "🇬🇧", "dutch": "🇳🇱", "european": "🇪🇺",
+}
+
 CUISINE_EMOJI = {
     "european": "🇪🇺",
     "international": "🌍",

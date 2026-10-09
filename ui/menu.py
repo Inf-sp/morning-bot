@@ -4,7 +4,7 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder, MessageSpec
-from .constants import LANGUAGE_EMOJI, ui_label
+from .constants import CUISINE_FLAG, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
 from .navigation import nav_row
 from .news import append_weekly_news
@@ -217,7 +217,8 @@ _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner"
 def day_menu(menu, *, cuisine_label, intro="", news=None):
     """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов."""
     b = MessageBuilder()
-    b.section(f"🍳 Меню на сегодня · {cuisine_label} кухня")
+    flag = CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
+    b.section(f"{flag} Меню на сегодня · {cuisine_label} кухня")
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
