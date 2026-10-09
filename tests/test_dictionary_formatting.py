@@ -261,7 +261,7 @@ def test_daily_word_has_delete_home_and_notification_settings(monkeypatch):
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
         [("❌ Удалить слово", "a_dictdelid_w1")],
-        [("#️⃣ Главная", "m_menu"), ("🎚️ Настройки уведомлений", "set_notif_new")],
+        [("#️⃣ Главная", "m_menu"), ("🎚️ Настроить", "set_notif_new")],
     ]
 
 

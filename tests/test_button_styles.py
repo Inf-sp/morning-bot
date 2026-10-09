@@ -218,15 +218,15 @@ def test_leisure_hub_picks_are_green_and_keep_their_order():
     ]
 
 
-def test_forecast_buttons_are_green():
+def test_forecast_buttons_have_standard_color():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
         [InlineKeyboardButton("🗓️ Погода на неделю", callback_data="a_w_week")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
-        ("Полный прогноз на сегодня", "success"), ("Погода на неделю", "success"), ("Главная", "primary"),
+    assert [(row[0]["text"], row[0].get("style")) for row in rows] == [
+        ("Полный прогноз на сегодня", None), ("Погода на неделю", None), ("Главная", "primary"),
     ]
 
 
