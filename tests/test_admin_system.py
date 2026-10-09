@@ -314,30 +314,22 @@ def test_admin_home_ui_uses_compact_exact_lines_without_ok():
     assert "OK" not in message.text
 
 
-def test_admin_home_ui_shows_current_errors_under_status():
+def test_admin_home_ui_has_status_dots_and_no_errors_block():
     message = admin_ui.home(
-        status_dot="🔴", status_text="API требуют внимания",
-        updated_at="15:15",
         system_rows=[
             "AI", "🟢 Gemini · Основной · доступен",
-            "Данные", "🟢 TMDB · Кино · доступен",
+            "Данные", "🟢 TMDB · Кино · доступен", "NS · Поезда · 0 сегодня",
         ],
         error_rows=["21 августа, 15:14 · Обучение · не открылось задание"],
     )
 
     assert message.text == (
         "🛠️ Админ\n\n"
-        "Мозг:\n"
+        "AI\n"
         "🟢 Gemini · Основной · доступен\n\n"
-        "Данные:\n"
-        "🟢 TMDB · Кино · доступен\n\n"
-        "Ошибки:\n"
-        "21 августа, 15:14 · Обучение · не открылось задание"
-    )
-    assert any(
-        entity.type == "bold"
-        and entity.length == len("Ошибки:")
-        for entity in message.entities
+        "Данные\n"
+        "🟢 TMDB · Кино · доступен\n"
+        "⚪ NS · Поезда · 0 сегодня"
     )
 
 

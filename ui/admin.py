@@ -32,6 +32,8 @@ def deploy_report(version, title, release_notes):
 
 # ================= ДОМ =================
 
+_STATUS_DOTS = ("🟢", "🟡", "🟠", "🔴", "⚪")
+
 def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
          notif_line=None, users_line=None, data_line=None, logs_line=None,
@@ -52,25 +54,17 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     if head:
         b.spacer()
     if system_rows is not None:
+        # Порядок: версия → AI → Данные. У каждой строки сервиса — точка статуса,
+        # чтобы столбец читался ровно. Ошибки на главный экран не выводятся (/admin_logs).
         rows = [str(row or "").strip() for row in system_rows if str(row or "").strip()]
         for row in rows:
             if row in ("AI", "Данные"):
                 if row == "Данные":
                     b.spacer()
-                b.bold("Мозг:" if row == "AI" else "Данные:")
+                b.bold(row)
                 b.newline()
             else:
-                b.line(row)
-        errors = [
-            str(row or "").strip() for row in error_rows or []
-            if str(row or "").strip()
-        ]
-        if errors:
-            b.spacer()
-            b.bold("Ошибки:")
-            b.newline()
-            for row in errors:
-                b.line(row)
+                b.line(row if row.startswith(_STATUS_DOTS) else f"⚪ {row}")  # нет данных
         return b.build_stripped()
     if system_dot is not None or system_text is not None:
         dot = system_dot if system_dot is not None else status_dot

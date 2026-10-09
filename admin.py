@@ -93,7 +93,6 @@ async def send_home(bot, cid, q=None):
     ])
     msg = ui.home(
         system_rows=monitor_rows,
-        error_rows=_active_error_rows(limit=5),
         version_line=deploy_report.version_line(),
     )
     await _show(bot, cid, msg, kb, q)
