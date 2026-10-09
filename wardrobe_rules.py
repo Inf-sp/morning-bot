@@ -181,13 +181,11 @@ WINDY_COLD_FEELS = 12
 
 
 def accessory_advice(ctx):
-    """Аксессуары по погоде — советом, а не вещами из шкафа: зонт, очки, шарф, шапка и перчатки."""
+    """Аксессуары по погоде — советом, а не вещами из шкафа (винительный падеж): очки, шарф, шапка."""
     low, high = feels_low(ctx), feels_high(ctx)
     advice = []
-    if ctx.get("has_rain"):
-        advice.append("зонт")
     if low is not None and low <= FROST_FEELS:
-        advice.append("шапка и перчатки")
+        advice.append("шапку и перчатки")
     elif low is not None and (low <= COLD_FEELS or (ctx.get("strong_wind") and low < WINDY_COLD_FEELS)):
         advice.append("шарф")
     if not ctx.get("has_rain") and (ctx.get("sunny") or (summer_weather(ctx) and high is not None and high >= 24)):
@@ -195,38 +193,47 @@ def accessory_advice(ctx):
     return advice
 
 
+def _and_list(values):
+    """«a», «a и b», «a, b и c»."""
+    values = list(dict.fromkeys(values))
+    return values[0] if len(values) == 1 else f"{', '.join(values[:-1])} и {values[-1]}"
+
+
 def weather_reason(ctx, items):
-    """Одна строка с точкой в конце, только когда погода повлияла на выбор; иначе ""."""
-    parts, consequences = [], []
+    """«Дождь и порывы ветра до 16 м/с, лучше выбрать непромокаемую верхнюю одежду и закрытую обувь.»
+
+    Одна фраза без тире, только когда погода повлияла на выбор; иначе "".
+    """
+    weather, consequences = [], []
     if ctx.get("has_rain"):
         hour = ctx.get("rain_from")
-        parts.append(f"Дождь с {hour:02d}:00" if isinstance(hour, int) and hour > (ctx.get("window") or (0,))[0]
-                     else "Дождь")
+        weather.append(f"дождь с {hour:02d}:00" if isinstance(hour, int) and hour > (ctx.get("window") or (0,))[0]
+                       else "дождь")
         outer = next((item for item in items if item.get("zone") == "Верхняя одежда"), None)
         if outer and outer.get("rain_ok"):
-            consequences.append("непромокаемая верхняя одежда")
+            consequences.append("непромокаемую верхнюю одежду")
         if any(item.get("zone") == "Обувь" for item in items):
-            consequences.append("закрытая обувь")
+            consequences.append("закрытую обувь")
     gust = ctx.get("gust_max")
     if ctx.get("strong_wind"):
-        parts.append(f"порывы до {gust} м/с" if gust else "сильный ветер")
+        weather.append(f"порывы ветра до {gust} м/с" if gust else "сильный ветер")
         if not ctx.get("has_rain") and any(item.get("zone") == "Верхняя одежда" for item in items):
             consequences.append("ветрозащитный слой")
+    parts = [" и ".join(weather)] if weather else []
     if ctx.get("layering") and ctx.get("feels_min") is not None:
         parts.append(f"утром ощущается {ctx['feels_min']:+d}°, днём до {ctx['feels_max']:+d}°")
         consequences.append("слой, который можно снять")
     if not parts and summer_weather(ctx) and feels_high(ctx) is not None and feels_high(ctx) >= 24:
-        parts.append(f"Тепло до {round(feels_high(ctx)):+d}° и сухо")
+        parts.append(f"тепло до {round(feels_high(ctx)):+d}° и сухо")
         consequences.append("лёгкие вещи")
     low = feels_low(ctx)
     if not parts and low is not None and low <= COLD_FEELS:
-        parts.append(f"Холодно, ощущается {round(low):+d}°")
+        parts.append(f"холодно, ощущается {round(low):+d}°")
     consequences.extend(accessory_advice(ctx))
     if not parts:
         return ""
     text = ", ".join(parts)
     text = text[:1].upper() + text[1:]
     if consequences:
-        text += " — " + ", ".join(dict.fromkeys(consequences))
+        text += f", лучше выбрать {_and_list(consequences)}"
     return text + "."
-

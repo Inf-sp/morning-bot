@@ -73,7 +73,7 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
     assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 4, 2, 1)
     assert data["weaknesses"] == ["1 пара обуви на все случаи", "нет тёплой куртки к зиме"]
     text = wardrobe_ui.purchase_screen({**data, "has_picks": True}).text
-    assert text.startswith("💳 Что докупить\n\n👔 Твой шкаф · 9 вещей · 16 образов\n")
+    assert text.startswith("💳 Что докупить\n\nТвой шкаф · 9 вещей · 16 образов\n")
     assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
     assert "Самое полезное" not in text and "Явных пробелов нет" not in text
     assert "присматриваешь" not in text
@@ -133,7 +133,7 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     assert labels[3:] == [["⬅️ Назад", "#️⃣ Главная"]]
     assert best["item"] not in message["text"] and "Самое полезное" not in message["text"]
     styles = [row[0].api_kwargs.get("style") for row in message["reply_markup"].inline_keyboard[:3]]
-    assert styles == ["danger"] * 3
+    assert styles == [None] * 3  # стандартного цвета
     assert message["reply_markup"].inline_keyboard[3][0].callback_data == "m_wardrobe"
     callbacks = [b.callback_data for row in message["reply_markup"].inline_keyboard for b in row]
     assert all(len(data.encode()) <= 64 and "кед" not in data for data in callbacks)
@@ -160,7 +160,7 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
 
     text = query.edited[0]["text"]
     assert text.startswith(f"🛒 {wardrobe._purchase_state(cid)['pool'][0]['item']}\n\nПочему тебе: ")
-    assert "Было 16 образов → станет 32" in text
+    assert "Было" not in text and "станет" not in text
     assert "Готовые образы:\n• серая футболка + синие джинсы" in text
     assert "💡 " in text and "http" not in text and "€" not in text
     assert _labels(query.edited[0]["reply_markup"]) == [
@@ -187,7 +187,7 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     assert query.edited[0]["text"].startswith("✅ «Белые кожаные кеды» — в шкафу")
     assert wardrobe._purchase_state(cid)["key"] != old_key
     # «Часы» в шкаф не попадают (только одежда и обувь): 8 вещей + кеды.
-    assert "👔 Твой шкаф · 9 вещей" in bot.sent[-1]["text"]
+    assert "Твой шкаф · 9 вещей" in bot.sent[-1]["text"] and "👔" not in bot.sent[-1]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
     wardrobe.store.pending_input.pop(cid, None)
 

@@ -526,10 +526,9 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
         batch = _stable_batch(pool, profile)
     _remember_purchase_batch(cid, batch, cycle_reset)
     msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch)})
-    # Рекомендации — только кнопки, красные (цвет задан явно, это не «Удалить»).
+    # Рекомендации — только кнопки стандартного цвета.
     kb = InlineKeyboardMarkup([
-        *[[InlineKeyboardButton(c["item"][:40], callback_data=f"w_buy_i:{c['id']}",
-                                api_kwargs={"style": "danger"})] for c in batch],
+        *[[InlineKeyboardButton(c["item"][:40], callback_data=f"w_buy_i:{c['id']}")] for c in batch],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

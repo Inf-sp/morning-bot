@@ -270,7 +270,7 @@ def purchase_screen(data):
     b.title("💳 Что докупить")
     total = int(data.get("total") or 0)
     outfits = int(data.get("outfits") or 0)
-    b.line(f"👔 Твой шкаф · {total} {_pluralize_items(total)} · {outfits} {_outfits_word(outfits)}")
+    b.line(f"Твой шкаф · {total} {_pluralize_items(total)} · {outfits} {_outfits_word(outfits)}")
     strengths = [_clean_text(x) for x in data.get("strengths") or [] if _clean_text(x)]
     weaknesses = [_clean_text(x) for x in data.get("weaknesses") or [] if _clean_text(x)]
     if strengths:
@@ -294,7 +294,7 @@ def purchase_small_wardrobe():
 def purchase_card(data):
     """Экран 2: одна покупка с фактами шкафа.
 
-    data: {name, why, before, after, outfits[[names]], tip}
+    data: {name, why, outfits[[names]], tip}; строки «Было → станет» нет.
     """
     data = data or {}
     b = MessageBuilder()
@@ -302,10 +302,6 @@ def purchase_card(data):
     why = _finish_dot(data.get("why"))
     if why:
         b.labeled_line("Почему тебе", why, lowercase=False)
-    before, after = int(data.get("before") or 0), int(data.get("after") or 0)
-    if after > before:
-        b.spacer()
-        b.line(f"Было {before} {_outfits_word(before)} → станет {after}")
     outfits = [
         " + ".join(_lower_first(_clean_text(name)) for name in outfit if _clean_text(name))
         for outfit in data.get("outfits") or []

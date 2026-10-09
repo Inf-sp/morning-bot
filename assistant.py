@@ -13,6 +13,7 @@ import rich_delivery
 import menu
 import myday
 import secure
+import assistant_context
 from ui import assistant as assistant_ui
 from ui.builder import MessageSpec
 
@@ -484,6 +485,16 @@ async def chat_reply(bot, cid, text):
             prompt_text += "\n\nСвежие фрагменты из открытых источников:\n" + "\n---\n".join(sources)
     hist.append({"role": "user", "content": prompt_text})
     hist = hist[-10:]
+    # Свои данные — только в текущий запрос к AI (не в сохраняемую историю):
+    # вещи шкафа, продукты, любимое — по теме вопроса.
+    personal = await asyncio.to_thread(assistant_context.build, cid, text)
+    call_hist = hist
+    if personal:
+        call_hist = [*hist[:-1], {"role": "user", "content": (
+            f"{prompt_text}\n\nДанные пользователя — опирайся на них, называй его конкретные вещи, "
+            "продукты и любимое; не выдумывай того, чего в списке нет:\n"
+            f"{secure.wrap_untrusted(personal, 'данные пользователя')}"
+        )}]
     # Rich drafts are Telegram's native live preview surface. Classic bots and
     # older delivery paths keep the existing editable status message instead.
     draft = await rich_delivery.start_draft(bot, cid)
@@ -524,8 +535,8 @@ async def chat_reply(bot, cid, text):
 
     try:
         answer = (
-            await ai.achat_chain_stream(hist, cid, on_delta=update_draft)
-            if draft is not None else await ai.achat_chain(hist, cid)
+            await ai.achat_chain_stream(call_hist, cid, on_delta=update_draft)
+            if draft is not None else await ai.achat_chain(call_hist, cid)
         )
     except Exception as e:
         if status is not None:
