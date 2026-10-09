@@ -206,15 +206,15 @@ def test_explicitly_styled_button_keeps_its_place():
     assert [row[0]["text"] for row in rows] == ["Любой жанр", "Драма", "Новинка"]
 
 
-def test_pager_arrows_become_blue_side_arrows_and_list_button_is_blue():
+def test_pager_arrows_and_list_button_have_standard_color():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("◀️", callback_data="p0"), InlineKeyboardButton("2/5", callback_data="noop"),
          InlineKeyboardButton("▶️", callback_data="p2")],
         [InlineKeyboardButton("🔢 Показать списком", callback_data="list")],
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert [(b["text"], b.get("style")) for b in rows[0]] == [("←", "primary"), ("2/5", None), ("→", "primary")]
-    assert (rows[1][0]["text"], rows[1][0]["style"]) == ("Показать списком", "primary")
+    assert [(b["text"], b.get("style")) for b in rows[0]] == [("←", None), ("2/5", None), ("→", None)]
+    assert (rows[1][0]["text"], rows[1][0].get("style")) == ("Показать списком", None)
 
 
 def test_cancel_button_is_red():

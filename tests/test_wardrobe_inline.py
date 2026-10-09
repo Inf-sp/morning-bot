@@ -744,8 +744,8 @@ def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
     assert styles == [wardrobe._settings.STYLES[2], None]
 
 
-def test_listen_button_is_green():
+def test_listen_button_has_standard_color():
     import dictionary_views
 
     row = dictionary_views._dict_tts_row({"id": "w1", "term": "wazig", "lang": "nl"})
-    assert row and row[0][0].api_kwargs == {"style": "success"}
+    assert row and not row[0][0].api_kwargs

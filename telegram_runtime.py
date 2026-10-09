@@ -113,7 +113,9 @@ _PREFS_RE = re.compile(r"^Выбрать предпочтения$")
 _DISLIKE_TOP = ("movie_no_", "book_no_", "listen_no", "nov_no_")
 _BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить|Показать списком|Показать карточками)$")
-# Листание: эмодзи-стрелки ◀️/▶️ → синие «←»/«→».
+# Синие — только «Главная», «Назад» и «Настроить»; листание и «Показать списком» стандартные.
+_BLUE_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
+# Листание: эмодзи-стрелки ◀️/▶️ → «←»/«→» стандартного цвета.
 _PAGER_ARROWS = {"◀️": "←", "◀": "←", "⬅️": "←", "⬅": "←", "▶️": "→", "▶": "→", "➡️": "→", "➡": "→"}
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
 _WAIT_RE = re.compile(r"(?:\.\.\.|…)$")
@@ -186,8 +188,6 @@ def _enhance_markup(markup, level=2):
             text = str(button.get("text") or "")
             if text.strip() in _PAGER_ARROWS:
                 button["text"] = _PAGER_ARROWS[text.strip()]
-                if level >= 1:
-                    button.setdefault("style", "primary")
                 changed = True
                 continue
             toggle = _toggle(text) if level >= 1 else None
@@ -216,7 +216,7 @@ def _enhance_markup(markup, level=2):
             for pattern, style, bucket in (
                 (_REFRESH_RE, "success", refresh_rows), (_ADD_RE, "success", add_rows),
                 (_PREFS_RE, "primary", prefs_rows),
-                (_DELETE_RE, "danger", None), (_NAV_RE, "primary", None),
+                (_DELETE_RE, "danger", None), (_BLUE_RE, "primary", None),
             ):
                 if pattern.match(text):
                     # Явно заданный в коде цвет — и явно заданное место: не поднимаем наверх.
