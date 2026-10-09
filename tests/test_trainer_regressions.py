@@ -161,6 +161,48 @@ def test_trainer_result_offers_remove_from_learning():
     assert labels[:2] == ["✨ Следующее задание", "❌ Удалить"]
 
 
+def test_correct_answer_sends_next_task_without_button(monkeypatch):
+    cid = "trainer-auto-next"
+    trainer_session.finish(cid)
+    state = trainer_session.start(cid, "nl", [])
+    sent, rendered = [], []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    class Repository:
+        def __init__(self, _cid):
+            pass
+
+        def record_answer(self, *_args, **_kwargs):
+            return None
+
+    async def render_next(_bot, _cid):
+        rendered.append(_cid)
+
+    monkeypatch.setattr(trainer, "DictionaryRepository", Repository)
+    monkeypatch.setattr(trainer, "_render_next", render_next)
+    message = type("Message", (), {"text": "✅ Верно", "entities": []})()
+
+    def answer(correct):
+        data = {"_task_id": f"task-{correct}", "lang": "nl", "term": "Gevolg", "exercise_type": "recall"}
+        state["current"], state["queue"] = data, []
+        grade = trainer_grading.GradeResult(correct, trainer_grading.AnswerQuality.NOT_REMEMBERED)
+        asyncio.run(trainer._apply_result(Bot(), cid, state, grade, message))
+        return [button.text for row in sent[-1]["reply_markup"].inline_keyboard for button in row], data
+
+    labels, data = answer(True)
+    assert "✨ Следующее задание" not in labels and "❌ Удалить" in labels
+    assert rendered == [cid] and state["current"] is None and state["previous"] is data
+    # «Удалить» под прошлым результатом работает и после нового задания.
+    assert trainer._answered_task(state, "task-True") is data
+
+    labels, _data = answer(False)
+    assert labels[0] == "✨ Следующее задание" and rendered == [cid]
+    trainer_session.finish(cid)
+
+
 def test_remove_from_training_deletes_dictionary_entry_and_future_queue_items(monkeypatch):
     cid = "trainer-remove"
     trainer_session.finish(cid)

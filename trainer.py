@@ -54,7 +54,8 @@ def _nav_row():
 
 
 def _result_keyboard(data, *, allow_remove=True):
-    rows = [[("✨ Следующее задание", f"ex_next_{data['_task_id']}")]]
+    # После верного ответа следующее задание приходит само — кнопка не нужна.
+    rows = [] if data.get("_result_correct") else [[("✨ Следующее задание", f"ex_next_{data['_task_id']}")]]
     if allow_remove and not data.get("_removed"):
         rows.append([("❌ Удалить", f"ex_remove_{data['_task_id']}")])
     rows.append(_nav_row())
@@ -63,6 +64,14 @@ def _result_keyboard(data, *, allow_remove=True):
 
 def _task_matches(data, task_id):
     return bool(task_id) and str(data.get("_task_id") or "") == str(task_id)
+
+
+def _answered_task(state, task_id):
+    """Отвеченное задание по id: текущее или предыдущее (после верного ответа уже пришло новое)."""
+    for data in (state.get("current"), state.get("previous")):
+        if data and _task_matches(data, task_id) and data.get("_answered") and not data.get("_removed"):
+            return data
+    return None
 
 
 def _options(data):
@@ -312,6 +321,9 @@ async def _apply_result(bot, cid, state, grade, message):
     data["_result_message"] = message
     kb = _result_keyboard(data)
     await bot.send_message(chat_id=cid, text=message.text, entities=message.entities, reply_markup=kb)
+    if grade.correct:
+        state["previous"], state["current"] = data, None
+        await _render_next(bot, cid)
 
 
 def _trainer_display_term(data):
@@ -322,10 +334,8 @@ def _trainer_display_term(data):
 
 async def confirm_remove_from_training(bot, cid, task_id="", q=None):
     state = trainer_session.get(cid)
-    if not state or not state.get("current"):
-        return
-    data = state["current"]
-    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+    data = _answered_task(state, task_id) if state else None
+    if data is None:
         return
     text = f"Удалить «{_trainer_display_term(data)}» из обучения?"
     markup = _keyboard([
@@ -337,10 +347,8 @@ async def confirm_remove_from_training(bot, cid, task_id="", q=None):
 
 async def cancel_remove_from_training(bot, cid, task_id="", q=None):
     state = trainer_session.get(cid)
-    if not state or not state.get("current"):
-        return
-    data = state["current"]
-    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+    data = _answered_task(state, task_id) if state else None
+    if data is None:
         return
     message = data.get("_result_message")
     if message is None:
@@ -351,10 +359,8 @@ async def cancel_remove_from_training(bot, cid, task_id="", q=None):
 
 async def remove_from_training(bot, cid, task_id="", q=None):
     state = trainer_session.get(cid)
-    if not state or not state.get("current"):
-        return
-    data = state["current"]
-    if not _task_matches(data, task_id) or not data.get("_answered") or data.get("_removed"):
+    data = _answered_task(state, task_id) if state else None
+    if data is None:
         return
     repository = DictionaryRepository(cid)
     repository.delete_training_entry(data["lang"], data["term"])
