@@ -85,7 +85,8 @@ def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
         "Рукава слегка подвернуть",
         "Футболку оставить навыпуск",
     ]
-    assert build_sock_recommendation(items) == "Бордовые носки"
+    # Зелёная рубашка уже акцент — носки в тон низу, а не второй цвет.
+    assert build_sock_recommendation(items) == "Оливковые носки"
 
 
 def test_socks_are_a_colour_accent_and_never_blue():

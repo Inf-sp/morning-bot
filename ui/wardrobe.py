@@ -64,10 +64,10 @@ def empty_wardrobe():
 def render_wardrobe_message(look_data, *, news=None):
     """Образ дня одним списком «Надень сегодня»: базовые вещи, затем дополнения.
 
-    Погодная строка намеренно не показывается.
+    Погода — одной строкой-причиной и только когда она повлияла на выбор.
 
     look_data: {primary_style, items[{name, zone}], sock_recommendation,
-                how_to_wear[], main_accent}
+                how_to_wear[], main_accent, weather_reason}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -92,6 +92,11 @@ def render_wardrobe_message(look_data, *, news=None):
         b.spacer()
         for item in items:
             b.line(f"- {item}")
+
+    weather_reason = _clean_text(look_data.get("weather_reason"))
+    if weather_reason:
+        b.spacer()
+        b.line(weather_reason)
 
     main_accent = _finish_dot(look_data.get("main_accent") or "")
     if main_accent:

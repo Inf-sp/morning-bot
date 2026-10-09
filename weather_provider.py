@@ -115,6 +115,7 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         "windgusts_10m": [],
         "winddirection_10m": [],
         "temperature_2m": [],
+        "apparent_temperature": [],
         "relativehumidity_2m": [],
         "uv_index": [],
         "cloudcover": [],
@@ -127,6 +128,8 @@ def _adapt_openweather(current_payload, hourly_payload, daily_payload, alerts=No
         hourly_out["windgusts_10m"].append(h.get("wind_gust") or h.get("wind_speed") or 0)
         hourly_out["winddirection_10m"].append(h.get("wind_deg"))
         hourly_out["temperature_2m"].append(h.get("temp"))
+        # «Ощущается как» — для подбора одежды по реальному комфорту, а не по градуснику.
+        hourly_out["apparent_temperature"].append(h.get("feels_like", h.get("temp")))
         hourly_out["relativehumidity_2m"].append(h.get("humidity"))
         hourly_out["uv_index"].append(h.get("uvi"))
         hourly_out["cloudcover"].append(h.get("clouds"))

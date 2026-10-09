@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import config
 import store
+import wardrobe_rules as rules
 from wardrobe_model import (
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
@@ -247,11 +248,8 @@ def _is_shorts(item):
 
 
 def _shorts_weather(weather_ctx):
-    return bool(
-        weather_ctx.get("hot")
-        and not weather_ctx.get("has_rain")
-        and not weather_ctx.get("strong_wind")
-    )
+    """Шорты уместны: тепло весь окно, сухо, без порывов (см. wardrobe_rules)."""
+    return rules.summer_weather(weather_ctx)
 
 
 def _is_raincoat(item):
@@ -268,21 +266,32 @@ def select_outfit_candidates(w, weather_ctx):
         if zone == "Другое":
             continue
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
-        items = [it for it in items if not _temp_conflicts(it, weather_ctx)]
+        # Жёсткие правила погоды: шорты в дождь и ветер, тёплое в жару и т. п. — исключаются.
+        items = [it for it in items if not _temp_conflicts(it, weather_ctx) and rules.allowed(it, weather_ctx)]
+        if zone == "Обувь" and weather_ctx.get("has_rain"):
+            # В дождь без замши и текстиля, если есть закрытая непромокающая альтернатива.
+            items = [it for it in items if rules.rain_shoe_ok(it)] or items
         if zone == "Верхняя одежда":
             if not weather_ctx.get("has_rain"):
                 items = [it for it in items if not _is_raincoat(it)]
             too_warm_for_outer = (weather_ctx.get("tmax") or 0) > WARDROBE_OUTERWEAR_MAX_TEMP
-            outerwear_needed = weather_ctx.get("has_rain") or weather_ctx.get("strong_wind") or not too_warm_for_outer
+            outerwear_needed = rules.needs_outerwear(weather_ctx) or not too_warm_for_outer
             if not outerwear_needed:
                 candidates[zone] = []
                 continue
             if weather_ctx.get("has_rain"):
-                items = sorted(items, key=lambda it: not it.get("rain_ok"))
+                # Есть непромокаемая — только она.
+                items = [it for it in items if it.get("rain_ok")] or items
+            elif weather_ctx.get("strong_wind"):
+                # Порывы: есть непродуваемая — только она.
+                items = [it for it in items if it.get("wind_ok") or it.get("rain_ok")] or items
         elif zone == "Аксессуары" and (weather_ctx.get("hot") or weather_ctx.get("sunny")):
             # Очки могут лежать дальше первых двух аксессуаров, которые попадут
             # в перебор, поэтому поднимаем их до ограничения пула кандидатов.
             items = sorted(items, key=lambda item: not _is_sunglasses(item))
+        elif zone == "Низ" and weather_ctx.get("has_rain"):
+            # В дождь светлые брюки — в конец очереди: брызги на них заметнее.
+            items = sorted(items, key=rules.is_light)
         elif zone == "Низ" and _shorts_weather(weather_ctx):
             # При устойчивой жаре шорты должны дойти до конечного скоринга,
             # даже если брюки были добавлены в шкаф раньше.
@@ -294,18 +303,6 @@ def select_outfit_candidates(w, weather_ctx):
 def _is_neutral_color(color):
     c = str(color or "").lower()
     return any(p in c for p in NEUTRAL_COLORS)
-
-
-def _color_penalty(items):
-    """Штраф за 2+ ярких (не-нейтральных) цвета одновременно в наборе."""
-    bright = []
-    for it in items:
-        for c in (it.get("colors") or []):
-            if not _is_neutral_color(c):
-                bright.append(c.lower())
-    if len(bright) <= 1:
-        return 0
-    return -10 * (len(bright) - 1)
 
 
 def outfit_style_score(items, style):
@@ -341,7 +338,7 @@ def outfit_style_score(items, style):
 # Два представительных дня: тёплый (без верхней одежды) и холодный (верхняя
 # одежда обязательна). Жёсткие фильтры — те же, что у подбора образа дня.
 _COUNT_DAYS = (({"tmax": 22, "warm": True}, False), ({"tmax": 2}, True))
-_MAX_BRIGHT_COLORS = 2  # как _color_penalty: три ярких цвета — уже не образ
+_MAX_BRIGHT_COLORS = 2  # три ярких цвета — уже не образ
 
 
 def _bright_count(item):
@@ -433,6 +430,11 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
     # но при +20…+22 однослойный комплект снова остаётся конкурентным.
     if tmax is not None and 14 <= tmax < 20 and _has_light_shirt_layer(items):
         score += 2
+    # Холодное утро и тёплый день: нужен слой, который можно снять.
+    if weather_ctx.get("layering") and (
+        _has_light_shirt_layer(items) or any(it.get("zone") == "Верхняя одежда" for it in items)
+    ):
+        score += 3
     for it in items:
         tr = it.get("temp_range")
         if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
@@ -447,7 +449,7 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
             # Это сильнее цветового тай-брейкера, но не отменяет защиту от
             # дождя и ветра, историю ношения или явные ограничения пользователя.
             score += 8
-    score += _color_penalty(items)
+    score += rules.harmony_score(items)
     if selected_styles:
         score += 2 * max(outfit_style_score(items, style) for style in selected_styles)
     prefs_low = str(prefs_text or "").lower()
@@ -518,24 +520,39 @@ def _top_candidates(items, limit=3, selected_styles=None):
     return [item for _index, item in ranked[:limit]]
 
 
+TOP_OUTFITS = 6  # столько разных комплектов видит ИИ-стилист
+
+
 def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
                      selected_styles=None):
-    """Собирает кандидатов, перебирает ограниченные комбинации (топ-3 на зону),
-    возвращает лучший полный набор вещей (list[item]) или None, если нет
-    кандидатов для базовой части образа (верх/низ/обувь)."""
+    """Лучший полный набор вещей (list[item]) или None, если нет кандидатов
+    для базовой части образа (верх/низ/обувь)."""
+    best = top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids,
+                       selected_styles, limit=1)
+    return best[0] if best else None
+
+
+def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
+                selected_styles=None, limit=TOP_OUTFITS):
+    """До limit лучших разных полных комплектов, лучший первым.
+
+    Перебирает ограниченные комбинации (топ-3 на зону) из вещей, прошедших
+    жёсткие правила погоды; соседние варианты отличаются хотя бы одной вещью.
+    """
     candidates = select_outfit_candidates(w, weather_ctx)
     required = ["Верх", "Низ", "Обувь"]
     if any(not candidates.get(z) for z in required):
-        return None
+        return []
 
     def _combos():
         import itertools
         pools = [_top_candidates(candidates[z], selected_styles=selected_styles) for z in required]
         optional_zones = [z for z in ("Верхняя одежда", "Аксессуары") if candidates.get(z)]
         for zone in optional_zones:
-            pools.append([None] + _top_candidates(
-                candidates[zone], limit=2, selected_styles=selected_styles,
-            ))
+            top = _top_candidates(candidates[zone], limit=2, selected_styles=selected_styles)
+            # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.
+            mandatory = zone == "Верхняя одежда" and rules.needs_outerwear(weather_ctx)
+            pools.append(top if mandatory else [None] + top)
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]
 
@@ -572,10 +589,9 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
         score_outfit(combo, weather_ctx, wardrobe_history, prefs_text, selected_styles), combo,
     ) for combo in combos]
     if not scored:
-        return None
+        return []
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_score, best_combo = scored[0]
-    if best_score <= -50:
+    if scored[0][0] <= -50:
         # Похоже, единственный приемлемый вариант — это тот самый 7-дневный повтор
         # (guard). Пересчитываем без 7-дневного штрафа — маленький гардероб важнее антиповтора.
         rescored = [(score_outfit(combo, weather_ctx, [
@@ -583,8 +599,17 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
             if e.get("date", "") >= (datetime.now(config.TZ) - timedelta(days=3)).date().isoformat()
         ], prefs_text, selected_styles), combo) for _s, combo in scored]
         rescored.sort(key=lambda x: x[0], reverse=True)
-        best_score, best_combo = rescored[0]
-    return best_combo if is_complete_outfit(best_combo) else None
+        scored = rescored
+    picked = []
+    for _score, combo in scored:
+        ids = {it.get("id") for it in combo}
+        if is_complete_outfit(combo) and all(
+            len(ids ^ {it.get("id") for it in other}) >= 2 for other in picked
+        ):
+            picked.append(combo)
+            if len(picked) >= limit:
+                break
+    return picked
 
 
 # ---------- текст образа: локальный fallback ----------
@@ -746,17 +771,38 @@ def _color_facts(item):
     return f"{_item_facts(item)} {' '.join(map(str, item.get('colors') or []))}".casefold()
 
 
-def build_sock_recommendation(items):
-    """Носки последней строкой списка: цвет-акцент к низу и обуви или носки из шкафа."""
+# Носки в тон низу или обуви — когда цветной акцент в образе уже есть.
+_SOCK_TONES = (
+    (("чёрн", "черн", "графит"), "Чёрные носки"),
+    (("сер", "джинс", "деним", "син", "голуб"), "Серые носки"),
+    (("беж", "песоч", "кремов", "молоч", "экрю", "бел"), "Бежевые носки"),
+    (("корич", "шоколад", "коньяч", "мокко", "табач"), "Коричневые носки"),
+    (("олив", "хаки"), "Оливковые носки"),
+)
+
+
+def build_sock_recommendation(items, suggested=""):
+    """Носки последней строкой списка: носки из шкафа, проверенный совет стилиста,
+    в тон низу, если акцент уже есть, иначе цвет-акцент к низу и обуви. Синие не предлагаются."""
     selected = next((item for item in items
                      if item.get("zone") == "Аксессуары" and "носк" in _item_facts(item)), None)
     if selected:
         return public_item_name(selected)
+    if suggested:
+        return suggested
 
-    facts = " ".join(_color_facts(item) for item in items if item.get("zone") in ("Низ", "Обувь"))
-    return next((accent for markers, accent in _SOCK_ACCENTS
-                 if any(marker in facts for marker in markers)),
-                "Жёлтые носки")
+    has_accent = any(
+        rules.color_family(rules.main_color(item)) in ("cool", "warm", "other")
+        for item in items if item.get("zone") in ("Верх", "Верхняя одежда")
+    )
+    # Сначала низ, затем обувь: носки продолжают линию брюк.
+    for zone in ("Низ", "Обувь"):
+        facts = " ".join(_color_facts(item) for item in items if item.get("zone") == zone)
+        socks = next((socks for markers, socks in (_SOCK_TONES if has_accent else _SOCK_ACCENTS)
+                      if any(marker in facts for marker in markers)), None)
+        if socks:
+            return socks
+    return "Серые носки" if has_accent else "Жёлтые носки"
 
 
 def _accessory_advice(items, weather_ctx):

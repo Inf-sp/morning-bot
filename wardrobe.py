@@ -9,6 +9,9 @@ import store
 import weather
 import util
 import settings as _settings
+import wardrobe_rules
+import wardrobe_stylist
+import wardrobe_weather
 from ui import wardrobe as wardrobe_ui
 from ui.constants import delete_label, ui_label
 from wardrobe_model import (
@@ -28,15 +31,15 @@ from wardrobe_outfit import (
     choose_outfit_style,
     is_urban_2026_base_top,
     outfit_display_order,
-    pick_best_outfit,
     save_outfit_feedback,
+    top_outfits,
 )
 from wardrobe_migration import migrate_item_attrs
 
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 12
+COPY_VALIDATOR_VERSION = 13
 PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь", "Аксессуары")
@@ -622,6 +625,11 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         flags = weather.daytime_outfit_weather(
             wdata, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode)
         weather_ctx = build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode)
+        # Точная погода на часы, когда образ будут носить: от сейчас до 22:00.
+        window = wardrobe_weather.wear_window(
+            wdata, datetime.now(config.TZ).replace(tzinfo=None), sunny=flags["sunny"])
+        if window:
+            weather_ctx = {**weather_ctx, **window}
     except Exception:
         weather_ctx = {"tmin": None, "tmax": None, "has_rain": False, "wind_ms": None,
                        "strong_wind": False, "sunny": False, "hot": False, "warm": False, "tags": []}
@@ -635,12 +643,12 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         next_index = (selected_styles.index(previous_style) + 1) % len(selected_styles)
         selected_styles = [selected_styles[next_index]]
     wardrobe_history = store.get_wardrobe_history(cid)
-    best = pick_best_outfit(
+    outfits = top_outfits(
         w, weather_ctx, wardrobe_history, style_block,
         previous_item_ids=previous_item_ids,
         selected_styles=selected_styles,
     )
-    if not best:
+    if not outfits:
         if silent:
             return
         no_text, no_kb = _no_outfit_screen(result_kb, alternative=bool(previous_item_ids))
@@ -650,6 +658,11 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             await bot.send_message(chat_id=cid, text=no_text, parse_mode="HTML", reply_markup=no_kb)
         return
 
+    # ИИ-стилист выбирает из уже проверенных кодом комплектов; без ИИ — лучший по коду.
+    trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles))
+    pick = await asyncio.to_thread(
+        wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends)
+    best = outfits[pick["index"]] if pick else outfits[0]
     best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
     fallback_tip = build_style_tip(
@@ -672,12 +685,13 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             for it in best_sorted
         ],
         "style_tip": fallback_tip,
-        "sock_recommendation": build_sock_recommendation(best_sorted),
+        "sock_recommendation": build_sock_recommendation(best_sorted, (pick or {}).get("socks", "")),
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "main_accent": build_main_accent(
+        "main_accent": (pick or {}).get("accent") or build_main_accent(
             best_sorted, weather_ctx,
             avoid_accents={previous_main_accent} if previous_main_accent else None,
         ),
+        "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:

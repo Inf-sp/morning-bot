@@ -121,6 +121,7 @@ MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, 
 MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, items}} — новые региональные релизы на неделю
 BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, items}} — книги текущего месяца на неделю
 CATEGORY_NEWS_CACHE_KEY = "category_news_cache.json"  # общий проверенный пул новостей по разделам
+WARDROBE_TRENDS_CACHE_KEY = "wardrobe_trends_cache.json"  # {version, styles: {стили: {expires, items}}} — тренды сезона на неделю
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
 YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
