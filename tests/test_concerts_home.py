@@ -224,12 +224,22 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
     monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: [personal])
     monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: [festival])
-    monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
-    monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
-    assert "Romy" in msg.text
-    assert "Lowlands 2026" in msg.text
+    assert msg.text.startswith("🎫 Концерты недели\n\nТвои артисты:\n• Romy — ")
+    assert "· Paradiso, Amsterdam" in msg.text
+    assert "Популярное рядом:\n• Lowlands 2026 — " in msg.text
+
+
+def test_weekly_concerts_are_skipped_when_there_are_none(monkeypatch):
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [])
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: [])
+    sent = []
+
+    assert asyncio.run(leisure_concerts._build_weekly_events_msg("42")) is None
+    asyncio.run(leisure_concerts.send_weekend_events(RecordingBot(sent), "42"))
+    assert sent == []
 
 
 def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypatch):
@@ -257,35 +267,30 @@ def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypa
     monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL"})
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_args: black_keys)
     monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_args: other_events)
-    monkeypatch.setattr(leisure_concerts.leisure_movies, "get_movie_premieres", lambda _cid: _async([]))
-    monkeypatch.setattr(leisure_concerts.leisure_books, "get_book_premieres", lambda: _async([]))
 
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
-    assert msg.text.count("The Black Keys") == 1
-    assert msg.text.count("• ") == 6
-    assert "Artist 5" in msg.text
+    assert msg.text.count("The Black Keys") == 1  # варианты одного пакета билетов схлопнуты
+    assert msg.text.count("• ") == 1 + leisure_concerts._WEEKLY_POPULAR_LIMIT
+    assert "Artist 4" in msg.text and "Artist 5" not in msg.text  # популярного — до четырёх ближайших
 
 
-def test_weekly_events_notification_has_category_buttons(monkeypatch):
+def test_weekly_concerts_notification_buttons(monkeypatch):
     from ui.builder import MessageSpec
 
     sent = []
 
     monkeypatch.setattr(
         leisure_concerts, "_build_weekly_events_msg",
-        lambda _cid: _async(MessageSpec(text="🎲 Ближайшие события")),
+        lambda _cid: _async(MessageSpec(text="🎫 Концерты недели")),
     )
 
     asyncio.run(leisure_concerts.send_weekend_events(RecordingBot(sent), "42"))
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("🔕 Отключить уведомления", "set_notifpush_weekend_events")],
-        [("🎬 Кино", "movie_premieres")],
-        [("🎫 Концерты", "a_concerts_find")],
-        [("📚 Книги", "book_premieres")],
-        [("#️⃣ Главная", "m_menu")],
+        [("🎫 Все концерты", "a_concerts_find")],
+        [("🎚️ Настроить", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]
     assert sent[0]["disable_web_page_preview"] is True
 

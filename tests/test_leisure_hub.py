@@ -92,13 +92,16 @@ def test_main_menu_has_leisure_hub_instead_of_four_sections():
 
 def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
     msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Muse", "date": "2026-10-12", "url": "https://t.example"}],
         [{"title": "Дюна", "trailer_url": "https://y.example"}],
         [{"title": "Книга", "url": "https://b.example"}] * 5,
+        [{"title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "date": "2026-10-03",
+          "url": "https://t.example"}],
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
-    assert msg.text.startswith("🍿 Досуг\n\nКонцерты:\n• Muse")
+    assert msg.text.startswith("🍿 Досуг\n\nПремьеры кино:\n• «Дюна»\n\nНовые книги:")
+    assert msg.text.endswith("Новая музыка:\n• «Blue Rev» — Alvvays · Инди · 3 октября")
+    assert "Концерты" not in msg.text
     for title in ("Премьеры кино:", "Новые книги:", "«Дюна»", "«Книга»"):
         assert title in msg.text
     assert "игр" not in msg.text
@@ -107,17 +110,17 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
         "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
-        ["🎬 Кино", "🎧 Музыка", "📚 Книги"], ["✨ Новые премьеры"],
+        ["🎬 Кино", "📚 Книги", "🎧 Музыка"], ["✨ Новые премьеры"],
         ["🎚️ Настроить", "#️⃣ Главная"],
     ]
 
 
 def test_hub_hides_empty_blocks():
-    only_books = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}])
+    only_books = leisure_ui.leisure_hub_screen([], [{"title": "Книга"}], [])
     empty = leisure_ui.leisure_hub_screen([], [], [])
 
     assert "Новые книги:" in only_books.text
-    for title in ("Концерты:", "Премьеры кино:"):
+    for title in ("Новая музыка:", "Премьеры кино:"):
         assert title not in only_books.text
         assert title not in empty.text
     assert empty.text.startswith("🍿 Досуг\n\n")
@@ -132,13 +135,18 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
         (leisure_books.google_books, "search_new_releases"),
     ):
         monkeypatch.setattr(module, name, _boom)
+    monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: [{
+        "name": "Blue Rev", "artistName": "Alvvays", "releaseDate": datetime.now(config.TZ).date().isoformat(),
+        "url": "https://music.example/blue-rev", "genres": [{"genreId": "20"}],
+    }])
     bot = RecordingBot()
 
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 
     text = bot.sent[0]["text"]
-    for value in ("Muse", "«Дюна»", "«Новая книга»"):
+    for value in ("«Blue Rev» — Alvvays", "«Дюна»", "«Новая книга»"):
         assert value in text
+    assert "Muse" not in text  # концерты — в рассылке «Концерты недели», не в хабе
     # Раздела игр больше нет.
     assert "Новые игры" not in text and "Подобрать игру" not in str(bot.sent[0]["reply_markup"])
     assert bot.sent[0]["disable_web_page_preview"] is True
@@ -169,9 +177,10 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_movie_premieres", step("movies"))
     monkeypatch.setattr(leisure_books, "get_book_premieres", step("books"))
     monkeypatch.setattr(leisure_movies, "get_current_movie", step("movie_reco"))
+    monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "movie_reco"]
+    assert calls == ["concerts", "movies", "books", "music", "movie_reco"]
 
 
 def test_premieres_and_library_submenus():
@@ -286,6 +295,7 @@ def test_new_premieres_show_the_next_three_items_in_a_loop(monkeypatch):
     monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
     monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
     monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
+    monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: [])
     leisure_hub._premiere_offsets.pop("42", None)
     shown = []
 
@@ -298,3 +308,27 @@ def test_new_premieres_show_the_next_three_items_in_a_loop(monkeypatch):
     asyncio.run(leisure_hub.send_new_premieres(None, "42"))
 
     assert shown == [["Фильм 4", "Фильм 5", "Фильм 1"], ["Фильм 2", "Фильм 3", "Фильм 4"]]
+
+
+def test_hub_title_names_month_and_city():
+    msg = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}], month=10, city="Alkmaar")
+    assert msg.text.startswith("🍿 Досуг в октябре · Alkmaar\n\n")
+    assert leisure_ui.leisure_hub_screen([], [], []).text.startswith("🍿 Досуг\n")
+
+
+def test_new_music_follows_music_styles_with_one_album_per_artist(monkeypatch):
+    import leisure_hub
+    from datetime import date
+
+    rows = [
+        {"name": "A1", "artistName": "Alvvays", "releaseDate": "2026-10-05", "genres": [{"genreId": "20"}]},
+        {"name": "A2", "artistName": "Alvvays", "releaseDate": "2026-10-01", "genres": [{"genreId": "20"}]},
+        {"name": "P1", "artistName": "Pop Star", "releaseDate": "2026-10-07", "genres": [{"genreId": "14"}]},
+        {"name": "R1", "artistName": "Rocker", "releaseDate": "2026-10-08", "genres": [{"genreId": "21"}]},
+    ]
+    monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: rows)
+    monkeypatch.setattr(leisure_hub.leisure_music, "_music_styles", lambda _cid: ["indie", "pop"])
+
+    music = leisure_hub.new_music("42", "NL", date(2026, 10, 9))
+
+    assert [(item["title"], item["genre_label"]) for item in music] == [("P1", "Поп"), ("A1", "Инди")]

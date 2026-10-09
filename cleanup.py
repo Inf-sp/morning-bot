@@ -385,7 +385,7 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     pages = max(1, (total + CLEAN_PAGE - 1) // CLEAN_PAGE)
     page = max(0, min(page, pages - 1))
     chunk = _page_items(items, page)
-    hint = f"Отметь нужное ✅ и нажми «{_action_label(ctx)}»."
+    hint = f"Отметь нужное и нажми «{_action_label(ctx)}»."
     lines = [f"<b>{esc(title)}</b>", "", f"Всего: {total} · отмечено: {len(sel)}", "", hint]
     _lv_add_label = {
         "lv_movies": "✅ Добавить фильм",
@@ -696,7 +696,7 @@ async def _render_view(bot, cid, view_id, q=None):
         if ctx == "music_favorite_artists":
             import leisure_music
             group = leisure_music.favorite_artist_genre(cid, lbl)
-            if group != previous_group:
+            if group != previous_group and group != "Другие артисты":
                 rows.append([InlineKeyboardButton(group, callback_data="noop")])
                 previous_group = group
         mark = (("✅" if full_id in sel else "□") + " ") if view.get("editing") else ""

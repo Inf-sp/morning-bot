@@ -16,7 +16,7 @@ SETTINGS_KEY = "user_settings.json"
 EVENING_WEATHER_TIME = "20:00"
 NOTIF_TYPES = [
     ("weather_warn",     "Погодное предупреждение"),
-    ("weekend_events",  "Ближайшие события"),
+    ("weekend_events",  "Концерты недели"),
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
@@ -518,7 +518,7 @@ class NotificationOption:
 
 _ADMIN_NOTIFICATION_META = {
     "weather_warn":    ("08:00, если есть повод", "Погодное предупреждение"),
-    "weekend_events":  ("пт 10:00", "Ближайшие события"),
+    "weekend_events":  ("пт 10:00", "Концерты недели"),
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),

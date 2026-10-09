@@ -732,7 +732,7 @@ def test_favorite_artists_are_grouped_by_genre_without_no_genre_category(monkeyp
     grouped = leisure_music.group_favorite_artist_items("42", items)
 
     assert [leisure_music.favorite_artist_genre("42", label) for _id, label in grouped] == [
-        "Инди", "Поп", "Другие артисты",
+        "Другие артисты", "Инди", "Поп",
     ]
     assert "Без жанра" not in {
         leisure_music.favorite_artist_genre("42", label) for _id, label in grouped
@@ -975,38 +975,22 @@ def test_premiere_screens_are_compact_and_keep_book_links():
     assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
 
 
-def test_weekly_events_are_one_line_per_item_across_all_categories():
-    items = range(4)
-    concerts = range(7)
-    message = leisure_movies.leisure_ui.weekly_events_card(
-        [{
-            "id": index, "title": f"Фильм {index}", "genres": "Драма",
-            "rating": 7.5, "vote_count": 20,
-            "trailer_url": f"https://example.com/movie/{index}",
-            "overview": "Описание не должно попасть в рассылку.",
-        } for index in items],
-        [{
-            "title": f"Концерт {index}", "genre": "Рок", "date": "2026-08-21",
-            "url": f"https://example.com/concert/{index}",
-        } for index in concerts],
-        [{
-            "title": f"Книга {index}", "categories": ["Fantasy"],
-            "rating": 4.4, "ratings_count": 15,
-            "url": f"https://example.com/book/{index}",
-            "summary": "Описание не должно попасть в рассылку.",
-        } for index in items],
+def test_weekly_concerts_card_lists_my_artists_then_popular():
+    message = leisure_movies.leisure_ui.weekly_concerts_card(
+        [{"title": "Placebo", "date": "2026-10-27", "url": "https://t.example/placebo",
+          "venue": "Ziggo Dome", "city": "Amsterdam", "genre": "Альтернативный рок"}],
+        [{"title": "Muse", "date": "2026-11-12", "url": "", "venue": "GelreDome", "city": "Arnhem",
+          "genre": "Рок"}],
     )
 
-    assert message.text.startswith("🎲 Ближайшие события\n\n🎬 Кино")
-    assert message.text.count("• «Фильм") == 3
-    assert message.text.count("• Концерт") == 6
-    assert message.text.count("• «Книга") == 3
-    assert "Игр" not in message.text
-    assert "• «Фильм 0» · драма\n" in message.text
-    assert "⭐" not in message.text.split("🎫")[0]
-    assert "«Книга 0» · Фэнтези · ⭐ 4.4/5" in message.text
-    assert "Описание не должно" not in message.text
-    assert len([entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]) == 12
+    assert message.text == (
+        "🎫 Концерты недели\n\n"
+        "Твои артисты:\n• Placebo — 27 октября · Ziggo Dome, Amsterdam\n\n"
+        "Популярное рядом:\n• Muse — 12 ноября · Рок · GelreDome, Arnhem"
+    )
+    assert [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK] == [
+        "https://t.example/placebo",
+    ]
 
 
 def test_movie_premieres_fit_one_message_without_cutting_descriptions():

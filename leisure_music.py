@@ -56,7 +56,8 @@ def favorite_artist_genre(cid, artist):
 
 def group_favorite_artist_items(cid, items):
     order = {label: index for index, (_key, label, _prompt) in enumerate(_MUSIC_GENRES)}
-    order["Другие артисты"] = len(order)
+    # Артисты без жанра — первыми и без заголовка группы, чтобы не казались частью последнего жанра.
+    order["Другие артисты"] = -1
     return sorted(
         list(items or []),
         key=lambda item: (

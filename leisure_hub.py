@@ -1,16 +1,20 @@
-"""Хаб «🍿 Досуг»: концерты, премьеры, подборки и библиотека.
+"""Хаб «🍿 Досуг»: премьеры кино и книг, новая музыка, подборки и библиотека.
 
-Открытие хаба только читает готовые кэши (концерты любимых артистов, премьеры
-кино/книг) — без сети и AI. Кэши обновляет ночной прогрев
+Открытие хаба читает готовые кэши премьер — без AI; «Новая музыка» берётся из
+ленты Apple Music с кэшем на 6 часов. Кэши обновляет ночной прогрев
 ``warm_hub_cache`` (задача ``leisure`` в bot_maintenance.job_warm_home_pages).
+Концерты любимых артистов приходят рассылкой «Концерты недели».
 """
+import asyncio
 import logging
 from datetime import datetime
 
+import apple_music
 import config
 import leisure_books
 import leisure_concerts
 import leisure_movies
+import leisure_music
 import store
 from ui import leisure as leisure_ui
 
@@ -39,15 +43,32 @@ def _offset(cid, today):
     return offset if day == today else 0
 
 
+def new_music(cid, cc, today) -> list[dict]:
+    """Свежие альбомы по музыкальным стилям пользователя (без стилей — по всем), разные артисты."""
+    styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)
+    labels = {key: label for key, label, _prompt in leisure_music._MUSIC_GENRES}
+    releases = sorted(
+        (item for style in styles for item in apple_music.new_releases(style, cc.lower(), today=today)),
+        key=lambda item: item["date"], reverse=True,
+    )
+    items, artists = [], set()
+    for item in releases:
+        if item["artist"].casefold() in artists:
+            continue
+        artists.add(item["artist"].casefold())
+        items.append({**item, "genre_label": labels.get(item["genre"], "")})
+    return items
+
+
 def hub_data(cid) -> dict:
-    """Блоки хаба из кэшей; пустой список — блок скрыт."""
+    """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке."""
     today, cc = _today_and_cc(cid)
     limit = leisure_ui.LEISURE_HUB_LIMIT
     offset = _offset(cid, today)
     return {
-        "concerts": leisure_concerts.cached_favorite_concerts(cid, limit),
         "movies": _window(leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True), offset, limit),
         "books": _window(leisure_books._book_premieres_cache_get(today, allow_stale=True), offset, limit),
+        "music": _window(new_music(cid, cc, today), offset, limit),
     }
 
 
@@ -69,12 +90,17 @@ async def _show(bot, cid, msg, q=None):
 
 
 async def send_hub(bot, cid, q=None):
-    msg = leisure_ui.leisure_hub_screen(**hub_data(cid), reply_markup=leisure_ui.leisure_hub_kb())
+    today, _cc = _today_and_cc(cid)
+    data = await asyncio.to_thread(hub_data, cid)
+    msg = leisure_ui.leisure_hub_screen(
+        **data, reply_markup=leisure_ui.leisure_hub_kb(),
+        month=today.month, city=store.get_settings(cid).get("city") or "",
+    )
     await _show(bot, cid, msg, q)
 
 
 async def send_new_premieres(bot, cid, q=None):
-    """«Новые премьеры»: следующие премьеры кино и книг в том же экране."""
+    """«Новые премьеры»: следующие премьеры кино, книг и новая музыка в том же экране."""
     today, _cc = _today_and_cc(cid)
     _premiere_offsets[str(cid)] = (today, _offset(cid, today) + leisure_ui.LEISURE_HUB_LIMIT)
     await send_hub(bot, cid, q)
@@ -110,6 +136,7 @@ async def warm_hub_cache(cid):
         ("movie_premieres", lambda: _warm_movie_premieres(cid)),
         # refresh=True возвращает свежий кэш без запроса; внешний поиск — только без него.
         ("book_premieres", lambda: leisure_books.get_book_premieres(refresh=True)),
+        ("new_music", lambda: asyncio.to_thread(apple_music._feed, _today_and_cc(cid)[1].lower())),
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
     )
     ok = True

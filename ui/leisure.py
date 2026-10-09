@@ -906,6 +906,17 @@ def _event_date_label(value) -> str:
     return _format_date_label(day, include_year=day.year != date.today().year) if day else ""
 
 
+def _music_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    """«Album» — Artist · жанр · дата; название — ссылка на альбом."""
+    rows = [item for item in list(items or []) if item.get("title") and item.get("artist")][:limit]
+    if rows:
+        b.section(title)
+    for item in rows:
+        _weekly_item(b, f"«{item['title']}» — {item['artist']}", item.get("url"),
+                     (item.get("genre_label"), _event_date_label(item.get("date"))))
+    return bool(rows)
+
+
 def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     rows = [item for item in list(items or []) if item.get("title")][:limit]
     if rows:
@@ -936,30 +947,57 @@ def _event_sections(b: MessageBuilder, sections) -> bool:
     return any(added)
 
 
-def weekly_events_card(movies, concerts, books) -> MessageSpec:
-    """Одна строка на событие; для концертов — до шести ближайших афиш."""
+def _weekly_concert_rows(b: MessageBuilder, title, items, *, with_genre=False):
+    """«• Placebo — 27 октября · Ziggo Dome, Amsterdam»; имя — ссылка на билеты."""
+    if not items:
+        return
+    b.spacer()
+    b.bold(title)
+    b.newline()
+    for item in items:
+        place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
+        meta = [part for part in (item.get("genre") if with_genre else "", place) if part]
+        b.text_line("• ")
+        if item.get("url"):
+            b.link(item["title"], item["url"])
+        else:
+            b.text_line(item["title"])
+        b.text_line(" — " + _event_date_label(item.get("date")) + "".join(f" · {part}" for part in meta))
+        b.newline()
+
+
+def weekly_concerts_card(mine, popular) -> MessageSpec:
+    """Рассылка «Концерты недели»: концерты любимых артистов, затем популярное рядом."""
     b = MessageBuilder()
-    b.title("🎲 Ближайшие события")
-    if not _event_sections(b, (
-        ("🎬 Кино", _movie_event_rows, movies, 3),
-        ("🎫 Концерты", _concert_event_rows, concerts, 6),
-        ("📚 Книги", _book_event_rows, books, 3),
-    )):
-        b.line("Пока нет подтверждённых премьер и событий.")
+    b.title("🎫 Концерты недели")
+    _weekly_concert_rows(b, "Твои артисты:", mine)
+    _weekly_concert_rows(b, "Популярное рядом:", popular, with_genre=True)
     return b.build_stripped()
 
 
 LEISURE_HUB_LIMIT = 3
 
 
-def leisure_hub_screen(concerts, movies, books, reply_markup=None) -> MessageSpec:
-    """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты."""
+_MONTHS_IN = ("в январе", "в феврале", "в марте", "в апреле", "в мае", "в июне", "в июле",
+              "в августе", "в сентябре", "в октябре", "в ноябре", "в декабре")
+
+
+def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city="") -> MessageSpec:
+    """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты.
+
+    Заголовок «🍿 Досуг в октябре · Alkmaar»: месяц и город — если известны.
+    """
     b = MessageBuilder()
-    b.title(ui_label("leisure", "Досуг"))
+    title = ui_label("leisure", "Досуг")
+    if 1 <= int(month or 0) <= 12:
+        title += f" {_MONTHS_IN[int(month) - 1]}"
+    if str(city or "").strip():
+        title += f" · {str(city).strip()}"
+    b.title(title)
     if not _event_sections(b, (
-        ("Концерты:", _concert_event_rows, concerts, LEISURE_HUB_LIMIT),
         ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
         ("Новые книги:", _book_event_rows, books, LEISURE_HUB_LIMIT),
+        ("Новая музыка:", _music_event_rows, music, LEISURE_HUB_LIMIT),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
     return b.build_stripped(reply_markup=reply_markup)
@@ -974,11 +1012,11 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    """Кино | Музыка | Книги одной строкой, как приёмы пищи в Готовке; ниже «Новые премьеры»."""
+    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже «Новые премьеры»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
-         InlineKeyboardButton("📚 Книги", callback_data="book_reco")],
+         InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("✨ Новые премьеры", callback_data="lz_more")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

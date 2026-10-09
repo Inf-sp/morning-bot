@@ -399,7 +399,7 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
 
 @ai.background_job
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Прогревает недельный кэш концертов перед уведомлением «Ближайшие события» (10:00 пт),
+    """Прогревает недельный кэш концертов перед уведомлением «Концерты недели» (10:00 пт),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekend_events"):

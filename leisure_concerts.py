@@ -11,11 +11,8 @@ from ui.constants import COUNTRY_EMOJI
 import ai
 import api_usage
 import config
-import leisure_books
-import leisure_movies
 import provider_runtime
 import rich_delivery
-import settings
 import store
 import util
 from ui import leisure as leisure_ui
@@ -60,6 +57,7 @@ _POPULAR_EVENTS_CACHE_VERSION = 3
 _POPULAR_EVENTS_LIMIT = 12
 _WEEKLY_CONCERT_LIMIT = 6
 _WEEKLY_CONCERT_HORIZON_DAYS = 62
+_WEEKLY_POPULAR_LIMIT = 4
 
 
 class TicketmasterRateLimitError(RuntimeError):
@@ -1123,6 +1121,8 @@ def concert_items_between(events, start, end, limit):
             "date": date_str,
             "genre": _concert_genre(event),
             "url": str(event.get("url") or "").strip(),
+            "venue": " ".join(str(venue.get("name") or "").split()),
+            "city": city,
         })
     items.sort(key=lambda item: item.get("date") or "9999-99-99")
     return items[:limit]
@@ -1141,49 +1141,43 @@ def cached_favorite_concerts(cid, limit):
 
 
 async def _build_weekly_events_msg(cid):
-    """Компактная пятничная подборка из готовых премьерных кэшей."""
+    """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
+
+    Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
+    Ticketmaster заново не запрашивается. Нет концертов — None.
+    """
     from datetime import datetime, timedelta
 
     s = store.get_settings(cid)
     cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
     period_start = datetime.now(config.TZ).date()
     period_end = period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
-
-    # Концерты уже прогреты отдельным пятничным заданием. В момент рассылки не
-    # запускаем Ticketmaster заново: объединяем персональный и месячный кэши.
-    personal_events = _concerts_cache_get(cid, cc) or []
-    popular_events = _popular_events_cache_get(cc, period_start) or []
-    concert_items = concert_items_between(
-        [*personal_events, *popular_events], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
+    mine = concert_items_between(
+        _concerts_cache_get(cid, cc) or [], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
     )
-
-    results = await asyncio.gather(
-        leisure_movies.get_movie_premieres(cid),
-        leisure_books.get_book_premieres(),
-        return_exceptions=True,
-    )
-    labels = ("movie", "book")
-    loaded = {}
-    for label, result in zip(labels, results):
-        if isinstance(result, Exception):
-            _log.warning("weekly events %s cache failed: %r", label, result)
-            loaded[label] = []
-        else:
-            loaded[label] = list(result or [])
-
-    return leisure_ui.weekly_events_card(
-        loaded["movie"], concert_items, loaded["book"],
-    )
+    taken = {(item["title"].casefold(), item["date"]) for item in mine}
+    popular = [
+        item for item in concert_items_between(
+            _popular_events_cache_get(cc, period_start) or [], period_start, period_end,
+            _WEEKLY_CONCERT_LIMIT * 2,
+        )
+        if (item["title"].casefold(), item["date"]) not in taken
+    ][:_WEEKLY_POPULAR_LIMIT]
+    if not mine and not popular:
+        return None
+    return leisure_ui.weekly_concerts_card(mine, popular)
 
 
 async def send_weekend_events(bot, cid):
-    """Пятница 10:00 — одно сообщение с премьерами и переходами в категории."""
+    """Пятница 10:00 — «Концерты недели»; без концертов рассылка не приходит."""
     msg = await _build_weekly_events_msg(cid)
-    kb = settings.notification_markup("weekend_events", [
-        [InlineKeyboardButton("🎬 Кино", callback_data="movie_premieres"),
-         InlineKeyboardButton("🎫 Концерты", callback_data="a_concerts_find")],
-        [InlineKeyboardButton("📚 Книги", callback_data="book_premieres")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    if msg is None:
+        return
+    # Как «Главные новости»: действие, ниже «Настроить | Главная» одной строкой.
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎫 Все концерты", callback_data="a_concerts_find")],
+        [InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await bot.send_message(
         chat_id=cid,
