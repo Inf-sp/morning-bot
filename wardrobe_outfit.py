@@ -568,7 +568,7 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
     ]
     combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
     if previous_item_ids:
-        # «Другой образ» должен менять основу комплекта, а не одну случайную вещь.
+        # «Новый образ» должен менять основу комплекта, а не одну случайную вещь.
         # Для полного набора из 4–5 элементов требуем минимум две замены; для
         # маленького шкафа оставляем честную возможность заменить хотя бы одну.
         min_changes = 2 if any(len(combo) >= 4 for combo in combos) else 1

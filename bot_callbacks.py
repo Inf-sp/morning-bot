@@ -358,7 +358,7 @@ ROUTES = (
     # Гардероб: инлайн-кабинет.
     R("w_look", lambda c: c.status(
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)), sub="wardrobe"),
-    # «Другой образ»: выбор направления под образом, затем новый образ в этом стиле.
+    # «Новый образ»: выбор направления под образом, затем новый образ в этом стиле.
     R("w_pick", _swap_kb(lambda c: wardrobe.style_picker_kb())),
     R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard())),
     R("w_lookst_*", _picked(lambda c: c.status(

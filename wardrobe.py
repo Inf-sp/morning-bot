@@ -370,7 +370,7 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard():
     rows = [
-        [("✨ Другой образ", "w_pick")],  # выбор стиля под образом; в чате — зелёная без эмодзи
+        [("✨ Новый образ", "w_pick")],  # выбор стиля под образом; в чате — зелёная без эмодзи
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Настроить", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -381,7 +381,7 @@ _wardrobe_home_kb = build_wardrobe_keyboard
 
 
 def style_picker_kb():
-    """«Другой образ»: направление — один из шести стилей, стандартного цвета."""
+    """«Новый образ»: направление — один из шести стилей, стандартного цвета."""
     rows = [[InlineKeyboardButton(name, callback_data=f"w_lookst_{index}")]
             for index, name in enumerate(_settings.STYLES)]
     rows.append(nav_row("w_card"))
@@ -628,7 +628,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
-    # style — разовый выбор направления из «Другой образ»; предпочтения не меняются.
+    # style — разовый выбор направления из «Новый образ»; предпочтения не меняются.
     selected_styles = [style] if style else _settings.wardrobe_styles(cid)
     if not style and previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
         next_index = (selected_styles.index(previous_style) + 1) % len(selected_styles)
