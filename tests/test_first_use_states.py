@@ -357,8 +357,12 @@ def test_learning_preferences_from_settings_return_to_settings():
 def test_cuisine_preferences_use_one_column():
     keyboard = settings._cuisines_kb("42")
 
-    assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
-    assert _labels(keyboard)[:-1] == [
+    cuisine_rows = keyboard.inline_keyboard[:len(settings.CUISINE_OPTIONS)]
+    assert all(len(row) == 1 for row in cuisine_rows)
+    assert _labels(keyboard)[len(settings.CUISINE_OPTIONS):-1] == [
+        ["✅ Завтрак", "✅ Обед", "✅ Ужин"], ["□ Вегетарианское"], ["□ Без свинины"], ["□ Без лактозы"],
+    ]
+    assert _labels(keyboard)[:len(settings.CUISINE_OPTIONS)] == [
         ["□ 🍕 Итальянская"],
         ["□ 🍣 Японская"],
         ["□ 🍜 Тайская"],
@@ -381,7 +385,8 @@ def test_legacy_group_cuisines_expand_to_concrete_ones(monkeypatch):
 def test_cuisine_settings_screen_has_no_descriptions_or_current_line():
     text = settings.settings_ui.cuisines().text
 
-    assert text == "📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом."
+    assert text == ("📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника "
+                    "с их учётом.\nНиже — какие приёмы пищи готовишь и ограничения в еде.")
 
 
 def test_onboarding_creates_a_level_only_for_the_selected_language(monkeypatch):

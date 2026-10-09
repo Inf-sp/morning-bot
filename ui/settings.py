@@ -2,11 +2,36 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import PREFERENCES_LABEL, ui_label
 
 
-def notifications():
+def notifications(next_line=""):
     b = MessageBuilder()
     b.section(ui_label("broadcasts", "Уведомления"))
     b.line("На кнопке — что придёт и когда.")
-    b.line("Зелёные — включены, красные — выключены. Нажми, чтобы переключить.")
+    b.line("Зелёные — включены, красные — выключены. Нажми, чтобы выбрать время или выключить.")
+    if next_line:
+        b.spacer()
+        b.line(next_line)
+    return b.build_stripped()
+
+
+def news_settings():
+    b = MessageBuilder()
+    b.section("📰 Новости")
+    b.line("Темы вечерних новостей и сколько их присылать. Зелёные темы — включены.")
+    return b.build_stripped()
+
+
+def myday_blocks():
+    b = MessageBuilder()
+    b.section("☀️ Мой день")
+    b.line("Выбери, что показывать в сводке. Зелёные — показываются, красные — скрыты.")
+    return b.build_stripped()
+
+
+def notification_kind(label, *, has_time=True):
+    """Экран одной рассылки: что приходит и когда."""
+    b = MessageBuilder()
+    b.section(f"🔔 {label}")
+    b.line("Выбери, присылать ли и в какое время." if has_time else "Приходит сразу, когда есть повод.")
     return b.build_stripped()
 
 
@@ -21,6 +46,7 @@ def cuisines():
     b = MessageBuilder()
     b.section(PREFERENCES_LABEL)
     b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
+    b.line("Ниже — какие приёмы пищи готовишь и ограничения в еде.")
     return b.build_stripped()
 
 
@@ -44,14 +70,16 @@ def wardrobe_style(styles):
     return b.build_stripped()
 
 
-def settings_home(city="", language=""):
-    """Главный экран Настроек: город и язык обучения; уведомления — по своей кнопке."""
+def settings_home(city="", language="", summary=""):
+    """Главный экран Настроек: город, язык обучения и короткая сводка."""
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
     b.line(f"Город: {city or 'не выбран'}")
     if language:
         b.line(f"Язык обучения: {language[:1].upper()}{language[1:]}")
+    if summary:
+        b.line(summary)
     return b.build_stripped()
 
 

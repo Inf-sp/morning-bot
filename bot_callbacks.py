@@ -385,7 +385,7 @@ ROUTES = (
     # «Новое меню»: кухня → новое меню на день (предпочтения не меняются).
     # food_meal_* — кнопки старых сообщений с шагом приёма пищи.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
-    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb())),
+    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid)))),
     R("food_go_*", _picked(_food_recipe)),
     R("m_menu", _main_menu),
     # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.

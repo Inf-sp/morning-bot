@@ -231,7 +231,7 @@ def day_menu(menu, *, cuisine_label, intro="", news=None):
         b.spacer()
         b.line(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
     append_weekly_news(b, news)
-    return b.build_stripped(reply_markup=food_card_kb())
+    return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes]))
 
 
 def food_menu(idea=None, *, meal="", news=None):
@@ -288,10 +288,11 @@ def food_menu(idea=None, *, meal="", news=None):
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_food")]))
 
 
-def food_card_kb():
-    """Кнопки меню дня: рецепт каждого блюда, «Новое меню», холодильник."""
+def food_card_kb(meals=None):
+    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Новое меню», холодильник."""
+    meals = meals or [meal for meal, _label in _MEAL_NAMES]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES],
+        [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
         [InlineKeyboardButton("✨ Новое меню", callback_data="food_pick")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="as_fridge_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

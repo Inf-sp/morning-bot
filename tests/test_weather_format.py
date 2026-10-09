@@ -176,8 +176,9 @@ def test_week_advice_has_no_useful_label():
     assert message.text.endswith("На следующей неделе будет переменчиво.")
 
 
-def test_weather_warning_is_scheduled_for_eight():
-    assert bot._WEATHER_WARNING_TIME == "08:00"
+def test_weather_warning_defaults_to_eight(monkeypatch):
+    monkeypatch.setattr(settings, "get", lambda *_a: None)
+    assert settings.notif_time("42", "weather_warn") == "08:00"
 
 
 def test_morning_myday_notification_is_removed():

@@ -50,7 +50,6 @@ CHAT_ID = config.CHAT_ID
 _PROCESS_STARTED_AT = datetime.now(TZ).isoformat()
 _RECENT_HOME_OPENINGS = {}
 _HOME_OPENING_DEDUP_SECONDS = 3
-_WEATHER_WARNING_TIME = "08:00"
 _HOME_WARM_SCHEDULE = (
     ("wardrobe", "00:00"),
     ("cooking", "00:05"),
@@ -299,9 +298,14 @@ async def admin_logs_command(update, context):
 
 
 # ---------- Расписание ----------
+def _slot_due(context, cid, kind):
+    """Рассылка запускается во все свои варианты времени; пользователю — только в выбранное."""
+    return settings.notif_due(cid, kind, getattr(getattr(context, "job", None), "data", None))
+
+
 async def job_weather_warn(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weather_warn"):
+        if not settings.notif_on(cid, "weather_warn") or not _slot_due(context, cid, "weather_warn"):
             continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "weather_warn")
@@ -390,7 +394,7 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
 @ai.background_job
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "daily_words"):
+        if not settings.notif_on(cid, "daily_words") or not _slot_due(context, cid, "daily_words"):
             continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "daily_words")
@@ -399,7 +403,7 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
 
 @ai.background_job
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Прогревает недельный кэш концертов перед уведомлением «Концерты недели» (10:00 пт),
+    """Прогревает недельный кэш концертов перед уведомлением «Концерты недели» (пт, с 09:00),
     чтобы само уведомление и последующие интерактивные «Концерты» читали кэш, а не ждали Ticketmaster."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekend_events"):
@@ -412,7 +416,7 @@ async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
 async def job_weekend_events(context: ContextTypes.DEFAULT_TYPE):
     """Компактные премьеры кино, концертов, книг и игр по пятницам."""
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "weekend_events"):
+        if not settings.notif_on(cid, "weekend_events") or not _slot_due(context, cid, "weekend_events"):
             continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "weekend_events")
@@ -440,7 +444,7 @@ async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
 async def job_news_digest(context: ContextTypes.DEFAULT_TYPE):
     """19:00: 3–5 главных новостей дня (NOS, NU.nl, NH Nieuws)."""
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "news_digest"):
+        if not settings.notif_on(cid, "news_digest") or not _slot_due(context, cid, "news_digest"):
             continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "news_digest")
@@ -450,7 +454,7 @@ async def job_news_digest(context: ContextTypes.DEFAULT_TYPE):
 
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "evening_weather"):
+        if not settings.notif_on(cid, "evening_weather") or not _slot_due(context, cid, "evening_weather"):
             continue
         try:
             await settings.send_scheduled_notification(context.bot, cid, "evening_weather")
@@ -660,25 +664,23 @@ def _build_application():
         job_warm_book_premieres_cache, time=_t("02:20"), days=(0,),
         **_job_options("book_premieres_cache_weekly"),
     )
+    # Концерты прогреваются до самого раннего времени «Концертов недели» (09:00).
     jq.run_daily(
-        job_refresh_concerts_cache, time=_t("09:00"), days=(4,),
+        job_refresh_concerts_cache, time=_t("08:30"), days=(4,),
         **_job_options("concerts_cache_weekly"),
     )
-    jq.run_daily(
-        job_weather_warn,
-        time=_t(_WEATHER_WARNING_TIME),
-        days=tuple(range(7)),
-        **_job_options("weather_warn_daily"),
+    # Каждая рассылка — во все свои варианты времени; job.data — слот «HH:MM».
+    notification_jobs = (
+        ("weather_warn", job_weather_warn, tuple(range(7))),
+        ("weekend_events", job_weekend_events, (4,)),
+        ("daily_words", job_daily_words, tuple(range(7))),
+        ("news_digest", job_news_digest, tuple(range(7))),
+        ("evening_weather", job_evening_weather, tuple(range(7))),
     )
-    jq.run_daily(job_weekend_events, time=_t("10:00"), days=(4,), **_job_options("weekend_events_weekly"))
-    jq.run_daily(job_daily_words, time=_t("11:00"), days=tuple(range(7)), **_job_options("daily_words"))
-    jq.run_daily(job_news_digest, time=_t("19:00"), days=tuple(range(7)), **_job_options("news_digest_daily"))
-    jq.run_daily(
-        job_evening_weather,
-        time=_t(settings.EVENING_WEATHER_TIME),
-        days=tuple(range(7)),
-        **_job_options("evening_weather_daily"),
-    )
+    for kind, job, days in notification_jobs:
+        for slot in settings.NOTIF_TIMES[kind][1]:
+            jq.run_daily(job, time=_t(slot), days=days, data=slot,
+                         **_job_options(f"{kind}_{slot.replace(':', '')}"))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
     return app

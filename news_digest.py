@@ -51,6 +51,19 @@ _POLITICS = re.compile(
     r"gevangenis|cel\b|verdachte|moord|doodgeschoten|steekpartij|politie|aangehouden|om eist|beroepsverbod)"
 )
 _SKIP = ("podcast",)
+_SPORT = re.compile(
+    r"\b(?:sport|voetbal|eredivisie|ajax\b|psv\b|feyenoord|az\b|wedstrijd|doelpunt|schaats|wielren|"
+    r"tennis|formule 1|verstappen|olympi|kampioen|wk\b|ek\b|coach)"
+)
+_CULTURE = re.compile(
+    r"\b(?:film|muziek|concert|festival|theater|tentoonstelling|kunst|schrijver|boek|zanger|band\b|"
+    r"album|serie\b|televizier|musical)"
+)
+# Темы новостей в Настройках: (ключ, подпись). По умолчанию выключена только политика.
+TOPICS = [("science", "Наука"), ("local", "Местное"), ("sport", "Спорт"),
+          ("culture", "Культура"), ("politics", "Политика")]
+DEFAULT_TOPICS_OFF = ("politics",)
+SPORT_FEED = ("NOS", "https://feeds.nos.nl/nossportalgemeen", False)
 _REGION = "noord-holland"
 MAX_ITEMS = 5
 _TIMEOUT_SECONDS = 10
@@ -110,13 +123,33 @@ def _interest_score(item):
     return score - (4 if _is_politics(item) else 0)
 
 
-def select(items, city, now=None):
-    """3–5 новостей без дублей: сначала интересное, затем местное, источник и свежесть."""
+def topic(item, city="") -> str:
+    """Одна тема новости по словам заголовка и описания; политика и криминал — первыми."""
+    text = _text(item)
+    if _is_politics(item):
+        return "politics"
+    if item.get("science") or _INTEREST.search(text):
+        return "science"
+    if _SPORT.search(text):
+        return "sport"
+    if _CULTURE.search(text):
+        return "culture"
+    if _local_score(item, city):
+        return "local"
+    return "other"
+
+
+def select(items, city, now=None, *, topics_off=(), limit=MAX_ITEMS):
+    """3–5 новостей без дублей: сначала интересное, затем местное, источник и свежесть.
+
+    topics_off — выключенные в Настройках темы; такие новости не попадают в подборку.
+    """
     now = now or datetime.now(config.TZ)
     fresh = [
         item for item in items
         if now - item["published"] <= timedelta(hours=_SCIENCE_HOURS if item.get("science") else _GENERAL_HOURS)
         and not any(marker in _text(item) for marker in _SKIP)
+        and topic(item, city) not in topics_off
     ]
     fresh.sort(key=lambda item: (-_interest_score(item), -_local_score(item, city),
                                  _SOURCE_RANK.get(item["source"], 9), -item["published"].timestamp()))
@@ -135,7 +168,7 @@ def select(items, city, now=None):
         if _local_score(item, city) and sum(1 for other in chosen if _local_score(other, city)) >= 2:
             continue
         chosen.append(item)
-        if len(chosen) == MAX_ITEMS:
+        if len(chosen) == limit:
             break
     return chosen
 
@@ -166,9 +199,13 @@ async def send_digest(bot, cid):
 
     settings_data = store.get_settings(cid) or {}
     city = str(settings_data.get("city") or "")
+    import settings as user_settings
+    topics_off = user_settings.news_topics_off(cid)
+    feeds_wanted = FEEDS if "sport" in topics_off else (*FEEDS, SPORT_FEED)
     feeds = await asyncio.gather(*(asyncio.to_thread(_fetch, source, url, science)
-                                   for source, url, science in FEEDS))
-    chosen = select([item for feed in feeds for item in feed], city)
+                                   for source, url, science in feeds_wanted))
+    chosen = select([item for feed in feeds for item in feed], city,
+                    topics_off=topics_off, limit=user_settings.news_count(cid))
     if not chosen:
         return
     titles = await asyncio.to_thread(_translate, [item["title"] for item in chosen])

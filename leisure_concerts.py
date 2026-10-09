@@ -297,9 +297,11 @@ async def get_popular_music_events(cc, period_start, period_end):
 
 # ---------- Внешний поиск концертов (Tavily + Firecrawl + AI) ----------
 # Ticketmaster — основной источник, но не полный: маленькие площадки, локальные
-# промоутеры и часть европейских туров туда не попадают. Раз в 7 дней на артиста
-# добираем события через веб-поиск (см. find_concerts/refresh_concerts_cache).
-_ARTIST_EXTERNAL_TTL = 7 * 86400
+# промоутеры и часть европейских туров туда не попадают. Раз в ~2,5 месяца на артиста
+# добираем события через веб-поиск (см. find_concerts/refresh_concerts_cache): туры
+# объявляют заранее, а каждый поиск — до 4000 символов веб-текста в запросе к AI.
+_ARTIST_EXTERNAL_TTL = 75 * 86400
+_EXTERNAL_CONTEXT_CHARS = 4000
 _ARTIST_EXTERNAL_CACHE_VERSION = 2
 _EXTERNAL_SEARCH_INFLIGHT = {}
 
@@ -443,7 +445,7 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
             context_parts.append(f"URL: {url}\n{content[:500]}")
     if not context_parts:
         return []
-    raw_context = "\n---\n".join(context_parts)[:8000]
+    raw_context = "\n---\n".join(context_parts)[:_EXTERNAL_CONTEXT_CHARS]
 
     allowed_cc = [cc]
     today = datetime.now(config.TZ).date().isoformat()

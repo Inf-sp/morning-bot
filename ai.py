@@ -290,6 +290,8 @@ _AI_CACHE_TTLS = {
     "wardrobe": 18 * 3600,
     "learning_explain": 14 * 86400,
     "learning_dict_add": 30 * 86400,
+    # Разбор концертов из веб-текста: тот же текст — тот же ответ, повтор безопасен.
+    "leisure_concerts": 75 * 86400,
     "deploy": 10 * 365 * 86400,
 }
 

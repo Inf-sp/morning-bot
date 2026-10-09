@@ -8,6 +8,7 @@ from ui import settings as settings_ui
 from ui.constants import cuisine_label, ui_label
 import rich_delivery
 from ui.navigation import nav_row
+from ui.text import ru_plural
 
 _log = logging.getLogger(__name__)
 
@@ -95,6 +96,143 @@ def set_(cid, key, value):
         return d, None
 
     store.mutate_kv(SETTINGS_KEY, change)
+
+# Время рассылок: (по умолчанию, варианты). Поезда NS приходят при сбое — без времени.
+NOTIF_TIMES = {
+    "weather_warn":    ("08:00", ("07:00", "08:00", "09:00")),
+    "daily_words":     ("11:00", ("08:00", "11:00", "14:00", "18:00")),
+    "news_digest":     ("19:00", ("08:00", "12:00", "19:00", "21:00")),
+    "evening_weather": (EVENING_WEATHER_TIME, ("18:00", "20:00", "21:00")),
+    "weekend_events":  ("10:00", ("09:00", "10:00", "18:00")),
+}
+_NOTIF_TITLES = {
+    "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
+    "news_digest": "Главные новости", "evening_weather": "Погода на завтра",
+    "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
+}
+
+
+# Блоки «Моего дня»: выключенный блок не показывается и не готовится.
+MYDAY_BLOCKS = [
+    ("weather", "Погода"), ("golden", "Золотой час"), ("outfit", "Образ дня"),
+    ("word", "Слово дня"), ("rail", "Работы на ЖД"), ("holidays", "Праздники"),
+    ("lifehack", "Лайфхак"), ("quote", "Цитата"),
+]
+
+
+def myday_block_on(cid, key) -> bool:
+    return key not in (get(cid, "myday_off", []) or [])
+
+
+async def send_myday_blocks(bot, cid, q=None):
+    rows = [[InlineKeyboardButton(("✅ " if myday_block_on(cid, key) else "□ ") + label,
+                                  callback_data=f"set_mydaytgl_{key}")]
+            for key, label in MYDAY_BLOCKS]
+    rows.append(nav_row("set_home"))
+    await rich_delivery.show(bot, cid, settings_ui.myday_blocks(), reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
+async def toggle_myday_block(bot, cid, key, q=None):
+    if key in dict(MYDAY_BLOCKS):
+        off = [item for item in (get(cid, "myday_off", []) or []) if item in dict(MYDAY_BLOCKS)]
+        set_(cid, "myday_off", [item for item in off if item != key] if key in off else [*off, key])
+        import myday
+        myday.reset_day_cache(cid)  # сводка дня пересобирается без/с этим блоком
+    await send_myday_blocks(bot, cid, q)
+
+
+NEWS_COUNTS = (3, 5)
+
+
+def news_topics_off(cid) -> list:
+    import news_digest
+    saved = get(cid, "news_topics_off", None)
+    valid = dict(news_digest.TOPICS)
+    return [key for key in (saved if isinstance(saved, list) else news_digest.DEFAULT_TOPICS_OFF) if key in valid]
+
+
+def news_count(cid) -> int:
+    saved = get(cid, "news_count", None)
+    return saved if saved in NEWS_COUNTS else NEWS_COUNTS[-1]
+
+
+async def send_news_settings(bot, cid, q=None):
+    import news_digest
+    off = news_topics_off(cid)
+    rows = [[InlineKeyboardButton(("□ " if key in off else "✅ ") + label, callback_data=f"set_newstgl_{key}")]
+            for key, label in news_digest.TOPICS]
+    count = news_count(cid)
+    rows.append([InlineKeyboardButton(("✅ " if n == count else "□ ") + f"{n} {ru_plural(n, 'новость', 'новости', 'новостей')}",
+                                      callback_data=f"set_newscount_{n}") for n in NEWS_COUNTS])
+    rows.append(nav_row("set_home"))
+    await rich_delivery.show(bot, cid, settings_ui.news_settings(), reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
+async def toggle_news_topic(bot, cid, key, q=None):
+    import news_digest
+    if key in dict(news_digest.TOPICS):
+        off = news_topics_off(cid)
+        set_(cid, "news_topics_off", [item for item in off if item != key] if key in off else [*off, key])
+    await send_news_settings(bot, cid, q)
+
+
+async def set_news_count(bot, cid, value, q=None):
+    if value.isdigit() and int(value) in NEWS_COUNTS:
+        set_(cid, "news_count", int(value))
+    await send_news_settings(bot, cid, q)
+
+
+def notif_time(cid, kind) -> str:
+    """Выбранное время рассылки «HH:MM» или время по умолчанию; "" — у рассылки нет времени."""
+    default, options = NOTIF_TIMES.get(kind, ("", ()))
+    saved = get(cid, f"notif_time_{kind}", None)
+    return saved if saved in options else default
+
+
+def notif_due(cid, kind, slot) -> bool:
+    """Запуск рассылки в slot «HH:MM» касается пользователя, если он выбрал это время."""
+    return not slot or notif_time(cid, kind) == slot
+
+
+_NOTIF_DAYS = {"weekend_events": (4,)}  # пятница; остальные — ежедневно
+
+
+def next_notification(cid, now=None) -> str:
+    """«Следующая: Главные новости сегодня в 19:00» или "". Погодное предупреждение
+    не считается: оно приходит только при важной погоде."""
+    from datetime import datetime, timedelta
+    now = now or datetime.now(config.TZ)
+    best = None
+    for kind in NOTIF_TIMES:
+        if kind == "weather_warn" or not notification_available(cid, kind) or not notif_on(cid, kind):
+            continue
+        hour, minute = map(int, notif_time(cid, kind).split(":"))
+        for offset in range(8):
+            moment = (now + timedelta(days=offset)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if moment > now and moment.weekday() in _NOTIF_DAYS.get(kind, range(7)):
+                if best is None or moment < best[0]:
+                    best = (moment, kind)
+                break
+    if best is None:
+        return ""
+    moment, kind = best
+    days = (moment.date() - now.date()).days
+    when = "сегодня" if days == 0 else "завтра" if days == 1 else "в пятницу"
+    return f"Следующая: {_NOTIF_TITLES[kind]} {when} в {moment:%H:%M}"
+
+
+def user_notif_label(cid, kind) -> str:
+    """«Главные новости · 19:00» с временем, выбранным пользователем."""
+    title = _NOTIF_TITLES.get(kind, kind)
+    if kind == "ns_disruptions":
+        return f"{title} · при сбое"
+    time_label = notif_time(cid, kind)
+    if kind == "weather_warn":
+        time_label += ", если есть повод"
+    elif kind == "weekend_events":
+        time_label = f"пт {time_label}"
+    return f"{title} · {time_label}"
+
 
 _LEGACY_NOTIF_KINDS = {
     "daily_words": ("daily_words_nl", "daily_words_en", "grammar_nl", "grammar_en"),
@@ -188,17 +326,28 @@ def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeybo
         *[[button] for button in home],
     ])
 
+def settings_summary(cid) -> str:
+    """«Уведомлений включено: 4 · Кухонь: 8 · Вещей в шкафу: 50»."""
+    from wardrobe_model import wardrobe_stats
+    enabled = sum(1 for kind, _label in NOTIF_TYPES
+                  if notification_available(cid, kind) and notif_on(cid, kind))
+    items, _counts = wardrobe_stats(store.load_wardrobe(cid))
+    return f"Уведомлений включено: {enabled} · Кухонь: {len(cuisines(cid))} · Вещей в шкафу: {items}"
+
+
 async def send_home(bot, cid, q=None):
     rows = [
         [InlineKeyboardButton("📍 Выбрать город", callback_data="set_city")],
         # Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
         [InlineKeyboardButton("🧠 Выбрать язык обучения", callback_data="set_learning_global")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
+        [InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
+        [InlineKeyboardButton("📰 Новости", callback_data="set_news")],
         [InlineKeyboardButton("📤 Экспорт данных", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
-    msg = settings_ui.settings_home(city, study_lang(cid))
+    msg = settings_ui.settings_home(city, study_lang(cid), settings_summary(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -577,9 +726,11 @@ async def send_notif(bot, cid, q=None):
             continue
         on = notif_on(cid, opt.key)
         mark = "✅" if on else "□"
-        rows.append([InlineKeyboardButton(f"{mark} {opt.button_label}", callback_data=f"set_notiftgl_{opt.key}")])
+        # Нажатие открывает экран рассылки: включить/выключить и выбрать время.
+        rows.append([InlineKeyboardButton(f"{mark} {user_notif_label(cid, opt.key)}",
+                                          callback_data=f"set_notifopen_{opt.key}")])
     rows.append(nav_row("set_home"))
-    msg = settings_ui.notifications()
+    msg = settings_ui.notifications(next_notification(cid))
     text = msg.text
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -592,12 +743,35 @@ async def send_notif(bot, cid, q=None):
     await bot.send_message(chat_id=cid, text=text, entities=msg.entities,
                            reply_markup=kb, transient=True)
 
+async def send_notif_kind(bot, cid, kind, q=None):
+    """Экран одной рассылки: «Присылать» (вкл/выкл) и варианты времени."""
+    if kind not in dict(NOTIF_TYPES):
+        await send_notif(bot, cid, q)
+        return
+    on = notif_on(cid, kind)
+    rows = [[InlineKeyboardButton(("✅ " if on else "□ ") + "Присылать", callback_data=f"set_notiftgl_{kind}")]]
+    current = notif_time(cid, kind)
+    for slot in NOTIF_TIMES.get(kind, ("", ()))[1]:
+        rows.append([InlineKeyboardButton(("✅ " if slot == current else "□ ") + slot,
+                                          callback_data=f"set_notiftime_{kind}_{slot.replace(':', '')}")])
+    rows.append(nav_row("set_notif"))
+    msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=kind in NOTIF_TIMES)
+    await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
 async def toggle_notif(bot, cid, kind, q=None):
     if kind not in dict(NOTIF_TYPES):
         await send_notif(bot, cid, q)
         return
     set_(cid, f"notif_{kind}", not notif_on(cid, kind))
-    await send_notif(bot, cid, q)
+    await send_notif_kind(bot, cid, kind, q)
+
+
+async def set_notif_time(bot, cid, kind, hhmm, q=None):
+    slot = f"{hhmm[:2]}:{hhmm[2:]}"
+    if slot in NOTIF_TIMES.get(kind, ("", ()))[1]:
+        set_(cid, f"notif_time_{kind}", slot)
+    await send_notif_kind(bot, cid, kind, q)
 
 
 async def toggle_notification_from_message(cid, kind, q):
@@ -641,6 +815,37 @@ async def send_personalization(bot, cid, q=None):
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
+FOOD_MEALS = [("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин")]
+FOOD_RESTRICTIONS = [("vegetarian", "Вегетарианское"), ("no_pork", "Без свинины"), ("no_lactose", "Без лактозы")]
+_RESTRICTION_PROMPTS = {
+    "vegetarian": "вегетарианское: без мяса, птицы и рыбы",
+    "no_pork": "без свинины, бекона и ветчины",
+    "no_lactose": "без молока, сливок, сыра и других молочных продуктов",
+}
+
+
+def food_meals(cid) -> list:
+    """Приёмы пищи меню дня; минимум один, по умолчанию все три."""
+    saved = get(cid, "food_meals", None)
+    meals = [key for key, _label in FOOD_MEALS if isinstance(saved, list) and key in saved]
+    return meals or [key for key, _label in FOOD_MEALS]
+
+
+def food_restrictions(cid) -> list:
+    saved = get(cid, "food_restrictions", []) or []
+    return [key for key, _label in FOOD_RESTRICTIONS if key in saved]
+
+
+def food_restrictions_prompt(cid) -> str:
+    """«вегетарианское: без мяса…; без лактозы…» для запросов к AI или ""."""
+    return "; ".join(_RESTRICTION_PROMPTS[key] for key in food_restrictions(cid))
+
+
+def _reset_day_menu(cid):
+    """Меню дня пересобирается с новыми приёмами пищи или ограничениями."""
+    store.mutate_profile(cid, lambda profile: ({**profile, "cooking_day_menu": None}, None))
+
+
 def _cuisines_kb(cid, back="as_fridge_home"):
     selected = set(cuisines(cid))
     buttons = [
@@ -651,8 +856,33 @@ def _cuisines_kb(cid, back="as_fridge_home"):
         for key, label in CUISINE_OPTIONS
     ]
     rows = [[button] for button in buttons]
+    meals = set(food_meals(cid))
+    rows.append([InlineKeyboardButton(("✅ " if key in meals else "□ ") + label, callback_data=f"set_foodmeal_{key}")
+                 for key, label in FOOD_MEALS])
+    restrictions = set(food_restrictions(cid))
+    rows.extend([[InlineKeyboardButton(("✅ " if key in restrictions else "□ ") + label,
+                                       callback_data=f"set_foodrestr_{key}")]
+                 for key, label in FOOD_RESTRICTIONS])
     rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
+
+
+async def toggle_food_meal(bot, cid, key, q=None):
+    meals = food_meals(cid)
+    if key in dict(FOOD_MEALS):
+        updated = [meal for meal in meals if meal != key] if key in meals else [*meals, key]
+        if updated:  # минимум один приём пищи
+            set_(cid, "food_meals", updated)
+            _reset_day_menu(cid)
+    await send_cuisines(bot, cid, q)
+
+
+async def toggle_food_restriction(bot, cid, key, q=None):
+    if key in dict(FOOD_RESTRICTIONS):
+        current = food_restrictions(cid)
+        set_(cid, "food_restrictions", [item for item in current if item != key] if key in current else [*current, key])
+        _reset_day_menu(cid)
+    await send_cuisines(bot, cid, q)
 
 
 async def send_cuisines(bot, cid, q=None):
@@ -1050,8 +1280,27 @@ async def handle_callback(bot, cid, data, q=None):
         await send_cuisines(bot, cid, q)
     elif data.startswith("set_cuisine_"):
         await toggle_cuisine(bot, cid, data[len("set_cuisine_"):], q)
+    elif data.startswith("set_foodmeal_"):
+        await toggle_food_meal(bot, cid, data[len("set_foodmeal_"):], q)
+    elif data.startswith("set_foodrestr_"):
+        await toggle_food_restriction(bot, cid, data[len("set_foodrestr_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
+    elif data == "set_news":
+        await send_news_settings(bot, cid, q)
+    elif data.startswith("set_newstgl_"):
+        await toggle_news_topic(bot, cid, data[len("set_newstgl_"):], q)
+    elif data.startswith("set_newscount_"):
+        await set_news_count(bot, cid, data[len("set_newscount_"):], q)
+    elif data == "set_myday":
+        await send_myday_blocks(bot, cid, q)
+    elif data.startswith("set_mydaytgl_"):
+        await toggle_myday_block(bot, cid, data[len("set_mydaytgl_"):], q)
+    elif data.startswith("set_notifopen_"):
+        await send_notif_kind(bot, cid, data[len("set_notifopen_"):], q)
+    elif data.startswith("set_notiftime_"):
+        kind, _sep, hhmm = data[len("set_notiftime_"):].rpartition("_")
+        await set_notif_time(bot, cid, kind, hhmm, q)
     elif data.startswith("set_notifpush_"):
         await toggle_notification_from_message(cid, data[len("set_notifpush_"):], q)
     elif data == "set_notif_off_all":

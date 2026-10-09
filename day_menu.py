@@ -48,6 +48,27 @@ def _settings():
     return settings
 
 
+# Слова, по которым код проверяет блюдо на ограничения (название и пояснение).
+_RESTRICTION_MARKERS = {
+    "vegetarian": ("мяс", "кур", "птиц", "говяд", "свин", "телят", "баран", "утк", "индейк", "фарш", "копчён",
+                   "котлет", "колбас", "бекон", "ветчин", "гуанчале", "рыб", "тунц", "лосос", "кревет",
+                   "кебаб", "кёфте", "шашлык", "пельмен", "хинкали", "чахохбили", "бефстроганов",
+                   "тонкацу", "кацудон", "якитори", "оякодон", "chicken", "beef", "pork", "pollo",
+                   "saltimbocca", "carbonara", "bourguignon", "coq au vin", "poulet", "mole", "pozole",
+                   "tacos", "enchiladas"),
+    "no_pork": ("свин", "бекон", "ветчин", "гуанчале", "тонкацу", "кацудон", "pork", "carbonara",
+                "croque-monsieur", "saltimbocca", "chorizo"),
+    "no_lactose": ("сыр", "молок", "молоч", "сливк", "сливоч", "сметан", "йогурт", "творог", "панир",
+                   "пармезан", "бешамел", "моцарел", "кефир", "caffellatte", "yogurt", "quesadilla",
+                   "gratin", "croque", "хачапури", "чвиштари", "сырник", "lasagna", "parmigiana"),
+}
+
+
+def fits_restrictions(dish, restrictions) -> bool:
+    text = f"{dish.get('name', '')} {dish.get('note', '')}".casefold()
+    return not any(marker in text for key in restrictions for marker in _RESTRICTION_MARKERS.get(key, ()))
+
+
 def cuisine_label(cuisine) -> str:
     """«Итальянская» — подпись кухни без эмодзи."""
     label = next((label for key, label in _settings().CUISINE_OPTIONS if key == cuisine), cuisine)
@@ -70,7 +91,8 @@ def get_cached_day_menu(cid, now=None) -> dict | None:
     if not isinstance(menu, dict) or menu.get("date") != _today(now).isoformat():
         return None
     dishes = menu.get("dishes") or {}
-    return menu if all((dishes.get(meal) or {}).get("name") for meal in MEALS) else None
+    meals = _settings().food_meals(cid)
+    return menu if all((dishes.get(meal) or {}).get("name") for meal in meals) else None
 
 
 def _history(profile, now) -> list[str]:
@@ -79,10 +101,21 @@ def _history(profile, now) -> list[str]:
     return list(entry.get("names") or []) if entry.get("month") == month else []
 
 
-def _fallback_dish(cuisine, meal, day, avoided):
-    """Типичное блюдо из встроенного списка: по кругу, сначала не показанные."""
-    options = (TYPICAL_DISHES.get(cuisine) or {}).get(meal) or (("", ""),)
-    fresh = [item for item in options if item[0].casefold() not in avoided] or list(options)
+def _fallback_dish(cuisine, meal, day, avoided, restrictions=()):
+    """Типичное блюдо из встроенного списка: по кругу, сначала подходящие и не показанные.
+
+    Если в этом приёме пищи нет блюда под ограничения — берём подходящее блюдо этой же
+    кухни из другого приёма пищи, а не нарушаем ограничение.
+    """
+    by_meal = TYPICAL_DISHES.get(cuisine) or {}
+    options = by_meal.get(meal) or (("", ""),)
+
+    def fitting(items):
+        return [item for item in items if fits_restrictions({"name": item[0], "note": item[1]}, restrictions)]
+
+    other_meals = [item for key, items in by_meal.items() if key != meal for item in items]
+    allowed = fitting(options) or fitting(other_meals) or list(options)
+    fresh = [item for item in allowed if item[0].casefold() not in avoided] or allowed
     name, note = fresh[day.toordinal() % len(fresh)]
     return {"name": name, "note": note}
 
@@ -92,35 +125,39 @@ def _clean(value, limit) -> str:
     return text if 0 < len(text) <= limit else ""
 
 
-def _prompt(cuisine, available, avoided_names) -> str:
-    lines = "\n".join(f"- {meal}: {typical_dish_line(cuisine, meal)}" for meal in MEALS)
+def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="") -> str:
+    lines = "\n".join(f"- {meal}: {typical_dish_line(cuisine, meal)}" for meal in meals)
+    limits = (f"Обязательные ограничения в еде: {restrictions_text}. Блюдо, которое их нарушает, — ошибка.\n"
+              if restrictions_text else "")
+    json_shape = ",".join(f'"{meal}":{{"name":"","note":""}}' for meal in meals)
+    names = {"breakfast": "завтрак", "lunch": "обед", "dinner": "ужин"}
     fridge = (f"По возможности опирайся на продукты из холодильника: "
               f"{secure.wrap_untrusted(', '.join(available), 'продукты в наличии')}.\n" if available else "")
     avoid = (f"Не повторяй блюда: {secure.wrap_untrusted(', '.join(avoided_names[-60:]), 'история меню')}.\n"
              if avoided_names else "")
     return (
         f"Составь меню на один день в одной кухне: {cuisine_label(cuisine)}.\n"
-        "Нужны три типичных домашних блюда этой кухни — завтрак, обед и ужин: то, что в этой стране "
-        "действительно едят на этот приём пищи, без фьюжна и случайных комбинаций.\n"
+        f"Нужны типичные домашние блюда этой кухни на: {', '.join(names[meal] for meal in meals)} — то, что в "
+        "этой стране действительно едят на этот приём пищи, без фьюжна и случайных комбинаций.\n"
         f"Типичные варианты:\n{lines}\n"
-        "Выбери из них или столь же традиционные; все три блюда разные.\n"
-        f"{fridge}{avoid}"
+        "Выбери из них или столь же традиционные; все блюда разные.\n"
+        f"{limits}{fridge}{avoid}"
         "name — общепринятое название блюда (для итальянской, французской и мексиканской кухни — "
         "оригинальное латиницей, для остальных — по-русски); note — что это за блюдо, по-русски, "
         "до 10 слов, без точки.\n"
-        'JSON без markdown: {"breakfast":{"name":"","note":""},"lunch":{"name":"","note":""},'
-        '"dinner":{"name":"","note":""}}'
+        f"JSON без markdown: {{{json_shape}}}"
     )
 
 
-def _ai_dishes(cid, cuisine, available, avoided_names) -> dict:
+def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="") -> dict:
     try:
         data = ai.llm_json(
-            _prompt(cuisine, available, avoided_names), 500, tier="cheap", module="food",
+            _prompt(cuisine, available, avoided_names, meals, restrictions_text), 500, tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
-                "avoid": avoided_names[-60:], "language": "ru", "schema_version": 1,
+                "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
+                "language": "ru", "schema_version": 2,
             },
         )
     except Exception as error:
@@ -138,13 +175,16 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     avoided_names = list(dict.fromkeys([*_history(profile, now), *avoid]))
     avoided = {name.casefold() for name in avoided_names}
     available = recipe_generation._home_idea_context(cid, now=now).get("available") or []
-    data = _ai_dishes(cid, cuisine, available, avoided_names)
+    meals = _settings().food_meals(cid)
+    restrictions = _settings().food_restrictions(cid)
+    data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid))
     dishes, used = {}, set()
-    for meal in MEALS:
+    for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
         name, note = _clean(raw.get("name"), _NAME_MAX), _clean(raw.get("note"), _NOTE_MAX)
-        if not name or name.casefold() in avoided or name.casefold() in used:
-            dish = _fallback_dish(cuisine, meal, day, avoided | used)
+        if (not name or name.casefold() in avoided or name.casefold() in used
+                or not fits_restrictions({"name": name, "note": note}, restrictions)):
+            dish = _fallback_dish(cuisine, meal, day, avoided | used, restrictions)
         else:
             dish = {"name": name, "note": note}
         used.add(dish["name"].casefold())
@@ -185,7 +225,9 @@ def dish_recipe(cid, meal, now=None) -> dict:
     """Полный рецепт блюда из меню дня для этого приёма пищи (кэш до конца дня)."""
     import recipe_generation
     menu = get_day_menu(cid, now=now)
-    dish = menu["dishes"][meal]
+    dish = menu["dishes"].get(meal)
+    if not dish:
+        raise ValueError(f"meal {meal} is not in today's menu")
     moment = (now or datetime.now(config.TZ)).replace(
         hour=MEAL_HOURS[meal], minute=0, second=0, microsecond=0)
     return recipe_generation.get_cooking_home_idea(

@@ -71,7 +71,8 @@ TYPICAL_DISHES = {
                   ("Якисоба", "жареная лапша с овощами")),
         "dinner": (("Тонкацу", "свиная котлета в панко с капустой"), ("Якитори", "куриные шашлычки на гриле"),
                    ("Темпура", "овощи и креветки в лёгком кляре"),
-                   ("Курица терияки", "курица в сладко-солёном соусе с рисом")),
+                   ("Курица терияки", "курица в сладко-солёном соусе с рисом"),
+                   ("Агэдаси тофу", "жареный тофу в лёгком бульоне даси")),
     },
     "thai": {
         "breakfast": (("Джок", "рисовая каша с имбирём"), ("Као том", "рисовый суп с курицей"),
@@ -105,7 +106,8 @@ TYPICAL_DISHES = {
                   ("Жареный рис", "рис с яйцом и овощами"), ("Цзяоцзы", "пельмени")),
         "dinner": (("Мапо-тофу", "тофу в остром соусе с фаршем"), ("Курица гунбао", "курица с арахисом и чили"),
                    ("Свинина в кисло-сладком соусе", "хрустящая свинина"),
-                   ("Утка по-пекински", "запечённая утка с блинчиками")),
+                   ("Утка по-пекински", "запечённая утка с блинчиками"),
+                   ("Баклажаны юйсян", "баклажаны в пряном чесночном соусе")),
     },
     "turkish": {
         "breakfast": (("Менемен", "яйца с томатами и перцем"), ("Кахвалты", "сыр, оливки, томаты, яйца и симит"),
@@ -130,7 +132,8 @@ TYPICAL_DISHES = {
                   ("Солянка", "густой суп с копчёностями"), ("Уха", "рыбный суп")),
         "dinner": (("Котлеты с пюре", "домашние котлеты и картофельное пюре"),
                    ("Голубцы", "капустные листья с мясом и рисом"),
-                   ("Бефстроганов", "говядина в сметанном соусе"), ("Пельмени", "домашние пельмени со сметаной")),
+                   ("Бефстроганов", "говядина в сметанном соусе"), ("Пельмени", "домашние пельмени со сметаной"),
+                   ("Гречка с грибами", "гречка с жареными грибами и луком")),
     },
     "georgian": {
         "breakfast": (("Хачапури по-аджарски", "лодочка с сыром и яйцом"),
@@ -221,10 +224,16 @@ def _recipe_source_name(sources) -> str:
     return "Spoonacular" if first.get("source_provider") == "spoonacular" else "TheMealDB"
 
 
-def _recipe_source_prompt_block(sources) -> str:
+# Сколько рецептов-образцов и сколько текста инструкции уходит в запрос к AI:
+# главный расход токенов раздела. Остальные источники остаются для запасных карточек.
+PROMPT_SOURCES = 3
+PROMPT_INSTRUCTIONS_CHARS = 600
+
+
+def _recipe_source_prompt_block(sources, limit=PROMPT_SOURCES) -> str:
     provider = _recipe_source_name(sources)
     compact = []
-    for source in sources or []:
+    for source in (sources or [])[:limit]:
         ingredients = []
         for item in source.get("ingredients") or []:
             if not isinstance(item, dict) or not item.get("name"):
@@ -247,7 +256,7 @@ def _recipe_source_prompt_block(sources) -> str:
             "category": source.get("category", ""),
             "area": source.get("area", ""),
             "ingredients": ingredients,
-            "instructions": str(instructions)[:1800],
+            "instructions": str(instructions)[:PROMPT_INSTRUCTIONS_CHARS],
             "ready_minutes": source.get("ready_minutes"),
             "used_ingredient_count": source.get("used_ingredient_count"),
             "missed_ingredient_count": source.get("missed_ingredient_count"),
@@ -841,6 +850,10 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     unavailable = [item["name"] for item in fridge if not item.get("on", True)]
     profile = store.get_profile(cid)
     diet_prefs = " ".join(str(profile.get("diet_prefs") or "").split())
+    import settings as user_settings
+    restrictions = user_settings.food_restrictions_prompt(cid)
+    if restrictions:  # ограничения из Настроек — обязательные для рецепта
+        diet_prefs = f"{diet_prefs}; {restrictions}".strip("; ")
     raw_memory_prefs = profile.get("prefs") or []
     if not isinstance(raw_memory_prefs, list):
         raw_memory_prefs = [raw_memory_prefs]
@@ -1519,7 +1532,7 @@ def _recipe_batch_prompt(constraint, cid, cuisine_weights, recent_history, seaso
     avoid_line = f"Не предлагай эти блюда (уже показывались недавно): {', '.join(avoid)}.\n" if avoid else ""
     cuisine_codes_line = "Коды кухонь (машиночитаемые, используй один из них или ближайший по стране): " + ", ".join(RECIPE_CUISINE_CODES) + ".\n"
     guard_line = f"{meal_guard}\n" if meal_guard else ""
-    source_block = _recipe_source_prompt_block(sources)
+    source_block = _recipe_source_prompt_block(sources, limit=RECIPE_BATCH_SIZE + 1)
     return (
         f"{cz}{weights_line}{season_line}{avoid_line}"
         f"Ты — шеф-повар с идеальной логикой. Составь список из {n} РАЗНЫХ рецептов "

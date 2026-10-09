@@ -880,9 +880,20 @@ def _rail_works(cid):
         return []
 
 
+class _BlockOff(Exception):
+    """Блок выключен пользователем — не ошибка, просто не показываем."""
+
+
 def _build_day_text(cid, *, refresh_current=False):
+    import settings as user_settings
+
+    def on(block):
+        return user_settings.myday_block_on(cid, block)
+
     s = store.get_settings(cid)
     try:
+        if not on("weather"):
+            raise _BlockOff()
         data = weather.fetch_weather(s["lat"], s["lon"], 2)
         if refresh_current:
             current = weather.fetch_current_conditions(s["lat"], s["lon"])
@@ -932,7 +943,8 @@ def _build_day_text(cid, *, refresh_current=False):
             rain_part = ""
         wind_part = _day_wind_text(display_wind_ms)
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
-        golden = sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
+        golden = (sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
+                  if on("golden") else "")
         if golden:
             weather_line += f" · Золотой час {golden}"
     else:
@@ -942,7 +954,9 @@ def _build_day_text(cid, *, refresh_current=False):
         response = getattr(weather_error, "response", None)
         status = getattr(response, "status_code", None)
         weather_icon = "☁️"
-        if isinstance(weather_error, weather.WeatherDailyLimitExceeded) or status == 429:
+        if isinstance(weather_error, _BlockOff):
+            weather_line = ""  # блок «Погода» выключен в Настройках
+        elif isinstance(weather_error, weather.WeatherDailyLimitExceeded) or status == 429:
             weather_line = f"Погодный лимит исчерпан. {weather.WEATHER_LIMIT_FALLBACK}"
         else:
             weather_line = "Сейчас недоступна — остальная сводка всё равно готова."
@@ -951,15 +965,17 @@ def _build_day_text(cid, *, refresh_current=False):
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
     is_weekend = now.weekday() >= 5
     learning_enabled = store.learning_is_enabled(cid)
-    word_line, word_lang = _word_of_day(cid) if learning_enabled else ("", "")
-    movie_rebus = {} if learning_enabled else _movie_rebus_of_day(now.date())
+    word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
+    movie_rebus = {} if learning_enabled or not on("word") else _movie_rebus_of_day(now.date())
     import wardrobe
-    outfit_summary = wardrobe.get_cached_outfit_summary(cid)
+    outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
-    _hack_cat, hack_text = daily_lifehack(
-        cid, rain=(rain >= 40 or bool(current_precipitation)),
-        hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
-    quote = _daily_literary_quote(cid)
+    hack_text = ""
+    if on("lifehack"):
+        _hack_cat, hack_text = daily_lifehack(
+            cid, rain=(rain >= 40 or bool(current_precipitation)),
+            hot=(tmax is not None and tmax >= 24), is_weekend=is_weekend)
+    quote = _daily_literary_quote(cid) if on("quote") else {}
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -979,8 +995,8 @@ def _build_day_text(cid, *, refresh_current=False):
         lifehack=hack_text,
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),
-        rail_works=_rail_works(cid),
-        holidays=_holidays(s),
+        rail_works=_rail_works(cid) if on("rail") else [],
+        holidays=_holidays(s) if on("holidays") else [],
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
@@ -995,7 +1011,10 @@ def _build_day_text(cid, *, refresh_current=False):
 
 async def _prepare_outfit(bot, cid):
     """Молча собирает образ дня для сводки; ошибка гардероба не блокирует «Мой день»."""
+    import settings as user_settings
     import wardrobe
+    if not user_settings.myday_block_on(cid, "outfit"):
+        return  # блок «Образ дня» выключен — образ не готовим
     try:
         if not wardrobe.get_cached_outfit_summary(cid).get("items"):
             await wardrobe.send_looks(bot, cid, silent=True)

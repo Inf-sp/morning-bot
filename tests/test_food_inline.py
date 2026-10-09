@@ -219,3 +219,14 @@ def test_chosen_cuisine_prompt_asks_for_a_typical_dish():
     assert "типичного блюда" in rule and "Crostata" in rule and "завтрак" in rule
     assert "Борщ" in recipe_generation._typical_dish_rule("russian", "lunch")
     assert set(recipe_generation.TYPICAL_DISHES) == {key for key, _ in recipe_generation._cuisine_options()}
+
+
+def test_recipe_prompt_sends_only_three_short_sources():
+    sources = [{"id": str(index), "name": f"Dish {index}", "instructions": "x" * 2000,
+                "ingredients": [{"name": "egg", "measure": "2"}]} for index in range(10)]
+
+    block = recipe_generation._recipe_source_prompt_block(sources)
+
+    assert block.count('"source_recipe_id"') == recipe_generation.PROMPT_SOURCES == 3
+    assert "x" * (recipe_generation.PROMPT_INSTRUCTIONS_CHARS + 1) not in block
+    assert recipe_generation._recipe_source_prompt_block(sources, limit=5).count('"source_recipe_id"') == 5

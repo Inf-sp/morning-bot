@@ -170,3 +170,82 @@ def test_recipe_cache_is_reused_only_for_the_same_menu_dish(monkeypatch):
     monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_a, **_k: ready)
 
     assert recipe_generation.get_cooking_home_idea("42", dish={"name": "Crostata"}) is ready
+
+
+def test_menu_has_only_chosen_meals_and_matching_buttons(monkeypatch):
+    import settings
+    _profile(monkeypatch)
+    _ai(monkeypatch, RuntimeError("AI down"))
+    monkeypatch.setattr(settings, "food_meals", lambda _cid: ["dinner"])
+    monkeypatch.setattr(settings, "food_restrictions", lambda _cid: [])
+
+    menu_data = day_menu.get_day_menu("42", now=NOW, cuisine="italian")
+    msg = menu_ui.day_menu(menu_data, cuisine_label="Итальянская")
+
+    assert list(menu_data["dishes"]) == ["dinner"]
+    assert "Завтрак:" not in msg.text and "Ужин:" in msg.text
+    assert [(b.text, b.callback_data) for b in msg.reply_markup.inline_keyboard[0]] == [("Ужин", "a_recipe_dinner")]
+
+
+def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
+    import settings
+    _profile(monkeypatch)
+    prompts = _ai(monkeypatch, {
+        "breakfast": {"name": "Сырники", "note": "творожные оладьи"},
+        "lunch": {"name": "Борщ", "note": "свекольный суп на говядине"},
+        "dinner": {"name": "Котлеты с пюре", "note": "домашние котлеты"},
+    })
+    monkeypatch.setattr(settings, "food_meals", lambda _cid: ["breakfast", "lunch", "dinner"])
+    monkeypatch.setattr(settings, "food_restrictions", lambda _cid: ["vegetarian"])
+    monkeypatch.setattr(settings, "food_restrictions_prompt", lambda _cid: "вегетарианское: без мяса, птицы и рыбы")
+
+    dishes = day_menu.get_day_menu("42", now=NOW, cuisine="russian")["dishes"]
+
+    assert "вегетарианское" in prompts[0]
+    assert dishes["breakfast"]["name"] == "Сырники"
+    for meal in ("lunch", "dinner"):  # мясо от AI заменено подходящим типичным блюдом
+        assert day_menu.fits_restrictions(dishes[meal], ["vegetarian"]), dishes[meal]
+    # «Борщ на говядине» от AI отклонён; вегетарианский борщ из списка допустим, котлеты — нет.
+    assert dishes["lunch"]["note"] != "свекольный суп на говядине"
+    assert dishes["dinner"]["name"] == "Гречка с грибами"
+
+
+def test_restrictions_are_detected_in_typical_dishes():
+    assert not day_menu.fits_restrictions({"name": "Pasta carbonara", "note": "паста с яйцом и гуанчале"}, ["no_pork"])
+    assert not day_menu.fits_restrictions({"name": "Хачапури по-аджарски", "note": ""}, ["no_lactose"])
+    assert day_menu.fits_restrictions({"name": "Pasta al pomodoro", "note": "паста с томатами"},
+                                      ["vegetarian", "no_pork"])
+
+
+def test_food_meal_toggle_keeps_one_meal_and_resets_menu(monkeypatch):
+    import settings
+    saved = {"food_meals": ["dinner"]}
+    resets = []
+    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: saved.get(key, default))
+    monkeypatch.setattr(settings, "set_", lambda _cid, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(settings, "_reset_day_menu", resets.append)
+
+    async def no_screen(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(settings, "send_cuisines", no_screen)
+
+    asyncio.run(settings.handle_callback(None, "42", "set_foodmeal_dinner"))  # последний — не снимается
+    assert settings.food_meals("42") == ["dinner"] and resets == []
+    asyncio.run(settings.handle_callback(None, "42", "set_foodmeal_breakfast"))
+    asyncio.run(settings.handle_callback(None, "42", "set_foodrestr_no_lactose"))
+    assert settings.food_meals("42") == ["breakfast", "dinner"]
+    assert settings.food_restrictions_prompt("42") == "без молока, сливок, сыра и других молочных продуктов"
+    assert resets == ["42", "42"]
+
+
+def test_recipe_context_includes_restrictions(monkeypatch):
+    import settings
+    monkeypatch.setattr(recipe_generation.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {"diet_prefs": "без острого"})
+    monkeypatch.setattr(recipe_generation, "_cuisine_context", lambda _cid: "")
+    monkeypatch.setattr(settings, "food_restrictions_prompt", lambda _cid: "без свинины, бекона и ветчины")
+
+    context = recipe_generation._home_idea_context("42")
+
+    assert context["diet_prefs"] == "без острого; без свинины, бекона и ветчины"
