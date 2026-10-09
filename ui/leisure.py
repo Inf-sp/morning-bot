@@ -980,8 +980,8 @@ def leisure_hub_kb():
         ("🎧 Подобрать музыку", "music_reco"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])
 
 

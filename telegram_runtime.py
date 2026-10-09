@@ -220,6 +220,13 @@ def _enhance_markup(markup, level=2):
                     if bucket is not None and not explicit:
                         bucket.add(index)
                     break
+    for row in rows:
+        # «Главная» всегда справа: слева «Назад» / «Настроить».
+        home = [button for button in row if str(button.get("text") or "") == "Главная"]
+        if home and len(row) > 1 and row[-1] is not home[0]:
+            row.remove(home[0])
+            row.append(home[0])
+            changed = True
     if not changed:
         return None
     # Сверху «Другой/Обновить…», затем «Добавить…», дальше исходный порядок;

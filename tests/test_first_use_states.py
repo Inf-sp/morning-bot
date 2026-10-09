@@ -100,7 +100,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert _labels(message.reply_markup) == [
         ["🎯 Запустить тренировку"],
         ["🕵️ Угадать персонажа"],
-        ["#️⃣ Главная", "🎚️ Настроить"],
+        ["🎚️ Настроить", "#️⃣ Главная"],
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [

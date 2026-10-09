@@ -108,7 +108,7 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
     }
     assert _labels(msg.reply_markup) == [
         ["🎬 Подобрать кино"], ["📚 Подобрать книгу"],
-        ["🎧 Подобрать музыку"], ["#️⃣ Главная", "🎚️ Настроить"],
+        ["🎧 Подобрать музыку"], ["🎚️ Настроить", "#️⃣ Главная"],
     ]
 
 
