@@ -527,15 +527,14 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
     return out
 
 
-# «Подсказка» — зелёная, «Сдаюсь» — красная (цвет задан явно, не по подписи).
-_GREEN = {"style": "success"}
+# «Подсказка» — стандартного цвета, «Сдаюсь» — красная (цвет задан явно, не по подписи).
 _RED = {"style": "danger"}
 
 
 def _game_play_kb(ui, *, hint_available):
     rows = []
     if hint_available:
-        rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint", api_kwargs=_GREEN)])
+        rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint")])
     rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs=_RED)])
     rows.append([
         InlineKeyboardButton(ui["back"], callback_data="m_learn"),

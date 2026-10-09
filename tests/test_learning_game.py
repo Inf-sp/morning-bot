@@ -205,7 +205,7 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
     assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
     hint, reveal = (row[0] for row in bot.messages[0]["reply_markup"].inline_keyboard[:2])
-    assert (hint.api_kwargs, reveal.api_kwargs) == ({"style": "success"}, {"style": "danger"})
+    assert (dict(hint.api_kwargs or {}), reveal.api_kwargs) == ({}, {"style": "danger"})
 
 
 def test_detective_card_is_fully_in_the_study_language():
