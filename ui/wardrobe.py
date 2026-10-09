@@ -348,10 +348,6 @@ def category_screen(zone, items, total=None):
     b = MessageBuilder()
     count = len(items) if total is None else total
     b.section(f"👕 {_clean_text(zone)} · {count} {_pluralize_items(count)}")
-    if items:
-        b.spacer()
-        for item in items:
-            b.line(f"• {_clean_text(_item_display(item))}")
     return b.build_stripped()
 
 
