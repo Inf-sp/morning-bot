@@ -67,7 +67,7 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "Восход 06:25 → Закат 21:02" in message.text
     assert message.text.index("Закат 21:02") < message.text.index("🌧️ Днём")
     assert "☀️ Солнце" not in message.text
-    assert "Полезно: Завтра будет часто идти дождь" in message.text
+    assert "Завтра будет часто идти дождь" in message.text
 
 
 def test_full_forecast_at_23_has_no_remaining_daytime_parts():
@@ -166,14 +166,14 @@ def test_qualitative_outlook_describes_weather_without_numbers():
     assert not any(character.isdigit() for character in outlook)
 
 
-def test_week_useful_label_is_bold():
+def test_week_advice_has_no_useful_label():
     message = weather_ui.week_forecast(
         "1–7 сен", "Alkmaar", "Переменно", [],
         "На следующей неделе будет переменчиво.", country="NL", country_code="nl",
     )
 
-    useful = [entity for entity in message.entities if entity.type == "bold"][-1]
-    assert useful.length == len("Полезно:".encode("utf-16-le")) // 2
+    assert "Полезно" not in message.text
+    assert message.text.endswith("На следующей неделе будет переменчиво.")
 
 
 def test_weather_warning_is_scheduled_for_eight():

@@ -175,7 +175,7 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
             b.bullet(step)
     if chef_tip:
         b.spacer()
-        b.labeled_line("Полезно", chef_tip, lowercase=False)
+        b.line(chef_tip)
     return b.build_stripped()
 
 

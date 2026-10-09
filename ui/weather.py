@@ -74,8 +74,7 @@ def full_forecast(header, current, periods, sunrise_line="", sunset_line="", adv
         b.line(sunset_line)
     if advice:
         b.spacer()
-        b.bold("Полезно:")
-        b.text_line(f" {advice}")
+        b.line(advice)
     return b.build_stripped()
 
 
@@ -108,8 +107,7 @@ def week_forecast(rng, city, overview, days, advice, country="", country_code=""
     for day in days:
         b.line(f"{day['abbrev']} · {day['icon']} {day['tmax']:+.0f}°")
     b.spacer()
-    b.bold("Полезно:")
-    b.text_line(f" {_finish_sentence(cap_sentence(advice))}")
+    b.line(_finish_sentence(cap_sentence(advice)))
     return b.build_stripped()
 
 

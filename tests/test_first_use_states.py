@@ -107,7 +107,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         "Dat is de druppel! — Это последняя капля.",
         "Eerst was mijn trein te laat, toen morste ik koffie. Dat is de druppel!",
         "Грамматика:\nПосле eerst и toen подлежащее и глагол меняются местами: Toen morste ik koffie.",
-        "Полезно: придумай своё предложение с «eerst… toen…» и скажи его вслух.",
+        "придумай своё предложение с «eerst… toen…» и скажи его вслух.",
     ]
 
     def marked(kind):

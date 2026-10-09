@@ -395,8 +395,6 @@ def artist_card(data):
             b.newline()
     if data.get("fact"):
         b.spacer()
-        b.bold("Полезно:")
-        b.newline()
         b.line(data["fact"])
     return b.build_stripped()
 

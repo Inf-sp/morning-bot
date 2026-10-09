@@ -55,7 +55,8 @@ def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
     assert "• Sweater Weather — знаковый хит" in message.text
     assert len(links) == 1
     assert links[0].url == "https://music.youtube.com/watch?v=sweater123"
-    assert "Полезно:" in message.text
+    assert "Полезно:" not in message.text
+    assert "Первый альбом вышел в 2013 году." in message.text
 
 
 def test_artist_card_links_have_short_notes_and_no_web_preview(monkeypatch):

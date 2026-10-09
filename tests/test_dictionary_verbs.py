@@ -60,7 +60,7 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert "Разбор: сильный глагол" in message.text
     assert "Формы: vervangen · verving · heeft vervangen" in message.text
     assert "Спряжение: ik vervang · jij/u/hij vervangt · wij/jullie/zij vervangen" in message.text
-    assert "Полезно: Ik ga mijn oude telefoon vervangen → Я собираюсь заменить свой старый телефон" in message.text
+    assert "Ik ga mijn oude telefoon vervangen → Я собираюсь заменить свой старый телефон" in message.text
     assert "auxiliary" not in message.text
     assert "confidence" not in message.text
 
@@ -85,7 +85,7 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
     assert "Формы: werken · werkte · heeft gewerkt" in text
     assert "Разбор: слабый глагол" in text
     assert "Спряжение: ik werk · jij/u/hij werkt · wij/jullie/zij werken" in text
-    assert "Полезно: Ik werk vandaag thuis → Сегодня я работаю дома" in text
+    assert "Ik werk vandaag thuis → Сегодня я работаю дома" in text
 
 
 def test_separable_verb_aanraden_keeps_its_example_in_the_card():
@@ -103,7 +103,7 @@ def test_separable_verb_aanraden_keeps_its_example_in_the_card():
 
     assert "Aanraden → Советовать · рекомендовать" in text
     assert "Разбор: глагол" in text
-    assert "Полезно: Ik raad je deze film aan → Я рекомендую тебе этот фильм" in text
+    assert "Ik raad je deze film aan → Я рекомендую тебе этот фильм" in text
 
 
 def test_verb_with_zijn_uses_is_perfect_form(monkeypatch):
@@ -145,7 +145,7 @@ def test_low_confidence_hides_forms_and_type_but_keeps_valid_example(monkeypatch
     text = dictionary_import._dict_entry_message(entry).text
 
     assert "Формы:" not in text
-    assert "Полезно:" in text
+    assert "→" in text
 
 
 def test_missing_main_form_uses_unverified_forms_without_null(monkeypatch):
@@ -311,7 +311,7 @@ def test_bevelen_card_uses_verb_analysis_and_related_noun():
             "Спряжение: ik beveel · jij/u/hij beveelt · wij/jullie/zij bevelen\n"
             "Пример:\n"
         "Ik moet hem bevelen om te stoppen. → Мне нужно приказать ему остановиться.\n\n"
-        "Полезно: het bevel → приказ (множественное число: de bevelen)"
+        "het bevel → приказ (множественное число: de bevelen)"
     )
 
 
