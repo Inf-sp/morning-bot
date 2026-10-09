@@ -32,9 +32,7 @@ def qualitative_outlook(days, period="На следующей неделе"):
 
 
 def week_overview(days):
-    """Build a short summary from daily weather without nightly lows."""
-    low = min(day["tmax"] for day in days)
-    high = max(day["tmax"] for day in days)
+    """Короткий текст недели: «Часто дождь, временами ветрено» — без значка и температур."""
     wet = sum(day["rain_real"] for day in days)
     clear = sum(day["code"] in (0, 1) and not day["rain_real"] for day in days)
     cloudy = sum(day["code"] in (3, 45, 48) for day in days)
@@ -43,19 +41,19 @@ def week_overview(days):
     avg_wind = sum(day["wind"] for day in days) / len(days)
 
     if snow:
-        icon, description = "❄️", "Временами снег"
+        description = "Временами снег"
     elif wet >= 4:
-        icon, description = "🌧️", "Часто дождь"
+        description = "Часто дождь"
     elif wet >= 2:
-        icon, description = "🌦️", "Переменная облачность, временами дождь"
+        description = "Переменная облачность, временами дождь"
     elif clear >= 5:
-        icon, description = "☀️", "В основном ясно"
+        description = "В основном ясно"
     elif clear >= 3:
-        icon, description = "🌤️", "В основном малооблачно"
+        description = "В основном малооблачно"
     elif cloudy >= 4:
-        icon, description = "☁️", "В основном облачно"
+        description = "В основном облачно"
     else:
-        icon, description = "🌤️", "Переменная облачность"
+        description = "Переменная облачность"
 
     if max_wind >= 11:
         description += ", сильный ветер"
@@ -63,6 +61,6 @@ def week_overview(days):
         description += ", временами ветрено"
     elif avg_wind >= 5:
         description += ", умеренный ветер"
-    return f"{icon} {low:+.0f}…{high:.0f}°C · {description}"
+    return description
 
 
