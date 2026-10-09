@@ -227,9 +227,9 @@ def day_menu(menu, *, cuisine_label, intro="", news=None):
         b.bold(f"{label}:")
         note = _cooking_text(dish.get("note"))
         b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
-    if intro:  # описание кухни — под блюдами
+    if intro:  # описание кухни — под блюдами: «Турецкая кухня — это мясо, овощи…»
         b.spacer()
-        b.line(intro)
+        b.line(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
     append_weekly_news(b, news)
     return b.build_stripped(reply_markup=food_card_kb())
 

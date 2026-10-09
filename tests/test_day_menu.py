@@ -104,7 +104,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "Завтрак: Crostata — песочный пирог с джемом\n\n"
         "Обед: Pasta al pomodoro — паста с томатами\n\n"
         "Ужин: Lasagna\n\n"
-        "Свежие продукты и простые сочетания."
+        "Итальянская кухня — это свежие продукты и простые сочетания."
     )
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
