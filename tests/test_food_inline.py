@@ -225,6 +225,7 @@ def test_other_recipe_asks_meal_then_cuisine():
     assert (card[0][0].text, card[0][0].callback_data) == ("✨ Другой рецепт", "food_pick")
     meals = menu_ui.food_meal_kb().inline_keyboard
     assert [row[0].text for row in meals[:-1]] == ["Завтрак", "Обед", "Ужин"]
+    assert all(not row[0].api_kwargs for row in meals[:-1])
     assert meals[-1][0].callback_data == "food_card"
     cuisines = menu_ui.food_cuisine_kb("dinner", [("italian", "🍕 Итальянская")]).inline_keyboard
     assert [(row[0].text, row[0].callback_data) for row in cuisines[:-1]] == [

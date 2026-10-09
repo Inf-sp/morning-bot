@@ -281,7 +281,7 @@ _GREEN = {"style": "success"}
 
 def food_meal_kb():
     """Шаг 1 «Другого рецепта»: приём пищи."""
-    rows = [[InlineKeyboardButton(label, callback_data=f"food_meal_{key}", api_kwargs=_GREEN)]
+    rows = [[InlineKeyboardButton(label, callback_data=f"food_meal_{key}")]
             for key, label in _FOOD_MEALS]
     rows.append(nav_row("food_card"))
     return InlineKeyboardMarkup(rows)
