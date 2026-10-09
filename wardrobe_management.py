@@ -99,6 +99,7 @@ async def _show_added_items(bot, cid, items):
     else:
         rows = [[(delete_label(f"Удалить: {public_item_name(item)[:28]}"), f"w_delete_{item['id']}")]
                 for item in items]
+    rows.append([("🎚️ Настроить", "w_closet")])  # синяя: категории «Моего шкафа»
     rows.append([("⬅️ Назад", "w_closet"), ("#️⃣ Главная", "m_menu")])
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_wardrobe._kb(rows))
 

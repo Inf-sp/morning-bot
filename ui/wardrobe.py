@@ -372,7 +372,7 @@ def item_card(item):
     b = MessageBuilder()
     b.section(_clean_text(item.get("name")) or "Вещь")
     b.spacer()
-    b.labeled_line("Категория", _lower_first(public_zone_name(item.get("zone"))))
+    b.labeled_line("Категория", public_zone_name(item.get("zone")))
     if item.get("color"):
         b.labeled_line("Цвет", item["color"])
     b.labeled_line("Тепло", item.get("warmth") or "обычные")
@@ -439,7 +439,7 @@ def _success_item_details(item):
 
 def _success_item_category(item):
     item = item or {}
-    return _clean_text(item.get("zone"))
+    return _clean_text(public_zone_name(item.get("zone"))) if item.get("zone") else ""
 
 
 def _success_item_style(item):

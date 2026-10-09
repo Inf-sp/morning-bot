@@ -33,7 +33,7 @@ def test_success_confirmation_shows_category_and_style():
     assert message.text == (
         "✅ Вещь добавлена в «🎚️ Мой шкаф»\n\n"
         "Светло-серая рубашка GU · короткий рукав · лёгкая ткань\n"
-        "Категория: Верх\n"
+        "Категория: Футболки и рубашки\n"
         "Стиль: Скандинавский"
     )
     assert "Светло-серая рубашка GU" in [
@@ -58,7 +58,7 @@ def test_success_confirmation_keeps_known_details_without_empty_values():
     assert message.text == (
         "✅ Вещь добавлена в «🎚️ Мой шкаф»\n\n"
         "Чёрные широкие брюки · лёгкие\n"
-        "Категория: Низ\n"
+        "Категория: Брюки и шорты\n"
         "Стиль: Повседневный"
     )
     assert "None" not in message.text

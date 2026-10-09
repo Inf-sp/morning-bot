@@ -628,7 +628,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
-    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nВерх:\nФутболка"
+    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nФутболки и рубашки:\nФутболка"
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
     assert ["💳 Что докупить"] not in labels
@@ -677,8 +677,8 @@ def test_closet_screen_lists_nonempty_categories_with_spacing(monkeypatch):
 
     assert bot.message["text"] == (
         "🎚️ Мой шкаф · 3 вещи\n\n"
-        "Верх:\nБелая футболка, Синяя рубашка\n\n"
-        "Низ:\nЧёрные брюки"
+        "Футболки и рубашки:\nБелая футболка, Синяя рубашка\n\n"
+        "Брюки и шорты:\nЧёрные брюки"
     )
 
 
@@ -711,7 +711,7 @@ def test_closet_category_uses_movie_style_pagination(monkeypatch):
     assert labels[1:3] == [["Вещь 9"], ["Вещь 10"]]
     assert labels[-2] == ["◀️", "2/2", "▶️"]
     assert labels[0] == ["✅ Добавить вещь"]
-    assert bot.message["text"].startswith("👕 Верх · 10 вещей")
+    assert bot.message["text"].startswith("👕 Футболки и рубашки · 10 вещей")
 
 
 def test_delete_removes_item_at_once_without_confirmation(monkeypatch):
