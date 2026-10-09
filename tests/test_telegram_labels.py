@@ -31,17 +31,13 @@ def test_wardrobe_card_uses_current_outfit_labels():
             {"name": "Синие брюки", "zone": "Низ"},
         ],
         "how_to_wear": ["Подверни рукава, чтобы образ выглядел легче"],
-        "main_accent": "Спокойные оттенки связывают комплект",
     })
 
-    assert _bold_fragments(message) == [
-        "🧥 Надень сегодня · Скандинавский",
-        "Главный акцент:",
-    ]
+    assert _bold_fragments(message) == ["🧥 Надень сегодня · Скандинавский"]
     assert "Образ на сегодня" not in message.text
     assert "🧥 Надень сегодня · Скандинавский\n\n- Белая рубашка\n- Синие брюки" in message.text
     assert "Как носить:" not in message.text
-    assert "💡 Главный акцент: спокойные оттенки связывают комплект." in message.text
+    assert "Главный акцент" not in message.text
 
 
 def test_day_summary_lifehack_keeps_capital_letter_after_label():

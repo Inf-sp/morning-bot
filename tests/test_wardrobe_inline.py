@@ -417,7 +417,7 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     monkeypatch.setattr(wardrobe.util.StatusManager, "start", unexpected_start)
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {
         "item_ids": ["old-item"],
-        "look_data": {"main_accent": "Серебристый браслет завершает образ."},
+        "look_data": {"primary_style": "Городской"},
     })
     monkeypatch.setattr(wardrobe, "send_looks", fake_send_looks)
 
@@ -429,7 +429,7 @@ def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
     assert calls[0][0] == "start_inline"
     assert calls[0][-1] is True
     send_kwargs = next(call[3] for call in calls if call[0] == "send_looks")
-    assert send_kwargs["previous_main_accent"].startswith("Серебристый браслет")
+    assert send_kwargs["previous_style"] == "Городской"
     assert calls[-1] == ("stop", True)
 
 
@@ -733,9 +733,9 @@ def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
     import wardrobe_router
 
     kb = wardrobe.style_picker_kb().inline_keyboard
-    assert kb[0][0].text == "Любой стиль" and kb[-1][0].callback_data == "w_card"
-    assert [row[0].text for row in kb[1:-1]] == list(wardrobe._settings.STYLES)
-    assert all(row[0].api_kwargs == {"style": "success"} for row in kb[:-1])
+    assert kb[-1][0].callback_data == "w_card"
+    assert [row[0].text for row in kb[:-1]] == list(wardrobe._settings.STYLES)
+    assert all(not row[0].api_kwargs for row in kb[:-1])
 
     styles = []
 

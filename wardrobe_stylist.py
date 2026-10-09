@@ -1,10 +1,9 @@
-"""ИИ-стилист: выбирает один из готовых комплектов кода и пишет главный акцент.
+"""ИИ-стилист: выбирает один из готовых комплектов кода и цвет носков.
 
 Код уже отсеял всё, что не подходит по погоде, и отсортировал комплекты по
 сочетаемости. ИИ выбирает между проверенными вариантами с учётом стиля,
 предпочтений и трендов недели. Ответ проверяется: номер только из списка,
-носки не синие, акцент говорит о вещах образа. Иначе — None, и карточку
-собирают правила кода.
+носки не синие. Иначе — None, и карточку собирают правила кода.
 """
 import logging
 from datetime import date, timedelta
@@ -14,7 +13,6 @@ import config
 import research
 import store
 from wardrobe_model import public_item_name
-from wardrobe_outfit import _claims_are_grounded, outfit_accessories
 
 _log = logging.getLogger(__name__)
 
@@ -22,7 +20,6 @@ TRENDS_TTL_DAYS = 7
 TRENDS_RETRY_DAYS = 1      # поиск не удался — база, повторная попытка завтра
 _TRENDS_VERSION = 1
 _TREND_MAX_CHARS = 140
-_ACCENT_MAX_CHARS = 220
 
 # База на случай, если поиск или ИИ недоступны: устойчивые тенденции 2026.
 BASE_TRENDS = (
@@ -149,9 +146,7 @@ def _prompt(outfits, ctx, styles, prefs_text, trends):
 
 socks — цвет носков одним прилагательным во множественном числе («бордовые»): в тон брюкам или обуви
 либо осознанный акцент к образу; не синие и не голубые.
-accent — одно предложение до 180 символов: главный акцент выбранного образа и почему он работает.
-Называй только вещи этого комплекта и их цвета, ничего не выдумывай.
-JSON без Markdown: {{"choice":1,"socks":"","accent":""}}"""
+JSON без Markdown: {{"choice":1,"socks":""}}"""
 
 
 def _valid_socks(value):
@@ -161,37 +156,18 @@ def _valid_socks(value):
     return f"{text[:1].upper()}{text[1:]} носки"
 
 
-def _names_look(text, items):
-    """Акцент говорит хотя бы об одной вещи образа (по основе слова названия)."""
-    words = text.casefold().split()
-    for item in items:
-        for word in public_item_name(item).casefold().split():
-            if len(word) >= 4 and any(w.startswith(word[:max(3, min(5, len(word) - 1))]) for w in words):
-                return True
-    return False
-
-
-def _valid_accent(value, items):
-    text = " ".join(str(value or "").split())
-    if not text or len(text) > _ACCENT_MAX_CHARS or not _claims_are_grounded(text, items):
-        return ""
-    # Аксессуары видны только в акценте, поэтому он обязан их назвать.
-    focus = outfit_accessories(items) or items
-    return text if _names_look(text, focus) else ""
-
-
 def choose(outfits, ctx, styles, prefs_text, trends):
-    """{index, socks, accent} или None — тогда карточку собирают правила кода."""
+    """{index, socks} или None — тогда карточку собирают правила кода."""
     if len(outfits) < 2:
         return None
     try:
         data = ai.llm_json(
-            _prompt(outfits, ctx, styles, prefs_text, trends), 500, tier="smart", module="wardrobe",
+            _prompt(outfits, ctx, styles, prefs_text, trends), 200, tier="smart", module="wardrobe",
             budget_seconds=20,
             cache_context={
                 "scenario": "wardrobe_stylist", "outfits": [[it.get("id") for it in o] for o in outfits],
                 "weather": _weather_line(ctx), "styles": list(styles), "preferences": prefs_text,
-                "trends": list(trends), "language": "ru", "schema_version": 1,
+                "trends": list(trends), "language": "ru", "schema_version": 2,
             },
         )
     except Exception as exc:
@@ -205,8 +181,5 @@ def choose(outfits, ctx, styles, prefs_text, trends):
         return None
     if not 0 <= index < len(outfits):
         return None
-    accent = _valid_accent(data.get("accent"), outfits[index])
     socks = _valid_socks(data.get("socks"))
-    if not accent or not socks:
-        return None
-    return {"index": index, "socks": socks, "accent": accent}
+    return {"index": index, "socks": socks} if socks else None

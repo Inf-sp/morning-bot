@@ -24,9 +24,7 @@ from wardrobe_model import (
 )
 from wardrobe_outfit import (
     build_how_to_wear,
-    build_main_accent,
     build_sock_recommendation,
-    outfit_accessories,
     build_style_tip,
     choose_outfit_style,
     is_urban_2026_base_top,
@@ -127,11 +125,6 @@ def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, ra
 
 
 def _build_look_message(look_data, *, news=None):
-    accessories = outfit_accessories((look_data or {}).get("items") or [])
-    accent = str((look_data or {}).get("main_accent") or "").casefold()
-    if accessories and not any(public_item_name(item).casefold() in accent for item in accessories):
-        # Кэш до версии «аксессуары только в акценте»: акцент должен их назвать.
-        look_data = {**look_data, "main_accent": build_main_accent(look_data["items"])}
     msg = wardrobe_ui.render_wardrobe_message(look_data, news=news)
     return msg.text, msg.entities
 
@@ -388,11 +381,9 @@ _wardrobe_home_kb = build_wardrobe_keyboard
 
 
 def style_picker_kb():
-    """«Другой образ»: направление — любой стиль или один из шести; всё зелёное."""
-    green = {"style": "success"}
-    rows = [[InlineKeyboardButton("Любой стиль", callback_data="w_lookst_any", api_kwargs=green)]]
-    rows.extend([InlineKeyboardButton(name, callback_data=f"w_lookst_{index}", api_kwargs=green)]
-                for index, name in enumerate(_settings.STYLES))
+    """«Другой образ»: направление — один из шести стилей, стандартного цвета."""
+    rows = [[InlineKeyboardButton(name, callback_data=f"w_lookst_{index}")]
+            for index, name in enumerate(_settings.STYLES)]
     rows.append(nav_row("w_card"))
     return InlineKeyboardMarkup(rows)
 
@@ -534,7 +525,7 @@ def _no_outfit_screen(result_kb, alternative=False):
 
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
-                     previous_style=None, previous_main_accent=None, q=None, silent=False,
+                     previous_style=None, q=None, silent=False,
                      style=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
@@ -687,10 +678,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "style_tip": fallback_tip,
         "sock_recommendation": build_sock_recommendation(best_sorted, (pick or {}).get("socks", "")),
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "main_accent": (pick or {}).get("accent") or build_main_accent(
-            best_sorted, weather_ctx,
-            avoid_accents={previous_main_accent} if previous_main_accent else None,
-        ),
         "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
         "purchase_recommendation": purchase_recommendation,
     }

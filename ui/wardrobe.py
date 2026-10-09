@@ -67,7 +67,7 @@ def render_wardrobe_message(look_data, *, news=None):
     Погода — одной строкой-причиной и только когда она повлияла на выбор.
 
     look_data: {primary_style, items[{name, zone}], sock_recommendation,
-                how_to_wear[], main_accent, weather_reason}
+                how_to_wear[], weather_reason}
     """
     look_data = look_data or {}
     b = MessageBuilder()
@@ -75,10 +75,7 @@ def render_wardrobe_message(look_data, *, news=None):
     b.section(outfit_header(primary_style))
 
     slots = _outfit_slots(look_data.get("items") or [])
-    # Аксессуары не входят в список: о них говорит только «Главный акцент».
-    items = [
-        *slots["Верх"], *slots["Низ"], *slots["Обувь"], *slots["Верхняя одежда"], *slots["Другое"],
-    ]
+    items = outfit_item_names(look_data)
     selected_socks = next(
         (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
     )
@@ -97,14 +94,6 @@ def render_wardrobe_message(look_data, *, news=None):
     if weather_reason:
         b.spacer()
         b.line(weather_reason)
-
-    main_accent = _finish_dot(look_data.get("main_accent") or "")
-    if main_accent:
-        b.spacer()
-        b.text_line("💡 ")
-        b.bold("Главный акцент:")
-        b.text_line(f" {_lower_first(main_accent)}")
-        b.newline()
 
     append_weekly_news(b, news)
 

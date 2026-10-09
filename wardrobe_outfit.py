@@ -613,59 +613,6 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
 
 
 # ---------- текст образа: локальный fallback ----------
-def _sentence_item_name(item):
-    name = public_item_name(item)
-    return name[:1].lower() + name[1:] if name else "вещь"
-
-
-def _shoe_finishing_verb(item):
-    name = public_item_name(item).casefold()
-    if any(marker in name for marker in ("обувь", "пара ", "модель ")):
-        return "завершает"
-    plural_subcategories = {"Кеды", "Кроссовки", "Лоферы", "Ботинки", "Сандалии", "Тапочки"}
-    plural_names = ("кеды", "кроссовки", "лоферы", "ботинки", "сандалии", "тапочки",
-                    "туфли", "сапоги", "мокасины", "слипоны", "челси", "мюли")
-    if item.get("subcategory") in plural_subcategories or any(word in name.split() for word in plural_names):
-        return "завершают"
-    return "завершает"
-
-
-def build_outfit_reasons(items, weather_ctx, score_details=None):
-    """Одна естественная строка о цельности образа на подтверждённых фактах.
-
-    Для обуви отдельно выбирается число глагола, потому что названия вещей —
-    свободный текст: «кеды завершают», но «обувь завершает»."""
-    reasons = []
-    colors = [c for it in items for c in (it.get("colors") or [])]
-    bright = [c for c in colors if not _is_neutral_color(c)]
-    neutral_anchor = next((it for it in items if any(_is_neutral_color(c) for c in (it.get("colors") or []))), None)
-    if neutral_anchor and len(set(bright)) >= 2:
-        return [
-            f"{_sentence_item_name(neutral_anchor)} поддерживает спокойную основу, "
-            f"а {' и '.join(sorted(set(bright))[:2])} добавляют цвет."
-        ]
-    outer = next((it for it in items if it.get("zone") == "Верхняя одежда"), None)
-    if outer and weather_ctx.get("has_rain") and outer.get("rain_ok"):
-        return [f"{_sentence_item_name(outer)} завершает образ и защищает от дождя."]
-    elif weather_ctx.get("has_rain") and not (outer and outer.get("rain_ok")):
-        return ["Вещи сочетаются между собой, но в шкафу нет подтверждённой защиты от дождя."]
-    elif outer and weather_ctx.get("warm"):
-        return [f"{_sentence_item_name(outer)} завершает образ и даёт слой для прохладного утра."]
-    low = next((it for it in items if it.get("zone") == "Низ"), None)
-    top = next((it for it in items if it.get("zone") == "Верх"), None)
-    shoe = next((it for it in items if it.get("zone") == "Обувь"), None)
-    if top and low and shoe:
-        return [
-            f"{_sentence_item_name(top)} и {_sentence_item_name(low)} создают лёгкую базу, "
-            f"а {_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ."
-        ]
-    if top and low:
-        return [f"{_sentence_item_name(top)} и {_sentence_item_name(low)} создают цельную основу образа."]
-    if shoe:
-        return [f"{_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ."]
-    return reasons
-
-
 _OPENABLE_LAYER_MARKERS = ("рубаш", "куртк", "пиджак", "кардиган", "пальто", "плащ", "ветровк")
 
 
@@ -803,79 +750,6 @@ def build_sock_recommendation(items, suggested=""):
         if socks:
             return socks
     return "Серые носки" if has_accent else "Жёлтые носки"
-
-
-def _accessory_advice(items, weather_ctx):
-    """Совет по аксессуару к образу без аксессуаров: по погоде, затем по характеру образа."""
-    facts = " ".join(_item_facts(item) for item in items)
-    advice = []
-    if weather_ctx.get("sunny") or weather_ctx.get("hot"):
-        advice.append("Добавь солнечные очки — они завершат лёгкий образ.")
-        if not weather_ctx.get("strong_wind"):
-            advice.append("Кепка добавит образу расслабленности и защитит от солнца.")
-    elif weather_ctx.get("tmax") is not None and weather_ctx["tmax"] <= 12:
-        advice.append("Шарф добавит тепла и сделает образ законченным у лица.")
-    if any(marker in facts for marker in ("рубаш", "пиджак", "классич", "брюк")):
-        advice.append("Тонкое кольцо или часы подчеркнут собранный образ.")
-    else:
-        advice.append("Подвеска на тонкой цепочке добавит образу деталь у ворота.")
-    return advice
-
-
-def outfit_accessories(items):
-    """Аксессуары образа, кроме носков: их показывает только «Главный акцент»."""
-    return [item for item in items
-            if item.get("zone") == "Аксессуары" and "носк" not in _item_facts(item)]
-
-
-_PLURAL_ACCESSORIES = ("часы", "очки", "серьги", "перчатки", "бусы", "наушники", "подтяжки", "кольца", "браслеты")
-
-
-def _is_plural_name(name):
-    """«Серые часы», «очки» — множественное число: по слову-исключению или окончанию прилагательного."""
-    words = name.casefold().split()
-    return bool(words) and (words[0].endswith(("ые", "ие")) or any(word in _PLURAL_ACCESSORIES for word in words))
-
-
-def _accessory_accents(accessories):
-    names = [_sentence_item_name(item) for item in accessories]
-    joined = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} и {names[-1]}"
-    if len(names) == 1 and not _is_plural_name(names[0]):
-        return [f"{joined} становится заметной деталью и завершает образ.",
-                f"{joined} добавляет образу законченности и держит на себе главный акцент."]
-    return [f"{joined} становятся заметными деталями и завершают образ.",
-            f"{joined} добавляют образу законченности и держат на себе главный акцент."]
-
-
-def build_main_accent(items, weather_ctx=None, avoid_accents=None):
-    """Выбирает grounded-акцент и ротирует его для другого образа.
-
-    Если в образе есть аксессуары, акцент всегда о них: в списке вещей их нет.
-    """
-    accessories = outfit_accessories(items)
-    candidates = _accessory_accents(accessories) if accessories else []
-    if not accessories:
-        candidates.extend(build_outfit_reasons(items, weather_ctx or {}))
-    if not accessories:
-        candidates.extend(_accessory_advice(items, weather_ctx or {}))
-    shoe = next((item for item in items if item.get("zone") == "Обувь"), None)
-    if shoe and not accessories:
-        candidates.append(
-            f"{_sentence_item_name(shoe)} {_shoe_finishing_verb(shoe)} образ и держит на себе главный акцент."
-        )
-    if not accessories:
-        candidates.append("Спокойная палитра связывает вещи, а обувь завершает образ.")
-
-    unique = list(dict.fromkeys(candidate for candidate in candidates if candidate))
-    avoided = {
-        re.sub(r"\s+", " ", str(accent or "")).strip().casefold()
-        for accent in (avoid_accents or ()) if str(accent or "").strip()
-    }
-    return next(
-        (candidate for candidate in unique
-         if re.sub(r"\s+", " ", candidate).strip().casefold() not in avoided),
-        unique[0],
-    )
 
 
 _COLOR_CLAIM_MARKERS = (

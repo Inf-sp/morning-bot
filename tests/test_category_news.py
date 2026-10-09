@@ -35,7 +35,7 @@ def test_all_home_renderers_append_one_linked_weekly_news_line():
     news = _news(now)
 
     wardrobe = wardrobe_ui.render_wardrobe_message(
-        {"main_accent": "Спокойная палитра связывает комплект."}, news=news,
+        {"items": [{"name": "Белая футболка", "zone": "Верх"}]}, news=news,
     )
     food = menu_ui.food_menu({}, meal="lunch", news=news)
     for message in (wardrobe, food):

@@ -301,6 +301,8 @@ def _probe_request(service: str):
         "tavily": ("GET", "https://api.tavily.com/usage", {"headers": {"Authorization": f"Bearer {config.TAVILY_API_KEY}"}}),
         "firecrawl": ("GET", "https://api.firecrawl.dev/v2/team/credit-usage", {"headers": {"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"}}),
         "tmdb": ("GET", "https://api.themoviedb.org/3/configuration", {"params": {"api_key": config.TMDB_API_KEY}}),
+        # videos.list стоит 1 единицу квоты (поиск — 100): проверяет только ключ.
+        "youtube": ("GET", "https://www.googleapis.com/youtube/v3/videos", {"params": {"part": "id", "id": "dQw4w9WgXcQ", "key": config.YOUTUBE_API_KEY}}),
         "google_books": ("GET", "https://www.googleapis.com/books/v1/volumes", {"params": {"q": "1984", "maxResults": 1, "printType": "books", "projection": "lite", "key": config.GOOGLE_BOOKS_API_KEY}}),
         "languagetool": ("POST", f"{config.LANGUAGETOOL_API_URL}/check", {"data": {"text": "Dit is goed.", "language": "nl-NL"}}),
         "spoonacular": ("GET", "https://api.spoonacular.com/food/ingredients/search", {"params": {"query": "apple", "number": 1, "apiKey": config.SPOONACULAR_API_KEY}}),
@@ -357,7 +359,7 @@ def probe(service: str) -> bool:
         if not ok:
             error = (
                 provider_runtime.google_error_details(response)
-                if service == "google_books"
+                if service in ("google_books", "youtube")
                 else f"HTTP {response.status_code}"
             )
         remaining = total = None
@@ -415,10 +417,6 @@ def check_all(*, force=False) -> None:
         # основной сервис и последний резерв.
         if spec.key in provider_runtime.AI_PROVIDERS and spec.key not in ("gemini", "openrouter"):
             continue
-        # YouTube search costs quota. Its status is updated by real lookups only,
-        # never by a diagnostic request from the monitor.
-        if spec.key == "youtube":
-            continue
         if spec.key == "tavily" and provider_runtime.tavily_monthly_quota_exhausted(now):
             continue
         state = current.get(spec.key) or {}
@@ -458,9 +456,9 @@ async def monitoring_job(_context) -> None:
 # ================= Ручная проверка API (🩺 Проверить API) =================
 
 LIVE_CHECK_TIMEOUT = 15  # секунд на один сервис; весь прогон ≈ самый медленный
-# Cloudflare probe — реальный вызов модели (тратит нейроны), YouTube search стоит
-# 100 единиц дневной квоты. Их состояние обновляют только реальные запросы.
-_LIVE_CHECK_REAL_ONLY = ("cloudflare", "youtube")
+# Cloudflare probe — реальный вызов модели (тратит нейроны): состояние обновляют
+# только реальные запросы.
+_LIVE_CHECK_REAL_ONLY = ("cloudflare",)
 # Админ только что нажал кнопку — Telegram заведомо отвечает.
 _LIVE_CHECK_EXCLUDED = ("telegram",)
 

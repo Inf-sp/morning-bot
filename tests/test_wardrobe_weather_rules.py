@@ -139,14 +139,11 @@ def _stylist(monkeypatch, answer):
 
 
 def test_stylist_answer_is_validated(monkeypatch):
-    good = {"choice": 2, "socks": "бордовые", "accent": "Бежевые лоферы смягчают тёмно-синие джинсы."}
-    assert _stylist(monkeypatch, good) == {
-        "index": 1, "socks": "Бордовые носки", "accent": "Бежевые лоферы смягчают тёмно-синие джинсы.",
-    }
+    good = {"choice": 2, "socks": "бордовые"}
+    assert _stylist(monkeypatch, good) == {"index": 1, "socks": "Бордовые носки"}
     assert _stylist(monkeypatch, {**good, "choice": 7}) is None
     assert _stylist(monkeypatch, {**good, "socks": "тёмно-синие"}) is None
-    # Чужая вещь: кожаной куртки в комплекте нет.
-    assert _stylist(monkeypatch, {**good, "accent": "Кожаная куртка задаёт характер образу."}) is None
+    assert _stylist(monkeypatch, {**good, "socks": "очень яркие неоновые"}) is None
     assert _stylist(monkeypatch, RuntimeError("down")) is None
     assert _stylist(monkeypatch, None) is None
 
@@ -178,16 +175,16 @@ def test_trends_are_searched_once_a_week(monkeypatch):
     assert calls == ["men's urban streetwear street style trends fall 2026"]
 
 
-def test_card_shows_weather_reason_between_list_and_accent():
+def test_card_shows_weather_reason_after_list():
     msg = render_wardrobe_message({
         "primary_style": "Городской", "items": [{"name": "Белая футболка", "zone": "Верх"}],
-        "sock_recommendation": "Серые носки", "main_accent": "Кеды завершают образ",
+        "sock_recommendation": "Серые носки",
         "weather_reason": "☂️ Дождь с 13:00 — непромокаемая верхняя одежда",
     })
 
     lines = msg.text.splitlines()
     assert lines.index("☂️ Дождь с 13:00 — непромокаемая верхняя одежда") == lines.index("- Серые носки") + 2
-    assert lines[-1].startswith("💡 Главный акцент:")
+    assert lines[-1] == "☂️ Дождь с 13:00 — непромокаемая верхняя одежда"
     assert "☂️" not in render_wardrobe_message({"items": [{"name": "Футболка", "zone": "Верх"}]}).text
 
 
@@ -239,4 +236,4 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
 
     assert set(saved["ids"]) == {"tee", "jeans", "sneakers", "rain"}
     assert saved["look"]["weather_reason"].startswith("☂️ Дождь, порывы до 12 м/с")
-    assert saved["look"]["main_accent"] and saved["look"]["sock_recommendation"]
+    assert saved["look"]["sock_recommendation"] and "main_accent" not in saved["look"]

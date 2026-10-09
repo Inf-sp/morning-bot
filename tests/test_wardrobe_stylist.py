@@ -16,7 +16,6 @@ from ui.wardrobe import (
 )
 from wardrobe_model import normalize_parsed_item
 from wardrobe_outfit import (
-    build_main_accent,
     build_how_to_wear,
     build_sock_recommendation,
     build_style_tip,
@@ -55,7 +54,6 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
         "style_tip": "Оставь верх навыпуск, чтобы силуэт выглядел расслабленнее",
         "sock_recommendation": "Белые носки",
         "how_to_wear": ["Футболку оставить навыпуск"],
-        "main_accent": "Белая футболка связывает светлую обувь с низом",
     })
 
     assert _entities(message, MessageEntity.ITALIC) == []
@@ -66,8 +64,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белые кеды" in message.text
     assert message.text.split("\n\n")[1].endswith("- Белые кеды\n- Белые носки")
     assert "Как носить:" not in message.text
-    assert "💡 Главный акцент:" in message.text
-    assert "белая футболка связывает светлую обувь с низом." in message.text
+    assert "Главный акцент" not in message.text
     assert "белые носки поддержат" not in message.text
     assert "💡 Полезно:" not in message.text
 
@@ -132,8 +129,7 @@ def test_outfit_card_capitalizes_item_names_without_lowercasing_the_rest():
         "items": [{"name": "цепочка со значком сторон света"}, {"name": "футболка Levi's"}],
     })
 
-    # Аксессуар (цепочка) в список не попадает — о нём говорит только «Главный акцент».
-    assert "Цепочка" not in message.text and "Дополнительно" not in message.text
+    assert "- Цепочка со значком сторон света" in message.text and "Дополнительно" not in message.text
     assert "- Футболка Levi's" in message.text
     assert "Надень сегодня" in message.text
 
@@ -168,7 +164,7 @@ def test_outfit_card_puts_each_selected_top_on_its_own_line():
     assert "Голубая рубашка, Белая футболка" not in message.text
 
 
-def test_selected_accessory_can_be_the_main_accent_instead_of_socks():
+def test_selected_accessory_is_listed_before_socks():
     message = render_wardrobe_message({
         "items": [
             {"name": "Белая футболка", "zone": "Верх"},
@@ -176,27 +172,9 @@ def test_selected_accessory_can_be_the_main_accent_instead_of_socks():
             {"name": "Серебристый браслет", "zone": "Аксессуары"},
         ],
         "sock_recommendation": "Белые носки",
-        "main_accent": "Серебристый браслет добавит контраст",
     })
 
-    assert "главный акцент: серебристый браслет" in message.text.casefold()
-    assert "белые носки поддержат" not in message.text.casefold()
-
-
-def test_main_accent_rotates_and_can_use_an_accessory():
-    items = [
-        {"name": "Белая футболка", "zone": "Верх", "colors": ["белый"]},
-        {"name": "Синие брюки", "zone": "Низ", "colors": ["синий"]},
-        {"name": "Белые кеды", "zone": "Обувь", "colors": ["белый"]},
-        {"name": "Серебристый браслет", "zone": "Аксессуары", "colors": ["серебристый"]},
-    ]
-
-    first = build_main_accent(items)
-    second = build_main_accent(items, avoid_accents={first})
-    assert "браслет" in second.casefold()
-
-    assert "браслет" in first.casefold()
-    assert second != first
+    assert message.text.endswith("- Чёрные брюки\n- Серебристый браслет\n- Белые носки")
 
 
 def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
@@ -717,20 +695,6 @@ def test_generic_style_tip_has_a_broader_safe_rotation():
 
 
 
-def test_main_accent_alternates_outfit_description_and_accessory_advice():
-    items = [
-        {"name": "Белая футболка", "zone": "Верх"},
-        {"name": "Синие джинсы", "zone": "Низ"},
-        {"name": "Белые кеды", "zone": "Обувь"},
-    ]
-    first = build_main_accent(items, {"sunny": True})
-    second = build_main_accent(items, {"sunny": True}, avoid_accents={first})
-
-    assert "белые кеды завершают образ" in first.casefold()
-    assert second == "Добавь солнечные очки — они завершат лёгкий образ."
-    assert "Шарф" in build_main_accent(items, {"tmax": 8}, avoid_accents={first})
-
-
 def test_old_cached_sock_line_is_shown_as_last_item():
     message = render_wardrobe_message({
         "items": [{"name": "Брюки", "zone": "Низ"}],
@@ -759,7 +723,7 @@ def test_any_number_of_styles_can_be_selected(monkeypatch):
     assert "Стиль: Минимализм · Скандинавский" in text and "до трёх" not in text
 
 
-def test_accessories_are_only_in_main_accent_not_in_list():
+def test_accessories_are_in_the_list_and_old_accent_is_hidden():
     items = [
         {"name": "Белая футболка", "zone": "Верх"},
         {"name": "Синие джинсы", "zone": "Низ"},
@@ -767,29 +731,12 @@ def test_accessories_are_only_in_main_accent_not_in_list():
         {"name": "Серые часы", "zone": "Аксессуары"},
         {"name": "Чёрная кепка", "zone": "Аксессуары"},
     ]
-    accent = build_main_accent(items, {"sunny": True})
-    message = render_wardrobe_message({"items": items, "sock_recommendation": "Жёлтые носки",
-                                       "main_accent": accent})
+    # Кэш прошлой версии хранил main_accent — он больше не показывается.
+    text, _entities = wardrobe._build_look_message({
+        "items": items, "sock_recommendation": "Жёлтые носки", "main_accent": "Спокойная палитра связывает вещи.",
+    })
 
-    assert accent == "серые часы и чёрная кепка становятся заметными деталями и завершают образ."
-    assert message.text.split("\n\n")[1] == "- Белая футболка\n- Синие джинсы\n- Белые кеды\n- Жёлтые носки"
-    assert "💡 Главный акцент: серые часы и чёрная кепка" in message.text
-
-
-def test_cached_look_without_accessory_accent_is_recomputed(monkeypatch):
-    look = {"items": [{"name": "Футболка", "zone": "Верх"}, {"name": "Серые часы", "zone": "Аксессуары"}],
-            "main_accent": "Спокойная палитра связывает вещи."}
-
-    text, _entities = wardrobe._build_look_message(look)
-
-    assert "Главный акцент: серые часы становятся заметными деталями" in text
-    assert "- Серые часы" not in text
-
-
-def test_single_accessory_accent_agrees_in_number():
-    def accent(name):
-        return build_main_accent([{"name": "Футболка", "zone": "Верх"}, {"name": name, "zone": "Аксессуары"}])
-
-    assert accent("Серебристый браслет").startswith("серебристый браслет становится")
-    assert accent("Солнцезащитные очки").startswith("солнцезащитные очки становятся")
-    assert accent("Часы").startswith("часы становятся")
+    assert text.split("\n\n")[1] == (
+        "- Белая футболка\n- Синие джинсы\n- Белые кеды\n- Серые часы\n- Чёрная кепка\n- Жёлтые носки"
+    )
+    assert "Главный акцент" not in text and "Спокойная палитра" not in text

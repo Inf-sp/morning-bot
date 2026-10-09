@@ -404,15 +404,29 @@ def test_passive_language_and_speech_probes_are_not_run_every_five_minutes():
     assert provider_runtime.SPEC_BY_KEY["gemini"].probe_every >= 3600
 
 
-def test_youtube_search_is_never_a_background_probe(monkeypatch):
+def test_youtube_probe_checks_key_without_search_quota(monkeypatch):
     _memory_store(monkeypatch)
-    calls = []
-    monkeypatch.setattr(service_monitor, "probe", lambda service: calls.append(service) or True)
-    monkeypatch.setattr(service_monitor, "SPECS", (provider_runtime.SPEC_BY_KEY["youtube"],))
+    monkeypatch.setattr(service_monitor.config, "YOUTUBE_API_KEY", "bad-key")
+    requests_made = []
 
-    service_monitor.check_all(force=True)
+    class Response:
+        status_code = 400
+        content = b"{}"
+        headers = {}
 
-    assert calls == []
+        def json(self):
+            return {"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.",
+                              "errors": [{"reason": "badRequest"}]}}
+
+    def fake_request(method, url, **kwargs):
+        requests_made.append((url, kwargs["params"]["part"]))
+        return Response()
+
+    monkeypatch.setattr(service_monitor.requests, "request", fake_request)
+
+    assert service_monitor.live_check("youtube")["detail"] == "неверный API-ключ"
+    assert requests_made == [("https://www.googleapis.com/youtube/v3/videos", "id")]
+    assert "/search" not in requests_made[0][0]
 
 
 def test_passive_probe_updates_status_without_polluting_error_log(monkeypatch):
@@ -499,7 +513,6 @@ def test_live_check_uses_real_requests_for_paid_probes(monkeypatch):
         "service": "serpapi", "label": "SerpApi", "status": "fail",
         "seconds": None, "detail": "ключ не настроен",
     }
-    assert service_monitor.live_check("youtube") is None  # реальных запросов ещё не было
     provider_runtime.record_result("cloudflare", True)
     assert service_monitor.live_check("cloudflare")["status"] == "ok"
     assert service_monitor.live_check("cloudflare")["detail"] == "по реальным запросам"
