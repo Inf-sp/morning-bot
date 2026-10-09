@@ -102,14 +102,14 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     assert msg.text == (
         "🍳 Меню на сегодня · Итальянская кухня\n\n"
         "Свежие продукты и простые сочетания.\n\n"
-        "Завтрак: Crostata — песочный пирог с джемом\n"
-        "Обед: Pasta al pomodoro — паста с томатами\n"
+        "Завтрак: Crostata — песочный пирог с джемом\n\n"
+        "Обед: Pasta al pomodoro — паста с томатами\n\n"
         "Ужин: Lasagna"
     )
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("✨ Другое меню", "food_pick")],
+        [("✨ Новое меню", "food_pick")],
         [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
 

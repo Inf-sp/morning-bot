@@ -974,15 +974,15 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    rows = _column_kb((
-        ("🎬 Фильмы и сериалы", "movie_reco"),
-        ("📚 Книги", "book_reco"),
-        ("🎧 Музыка", "music_reco"),
-    )).inline_keyboard
-    return InlineKeyboardMarkup([*rows, [
-        InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
+    """Кино | Музыка | Книги одной строкой, как приёмы пищи в Готовке; ниже «Новые премьеры»."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
+         InlineKeyboardButton("📚 Книги", callback_data="book_reco")],
+        [InlineKeyboardButton("✨ Новые премьеры", callback_data="lz_more")],
+        [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
 
 
 def leisure_premieres_menu() -> MessageSpec:

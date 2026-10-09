@@ -107,7 +107,7 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
     """Главный экран Готовки — меню на день; meal — полный рецепт блюда этого приёма пищи.
 
     Меню дня берётся из кэша мгновенно (ночной прогрев); без кэша или по
-    «✨ Другое меню» (refresh, cuisine) собирается один раз с индикатором.
+    «✨ Новое меню» (refresh, cuisine) собирается один раз с индикатором.
     """
     import asyncio
     import day_menu

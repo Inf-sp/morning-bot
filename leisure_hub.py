@@ -21,14 +21,33 @@ def _today_and_cc(cid):
     return datetime.now(config.TZ).date(), str(store.get_settings(cid).get("cc") or "NL").upper()
 
 
+# «Новые премьеры» листают витрину премьер по кругу: cid -> (дата, сдвиг).
+# ponytail: в памяти процесса — после рестарта витрина снова с начала.
+_premiere_offsets: dict = {}
+
+
+def _window(items, offset, limit):
+    """limit премьер начиная со сдвига, по кругу; короткая витрина — целиком."""
+    items = list(items or [])
+    if len(items) <= limit:
+        return items
+    return [items[(offset + index) % len(items)] for index in range(limit)]
+
+
+def _offset(cid, today):
+    day, offset = _premiere_offsets.get(str(cid), (None, 0))
+    return offset if day == today else 0
+
+
 def hub_data(cid) -> dict:
     """Блоки хаба из кэшей; пустой список — блок скрыт."""
     today, cc = _today_and_cc(cid)
     limit = leisure_ui.LEISURE_HUB_LIMIT
+    offset = _offset(cid, today)
     return {
         "concerts": leisure_concerts.cached_favorite_concerts(cid, limit),
-        "movies": leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or [],
-        "books": leisure_books._book_premieres_cache_get(today, allow_stale=True) or [],
+        "movies": _window(leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True), offset, limit),
+        "books": _window(leisure_books._book_premieres_cache_get(today, allow_stale=True), offset, limit),
     }
 
 
@@ -52,6 +71,13 @@ async def _show(bot, cid, msg, q=None):
 async def send_hub(bot, cid, q=None):
     msg = leisure_ui.leisure_hub_screen(**hub_data(cid), reply_markup=leisure_ui.leisure_hub_kb())
     await _show(bot, cid, msg, q)
+
+
+async def send_new_premieres(bot, cid, q=None):
+    """«Новые премьеры»: следующие премьеры кино и книг в том же экране."""
+    today, _cc = _today_and_cc(cid)
+    _premiere_offsets[str(cid)] = (today, _offset(cid, today) + leisure_ui.LEISURE_HUB_LIMIT)
+    await send_hub(bot, cid, q)
 
 
 async def send_premieres_menu(bot, cid, q=None):

@@ -378,11 +378,10 @@ def test_legacy_group_cuisines_expand_to_concrete_ones(monkeypatch):
     assert settings.cuisines("42") == ["japanese", "chinese", "thai", "italian", "turkish", "russian", "georgian"]
 
 
-def test_cuisine_settings_screen_describes_each_cuisine():
-    text = settings.settings_ui.cuisines("не выбраны", settings.CUISINE_OPTIONS).text
+def test_cuisine_settings_screen_has_no_descriptions_or_current_line():
+    text = settings.settings_ui.cuisines().text
 
-    assert "🍣 Японская — точность, умами, баланс · суши, рамен" in text
-    assert text.count(" · ") == len(settings.CUISINE_OPTIONS)
+    assert text == "📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом."
 
 
 def test_onboarding_creates_a_level_only_for_the_selected_language(monkeypatch):

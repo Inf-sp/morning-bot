@@ -648,9 +648,7 @@ def _cuisines_kb(cid, back="as_fridge_home"):
 
 
 async def send_cuisines(bot, cid, q=None):
-    labels = cuisine_labels(cid)
-    current = ", ".join(labels) if labels else "не выбраны"
-    msg = settings_ui.cuisines(current, CUISINE_OPTIONS)
+    msg = settings_ui.cuisines()
     text = msg.text
     kb = _cuisines_kb(cid)
     if q is not None:

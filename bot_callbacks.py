@@ -268,7 +268,7 @@ async def _yearly_tops(c):
 
 
 def _food_recipe(c):
-    """food_go_day_<кухня>: «Другое меню» на весь день в выбранной кухне.
+    """food_go_day_<кухня>: «Новое меню» на весь день в выбранной кухне.
 
     Старые кнопки food_go_<приём пищи>_<кухня|any> тоже дают новое меню дня.
     """
@@ -382,7 +382,7 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
-    # «Другое меню»: кухня → новое меню на день (предпочтения не меняются).
+    # «Новое меню»: кухня → новое меню на день (предпочтения не меняются).
     # food_meal_* — кнопки старых сообщений с шагом приёма пищи.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb())),
@@ -429,6 +429,7 @@ ROUTES = (
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
     R("lz_prem", lambda c: leisure_hub.send_premieres_menu(c.bot, c.cid, q=c.q)),
+    R("lz_more", lambda c: leisure_hub.send_new_premieres(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
