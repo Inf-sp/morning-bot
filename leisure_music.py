@@ -326,8 +326,8 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
         [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_music")],
         nav_row("m_leisure"),
     ])

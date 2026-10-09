@@ -350,10 +350,10 @@ def _movie_kb(i, category=None):
     category используется только для контекста подбора.
     """
     rows = [
+        # «Не нравится» — первой: в чёрный список, сразу следующая рекомендация.
+        [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
         # «Другой фильм» меняет кнопки под карточкой на выбор жанра (movie_pick_*).
         [InlineKeyboardButton("✨ Другой фильм", callback_data=f"movie_pick_{i}")],
-        # «Не нравится» — в чёрный список, сразу следующая рекомендация.
-        [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
         # «Настроить» — «Моё кино» новым сообщением, карточка остаётся.
         [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_movie")],
     ]

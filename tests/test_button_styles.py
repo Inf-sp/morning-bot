@@ -236,3 +236,13 @@ def test_main_section_actions_have_standard_color():
     other = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой фильм", callback_data="m")]]))["inline_keyboard"]
     assert other[0][0]["style"] == "success"
+
+
+def test_leisure_dislike_row_goes_above_other_recommendation():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другой фильм", callback_data="movie_pick_0")],
+        [InlineKeyboardButton("Не нравится", callback_data="movie_no_0", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [row[0]["text"] for row in rows] == ["Не нравится", "Другой фильм", "Назад"]

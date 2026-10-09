@@ -109,6 +109,7 @@ _REFRESH_RE = re.compile(
 )
 # «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
 _PREFS_RE = re.compile(r"^Выбрать предпочтения$")
+_DISLIKE_TOP = ("movie_no_", "book_no_", "listen_no", "nov_no_")
 _BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить|Показать списком|Показать карточками)$")
 # Листание: эмодзи-стрелки ◀️/▶️ → синие «←»/«→».
@@ -174,6 +175,11 @@ def _enhance_markup(markup, level=2):
     add_rows = set()
     refresh_rows = set()
     prefs_rows = set()
+    # «Не нравится» под кино, книгой, музыкой и новинкой — самой первой строкой.
+    dislike_rows = {
+        index for index, row in enumerate(rows)
+        if any(str(button.get("callback_data") or "").startswith(_DISLIKE_TOP) for button in row)
+    }
     for index, row in enumerate(rows):
         for button in row:
             text = str(button.get("text") or "")
@@ -233,7 +239,9 @@ def _enhance_markup(markup, level=2):
     # «Выбрать предпочтения» (синяя) — прямо над «Назад | Главная».
     order = sorted(
         (index for index in range(len(rows)) if index not in prefs_rows),
-        key=lambda index: (index not in refresh_rows, index not in add_rows),
+        key=lambda index: (
+            index not in dislike_rows, index not in refresh_rows, index not in add_rows,
+        ),
     )
     nav_at = next(
         (position for position, index in enumerate(order)

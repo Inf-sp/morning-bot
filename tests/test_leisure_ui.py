@@ -42,21 +42,21 @@ def test_recommendation_cards_have_no_refresh_label():
         (leisure_books._book_kb(0), "✨ Другая книга", "book_pick_0"),
         (leisure_music._listen_kb(), "✨ Другой артист", "music_pick"),
     ):
-        first = keyboard.inline_keyboard[0][0]
-        assert (first.text, first.callback_data) == (other, callback)
+        second = keyboard.inline_keyboard[1][0]
+        assert (second.text, second.callback_data) == (other, callback)
         assert all("жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
-    # «Не нравится» — красная, последней перед навигацией, вместо «Добавить в Моё…».
+    # «Не нравится» — красная, первой строкой, вместо «Добавить в Моё…».
     for keyboard, callback in (
         (leisure_movies._movie_kb(3), "movie_no_3"),
         (leisure_books._book_kb(3), "book_no_3"),
         (leisure_music._listen_kb(), "listen_no"),
     ):
-        dislike = keyboard.inline_keyboard[-3][0]
+        dislike = keyboard.inline_keyboard[0][0]
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
             "Не нравится", callback, {"style": "danger"},
         )
-        # Под «Не нравится» — синяя «Настроить» своего раздела, затем «Назад | Главная».
+        # Над навигацией — синяя «Настроить» своего раздела, затем «Назад | Главная».
         assert keyboard.inline_keyboard[-2][0].text == "🎚️ Настроить"
         assert keyboard.inline_keyboard[-2][0].callback_data.startswith("lz_cfg_")
         assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
@@ -1304,7 +1304,7 @@ def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
     picker = click("movie_pick_3")[0]
     assert picker.inline_keyboard[0][0].text == "🆕 Новинка"
     assert picker.inline_keyboard[1][0].text == "Комедия"
-    assert click("movie_card_3")[0].inline_keyboard[0][0].callback_data == "movie_pick_3"
+    assert click("movie_card_3")[0].inline_keyboard[1][0].callback_data == "movie_pick_3"
     assert click("movie_g_35") == [None] and shown == ["35"]
 
 
