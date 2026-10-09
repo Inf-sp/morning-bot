@@ -91,6 +91,9 @@ def render_wardrobe_message(look_data, *, news=None):
             b.line(f"- {item}")
 
     weather_reason = _clean_text(look_data.get("weather_reason"))
+    # Старые сохранённые образы хранят строку со значком погоды.
+    for icon in ("☂️", "💨", "🌡️", "☀️"):
+        weather_reason = weather_reason.removeprefix(icon).strip()
     if weather_reason:
         b.spacer()
         b.line(weather_reason)

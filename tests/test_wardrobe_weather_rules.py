@@ -67,7 +67,7 @@ def test_plus_18_rain_and_wind_never_gives_shorts():
         assert not _ids(outfit) & {"shorts", "sandals", "suede", "denim"}
         assert "rain" in _ids(outfit)
     reason = rules.weather_reason(ctx, outfits[0])
-    assert reason == "☂️ Дождь с 13:00, порывы до 12 м/с — непромокаемая верхняя одежда, закрытая обувь"
+    assert reason == "Дождь с 13:00, порывы до 12 м/с — непромокаемая верхняя одежда, закрытая обувь"
 
 
 def test_plus_28_dry_allows_shorts():
@@ -78,7 +78,7 @@ def test_plus_28_dry_allows_shorts():
 
     assert "shorts" in _ids(outfit)
     assert "rain" not in _ids(outfit)
-    assert rules.weather_reason(ctx, outfit).startswith("☀️ Тепло до +28° и сухо")
+    assert rules.weather_reason(ctx, outfit).startswith("Тепло до +28° и сухо")
 
 
 def test_cold_morning_warm_day_adds_removable_layer():
@@ -183,8 +183,8 @@ def test_card_shows_weather_reason_after_list():
     })
 
     lines = msg.text.splitlines()
-    assert lines.index("☂️ Дождь с 13:00 — непромокаемая верхняя одежда") == lines.index("- Серые носки") + 2
-    assert lines[-1] == "☂️ Дождь с 13:00 — непромокаемая верхняя одежда"
+    assert lines.index("Дождь с 13:00 — непромокаемая верхняя одежда") == lines.index("- Серые носки") + 2
+    assert lines[-1] == "Дождь с 13:00 — непромокаемая верхняя одежда"
     assert "☂️" not in render_wardrobe_message({"items": [{"name": "Футболка", "zone": "Верх"}]}).text
 
 
@@ -235,5 +235,5 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     asyncio.run(wardrobe.send_looks(None, 1, silent=True))
 
     assert set(saved["ids"]) == {"tee", "jeans", "sneakers", "rain"}
-    assert saved["look"]["weather_reason"].startswith("☂️ Дождь, порывы до 12 м/с")
+    assert saved["look"]["weather_reason"].startswith("Дождь, порывы до 12 м/с")
     assert saved["look"]["sock_recommendation"] and "main_accent" not in saved["look"]

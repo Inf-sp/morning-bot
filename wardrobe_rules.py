@@ -177,9 +177,8 @@ def harmony_score(items):
 # ---------- строка-причина ----------
 def weather_reason(ctx, items):
     """Одна строка, только когда погода реально повлияла на выбор; иначе ""."""
-    parts, consequences, icon = [], [], ""
+    parts, consequences = [], []
     if ctx.get("has_rain"):
-        icon = "☂️"
         hour = ctx.get("rain_from")
         parts.append(f"Дождь с {hour:02d}:00" if isinstance(hour, int) and hour > (ctx.get("window") or (0,))[0]
                      else "Дождь")
@@ -190,16 +189,13 @@ def weather_reason(ctx, items):
             consequences.append("закрытая обувь")
     gust = ctx.get("gust_max")
     if ctx.get("strong_wind"):
-        icon = icon or "💨"
         parts.append(f"порывы до {gust} м/с" if gust else "сильный ветер")
         if not ctx.get("has_rain") and any(item.get("zone") == "Верхняя одежда" for item in items):
             consequences.append("ветрозащитный слой")
     if ctx.get("layering") and ctx.get("feels_min") is not None:
-        icon = icon or "🌡️"
         parts.append(f"утром ощущается {ctx['feels_min']:+d}°, днём до {ctx['feels_max']:+d}°")
         consequences.append("слой, который можно снять")
     if not parts and summer_weather(ctx) and feels_high(ctx) is not None and feels_high(ctx) >= 24:
-        icon = "☀️"
         parts.append(f"Тепло до {round(feels_high(ctx)):+d}° и сухо")
         consequences.append("лёгкие вещи")
     if not parts:
@@ -208,5 +204,5 @@ def weather_reason(ctx, items):
     text = text[:1].upper() + text[1:]
     if consequences:
         text += " — " + ", ".join(dict.fromkeys(consequences))
-    return f"{icon} {text}"
+    return text
 
