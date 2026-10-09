@@ -67,7 +67,7 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "Восход 06:25 → Закат 21:02" in message.text
     assert message.text.index("Закат 21:02") < message.text.index("🌧️ Днём")
     assert "☀️ Солнце" not in message.text
-    assert "💡 Полезно: Завтра будет часто идти дождь" in message.text
+    assert "Полезно: Завтра будет часто идти дождь" in message.text
 
 
 def test_full_forecast_at_23_has_no_remaining_daytime_parts():
@@ -173,7 +173,7 @@ def test_week_useful_label_is_bold():
     )
 
     useful = [entity for entity in message.entities if entity.type == "bold"][-1]
-    assert useful.length == len("💡 Полезно:".encode("utf-16-le")) // 2
+    assert useful.length == len("Полезно:".encode("utf-16-le")) // 2
 
 
 def test_weather_warning_is_scheduled_for_eight():

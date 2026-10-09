@@ -185,7 +185,6 @@ def render_learning_entry(
             )
             builder.newline()
             builder.spacer()
-            builder.text_line("💡 ")
             builder.bold("Полезно:")
             builder.text_line(" ")
             builder.bold(str(related_noun["term"]).strip())
@@ -197,7 +196,6 @@ def render_learning_entry(
             builder.newline()
         else:
             builder.spacer()
-            builder.text_line("💡 ")
             builder.bold("Полезно:")
             builder.text_line(
                 f" {_without_terminal_period(example)} → {_without_terminal_period(example_translation)}"

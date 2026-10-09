@@ -167,7 +167,6 @@ def learning_menu(home: dict):
             b.newline()
         if phrase.get("tip"):
             b.spacer()
-            b.text_line("💡 ")
             b.bold("Полезно:")
             b.text_line(f" {str(phrase['tip']).strip()}")
 
@@ -262,7 +261,6 @@ def food_menu(idea=None, *, meal="", news=None):
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
         b.spacer()
-        b.text_line("💡 ")
         b.labeled_line("Полезно", tip)
 
     append_weekly_news(b, news)

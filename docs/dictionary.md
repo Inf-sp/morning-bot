@@ -116,7 +116,7 @@ Kiezen → выбирать
 Het brein → Мозг
 Разбор: существительное · het-слово
 Множественное число: de breinen
-💡 Полезно: Mijn brein heeft rust nodig → Моему мозгу нужен отдых
+Полезно: Mijn brein heeft rust nodig → Моему мозгу нужен отдых
 ```
 
 ```text

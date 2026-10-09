@@ -66,7 +66,7 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "Как носить:" not in message.text
     assert "Главный акцент" not in message.text
     assert "белые носки поддержат" not in message.text
-    assert "💡 Полезно:" not in message.text
+    assert "Полезно:" not in message.text
 
 
 def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
@@ -544,7 +544,7 @@ def test_cached_outfit_repairs_missing_useful_recommendation(monkeypatch):
     message = render_wardrobe_message(repaired)
 
     assert repaired["purchase_recommendation"]
-    assert "💡 Полезно:" not in message.text
+    assert "Полезно:" not in message.text
 
 
 def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypatch):

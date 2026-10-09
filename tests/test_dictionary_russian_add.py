@@ -57,7 +57,7 @@ def test_add_mozg_builds_a_dutch_learning_card_without_ai(monkeypatch):
     assert entry["article"] == "het"
     assert "Het brein → Мозг" in message.text
     assert "Разбор: существительное · het-слово" in message.text
-    assert "💡 Полезно: Mijn brein heeft rust nodig → Моему мозгу нужен отдых" in message.text
+    assert "Полезно: Mijn brein heeft rust nodig → Моему мозгу нужен отдых" in message.text
 
 
 def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
@@ -565,7 +565,7 @@ def test_dictionary_card_renders_normalized_noun_with_related_example():
         "🇳🇱 Добавлено в нидерландский словарь\n\n"
         "De walging → Отвращение\n\n"
         "Разбор: существительное · de-слово\n\n"
-        "💡 Полезно: Ze keek met walging naar het eten → Она с отвращением посмотрела на еду"
+        "Полезно: Ze keek met walging naar het eten → Она с отвращением посмотрела на еду"
     )
 
 
