@@ -49,14 +49,14 @@ def settings_home(city="", notifications=(), language=""):
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
-    b.line(f"📍 Город: {city or 'не выбран'}")
+    b.line(f"Город: {city or 'не выбран'}")
     if language:
-        b.line(f"🧠 Язык обучения: {language[:1].upper()}{language[1:]}")
+        b.line(f"Язык обучения: {language[:1].upper()}{language[1:]}")
     notifications = [str(name).strip() for name in notifications or () if str(name).strip()]
     if not notifications:
-        b.line("🔔 Уведомления: выключены")
+        b.line("Уведомления: выключены")
         return b.build_stripped()
-    b.line("🔔 Уведомления:")
+    b.line("Уведомления:")
     for name in notifications:
         b.line(f"- {name}")
     return b.build_stripped()

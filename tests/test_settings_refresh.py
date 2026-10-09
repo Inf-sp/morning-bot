@@ -56,10 +56,10 @@ def test_settings_home_lists_enabled_notifications_and_language(monkeypatch):
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
     text = sent[0]["text"]
-    assert "📍 Город: Алкмар\n🧠 Язык обучения: Нидерландский\n🔔 Уведомления:\n- Погода на завтра · 20:00" in text
+    assert "Город: Алкмар\nЯзык обучения: Нидерландский\nУведомления:\n- Погода на завтра · 20:00" in text
     callbacks = [b.callback_data for row in sent[0]["reply_markup"].inline_keyboard for b in row]
     assert "set_learning_global" in callbacks
 
     monkeypatch.setattr(settings, "notif_on", lambda _cid, _kind: False)
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
-    assert sent[-1]["text"].endswith("🔔 Уведомления: выключены")
+    assert sent[-1]["text"].endswith("\nУведомления: выключены")
