@@ -195,11 +195,24 @@ def _meal_type(value: str) -> str:
     return "main course"
 
 
-def source_recipes(meal_type, *, ingredients="", limit=10, avoid=()):
-    """Return up to 10 source recipes, ranked by the user's available products."""
+def source_recipes(meal_type, *, ingredients="", limit=10, avoid=(), cuisine=""):
+    """Return up to 10 source recipes, ranked by the user's available products.
+
+    cuisine — английское название кухни Spoonacular («Italian»): тогда поиск идёт
+    по кухне и приёму пищи, а продукты учитывает уже адаптация рецепта.
+    """
     limit = max(1, min(int(limit or 10), 10))
     ingredient_names = ingredient_query(ingredients)
-    if ingredient_names:
+    if cuisine:
+        found = _request("/recipes/complexSearch", {
+            "type": _meal_type(meal_type),
+            "cuisine": cuisine,
+            "number": limit,
+            "instructionsRequired": "true",
+            "sort": "popularity",
+        })
+        candidates = found.get("results") if isinstance(found, dict) else []
+    elif ingredient_names:
         found = _request("/recipes/findByIngredients", {
             "ingredients": ingredient_names,
             "number": limit,

@@ -226,7 +226,7 @@ def test_cancel_button_is_red():
 def test_main_section_actions_have_standard_color():
     labels = ("✨ Новый образ", "💳 Что докупить", "✨ Новый рецепт", "✨ Другой фильм",
               "✨ Другая книга", "✨ Другой артист", "🎯 Запустить тренировку",
-              "🕵️ Угадать персонажа", "🎬 Подобрать кино", "📚 Подобрать книгу", "🎧 Подобрать музыку",
+              "🕵️ Угадать персонажа", "🎬 Фильмы и сериалы", "📚 Книги", "🎧 Музыка",
               "🔄 Обновить карточки")
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"x{i}")]
                                    for i, label in enumerate(labels)])

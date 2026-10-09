@@ -207,6 +207,38 @@ def test_other_recipe_never_repeats_current_when_nothing_new(monkeypatch):
     assert _refresh_with(monkeypatch, llm_name="Омлет", local_name="Омлет") == "Сырники"
 
 
+def test_chosen_cuisine_rejects_recipe_of_another_cuisine(monkeypatch):
+    context = {"meal": "breakfast", "month": "2026-10", "pool_signature": "p", "signature": "s"}
+    answers = iter([
+        {**_recipe("Уэвос ранчерос"), "cuisine": "mexican"},
+        {**_recipe("Фриттата"), "cuisine": "italian"},
+    ])
+    sources_seen = []
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda _cid, now=None, cuisine=None: context)
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(recipe_generation.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(recipe_generation.config, "SPOONACULAR_API_KEY", "")
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_a, **_k: [
+        {"name": "Breakfast Burrito", "area": "Mexican"}, {"name": "Frittata", "area": "Italian"},
+    ])
+    monkeypatch.setattr(recipe_generation, "_home_idea_prompt",
+                        lambda _ctx, sources=None: sources_seen.append(sources) or "prompt")
+    monkeypatch.setattr(recipe_generation, "_normalize_home_idea", lambda data, _ctx: dict(data))
+    monkeypatch.setattr(recipe_generation, "_with_recipe_source", lambda idea, _sources: idea)
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_a, **_k: next(answers))
+
+    idea = recipe_generation.get_cooking_home_idea("42", refresh=True, cuisine="italian")
+
+    assert idea["name"] == "Фриттата" and idea["cuisine"] == "italian"
+    assert sources_seen == [[{"name": "Frittata", "area": "Italian"}]]  # мексиканский образец не передан
+
+
+def test_cuisine_groups_accept_country_codes():
+    assert recipe_generation.cuisine_matches("japanese", "asian")
+    assert recipe_generation.cuisine_matches("mexican", "")
+    assert not recipe_generation.cuisine_matches("mexican", "italian")
+
+
 def test_local_fallback_skips_shown_recipes_when_ai_is_down():
     fridge = "яйца, помидоры, сыр, хлеб, рис, курица, лук"
     first = recipe_generation._fallback_leftovers_recipe(fridge, meal="lunch")["name"]
@@ -231,7 +263,7 @@ def test_other_recipe_asks_meal_then_cuisine():
     assert [(row[0].text, row[0].callback_data) for row in cuisines[:-1]] == [
         ("Любая кухня", "food_go_dinner_any"), ("🍕 Итальянская", "food_go_dinner_italian"),
     ]
-    assert all(row[0].api_kwargs == {"style": "success"} for row in cuisines[:-1])
+    assert all(not row[0].api_kwargs for row in cuisines[:-1])  # стандартного цвета
     assert cuisines[-1][0].callback_data == "food_pick"
 
 

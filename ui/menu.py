@@ -276,7 +276,6 @@ def food_card_kb():
 
 
 _FOOD_MEALS = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
-_GREEN = {"style": "success"}
 
 
 def food_meal_kb():
@@ -289,8 +288,8 @@ def food_meal_kb():
 
 def food_cuisine_kb(meal, cuisines):
     """Шаг 2: кухня для выбранного приёма пищи; cuisines — [(код, подпись)]."""
-    rows = [[InlineKeyboardButton("Любая кухня", callback_data=f"food_go_{meal}_any", api_kwargs=_GREEN)]]
-    rows.extend([InlineKeyboardButton(label, callback_data=f"food_go_{meal}_{key}", api_kwargs=_GREEN)]
+    rows = [[InlineKeyboardButton("Любая кухня", callback_data=f"food_go_{meal}_any")]]
+    rows.extend([InlineKeyboardButton(label, callback_data=f"food_go_{meal}_{key}")]
                 for key, label in cuisines)
     rows.append(nav_row("food_pick"))
     return InlineKeyboardMarkup(rows)

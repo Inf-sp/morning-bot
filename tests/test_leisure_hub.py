@@ -98,8 +98,8 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
-    assert msg.text.startswith("🍿 Досуг\n\n🎫 Концерты\n• Muse")
-    for title in ("🎟️ Премьеры кино", "📚 Новые книги", "«Дюна»", "«Книга»"):
+    assert msg.text.startswith("🍿 Досуг\n\nКонцерты:\n• Muse")
+    for title in ("Премьеры кино:", "Новые книги:", "«Дюна»", "«Книга»"):
         assert title in msg.text
     assert "игр" not in msg.text
     assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_LIMIT
@@ -107,8 +107,8 @@ def test_hub_renders_all_blocks_with_links_and_one_column_buttons():
         "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
-        ["🎬 Подобрать кино"], ["📚 Подобрать книгу"],
-        ["🎧 Подобрать музыку"], ["🎚️ Настроить", "#️⃣ Главная"],
+        ["🎬 Фильмы и сериалы"], ["📚 Книги"],
+        ["🎧 Музыка"], ["🎚️ Настроить", "#️⃣ Главная"],
     ]
 
 
@@ -116,8 +116,8 @@ def test_hub_hides_empty_blocks():
     only_books = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}])
     empty = leisure_ui.leisure_hub_screen([], [], [])
 
-    assert "📚 Новые книги" in only_books.text
-    for title in ("🎫 Концерты", "🎟️ Премьеры кино"):
+    assert "Новые книги:" in only_books.text
+    for title in ("Концерты:", "Премьеры кино:"):
         assert title not in only_books.text
         assert title not in empty.text
     assert empty.text.startswith("🍿 Досуг\n\n")

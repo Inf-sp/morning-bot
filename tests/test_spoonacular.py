@@ -265,3 +265,18 @@ def test_incomplete_recipe_batch_response_uses_presentable_local_recipe(monkeypa
     assert len({item["name"] for item in result}) == 4
     assert all("омлет" not in item["name"].casefold() for item in result)
     assert recipe_generation._queue_recipe_presentable(result[0])
+
+
+def test_source_recipes_search_by_cuisine(monkeypatch):
+    calls = []
+
+    def fake_get(url, params, timeout):
+        calls.append((url, dict(params)))
+        return FakeResponse({"results": []})
+
+    monkeypatch.setattr(spoonacular.config, "SPOONACULAR_API_KEY", "key")
+    monkeypatch.setattr(spoonacular.requests, "get", fake_get)
+
+    assert spoonacular.source_recipes("завтрак", ingredients="яйца", cuisine="Italian") == []
+    assert calls[0][0].endswith("/recipes/complexSearch")
+    assert calls[0][1]["cuisine"] == "Italian" and calls[0][1]["type"] == "breakfast"

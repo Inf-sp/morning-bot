@@ -957,9 +957,9 @@ def leisure_hub_screen(concerts, movies, books, reply_markup=None) -> MessageSpe
     b = MessageBuilder()
     b.title(ui_label("leisure", "Досуг"))
     if not _event_sections(b, (
-        ("🎫 Концерты", _concert_event_rows, concerts, LEISURE_HUB_LIMIT),
-        ("🎟️ Премьеры кино", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
-        ("📚 Новые книги", _book_event_rows, books, LEISURE_HUB_LIMIT),
+        ("Концерты:", _concert_event_rows, concerts, LEISURE_HUB_LIMIT),
+        ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
+        ("Новые книги:", _book_event_rows, books, LEISURE_HUB_LIMIT),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
     return b.build_stripped(reply_markup=reply_markup)
@@ -975,9 +975,9 @@ def _column_kb(rows):
 
 def leisure_hub_kb():
     rows = _column_kb((
-        ("🎬 Подобрать кино", "movie_reco"),
-        ("📚 Подобрать книгу", "book_reco"),
-        ("🎧 Подобрать музыку", "music_reco"),
+        ("🎬 Фильмы и сериалы", "movie_reco"),
+        ("📚 Книги", "book_reco"),
+        ("🎧 Музыка", "music_reco"),
     )).inline_keyboard
     return InlineKeyboardMarkup([*rows, [
         InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),

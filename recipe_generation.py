@@ -31,6 +31,50 @@ def _themealdb_sources(meal_type, *, ingredients="", limit=10, avoid=()):
         return []
 
 
+# Выбранная кухня → название кухни Spoonacular и метки area у источников.
+_SPOONACULAR_CUISINES = {
+    "italian": "Italian", "mexican": "Mexican", "french": "French", "indian": "Indian",
+    "asian": "Asian", "mediterranean": "Mediterranean", "eastern_european": "Eastern European",
+}
+_SOURCE_AREAS = {
+    "asian": ("asian", "chinese", "japanese", "thai", "korean", "vietnamese", "malaysian", "filipino"),
+    "mediterranean": ("mediterranean", "greek", "spanish", "italian", "turkish", "moroccan", "portuguese"),
+    "eastern_european": ("eastern european", "russian", "polish", "ukrainian", "georgian"),
+}
+# Коды кухни в ответе модели, которые подходят под выбор группы.
+_CUISINE_GROUPS = {
+    "asian": {"asian", "japanese", "korean", "chinese", "thai", "vietnamese"},
+    "mediterranean": {"mediterranean", "greek", "spanish", "italian", "turkish"},
+    "eastern_european": {"eastern_european", "russian", "georgian"},
+}
+
+
+def cuisine_matches(code, chosen) -> bool:
+    """Подходит ли кухня рецепта под разовый выбор пользователя (пусто — любая)."""
+    return not chosen or str(code or "") in _CUISINE_GROUPS.get(chosen, {chosen})
+
+
+def _source_in_cuisine(source, chosen) -> bool:
+    area = str(source.get("area") or "").casefold()
+    return any(marker in area for marker in _SOURCE_AREAS.get(chosen, (chosen.replace("_", " "),)))
+
+
+def _recipe_sources_for_cuisine(meal_type, *, ingredients="", limit=10, avoid=(), cuisine=""):
+    """Источники только выбранной кухни: чужие не подсовываем модели как образец."""
+    sources = []
+    if config.SPOONACULAR_API_KEY and cuisine in _SPOONACULAR_CUISINES:
+        try:
+            sources = spoonacular.source_recipes(
+                meal_type, ingredients=ingredients, limit=limit, avoid=avoid,
+                cuisine=_SPOONACULAR_CUISINES[cuisine],
+            )
+        except Exception as error:
+            _log.warning("Spoonacular cuisine sources unavailable: %s", type(error).__name__)
+    if not sources:
+        sources = _recipe_sources(meal_type, ingredients=ingredients, limit=limit, avoid=avoid)
+    return [source for source in sources if _source_in_cuisine(source, cuisine)]
+
+
 def _recipe_sources(meal_type, *, ingredients="", limit=10, avoid=()):
     """Spoonacular is primary; TheMealDB keeps Cooking available as a fallback."""
     preferred = provider_runtime.selected_provider("spoonacular")
@@ -873,17 +917,26 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
     avoided = {name.casefold() for name in avoided_names}
 
     def is_new(candidate):
-        # «Новый рецепт» не повторяет ни текущий, ни уже показанные в этом месяце.
-        return _home_idea_complete(candidate) and not (
+        # «Новый рецепт» не повторяет ни текущий, ни уже показанные в этом месяце;
+        # при выбранной кухне рецепт другой кухни не принимается.
+        return _home_idea_complete(candidate) and cuisine_matches(candidate.get("cuisine"), cuisine) and not (
             refresh and str(candidate.get("name") or "").casefold() in avoided)
 
-    sources = _recipe_sources(
+    find_sources = _recipe_sources_for_cuisine if cuisine else _recipe_sources
+    sources = find_sources(
         _HOME_MEAL_LABELS[context["meal"]],
         ingredients=", ".join(context.get("available") or []),
         limit=10,
         avoid=avoided_names,
+        **({"cuisine": cuisine} if cuisine else {}),
     )
     prompt = _home_idea_prompt(context, sources=sources)
+    if cuisine:
+        label = next((label for key, label in _cuisine_options() if key == cuisine), cuisine)
+        prompt += (
+            f"\nПользователь выбрал кухню: {label.split(' ', 1)[-1]}. Блюдо обязательно этой кухни, "
+            f"поле cuisine — «{cuisine}» или конкретная страна этой кухни. Другая кухня — ошибка."
+        )
     if avoided_names:
         prompt += (
             "\nНе повторяй уже собранные в этом месяце блюда: "
@@ -926,6 +979,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
             prompt += (
                 "\nПредыдущий вариант не прошёл проверку. Верни новый вариант: обязательны естественные "
                 "русские названия, 2–3 коротких шага без времени в тексте и один конкретный совет на «ты»."
+                + (" Проверь кухню блюда — она должна совпадать с выбранной." if cuisine else "")
             )
     if not is_new(idea):
         idea = next((card for card in map(lambda source: _source_home_idea(source, context), sources)
@@ -933,9 +987,11 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
     if not is_new(idea):
         idea = _home_local_idea(context, avoided_names if refresh else ())
     if refresh and not is_new(idea):
-        # Нового варианта нет — самый давний рецепт месяца, но не текущий.
-        idea = next((item for item in month_pool if _home_idea_complete(item)
-                     and str(item.get("name") or "").casefold() != previous_name.casefold()), idea)
+        # Нового варианта нет — самый давний рецепт месяца, но не текущий; выбранная кухня первой.
+        pool = [item for item in month_pool if _home_idea_complete(item)
+                and str(item.get("name") or "").casefold() != previous_name.casefold()]
+        pool.sort(key=lambda item: not cuisine_matches(item.get("cuisine"), cuisine))
+        idea = next(iter(pool), idea)
     if not _home_idea_complete(idea):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
@@ -967,6 +1023,11 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
 
     store.mutate_profile(cid, save_idea)
     return idea
+
+
+def _cuisine_options():
+    import settings
+    return settings.CUISINE_OPTIONS
 
 
 def _cuisine_context(cid):
