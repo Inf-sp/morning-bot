@@ -218,9 +218,6 @@ def day_menu(menu, *, cuisine_label, intro="", news=None):
     """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов."""
     b = MessageBuilder()
     b.section(f"🍳 Меню на сегодня · {cuisine_label} кухня")
-    if intro:
-        b.spacer()
-        b.line(intro)
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
@@ -229,6 +226,9 @@ def day_menu(menu, *, cuisine_label, intro="", news=None):
         b.bold(f"{label}:")
         note = _cooking_text(dish.get("note"))
         b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
+    if intro:  # описание кухни — под блюдами
+        b.spacer()
+        b.line(intro)
     append_weekly_news(b, news)
     return b.build_stripped(reply_markup=food_card_kb())
 
