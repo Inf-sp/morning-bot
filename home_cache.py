@@ -23,10 +23,8 @@ def _wardrobe(cid):
 
 
 def _cooking(cid):
-    import menu
-    import recipe_generation
-    return (not menu.has_available_fridge(cid)
-            or recipe_generation.get_cached_cooking_home_idea(cid) is not None)
+    import day_menu
+    return day_menu.get_cached_day_menu(cid) is not None
 
 
 def _leisure(cid):

@@ -54,7 +54,9 @@ def _status_stages(data):
         return ((0, first), (2, second), (6, final))
 
     if data in ("m_food", "m_food_next") or data.startswith("food_go_"):
-        return progress("🍳 Подбираю рецепт...", "🧊 Сверяю холодильник...", "📝 Готовлю рецепт...")
+        return progress("🍳 Составляю меню...", "🧊 Сверяю холодильник...", "📝 Подбираю блюда...")
+    if data.startswith("a_recipe_"):
+        return progress("🍳 Готовлю рецепт...", "🧊 Сверяю холодильник...", "📝 Пишу шаги...")
     if data.startswith(("as_food", "as_fridge_cook", "food_")):
         first = "⏳ Ищу рецепт..."
     elif data == "w_look":
@@ -266,10 +268,13 @@ async def _yearly_tops(c):
 
 
 def _food_recipe(c):
-    """food_go_<приём пищи>_<кухня|any>: новый рецепт под выбор, предпочтения не меняются."""
-    meal, _sep, cuisine = c.data[len("food_go_"):].partition("_")
+    """food_go_day_<кухня>: «Другое меню» на весь день в выбранной кухне.
+
+    Старые кнопки food_go_<приём пищи>_<кухня|any> тоже дают новое меню дня.
+    """
+    _meal, _sep, cuisine = c.data[len("food_go_"):].partition("_")
     return c.status(lambda status: menu.send_food_menu(
-        c.bot, c.cid, status=status, refresh=True, meal=meal,
+        c.bot, c.cid, status=status, refresh=True,
         cuisine=None if cuisine in ("", "any") else cuisine))
 
 
@@ -377,11 +382,10 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
-    # «Новый рецепт»: приём пищи → кухня → новый рецепт (выбор только для этого рецепта).
-    R("food_pick", _swap_kb(lambda c: menu_ui.food_meal_kb())),
+    # «Другое меню»: кухня → новое меню на день (предпочтения не меняются).
+    # food_meal_* — кнопки старых сообщений с шагом приёма пищи.
+    R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb())),
-    R("food_meal_*", _swap_kb(lambda c: menu_ui.food_cuisine_kb(
-        c.data[len("food_meal_"):], [(key, label) for key, label in settings.CUISINE_OPTIONS]))),
     R("food_go_*", _picked(_food_recipe)),
     R("m_menu", _main_menu),
     # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.

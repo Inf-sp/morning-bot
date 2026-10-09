@@ -33,20 +33,134 @@ def _themealdb_sources(meal_type, *, ingredients="", limit=10, avoid=()):
 
 # Выбранная кухня → название кухни Spoonacular и метки area у источников.
 _SPOONACULAR_CUISINES = {
-    "italian": "Italian", "mexican": "Mexican", "french": "French", "indian": "Indian",
-    "asian": "Asian", "mediterranean": "Mediterranean", "eastern_european": "Eastern European",
+    "italian": "Italian", "japanese": "Japanese", "thai": "Thai", "mexican": "Mexican",
+    "indian": "Indian", "chinese": "Chinese", "french": "French", "russian": "Eastern European",
 }
 _SOURCE_AREAS = {
-    "asian": ("asian", "chinese", "japanese", "thai", "korean", "vietnamese", "malaysian", "filipino"),
-    "mediterranean": ("mediterranean", "greek", "spanish", "italian", "turkish", "moroccan", "portuguese"),
-    "eastern_european": ("eastern european", "russian", "polish", "ukrainian", "georgian"),
+    "russian": ("russian", "eastern european", "ukrainian"),
 }
-# Коды кухни в ответе модели, которые подходят под выбор группы.
+# Коды кухни в ответе модели, которые подходят под выбор.
 _CUISINE_GROUPS = {
-    "asian": {"asian", "japanese", "korean", "chinese", "thai", "vietnamese"},
-    "mediterranean": {"mediterranean", "greek", "spanish", "italian", "turkish"},
-    "eastern_european": {"eastern_european", "russian", "georgian"},
+    "russian": {"russian", "eastern_european"},
 }
+
+
+# Что действительно едят дома в стране на этот приём пищи: (название, пояснение).
+# Ориентир для модели и запасное меню дня без AI — «Итальянский завтрак» не должен
+# превращаться в пицца-фриттату.
+TYPICAL_DISHES = {
+    "italian": {
+        "breakfast": (("Crostata", "песочный пирог с джемом"), ("Ciambellone", "домашний кекс к кофе"),
+                      ("Fette biscottate", "хрустящие хлебцы с джемом и caffellatte"),
+                      ("Biscotti", "печенье к кофе с молоком"), ("Yogurt con frutta", "йогурт с фруктами и мёдом")),
+        "lunch": (("Pasta carbonara", "паста с яйцом, сыром и гуанчале"),
+                  ("Pasta al pomodoro", "паста с томатами и базиликом"),
+                  ("Aglio e olio", "спагетти с чесноком, маслом и чили"),
+                  ("Risotto", "сливочный рис с бульоном и пармезаном"),
+                  ("Minestrone", "густой овощной суп"), ("Pasta e fagioli", "суп с пастой и фасолью")),
+        "dinner": (("Lasagna", "запечённые листы пасты с рагу и бешамелем"),
+                   ("Pollo alla cacciatora", "курица, тушённая с томатами и травами"),
+                   ("Melanzane alla parmigiana", "запечённые баклажаны с томатами и сыром"),
+                   ("Pizza fatta in casa", "домашняя пицца"), ("Saltimbocca", "телятина с шалфеем и ветчиной")),
+    },
+    "japanese": {
+        "breakfast": (("Японский завтрак", "рис, мисо-суп и тамагояки"),
+                      ("Онигири", "рисовые треугольники с начинкой"), ("Оякодон", "рис с курицей и яйцом")),
+        "lunch": (("Рамен", "лапша в насыщенном бульоне"), ("Удон", "толстая лапша в лёгком бульоне"),
+                  ("Гёдза", "жареные пельмени"), ("Кацудон", "рис со свиной котлетой и яйцом"),
+                  ("Якисоба", "жареная лапша с овощами")),
+        "dinner": (("Тонкацу", "свиная котлета в панко с капустой"), ("Якитори", "куриные шашлычки на гриле"),
+                   ("Темпура", "овощи и креветки в лёгком кляре"),
+                   ("Курица терияки", "курица в сладко-солёном соусе с рисом")),
+    },
+    "thai": {
+        "breakfast": (("Джок", "рисовая каша с имбирём"), ("Као том", "рисовый суп с курицей"),
+                      ("Као пад", "жареный рис с яйцом")),
+        "lunch": (("Пад-тай", "жареная рисовая лапша с арахисом"), ("Том-ям", "кисло-острый суп"),
+                  ("Пад кра пао", "мясо с базиликом и рисом")),
+        "dinner": (("Зелёное карри", "карри на кокосовом молоке"), ("Массаман", "мягкое карри с картофелем"),
+                   ("Том кха", "кокосовый суп с курицей"), ("Сом-там", "салат из зелёной папайи")),
+    },
+    "mexican": {
+        "breakfast": (("Huevos rancheros", "яичница на тортилье с соусом сальса"),
+                      ("Huevos a la mexicana", "яйца с томатами, луком и чили"),
+                      ("Chilaquiles", "тортильи в соусе с сыром"), ("Molletes", "булочки с фасолью и сыром")),
+        "lunch": (("Tacos", "тортильи с мясом и сальсой"), ("Enchiladas", "запечённые тортильи в соусе"),
+                  ("Sopa de tortilla", "томатный суп с тортильей"), ("Pozole", "суп с кукурузой и мясом")),
+        "dinner": (("Quesadillas", "тортильи с сыром"), ("Tostadas", "хрустящие тортильи с гуакамоле"),
+                   ("Mole", "мясо в соусе из чили и шоколада"), ("Chiles rellenos", "фаршированный перец")),
+    },
+    "indian": {
+        "breakfast": (("Масала доса", "рисовый блин с картофелем"), ("Поха", "рисовые хлопья с овощами"),
+                      ("Упма", "манка со специями и овощами"), ("Алу паратха", "лепёшка с картофелем")),
+        "lunch": (("Дал", "чечевица со специями и рисом"), ("Чана масала", "нут в пряном соусе"),
+                  ("Палак панир", "шпинат с сыром панир"), ("Бирьяни", "рис со специями и мясом")),
+        "dinner": (("Баттер чикен", "курица в сливочно-томатном соусе"), ("Куриное карри", "курица в пряном соусе"),
+                   ("Алу гоби", "картофель с цветной капустой"), ("Самоса", "пирожки с пряной начинкой")),
+    },
+    "chinese": {
+        "breakfast": (("Конджи", "рисовая каша с добавками"), ("Баоцзы", "паровые булочки с начинкой"),
+                      ("Цзяньбин", "блин с яйцом и соусом")),
+        "lunch": (("Даньдань-мянь", "острая лапша с фаршем"), ("Жареная лапша", "лапша с овощами и мясом"),
+                  ("Жареный рис", "рис с яйцом и овощами"), ("Цзяоцзы", "пельмени")),
+        "dinner": (("Мапо-тофу", "тофу в остром соусе с фаршем"), ("Курица гунбао", "курица с арахисом и чили"),
+                   ("Свинина в кисло-сладком соусе", "хрустящая свинина"),
+                   ("Утка по-пекински", "запечённая утка с блинчиками")),
+    },
+    "turkish": {
+        "breakfast": (("Менемен", "яйца с томатами и перцем"), ("Кахвалты", "сыр, оливки, томаты, яйца и симит"),
+                      ("Чылбыр", "яйца пашот на йогурте с маслом")),
+        "lunch": (("Мерджимек чорбасы", "чечевичный суп"), ("Пиде", "лодочка из теста с начинкой"),
+                  ("Лахмаджун", "тонкая лепёшка с фаршем"), ("Кёфте", "мясные котлетки")),
+        "dinner": (("Кебаб", "мясо на гриле с лепёшкой"), ("Имам баялды", "баклажаны с овощами"),
+                   ("Долма", "фаршированные листья и овощи"), ("Мезе", "набор закусок")),
+    },
+    "french": {
+        "breakfast": (("Croissant", "круассаны с маслом и джемом"), ("Tartine", "багет с маслом и джемом"),
+                      ("Pain perdu", "французские гренки"), ("Crêpes", "тонкие блины")),
+        "lunch": (("Soupe à l'oignon", "луковый суп с сырной гренкой"), ("Quiche lorraine", "открытый пирог с беконом"),
+                  ("Croque-monsieur", "горячий сэндвич с ветчиной и сыром"), ("Salade niçoise", "салат с тунцом")),
+        "dinner": (("Ratatouille", "тушёные овощи прованса"), ("Bœuf bourguignon", "говядина в красном вине"),
+                   ("Poulet rôti", "запечённая курица"), ("Gratin dauphinois", "картофельный гратен")),
+    },
+    "russian": {
+        "breakfast": (("Сырники", "творожные оладьи со сметаной"), ("Блины", "тонкие блины с начинкой"),
+                      ("Гречневая каша", "гречка с маслом или молоком"), ("Овсяная каша", "овсянка с ягодами")),
+        "lunch": (("Борщ", "свекольный суп со сметаной"), ("Щи", "суп из капусты"),
+                  ("Солянка", "густой суп с копчёностями"), ("Уха", "рыбный суп")),
+        "dinner": (("Котлеты с пюре", "домашние котлеты и картофельное пюре"),
+                   ("Голубцы", "капустные листья с мясом и рисом"),
+                   ("Бефстроганов", "говядина в сметанном соусе"), ("Пельмени", "домашние пельмени со сметаной")),
+    },
+    "georgian": {
+        "breakfast": (("Хачапури по-аджарски", "лодочка с сыром и яйцом"),
+                      ("Чвиштари", "кукурузные лепёшки с сыром"), ("Эрбокверцх", "яичница с помидорами и зеленью")),
+        "lunch": (("Харчо", "густой суп с говядиной и рисом"), ("Хинкали", "сочные пельмени с бульоном"),
+                  ("Лобио", "фасоль с орехами и зеленью"), ("Чихиртма", "куриный суп с яйцом")),
+        "dinner": (("Чахохбили", "курица, тушённая с томатами и зеленью"), ("Чашушули", "острая тушёная говядина"),
+                   ("Оджахури", "жареный картофель с мясом"), ("Пхали", "закуска из овощей с орехами")),
+    },
+}
+
+
+def typical_dish_line(cuisine, meal) -> str:
+    """«Crostata (песочный пирог с джемом), …» для подсказки модели."""
+    return ", ".join(f"{name} ({note})" for name, note in (TYPICAL_DISHES.get(cuisine) or {}).get(meal, ()))
+
+
+def _typical_dish_rule(cuisine, meal) -> str:
+    label = next((label for key, label in _cuisine_options() if key == cuisine), cuisine).split(" ", 1)[-1]
+    meal_label = _HOME_MEAL_LABELS.get(meal, "этот приём пищи")
+    examples = typical_dish_line(cuisine, meal)
+    rule = (
+        f"\nПользователь выбрал кухню: {label}. Нужен рецепт одного типичного блюда, которое в этой "
+        f"стране действительно готовят дома на {meal_label}; не фьюжн, не «{label.lower()}» версия чужого "
+        f"блюда и не случайная комбинация. Поле cuisine — «{cuisine}» или конкретная страна этой кухни."
+    )
+    if examples:
+        rule += (f" Типичные варианты: {examples}. Выбери одно из них или столь же традиционное; "
+                 "образец из базы используй, только если это такое блюдо. Название — оригинальное и по-русски.")
+    return rule
 
 
 def cuisine_matches(code, chosen) -> bool:
@@ -425,13 +539,31 @@ def _home_string_list(value) -> list[str]:
 
 
 _HOME_QUANTITY = (
-    r"\d+(?:[.,]\d+)?(?:\s*[–-]\s*\d+(?:[.,]\d+)?)?\s*"
-    r"(?:г|кг|мл|л|шт\.?|зубчик(?:а|ов)?|ст\.\s*л\.|ч\.\s*л\.|стакан(?:а|ов)?|упаковк(?:а|и|ок))"
+    r"(?:\d+[¼½¾⅓⅔]?|[¼½¾⅓⅔])(?:[.,]\d+)?(?:\s*[–-]\s*\d+(?:[.,]\d+)?)?\s*"
+    r"(?:г|кг|мл|л|шт\.?|зубчик(?:а|ов)?|ст\.\s*л\.?|ч\.\s*л\.?|стакан(?:а|ов)?|упаковк(?:а|и|ок))"
 )
 
 
+_FRACTIONS = {"0.25": "¼", "0.5": "½", "0.75": "¾", "0.33": "⅓", "0.67": "⅔"}
+
+
+def _tidy_numbers(text) -> str:
+    """«8.0 яйца» → «8 яйца», «0.5 стакана» → «½ стакана», «1.5» → «1½»."""
+    text = re.sub(r"(\d+)[.,]0+\b", r"\1", str(text or ""))
+
+    def fraction(match):
+        whole, part = match.group(1), "0." + match.group(2)
+        symbol = _FRACTIONS.get(part[:4])
+        metric = re.match(r"\s*(?:г|кг|мл|л)\b", match.string[match.end():])
+        if not symbol or metric:
+            return match.group(0)
+        return symbol if whole == "0" else whole + symbol
+
+    return re.sub(r"\b(\d+)[.,](\d{1,2})\d*\b", fraction, text)
+
+
 def _home_natural_ingredient(value) -> str:
-    text = " ".join(str(value or "").lower().replace("ё", "е").split()).strip(" -•.,")
+    text = " ".join(_tidy_numbers(value).lower().replace("ё", "е").split()).strip(" -•.,")
     quantity = ""
     prefix = re.fullmatch(rf"({_HOME_QUANTITY})\s+(.+)", text, re.I)
     suffix = re.fullmatch(rf"(.+?)\s+({_HOME_QUANTITY})", text, re.I)
@@ -439,7 +571,7 @@ def _home_natural_ingredient(value) -> str:
         quantity, text = prefix.group(1), prefix.group(2)
     elif suffix:
         text, quantity = suffix.group(1), suffix.group(2)
-    if re.search(r"\bшт$", quantity, re.I):
+    if re.search(r"(?:\bшт|\b(?:ст|ч)\.\s*л)$", quantity, re.I):
         quantity += "."
     natural = _HOME_NATURAL_INGREDIENTS.get(text, text)
     # Возвращаем принятую в модели холодильника форму, затем ещё раз исправляем
@@ -624,6 +756,8 @@ def _normalize_home_idea(data, context: dict) -> dict:
     reason = _home_human_reason(data.get("reason"), context)
     tip = _home_useful_tip(data.get("tip"))
     ingredients = [_home_natural_ingredient(item) for item in _home_string_list(data.get("ingredients"))]
+    # «2 порции» из источника — не продукт.
+    ingredients = [item for item in ingredients if not re.search(r"\bпорци|\bserving", item)]
     steps = _home_steps(data.get("steps"))
     cuisine = _resolve_home_cuisine(data.get("cuisine"), name, ingredients, steps)
     ingredient_keys = {_home_semantic_ingredient_key(item) for item in ingredients}
@@ -680,6 +814,7 @@ def _normalize_home_idea(data, context: dict) -> dict:
         "image": str(data.get("image") or "").strip(),
         "servings": str(data.get("servings") or "").strip(),
         "code_fallback": bool(data.get("code_fallback")),
+        "dish": str(data.get("dish") or ""),
     }
 
 
@@ -872,27 +1007,11 @@ def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     return normalized if _home_idea_complete(normalized) else None
 
 
-def current_meal(now=None) -> str:
-    """Приём пищи главного экрана: 06–11 завтрак, 11–16 обед, 16–06 ужин."""
-    return _home_meal_for_hour((now or datetime.now(TZ)).hour)
+def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None) -> dict:
+    """Одна стабильная идея для текущего приёма пищи и актуального холодильника.
 
-
-def warm_cooking_home_ideas(cid, now=None) -> dict:
-    """Ночью готовит дневной кэш завтрака, обеда и ужина без сообщений пользователю."""
-    base = now or datetime.now(TZ)
-    result = {}
-    for meal, hour in (("breakfast", 8), ("lunch", 13), ("dinner", 18)):
-        meal_time = base.replace(hour=hour, minute=0, second=0, microsecond=0)
-        try:
-            result[meal] = bool(get_cooking_home_idea(cid, now=meal_time, refresh=False))
-        except Exception as error:
-            _log.warning("cooking home warm failed cid=%s meal=%s: %r", cid, meal, error)
-            result[meal] = False
-    return result
-
-
-def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
-    """Одна стабильная идея для текущего приёма пищи и актуального холодильника."""
+    dish — {name, note} блюда из меню дня: тогда нужен рецепт именно этого блюда.
+    """
     context = _home_idea_context(cid, now=now, cuisine=cuisine)
     profile = store.get_profile(cid)
     entries = profile.get("cooking_home_ideas") or {}
@@ -906,7 +1025,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
         previous_name = str((cached.get("idea") or {}).get("name") or "")
     if not refresh:
         ready = get_cached_cooking_home_idea(cid, now=now)
-        if ready is not None:
+        if ready is not None and (not dish or ready.get("dish") == dish["name"]):
             return ready
 
     month_pool = _home_month_pool(profile, context)
@@ -923,7 +1042,8 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
             refresh and str(candidate.get("name") or "").casefold() in avoided)
 
     find_sources = _recipe_sources_for_cuisine if cuisine else _recipe_sources
-    sources = find_sources(
+    # Для блюда из меню образцы из базы не нужны: они почти всегда о другом блюде.
+    sources = [] if dish else find_sources(
         _HOME_MEAL_LABELS[context["meal"]],
         ingredients=", ".join(context.get("available") or []),
         limit=10,
@@ -931,13 +1051,18 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
         **({"cuisine": cuisine} if cuisine else {}),
     )
     prompt = _home_idea_prompt(context, sources=sources)
-    if cuisine:
-        label = next((label for key, label in _cuisine_options() if key == cuisine), cuisine)
+    if dish:
         prompt += (
-            f"\nПользователь выбрал кухню: {label.split(' ', 1)[-1]}. Блюдо обязательно этой кухни, "
-            f"поле cuisine — «{cuisine}» или конкретная страна этой кухни. Другая кухня — ошибка."
+            f"\nНужен рецепт именно этого блюда: «{dish['name']}» — {dish.get('note') or 'классический вариант'}. "
+            f"Поле cuisine — «{cuisine}», name — «{dish['name']}»."
         )
-    if avoided_names:
+    elif cuisine:
+        prompt += _typical_dish_rule(cuisine, context["meal"])
+    prompt += (
+        "\nКоличества пиши по-человечески: «2 яйца», «½ стакана», без «8.0» и «0.25»; "
+        "в шагах только продукты из списка ингредиентов."
+    )
+    if avoided_names and not dish:
         prompt += (
             "\nНе повторяй уже собранные в этом месяце блюда: "
             f"{secure.wrap_untrusted(', '.join(avoided_names[-31:]), 'история рецептов')}."
@@ -959,6 +1084,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
                     "cuisines": context.get("cuisine_codes") or [],
                     "sources": sources,
                     "previous_recipe": previous_name,
+                    "dish": (dish or {}).get("name", ""),
                     "avoid": avoided_names[-31:],
                     "attempt": attempt,
                     "language": "ru",
@@ -981,6 +1107,9 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
                 "русские названия, 2–3 коротких шага без времени в тексте и один конкретный совет на «ты»."
                 + (" Проверь кухню блюда — она должна совпадать с выбранной." if cuisine else "")
             )
+    if dish and is_new(idea):
+        # Рецепт блюда из меню: то же название, что в меню, и метка для кэша дня.
+        idea = {**idea, "name": dish["name"], "dish": dish["name"]}
     if not is_new(idea):
         idea = next((card for card in map(lambda source: _source_home_idea(source, context), sources)
                      if is_new(card)), {})

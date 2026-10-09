@@ -37,7 +37,7 @@ def _patch_warm_steps(monkeypatch, calls, probe=None):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
     monkeypatch.setattr(bot.wardrobe, "warm_home_cache", step("wardrobe"))
-    monkeypatch.setattr(bot_maintenance.recipe_generation, "warm_cooking_home_ideas", step("cooking", False))
+    monkeypatch.setattr(bot_maintenance.day_menu, "warm_day_menu", step("cooking", False))
     monkeypatch.setattr(bot.learning, "warm_home_cache", step("learning", False))
     monkeypatch.setattr(bot_maintenance.leisure_hub, "warm_hub_cache", step("leisure"))
     monkeypatch.setattr(bot.myday, "warm_day_cache", step("myday"))

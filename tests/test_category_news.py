@@ -37,7 +37,7 @@ def test_all_home_renderers_append_one_linked_weekly_news_line():
     wardrobe = wardrobe_ui.render_wardrobe_message(
         {"items": [{"name": "Белая футболка", "zone": "Верх"}]}, news=news,
     )
-    food = menu_ui.food_menu({}, meal="lunch", news=news)
+    food = menu_ui.day_menu({"dishes": {"lunch": {"name": "Борщ"}}}, cuisine_label="Русская", news=news)
     for message in (wardrobe, food):
         assert (
             "📰 На неделе: EFSA обновила рекомендации по безопасному хранению продуктов."

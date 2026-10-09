@@ -359,58 +359,30 @@ def test_cuisine_preferences_use_one_column():
 
     assert all(len(row) == 1 for row in keyboard.inline_keyboard[:-1])
     assert _labels(keyboard)[:-1] == [
-        ["□ 🍣 Азиатская"],
         ["□ 🍕 Итальянская"],
-        ["□ 🥗 Средиземноморская"],
-        ["□ 🥐 Французская"],
+        ["□ 🍣 Японская"],
+        ["□ 🍜 Тайская"],
         ["□ 🌶️ Мексиканская"],
         ["□ 🍛 Индийская"],
-        ["□ 🍲 Восточноевропейская"],
+        ["□ 🥢 Китайская"],
+        ["□ 🥙 Турецкая"],
+        ["□ 🥐 Французская"],
+        ["□ 🥞 Русская"],
+        ["□ 🫓 Грузинская"],
     ]
 
 
-def test_legacy_japanese_cuisine_preference_migrates_to_asian(monkeypatch):
-    monkeypatch.setattr(settings, "get", lambda *_args: ["japanese", "italian"])
+def test_legacy_group_cuisines_expand_to_concrete_ones(monkeypatch):
+    monkeypatch.setattr(settings, "get", lambda *_args: ["asian", "mediterranean", "eastern_european"])
 
-    assert settings.cuisines("42") == ["asian", "italian"]
-
-
-def test_empty_fridge_opens_add_products_screen(monkeypatch):
-    class QueryMessage:
-        updated = None
-
-        async def edit_text(self, text, **kwargs):
-            self.updated = {"text": text, **kwargs}
-
-    class Query:
-        message = QueryMessage()
-
-    class Bot:
-        async def send_message(self, **_kwargs):
-            raise AssertionError("empty state should replace the current screen")
-
-    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: False)
-
-    asyncio.run(menu.send_food_menu(Bot(), "42", q=Query()))
-
-    assert Query.message.updated["text"].startswith("🥣 Готовка")
-    assert _labels(Query.message.updated["reply_markup"]) == [
-        ["✅ Добавить продукт"],
-        ["#️⃣ Главная"],
-    ]
+    assert settings.cuisines("42") == ["japanese", "chinese", "thai", "italian", "turkish", "russian", "georgian"]
 
 
-def test_empty_fridge_check_reads_the_actual_fridge_store(monkeypatch):
-    calls = []
+def test_cuisine_settings_screen_describes_each_cuisine():
+    text = settings.settings_ui.cuisines("не выбраны", settings.CUISINE_OPTIONS).text
 
-    def get_list(key, cid):
-        calls.append((key, cid))
-        return []
-
-    monkeypatch.setattr(menu.store, "get_list", get_list)
-
-    assert menu.has_available_fridge("42") is False
-    assert calls == [(menu.config.FRIDGE_KEY, "42")]
+    assert "🍣 Японская — точность, умами, баланс · суши, рамен" in text
+    assert text.count(" · ") == len(settings.CUISINE_OPTIONS)
 
 
 def test_onboarding_creates_a_level_only_for_the_selected_language(monkeypatch):

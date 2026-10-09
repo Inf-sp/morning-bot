@@ -48,71 +48,11 @@ def test_month_recipe_pool_only_uses_current_profile_and_month():
     ) == []
 
 
-def test_other_recipe_refreshes_current_meal_in_inline_status(monkeypatch):
-    calls, generated = [], []
-
-    class Status:
-        async def replace(self, text, **kwargs):
-            calls.append((text, kwargs))
-
-    def generate(cid, now, refresh, cuisine=None):
-        generated.append((cid, recipe_generation.current_meal(now), refresh))
-        return {"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
-            "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}
-
-    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", generate)
-
-    asyncio.run(menu.send_food_menu(object(), "42", refresh=True, status=Status()))
-
-    assert generated == [("42", recipe_generation.current_meal(), True)]
-    text, kwargs = calls[0]
-    assert text.startswith("🍳 Что приготовить на ") and "Шакшука" in text
-    labels = [b.text for row in kwargs["reply_markup"].inline_keyboard for b in row]
-    assert labels[0] == "✨ Новый рецепт"
-
-
-def test_food_home_serves_cached_day_recipe_instantly(monkeypatch):
-    shown = []
-
-    class Status:
-        async def replace(self, text, **_kwargs):
-            shown.append(text)
-
-    def no_generation(*_args, **_kwargs):
-        raise AssertionError("cached recipe must not be regenerated")
-
-    monkeypatch.setattr(menu, "has_available_fridge", lambda _cid: True)
-    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_a, **_k: {"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
-            "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."})
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", no_generation)
-
-    import time
-    started = time.monotonic()
-    asyncio.run(menu.send_food_menu(object(), "42", status=Status()))
-
-    assert time.monotonic() - started < 0.1
-    assert "Шакшука" in shown[0]
-
-
 def test_recipe_header_follows_time_of_day():
     for meal, words in (("breakfast", "на завтрак"), ("lunch", "на обед"), ("dinner", "на ужин")):
         text = menu.menu_ui.food_menu({"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
             "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}, meal=meal).text
         assert text.startswith(f"🍳 Что приготовить {words} · ")
-
-
-def test_warm_prepares_three_day_recipes(monkeypatch):
-    meals = []
-    monkeypatch.setattr(
-        recipe_generation, "get_cooking_home_idea",
-        lambda cid, now=None, refresh=False: meals.append(recipe_generation.current_meal(now)) or {"name": "x"},
-    )
-
-    assert recipe_generation.warm_cooking_home_ideas("42") == {
-        "breakfast": True, "lunch": True, "dinner": True,
-    }
-    assert meals == ["breakfast", "lunch", "dinner"]
 
 
 def test_old_what_to_cook_button_opens_the_recipe_home():
@@ -233,8 +173,9 @@ def test_chosen_cuisine_rejects_recipe_of_another_cuisine(monkeypatch):
     assert sources_seen == [[{"name": "Frittata", "area": "Italian"}]]  # мексиканский образец не передан
 
 
-def test_cuisine_groups_accept_country_codes():
-    assert recipe_generation.cuisine_matches("japanese", "asian")
+def test_cuisine_match_is_strict_except_russian_group():
+    assert recipe_generation.cuisine_matches("eastern_european", "russian")
+    assert not recipe_generation.cuisine_matches("chinese", "japanese")
     assert recipe_generation.cuisine_matches("mexican", "")
     assert not recipe_generation.cuisine_matches("mexican", "italian")
 
@@ -250,23 +191,6 @@ def test_local_fallback_skips_shown_recipes_when_ai_is_down():
     )["name"] == "Яичная сковорода с овощами"
 
 
-def test_other_recipe_asks_meal_then_cuisine():
-    from ui import menu as menu_ui
-
-    card = menu_ui.food_card_kb().inline_keyboard
-    assert (card[0][0].text, card[0][0].callback_data) == ("✨ Новый рецепт", "food_pick")
-    meals = menu_ui.food_meal_kb().inline_keyboard
-    assert [row[0].text for row in meals[:-1]] == ["Завтрак", "Обед", "Ужин"]
-    assert all(not row[0].api_kwargs for row in meals[:-1])
-    assert meals[-1][0].callback_data == "food_card"
-    cuisines = menu_ui.food_cuisine_kb("dinner", [("italian", "🍕 Итальянская")]).inline_keyboard
-    assert [(row[0].text, row[0].callback_data) for row in cuisines[:-1]] == [
-        ("Любая кухня", "food_go_dinner_any"), ("🍕 Итальянская", "food_go_dinner_italian"),
-    ]
-    assert all(not row[0].api_kwargs for row in cuisines[:-1])  # стандартного цвета
-    assert cuisines[-1][0].callback_data == "food_pick"
-
-
 def test_chosen_cuisine_changes_prompt_but_not_day_cache_signature(monkeypatch):
     monkeypatch.setattr(recipe_generation.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
     monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {})
@@ -279,22 +203,19 @@ def test_chosen_cuisine_changes_prompt_but_not_day_cache_signature(monkeypatch):
     assert chosen["cuisine_codes"] == ["italian"] and "Итальянская" in chosen["cuisines"]
 
 
-def test_food_go_passes_meal_and_cuisine_to_one_recipe(monkeypatch):
-    import bot_callbacks
-    from types import SimpleNamespace
+def test_source_quantities_are_human_and_servings_dropped():
+    norm = recipe_generation._home_natural_ingredient
+    assert norm("8.0 яйца") == "8 яйца"
+    assert norm("молоко 0.5 стакана") == "молоко ½ стакана"
+    assert norm("петрушка 2.0 ст. л.") == "петрушка 2 ст. л."
+    assert recipe_generation._tidy_numbers("масло 12.5 г") == "масло 12.5 г"
+    idea = recipe_generation._normalize_home_idea(
+        {"name": "Crostata", "ingredients": ["мука 200 г", "2.0 порции"]}, {"available": []})
+    assert all("порци" not in item for item in idea.get("ingredients") or [])
 
-    calls = []
 
-    async def send_food_menu(_bot, cid, **kwargs):
-        calls.append((cid, kwargs["meal"], kwargs["cuisine"], kwargs["refresh"]))
-
-    async def status_call(call, **_kw):
-        return await call(None)
-
-    monkeypatch.setattr(bot_callbacks.menu, "send_food_menu", send_food_menu)
-    c = SimpleNamespace(bot=None, cid="42", data="food_go_lunch_eastern_european", status=status_call)
-    asyncio.run(bot_callbacks._food_recipe(c))
-    c.data = "food_go_dinner_any"
-    asyncio.run(bot_callbacks._food_recipe(c))
-
-    assert calls == [("42", "lunch", "eastern_european", True), ("42", "dinner", None, True)]
+def test_chosen_cuisine_prompt_asks_for_a_typical_dish():
+    rule = recipe_generation._typical_dish_rule("italian", "breakfast")
+    assert "типичного блюда" in rule and "Crostata" in rule and "завтрак" in rule
+    assert "Борщ" in recipe_generation._typical_dish_rule("russian", "lunch")
+    assert set(recipe_generation.TYPICAL_DISHES) == {key for key, _ in recipe_generation._cuisine_options()}

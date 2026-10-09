@@ -212,8 +212,31 @@ def _cooking_sentence(value) -> str:
 _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "dinner": "на ужин"}
 
 
+_MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
+
+
+def day_menu(menu, *, cuisine_label, intro="", news=None):
+    """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов."""
+    b = MessageBuilder()
+    b.section(f"🍳 Меню на сегодня · {cuisine_label} кухня")
+    if intro:
+        b.spacer()
+        b.line(intro)
+    dishes = (menu or {}).get("dishes") or {}
+    rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
+    rows = [(label, dish) for label, dish in rows if dish.get("name")]
+    if rows:
+        b.spacer()
+        for label, dish in rows:
+            b.bold(f"{label}:")
+            note = _cooking_text(dish.get("note"))
+            b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
+    append_weekly_news(b, news)
+    return b.build_stripped(reply_markup=food_card_kb())
+
+
 def food_menu(idea=None, *, meal="", news=None):
-    """Главный экран Готовки: рецепт из холодильника на текущий приём пищи."""
+    """Полный рецепт блюда из меню дня для выбранного приёма пищи."""
     idea = idea or {}
     b = MessageBuilder()
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
@@ -263,46 +286,23 @@ def food_menu(idea=None, *, meal="", news=None):
         b.spacer()
         b.labeled_line("Полезно", tip)
 
-    append_weekly_news(b, news)
-    return b.build_stripped(reply_markup=food_card_kb())
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_food")]))
 
 
 def food_card_kb():
-    """Кнопки рецепта: «Новый рецепт» открывает выбор приёма пищи и кухни под рецептом."""
-    return ikb([
-        [("✨ Новый рецепт", "food_pick")],
-        [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+    """Кнопки меню дня: рецепт каждого блюда, «Другое меню», холодильник."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES],
+        [InlineKeyboardButton("✨ Другое меню", callback_data="food_pick")],
+        [InlineKeyboardButton("🎚️ Настроить", callback_data="as_fridge_home"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
-_FOOD_MEALS = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
-
-
-def food_meal_kb():
-    """Шаг 1 «Нового рецепта»: приём пищи."""
-    rows = [[InlineKeyboardButton(label, callback_data=f"food_meal_{key}")]
-            for key, label in _FOOD_MEALS]
+def food_cuisine_kb(cuisines):
+    """«Другое меню»: кухня нового меню на день; cuisines — [(код, подпись)]."""
+    rows = [[InlineKeyboardButton(label, callback_data=f"food_go_day_{key}")]
+            for key, label in cuisines]
     rows.append(nav_row("food_card"))
     return InlineKeyboardMarkup(rows)
 
-
-def food_cuisine_kb(meal, cuisines):
-    """Шаг 2: кухня для выбранного приёма пищи; cuisines — [(код, подпись)]."""
-    rows = [[InlineKeyboardButton("Любая кухня", callback_data=f"food_go_{meal}_any")]]
-    rows.extend([InlineKeyboardButton(label, callback_data=f"food_go_{meal}_{key}")]
-                for key, label in cuisines)
-    rows.append(nav_row("food_pick"))
-    return InlineKeyboardMarkup(rows)
-
-
-def food_empty_menu():
-    b = MessageBuilder()
-    b.section("🥣 Готовка")
-    b.spacer()
-    b.line("Добавь продукты, которые обычно есть дома.")
-    b.spacer()
-    b.line("Я буду подбирать простые рецепты из них и показывать, чего не хватает.")
-    return b.build_stripped(reply_markup=ikb([
-        [("✅ Добавить продукт", "as_fridge_add")],
-        [("#️⃣ Главная", "m_menu")],
-    ]))
