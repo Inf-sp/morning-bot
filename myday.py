@@ -932,9 +932,9 @@ def _build_day_text(cid, *, refresh_current=False):
             rain_part = ""
         wind_part = _day_wind_text(display_wind_ms)
         weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
-        golden = sun.evening_golden_start(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
+        golden = sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
         if golden:
-            weather_line += f" · золотой час {golden}"
+            weather_line += f" · Золотой час {golden}"
     else:
         rain = 0
         rain_mm = None

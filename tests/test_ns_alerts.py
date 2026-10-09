@@ -131,8 +131,11 @@ def test_day_summary_shows_works_period_under_weather():
         {"title": "Alkmaar – Uitgeest", "start": _date(2026, 9, 30), "end": _date(2026, 10, 2)},
     ])
 
-    assert "Погода: до +15°C\n\n🚧 Работы на ЖД: Alkmaar – Den Helder · 10–12 октября" in msg.text
-    assert "🚧 Работы на ЖД: Alkmaar – Uitgeest · 30 сентября – 2 октября" in msg.text
+    assert "Погода: до +15°C\n\n🚧 Работы на ЖД: от Alkmaar до Den Helder · с 10 по 12 октября" in msg.text
+    assert "🚧 Работы на ЖД: от Alkmaar до Uitgeest · с 30 сентября по 2 октября" in msg.text
+    one_day = myday_ui.day_summary("Сб", "Alkmaar", rail_works=[
+        {"title": "Station Alkmaar", "start": _date(2026, 10, 10), "end": _date(2026, 10, 10)}])
+    assert "🚧 Работы на ЖД: Station Alkmaar · 10 октября" in one_day.text
 
 
 def test_todays_works_cover_all_city_stations_once(monkeypatch):

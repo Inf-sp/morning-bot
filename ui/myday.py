@@ -1,3 +1,4 @@
+import re
 from telegram import MessageEntity
 
 from .text import finish_dot
@@ -16,14 +17,20 @@ _MONTHS_GENITIVE = ("", "января", "февраля", "марта", "апр�
 
 
 def _works_period(start, end):
-    """10–12 октября; 30 сентября – 2 октября; один день — 10 октября."""
+    """«с 5 по 12 октября»; «с 30 сентября по 2 октября»; один день — «10 октября»."""
     if not start or not end:
         return ""
     if start == end:
         return f"{start.day} {_MONTHS_GENITIVE[start.month]}"
     if start.month == end.month and start.year == end.year:
-        return f"{start.day}–{end.day} {_MONTHS_GENITIVE[end.month]}"
-    return f"{start.day} {_MONTHS_GENITIVE[start.month]} – {end.day} {_MONTHS_GENITIVE[end.month]}"
+        return f"с {start.day} по {end.day} {_MONTHS_GENITIVE[end.month]}"
+    return f"с {start.day} {_MONTHS_GENITIVE[start.month]} по {end.day} {_MONTHS_GENITIVE[end.month]}"
+
+
+def _works_section(title):
+    """«Alkmaar - Hoorn» → «от Alkmaar до Hoorn»; без двух станций — как есть."""
+    parts = [part.strip() for part in re.split(r"\s[-–—]\s", str(title or "")) if part.strip()]
+    return f"от {parts[0]} до {parts[-1]}" if len(parts) >= 2 else str(title or "").strip()
 
 
 def _split_word_translation(value):
@@ -76,7 +83,7 @@ def day_summary(
 
     # Плановые работы NS на станциях города — только в дни работ.
     for works in rail_works or []:
-        title = str(works.get("title") or "").strip()
+        title = _works_section(works.get("title"))
         period = _works_period(works.get("start"), works.get("end"))
         text = " · ".join(part for part in (title, period) if part)
         if text:
@@ -126,7 +133,7 @@ def day_summary(
         b.text_line("💭 ")
         b.add(f"«{quote_text}»", MessageEntity.ITALIC)
         if quote_author:
-            b.text_line(f" — {quote_author}")
+            b.text_line(f" © {quote_author}")
         b.newline()
 
     return b.build_stripped()

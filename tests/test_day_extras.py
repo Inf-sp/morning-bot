@@ -72,5 +72,13 @@ def test_golden_hour_matches_known_sun_times():
 
     line = sun.golden_hour_line(52.63, 4.75, date(2026, 10, 8), TZ)
     assert line.startswith("Золотой час будет с ") and " по " in line and "синий" not in line
-    assert sun.evening_golden_start(52.63, 4.75, date(2026, 10, 8), TZ) == line[len("Золотой час будет с "):][:5]
+    assert line == f"Золотой час будет {sun.evening_golden_range(52.63, 4.75, date(2026, 10, 8), TZ)}"
+    assert sun.evening_golden_range(52.63, 4.75, date(2026, 10, 8), TZ).startswith("с 18:")
     assert sun.golden_hour_line(None, None, date(2026, 10, 8), TZ) == ""
+
+
+def test_quote_author_follows_copyright_sign():
+    msg = myday_ui.day_summary("Пт", "Alkmaar", quote_text="Даже самый маленький человек может изменить ход будущего.",
+                               quote_author="Джон Толкин")
+
+    assert msg.text.endswith("💭 «Даже самый маленький человек может изменить ход будущего.» © Джон Толкин")

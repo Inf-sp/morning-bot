@@ -67,7 +67,7 @@ def test_day_summary_puts_quote_after_movie_rebus():
     assert "🎬 Ребус дня: 🦈 🌊 👨‍🔬 → Челюсти" in message.text
     assert "🎫 Афиша" not in message.text
     assert message.text.endswith(
-        "💭 «Человека можно уничтожить, но нельзя победить.» — Эрнест Хемингуэй"
+        "💭 «Человека можно уничтожить, но нельзя победить.» © Эрнест Хемингуэй"
     )
     spoiler = next(entity for entity in message.entities if entity.type == MessageEntity.SPOILER)
     assert message.text.encode("utf-16-le")[spoiler.offset * 2:(spoiler.offset + spoiler.length) * 2].decode("utf-16-le") == "Челюсти"
