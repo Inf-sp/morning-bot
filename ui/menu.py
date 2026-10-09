@@ -268,9 +268,9 @@ def food_menu(idea=None, *, meal="", news=None):
 
 
 def food_card_kb():
-    """Кнопки рецепта: «Другой рецепт» открывает выбор приёма пищи и кухни под рецептом."""
+    """Кнопки рецепта: «Новый рецепт» открывает выбор приёма пищи и кухни под рецептом."""
     return ikb([
-        [("✨ Другой рецепт", "food_pick")],
+        [("✨ Новый рецепт", "food_pick")],
         [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ])
 
@@ -280,7 +280,7 @@ _GREEN = {"style": "success"}
 
 
 def food_meal_kb():
-    """Шаг 1 «Другого рецепта»: приём пищи."""
+    """Шаг 1 «Нового рецепта»: приём пищи."""
     rows = [[InlineKeyboardButton(label, callback_data=f"food_meal_{key}")]
             for key, label in _FOOD_MEALS]
     rows.append(nav_row("food_card"))

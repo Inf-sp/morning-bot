@@ -653,7 +653,7 @@ def _home_idea_complete(idea) -> bool:
 
 
 def _home_idea_context(cid, now=None, cuisine=None) -> dict:
-    """cuisine — разовый выбор кухни из «Другой рецепт»: меняет подсказку модели,
+    """cuisine — разовый выбор кухни из «Новый рецепт»: меняет подсказку модели,
     но не подпись кэша, поэтому новый рецепт становится рецептом дня этого приёма пищи."""
     now = now or datetime.now(TZ)
     raw_fridge = store.get_list(config.FRIDGE_KEY, str(cid))
@@ -873,7 +873,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None) -> dict:
     avoided = {name.casefold() for name in avoided_names}
 
     def is_new(candidate):
-        # «Другой рецепт» не повторяет ни текущий, ни уже показанные в этом месяце.
+        # «Новый рецепт» не повторяет ни текущий, ни уже показанные в этом месяце.
         return _home_idea_complete(candidate) and not (
             refresh and str(candidate.get("name") or "").casefold() in avoided)
 

@@ -377,7 +377,7 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
-    # «Другой рецепт»: приём пищи → кухня → новый рецепт (выбор только для этого рецепта).
+    # «Новый рецепт»: приём пищи → кухня → новый рецепт (выбор только для этого рецепта).
     R("food_pick", _swap_kb(lambda c: menu_ui.food_meal_kb())),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb())),
     R("food_meal_*", _swap_kb(lambda c: menu_ui.food_cuisine_kb(

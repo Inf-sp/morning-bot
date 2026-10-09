@@ -251,9 +251,9 @@ async def enter_meal(bot, cid, meal, ingredients=None, status=None, cuisine=""):
 
 
 async def show_next_recipe(bot, cid, status=None):
-    """«Другой рецепт» (as_food): показывает следующий рецепт активной категории (§6.1).
+    """«Новый рецепт» (as_food): показывает следующий рецепт активной категории (§6.1).
 
-    Категория берётся из active_meal — не из текста кнопки, поэтому «Другой рецепт»
+    Категория берётся из active_meal — не из текста кнопки, поэтому «Новый рецепт»
     физически не может перепрыгнуть в другую категорию (фикс бага из ТЗ п.1)."""
     meal = get_active_meal(cid)
     if not meal:

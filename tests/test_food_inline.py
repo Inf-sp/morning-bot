@@ -69,7 +69,7 @@ def test_other_recipe_refreshes_current_meal_in_inline_status(monkeypatch):
     text, kwargs = calls[0]
     assert text.startswith("🍳 Что приготовить на ") and "Шакшука" in text
     labels = [b.text for row in kwargs["reply_markup"].inline_keyboard for b in row]
-    assert labels[0] == "✨ Другой рецепт"
+    assert labels[0] == "✨ Новый рецепт"
 
 
 def test_food_home_serves_cached_day_recipe_instantly(monkeypatch):
@@ -222,7 +222,7 @@ def test_other_recipe_asks_meal_then_cuisine():
     from ui import menu as menu_ui
 
     card = menu_ui.food_card_kb().inline_keyboard
-    assert (card[0][0].text, card[0][0].callback_data) == ("✨ Другой рецепт", "food_pick")
+    assert (card[0][0].text, card[0][0].callback_data) == ("✨ Новый рецепт", "food_pick")
     meals = menu_ui.food_meal_kb().inline_keyboard
     assert [row[0].text for row in meals[:-1]] == ["Завтрак", "Обед", "Ужин"]
     assert all(not row[0].api_kwargs for row in meals[:-1])
