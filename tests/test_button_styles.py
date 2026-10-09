@@ -110,7 +110,6 @@ def test_not_modified_error_is_not_retried(sent):
 def test_refresh_buttons_are_green_without_emoji_and_on_top(sent):
     bot = telegram_runtime.MenuCleanupBot("1:x")
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💳 Что докупить", callback_data="w_buy")],
         [InlineKeyboardButton("✨ Разное", callback_data="cat")],
         [InlineKeyboardButton("✨ Обновить", callback_data="w_look")],
         [InlineKeyboardButton("✨ Подобрать новые слова", callback_data="seed")],
@@ -121,10 +120,10 @@ def test_refresh_buttons_are_green_without_emoji_and_on_top(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [row[0]["text"] for row in rows]
     assert texts == [
-        "Что докупить", "Обновить", "Подобрать новые слова", "Обновить карточки", "Разное",
+        "Обновить", "Подобрать новые слова", "Обновить карточки", "Разное",
     ]
-    assert all(row[0].get("style") == "success" for row in rows[:4])
-    assert "style" not in rows[4][0]
+    assert all(row[0].get("style") == "success" for row in rows[:3])
+    assert "style" not in rows[3][0]
 
 
 def test_meaningful_emoji_stay_and_main_menu_is_untouched():
@@ -172,12 +171,6 @@ def test_toggles_become_green_or_red_without_marks_and_keep_marks_without_color(
     assert [row[0]["text"] for row in plain][1:] == ["✅ 🇳🇱 Нидерландский", "□ ⭐️ 7+"]
 
 
-def test_what_to_buy_is_green():
-    markup = InlineKeyboardMarkup([[InlineKeyboardButton("💳 Что докупить", callback_data="w_buy")]])
-    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert rows[0][0] == {"text": "Что докупить", "callback_data": "w_buy", "style": "success"}
-
-
 def test_preferences_button_is_blue_right_above_back_and_home():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Мои фильмы", callback_data="list")],
@@ -189,32 +182,6 @@ def test_preferences_button_is_blue_right_above_back_and_home():
     assert [(row[0]["text"], row[0].get("style")) for row in rows] == [
         ("Добавить фильм", "success"), ("Мои фильмы", None),
         ("Выбрать предпочтения", "primary"), ("Назад", "primary"),
-    ]
-
-
-def test_learning_actions_are_green():
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎯 Запустить тренировку", callback_data="a_train_nl")],
-        [InlineKeyboardButton("🕵️ Угадать персонажа", callback_data="a_game")],
-    ])
-    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
-        ("Запустить тренировку", "success"), ("Угадать персонажа", "success"),
-    ]
-
-
-def test_leisure_hub_picks_are_green_and_keep_their_order():
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Подобрать кино", callback_data="movie_reco")],
-        [InlineKeyboardButton("📚 Подобрать книгу", callback_data="book_reco")],
-        [InlineKeyboardButton("👾 Подобрать игру", callback_data="vg_reco")],
-        [InlineKeyboardButton("🎧 Подобрать музыку", callback_data="music_reco")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
-    ])
-    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
-    assert [(row[0]["text"], row[0]["style"]) for row in rows] == [
-        ("Подобрать кино", "success"), ("Подобрать книгу", "success"),
-        ("Подобрать игру", "success"), ("Подобрать музыку", "success"), ("Главная", "primary"),
     ]
 
 
@@ -255,3 +222,17 @@ def test_cancel_button_is_red():
     markup = InlineKeyboardMarkup([[InlineKeyboardButton("Отмена", callback_data="cancel")]])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert rows[0][0] == {"text": "Отмена", "callback_data": "cancel", "style": "danger"}
+
+
+def test_main_section_actions_have_standard_color():
+    labels = ("✨ Другой образ", "💳 Что докупить", "✨ Другой рецепт", "🎯 Запустить тренировку",
+              "🕵️ Угадать персонажа", "🎬 Подобрать кино", "📚 Подобрать книгу", "🎧 Подобрать музыку")
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"x{i}")]
+                                   for i, label in enumerate(labels)])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert [row[0].get("style") for row in rows] == [None] * len(labels)
+    assert [row[0]["text"] for row in rows] == [label.split(" ", 1)[1] for label in labels]
+    # Остальные «Другой … / Подобрать …» по-прежнему зелёные.
+    other = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другой фильм", callback_data="m")]]))["inline_keyboard"]
+    assert other[0][0]["style"] == "success"
