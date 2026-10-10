@@ -12,6 +12,7 @@ _RAIN_BAD_SHOES = ("замш", "suede", "текстил", "канвас", "canva
 _LIGHT_BOTTOM = ("лён", "лен", "льнян", "linen")
 
 SHORTS_FEELS_MIN = 20   # °C «ощущается» в самый холодный час окна
+SWEATER_FEELS_MAX = 18  # °C: кофта поверх футболки — только если холоднее (или холодное утро)
 SHORTS_GUST_MAX = 8     # м/с
 
 
@@ -67,7 +68,9 @@ def allowed(item, ctx):
         return False
     low, high = feels_low(ctx), feels_high(ctx)
     warmth = item.get("warmth")
-    if zone in ("Верх", "Низ", "Обувь", "Верхняя одежда"):
+    if zone == "Кофты" and low is not None and low >= SWEATER_FEELS_MAX and not ctx.get("layering"):
+        return False  # в тепло кофта не нужна
+    if zone in ("Верх", "Кофты", "Низ", "Обувь", "Верхняя одежда"):
         if warmth == "тёплые" and (ctx.get("hot") or (high is not None and high >= 22)):
             return False
         if warmth == "лёгкие" and zone in ("Низ", "Обувь") and low is not None and low < 12:

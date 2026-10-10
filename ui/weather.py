@@ -25,30 +25,25 @@ MessageBuilder (section/line/warning/embed) — единый визуальны�
 """
 
 from .builder import MessageBuilder, MessageSpec, from_html
-from .constants import ui_label
 from util import cap_sentence, country_flag, flag_from_cc
 
 WEEK_FORECAST_BUTTON = "🗓️ Погода на неделю"
 
 
-def weather_warning(events, when="", advice=None):
-    """Новый формат погодного предупреждения: события → когда → что сделать.
+def weather_warning(events, when="", icon="⚠️"):
+    """Погодное предупреждение: значок главного события в заголовке → события → когда.
 
-    events — строки событий (с эмодзи); when — интервал/период; advice — список
-    рекомендаций (2–4). Всё уже отобрано и обрезано вызывающим кодом.
+    Эмодзи только в заголовке (🌧️ дождь, 💨 ветер, ⛈️ гроза…); события и «Когда:» —
+    без значков, рекомендаций «Что сделать» нет.
     """
     b = MessageBuilder()
-    b.section("⚠️ Погодное предупреждение")
+    b.section(f"{icon or '⚠️'} Погодное предупреждение")
     b.newline()
     for ev in events:
         b.line(ev)
     if when:
-        b.section(ui_label("when", "Когда:"))
+        b.section("Когда:")
         b.line(when)
-    if advice:
-        b.section(ui_label("action", "Что сделать:"))
-        for a in advice:
-            b.bullet(a)
     return b.build_stripped()
 
 

@@ -321,7 +321,7 @@ def load_wardrobe(cid=None):
         if "zones" not in w:
             w = _migrate_legacy_wardrobe(w)
             _save(key, w)
-        if _drop_non_clothing(w):
+        if _drop_non_clothing(w) | _move_sweaters(w):
             _save(key, w)
         # В in-memory fallback-режиме _load не делает глубокую копию вложенных dict
         # (только list верхнего уровня) — без неё мутация возвращённого объекта до
@@ -340,6 +340,31 @@ def _drop_non_clothing(w) -> bool:
         zones.pop(zone, None)
     w["_v"] = int(w.get("_v", 0)) + 1  # версия меняется — кэш образа с аксессуарами пересоберётся
     return True
+
+
+def _move_sweaters(w) -> bool:
+    """Одноразово переносит худи, свитеры и кардиганы из «Футболок и рубашек» в «Кофты»."""
+    from wardrobe_model import SWEATER_MARKERS, SWEATER_SUBCATS, guess_subcategory
+    zones = w.setdefault("zones", {})
+    moved = False
+    for subcategory, items in list((zones.get("Верх") or {}).items()):
+        keep = []
+        for item in items:
+            name = str(item.get("name") or "").casefold()
+            if subcategory in SWEATER_SUBCATS or any(marker in name for marker in SWEATER_MARKERS):
+                target = subcategory if subcategory in SWEATER_SUBCATS else guess_subcategory("Кофты", name)
+                zones.setdefault("Кофты", {}).setdefault(target, []).append(
+                    {**item, "zone": "Кофты", "subcategory": target})
+                moved = True
+            else:
+                keep.append(item)
+        if keep:
+            zones["Верх"][subcategory] = keep
+        else:
+            zones["Верх"].pop(subcategory, None)
+    if moved:
+        w["_v"] = int(w.get("_v", 0)) + 1  # образ дня пересоберётся с кофтой поверх футболки
+    return moved
 
 
 def save_wardrobe(w, cid=None):

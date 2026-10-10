@@ -250,3 +250,54 @@ def test_weather_suggests_accessories_instead_of_wardrobe_items():
     assert rules.weather_reason(frost, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается -6°, лучше выбрать шапку и перчатки."
     assert rules.weather_reason(chilly, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается +4°, лучше выбрать шарф."
     assert rules.weather_reason(wear_window(_hourly(18, 17), NOW), [TEE, JEANS, SNEAKERS]) == ""
+
+
+HOODIE = _it("hoodie", "Кофты", "Серая худи с капюшоном", "серый")
+
+
+def test_hoodie_is_a_layer_over_a_tee_in_cool_weather():
+    ctx = wear_window(_hourly(13, 11), NOW)
+    w = _wardrobe(TEE, HOODIE, JEANS, SNEAKERS)
+
+    outfit = pick_best_outfit(w, ctx, [], "", selected_styles=[])
+
+    assert {"tee", "hoodie"} <= _ids(outfit)  # футболка под худи
+    from ui.wardrobe import outfit_item_names
+    from wardrobe_outfit import outfit_display_order
+    names = outfit_item_names({"items": [{"name": it["name"], "zone": it["zone"]}
+                                         for it in sorted(outfit, key=outfit_display_order)]})
+    assert names[:2] == ["Белая футболка", "Серая худи с капюшоном"]
+
+
+def test_no_hoodie_in_warm_weather_and_never_alone():
+    warm = wear_window(_hourly(24, 22), NOW)
+    assert "hoodie" not in _ids(pick_best_outfit(_wardrobe(TEE, HOODIE, JEANS, SNEAKERS), warm, [], "",
+                                                  selected_styles=[]))
+    cool = wear_window(_hourly(13, 11), NOW)
+    assert pick_best_outfit(_wardrobe(HOODIE, JEANS, SNEAKERS), cool, [], "", selected_styles=[]) is None
+
+
+def test_sweaters_move_to_their_own_closet_category():
+    w = {"_v": 2, "zones": {"Верх": {
+        "Худи": [{"id": "h", "zone": "Верх", "name": "Серая худи"}],
+        "Футболки": [{"id": "t", "zone": "Верх", "name": "Белая футболка"},
+                     {"id": "s", "zone": "Верх", "name": "Синий свитшот"}],
+    }}}
+
+    assert store._move_sweaters(w) is True
+    assert w["zones"]["Верх"] == {"Футболки": [{"id": "t", "zone": "Верх", "name": "Белая футболка"}]}
+    assert {item["id"] for items in w["zones"]["Кофты"].values() for item in items} == {"h", "s"}
+    assert w["zones"]["Кофты"]["Свитшоты"][0]["subcategory"] == "Свитшоты" and w["_v"] == 3
+    assert store._move_sweaters(w) is False
+
+
+def test_cached_look_is_rebuilt_when_rain_appears(monkeypatch):
+    import wardrobe
+    cached = {"item_ids": ["tee"], "look_data": {"items": [], "weather": {
+        "rain": False, "wind": False, "cold": True, "summer": False}}}
+    rainy = (wear_window(_hourly(18, 15, rain_from=0, gust=12), NOW), {"sunny": False})
+    dry_same = (wear_window(_hourly(13, 11), NOW), {"sunny": False})
+
+    assert wardrobe.weather_signature(*rainy) != cached["look_data"]["weather"]
+    assert wardrobe.weather_signature(*dry_same) == cached["look_data"]["weather"]
+    assert wardrobe.weather_signature({}, None) is None  # без погоды — не сравниваем

@@ -1,21 +1,19 @@
 """Погодное предупреждение: библиотека последствий.
 
 Уведомление строится вокруг последствий для человека, а не пересказа прогноза:
-⚠️ заголовок → 1–3 самых важных события → Когда → Что сделать.
+заголовок со значком главного события → 1–3 самых важных события → Когда.
 
 Каждое явление (hazard) описывается записью WeatherHazard: условие срабатывания,
-текст события, рекомендации, приоритет. Тексты — детерминированные шаблоны (без LLM).
+текст события, приоритет. Тексты — детерминированные шаблоны (без LLM).
 Отправлять только при наличии хотя бы одного значимого фактора (тихие дни — молчим).
 """
 from dataclasses import dataclass
 from typing import Callable
 
-import store
 import weather
 
 # Максимумы по ТЗ: не перегружать уведомление.
 MAX_EVENTS = 3
-MAX_ADVICE = 4
 
 # --- weathercode-наборы ---
 THUNDER_CODES = (95, 96, 99)
@@ -40,7 +38,6 @@ class WeatherHazard:
     priority: int                       # меньше = важнее
     triggers: Callable[["WarnContext"], bool]
     event: Callable[["WarnContext"], str]
-    advice: Callable[["WarnContext"], list]
 
 
 @dataclass
@@ -59,11 +56,6 @@ class WarnContext:
     when_wind: str = ""
     when_uv: str = ""
     when_heat: str = ""
-    # персональные флаги
-    bike: bool = False
-    has_raincoat: bool = False
-    pollen_allergy: bool = False
-    has_plan_today: bool = False
 
 
 # ---------- условия и тексты ----------
@@ -76,10 +68,6 @@ HAZARDS = [
         key="thunderstorm", priority=1,
         triggers=lambda c: c.weathercode in THUNDER_CODES,
         event=lambda c: "⛈️ Возможна гроза.",
-        advice=lambda c: [
-            "По возможности оставайся в помещении.",
-            "Не укрывайся под одинокими деревьями.",
-        ],
     ),
     WeatherHazard(
         key="ice", priority=2,
@@ -89,20 +77,11 @@ HAZARDS = [
                 and ((c.rain_mm or 0) > 0 or (c.humidity or 0) >= 90))
         ),
         event=lambda c: "🧊 Возможен гололёд.",
-        advice=lambda c: [
-            "Надень обувь с хорошим сцеплением.",
-            "Будь осторожен на мостах и лестницах.",
-        ],
     ),
     WeatherHazard(
         key="storm_wind", priority=3,
         triggers=lambda c: (c.gust_ms or c.wind_ms or 0) >= STORM_GUST_MS,
         event=lambda c: f"💨 Порывы ветра до {_f(c.gust_ms or c.wind_ms)} м/с.",
-        advice=lambda c: (
-            ["На велосипеде будь осторожен при боковом ветре, особенно на мостах и открытых участках."]
-            if c.bike else
-            ["Будь осторожен на велосипеде — возможны сильные порывы ветра."]
-        ) + ["Убери с балкона лёгкие предметы."],
     ),
     WeatherHazard(
         key="heavy_rain", priority=4,
@@ -112,75 +91,39 @@ HAZARDS = [
         ),
         event=lambda c: f"🌧️ Сегодня ожидается дождь с вероятностью {_f(c.rain_prob)}%."
                         + (" Возможны сильные осадки." if (c.rain_mm or 0) >= weather.HEAVY_RAIN_MM_DAY else ""),
-        advice=lambda c: _rain_advice(c),
     ),
     WeatherHazard(
         key="heat", priority=5,
         triggers=lambda c: c.tmax is not None and c.tmax >= HEAT_TMAX,
         event=lambda c: f"🌡️ Жарко, до +{_f(c.tmax)}°C.",
-        advice=lambda c: [
-            "Пей больше воды.",
-            "По возможности избегай солнца с 12:00 до 16:00.",
-        ],
     ),
     WeatherHazard(
         key="high_uv", priority=6,
         triggers=lambda c: c.uv is not None and c.uv >= UV_WARN,
         event=lambda c: f"☀️ Высокий UV-индекс — {_f(c.uv)}.",
-        advice=lambda c: [
-            "Используй солнцезащитный крем.",
-            "Возьми очки и головной убор.",
-        ],
     ),
     WeatherHazard(
         key="snow", priority=7,
         triggers=lambda c: c.weathercode in SNOW_CODES,
         event=lambda c: "❄️ Ожидается снег.",
-        advice=lambda c: [
-            "Планируй больше времени на дорогу.",
-            "Возможны скользкие тротуары.",
-        ],
     ),
     WeatherHazard(
         key="cold", priority=8,
         triggers=lambda c: c.tmax is not None and c.tmax <= COLD_TMAX,
         event=lambda c: f"🥶 Мороз, днём около {c.tmax:+.0f}°C.",
-        advice=lambda c: [
-            "Одевайся теплее.",
-            "На дорогах возможен гололёд.",
-        ],
     ),
     WeatherHazard(
         key="fog", priority=9,
         triggers=lambda c: c.weathercode in FOG_CODES,
         event=lambda c: "🌫️ Ожидается туман, видимость снижена.",
-        advice=lambda c: (
-            ["На велосипеде или в машине включи освещение."] if c.bike else
-            ["Если едешь на велосипеде или автомобиле — включи освещение."]
-        ),
     ),
     WeatherHazard(
         key="high_humidity", priority=10,
         triggers=lambda c: (c.humidity is not None and c.humidity >= HUMIDITY_WARN
                             and c.tmax is not None and c.tmax >= HUMIDITY_MIN_TEMP),
         event=lambda c: "💧 Высокая влажность — может казаться жарче.",
-        advice=lambda c: ["Если долго находишься на улице — чаще пей воду."],
     ),
 ]
-
-
-def _rain_advice(c: WarnContext) -> list:
-    advice = []
-    if c.has_raincoat:
-        advice.append("Лучше надень дождевик — сегодня он пригодится.")
-    else:
-        advice.append("🌧️ Возьми дождевик или зонт — без него будет некомфортно.")
-    advice.append("На дорогах будет мокро, тормозной путь увеличится.")
-    if c.bike:
-        advice.append("На велосипеде будь осторожнее на мокрой дороге.")
-    if c.has_plan_today:
-        advice.append("Перед выходом на встречу возьми зонт — дождь ожидается днём.")
-    return advice
 
 
 # ---------- сбор контекста ----------
@@ -192,8 +135,7 @@ def _day_str(data):
 
 
 def collect_context(data, cid) -> WarnContext:
-    """Собирает WarnContext из ответа fetch_weather и данных пользователя."""
-    import settings as _s
+    """Собирает WarnContext из ответа fetch_weather."""
     d = data.get("daily", {})
 
     def _first(key, default=None):
@@ -211,17 +153,10 @@ def collect_context(data, cid) -> WarnContext:
     uv = _first("uv_index_max")
     humidity = _daytime_max_hourly(data, day_str, "relativehumidity_2m")
 
-    # персонализация
-    bike = bool(_s.get(cid, "bike", False))
-    pollen_allergy = bool(_s.get(cid, "pollen_allergy", False))
-    has_raincoat = _raincoat_present(cid)
-
     ctx = WarnContext(
         tmax=tmax, tmin=tmin, wind_ms=wind_ms, gust_ms=gust_ms,
         rain_prob=rain_prob, rain_mm=rain_mm, weathercode=weathercode,
         uv=uv, humidity=humidity,
-        bike=bike, has_raincoat=has_raincoat, pollen_allergy=pollen_allergy,
-        has_plan_today=False,
     )
     # интервалы «когда» из hourly в дневном окне
     ctx.when_rain = _rain_when(data, day_str)
@@ -300,14 +235,6 @@ def _rain_when(data, day_str):
     return "\n".join(lines)
 
 
-def _raincoat_present(cid) -> bool:
-    try:
-        import wardrobe
-        return wardrobe._has_rain_outerwear(store.load_wardrobe(cid))
-    except Exception:
-        return False
-
-
 # ---------- сборка предупреждения ----------
 def _when_for(ctx: WarnContext, keys) -> str:
     """Объединённый интервал 'когда' по вошедшим hazard-ключам."""
@@ -347,15 +274,11 @@ def build_warning(data, cid):
     if not fired:
         return None
     top = fired[:MAX_EVENTS]
-    events = [h.event(ctx) for h in top]
-    when = _when_for(ctx, [h.key for h in top])
-    advice = []
-    seen = set()
+    # Значок главного события — в заголовок, сами события без эмодзи.
+    icon, events = "", []
     for h in top:
-        for a in h.advice(ctx):
-            key = a.strip().lower()
-            if key not in seen:
-                seen.add(key)
-                advice.append(a)
-    advice = advice[:MAX_ADVICE]
-    return weather_ui.weather_warning(events, when, advice)
+        mark, _sep, text = h.event(ctx).partition(" ")
+        icon = icon or mark
+        events.append(text)
+    when = _when_for(ctx, [h.key for h in top])
+    return weather_ui.weather_warning(events, when, icon)

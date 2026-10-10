@@ -48,11 +48,11 @@ _LIGHT_BASE_MARKERS = ("футболк", "майк", "лонгслив", "топ
 # базовый верх.
 _BASE_TOP_MARKERS = (
     "футболк", "майк", "рубаш", "лонгслив", "поло", "топ", "водолазк",
-    "свитер", "джемпер", "свитш", "худи", "толстовк", "кофт",
 )
+# Кофты (худи, свитеры, кардиганы) — тоже второй слой: под ними всегда футболка.
 _LAYER_MARKERS = (
     "жилет", "кардиган", "overshirt", "оверши", "shacket", "шакет",
-    "пиджак", "блейзер",
+    "пиджак", "блейзер", "свитер", "джемпер", "свитш", "худи", "толстовк", "кофт",
 )
 _OUTERWEAR_MARKERS = (
     "куртк", "ветровк", "пальто", "плащ", "дождевик", "парка", "пуховик",
@@ -71,7 +71,7 @@ def outfit_role(item):
     """Возвращает функциональную роль вещи в комплекте, не меняя её категорию в шкафу."""
     facts = " ".join(str(item.get(key) or "") for key in ("name", "subcategory")).casefold()
     zone = str(item.get("zone") or "")
-    if any(marker in facts for marker in _LAYER_MARKERS):
+    if zone == "Кофты" or any(marker in facts for marker in _LAYER_MARKERS):
         return "layer"
     if zone == "Верхняя одежда" or any(marker in facts for marker in _OUTERWEAR_MARKERS):
         return "outerwear"
@@ -431,9 +431,13 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
     # но при +20…+22 однослойный комплект снова остаётся конкурентным.
     if tmax is not None and 14 <= tmax < 20 and _has_light_shirt_layer(items):
         score += 2
+    # Прохладно: кофта поверх футболки получает приоритет.
+    low = rules.feels_low(weather_ctx)
+    if low is not None and low < rules.SWEATER_FEELS_MAX and any(it.get("zone") == "Кофты" for it in items):
+        score += 2
     # Холодное утро и тёплый день: нужен слой, который можно снять.
     if weather_ctx.get("layering") and (
-        _has_light_shirt_layer(items) or any(it.get("zone") == "Верхняя одежда" for it in items)
+        _has_light_shirt_layer(items) or any(it.get("zone") in ("Верхняя одежда", "Кофты") for it in items)
     ):
         score += 3
     for it in items:
@@ -548,7 +552,7 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
     def _combos():
         import itertools
         pools = [_top_candidates(candidates[z], selected_styles=selected_styles) for z in required]
-        optional_zones = [z for z in ("Верхняя одежда",) if candidates.get(z)]
+        optional_zones = [z for z in ("Кофты", "Верхняя одежда") if candidates.get(z)]
         for zone in optional_zones:
             top = _top_candidates(candidates[zone], limit=2, selected_styles=selected_styles)
             # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.

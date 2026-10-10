@@ -109,7 +109,7 @@ def _item_display(it):
     return it.get("short_name") or it.get("name")
 
 
-_OUTFIT_SLOTS = ("Верх", "Верхняя одежда", "Низ", "Обувь", "Аксессуары", "Другое")
+_OUTFIT_SLOTS = ("Верх", "Кофты", "Верхняя одежда", "Низ", "Обувь", "Аксессуары", "Другое")
 
 
 def _outfit_slots(items):
@@ -129,7 +129,8 @@ def outfit_item_names(look_data):
     """Все показанные в образе вещи в том же порядке, но одним списком."""
     look_data = look_data or {}
     slots = _outfit_slots(look_data.get("items") or [])
-    names = [*slots["Верх"], *slots["Низ"], *slots["Обувь"]]
+    # Футболка, поверх неё кофта, затем низ и обувь.
+    names = [*slots["Верх"], *slots["Кофты"], *slots["Низ"], *slots["Обувь"]]
     names.extend(slots["Верхняя одежда"])
     names.extend(item for item in slots["Аксессуары"] if "носк" not in item.casefold())
     names.extend(slots["Другое"])

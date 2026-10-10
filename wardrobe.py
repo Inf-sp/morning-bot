@@ -4,7 +4,6 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import re
 import config
-import category_news
 import store
 import weather
 import util
@@ -41,7 +40,7 @@ WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 13
 PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
-CLOSET_ZONE_ORDER = ("Верх", "Низ", "Верхняя одежда", "Обувь")
+CLOSET_ZONE_ORDER = ("Верх", "Кофты", "Низ", "Верхняя одежда", "Обувь")
 _PURCHASE_IDEAS = (
     {
         "item": "Тёмно-синий оверсайз-пиджак",
@@ -110,6 +109,51 @@ def build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, ra
         "tmin": tmin, "tmax": tmax, "has_rain": has_rain,
         "wind_ms": flags["wind_ms"], "strong_wind": flags["strong_wind"],
         "sunny": flags["sunny"], "hot": hot, "warm": warm, "tags": tags,
+    }
+
+
+_NO_WEATHER = {"tmin": None, "tmax": None, "has_rain": False, "wind_ms": None,
+               "strong_wind": False, "sunny": False, "hot": False, "warm": False, "tags": []}
+
+
+def _wear_weather(settings_data):
+    """(weather_ctx, flags) на часы, когда образ носят; без погоды — (_NO_WEATHER, None)."""
+    try:
+        wdata = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
+        wd = wdata["daily"]
+        day_str = (wd.get("time") or [None])[0] or _day_key()
+        daytime_min, daytime_max = weather._daytime_temperature_range(
+            wdata, day_str, wd["temperature_2m_min"][0], wd["temperature_2m_max"][0],
+        )
+        tmax, tmin = round(daytime_max), round(daytime_min)
+        wind_ms = round(wd["windspeed_10m_max"][0])
+        rain_prob_day = wd["precipitation_probability_max"][0] or 0
+        rain_mm_day = (wd.get("precipitation_sum") or [None])[0]
+        weathercode = (wd.get("weathercode") or [None])[0]
+        flags = weather.daytime_outfit_weather(
+            wdata, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode)
+        weather_ctx = build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode)
+        # Точная погода на часы, когда образ будут носить: от сейчас до 22:00.
+        window = wardrobe_weather.wear_window(
+            wdata, datetime.now(config.TZ).replace(tzinfo=None), sunny=flags["sunny"])
+        if window:
+            weather_ctx = {**weather_ctx, **window}
+        return weather_ctx, flags
+    except Exception as error:
+        _log.warning("wardrobe: weather unavailable, look built without weather: %r", error)
+        return dict(_NO_WEATHER), None
+
+
+def weather_signature(weather_ctx, flags):
+    """Под какую погоду собран образ: дождь, сильный ветер, холод, лето; None — погоды не было."""
+    if flags is None:
+        return None
+    low = wardrobe_rules.feels_low(weather_ctx)
+    return {
+        "rain": bool(weather_ctx.get("has_rain")),
+        "wind": bool(weather_ctx.get("strong_wind")),
+        "cold": low is not None and low < wardrobe_rules.SWEATER_FEELS_MAX,
+        "summer": wardrobe_rules.summer_weather(weather_ctx),
     }
 
 
@@ -519,6 +563,12 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids else _get_cached_look(cid)
     if cached:
+        # Погода поменялась (дождь, ветер, холод) или образ собран без неё — пересобираем.
+        current = weather_signature(*await asyncio.to_thread(_wear_weather, store.get_settings(cid)))
+        saved = (cached.get("look_data") or {}).get("weather")
+        if current is not None and current != saved:
+            cached = None
+    if cached:
         if silent:
             return
         cached_names = [_item_name(it) for it in (cached.get("look_data") or {}).get("items", [])]
@@ -528,7 +578,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         original_look_data = cached.get("look_data", {})
         look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
         text, entities = _build_look_message(
-            look_data, news=category_news.cached_line("wardrobe"),
+            look_data,  # без строки «На неделе»: карточка образа — только образ
         )
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
@@ -587,32 +637,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         else:
             status = await util.StatusManager.start(
                 bot, cid, message=None, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
-    tmax = tmin = None
-    flags = None
-    try:
-        wdata = await asyncio.to_thread(weather.fetch_weather, s["lat"], s["lon"], 2)
-        wd = wdata["daily"]
-        day_str = (wd.get("time") or [None])[0] or _day_key()
-        daytime_min, daytime_max = weather._daytime_temperature_range(
-            wdata, day_str, wd["temperature_2m_min"][0], wd["temperature_2m_max"][0],
-        )
-        tmax = round(daytime_max)
-        tmin = round(daytime_min)
-        wind_ms = round(wd["windspeed_10m_max"][0])
-        rain_prob_day = wd["precipitation_probability_max"][0] or 0
-        rain_mm_day = (wd.get("precipitation_sum") or [None])[0]
-        weathercode = (wd.get("weathercode") or [None])[0]
-        flags = weather.daytime_outfit_weather(
-            wdata, day_str, tmax, wind_ms, rain_prob_day, rain_mm_day, weathercode)
-        weather_ctx = build_weather_context(wdata, day_str, tmax, tmin, wind_ms, rain_prob_day, rain_mm_day, weathercode)
-        # Точная погода на часы, когда образ будут носить: от сейчас до 22:00.
-        window = wardrobe_weather.wear_window(
-            wdata, datetime.now(config.TZ).replace(tzinfo=None), sunny=flags["sunny"])
-        if window:
-            weather_ctx = {**weather_ctx, **window}
-    except Exception:
-        weather_ctx = {"tmin": None, "tmax": None, "has_rain": False, "wind_ms": None,
-                       "strong_wind": False, "sunny": False, "hot": False, "warm": False, "tags": []}
+    weather_ctx, flags = await asyncio.to_thread(_wear_weather, s)
     _rules, gap_note = _build_weather_rules(cid, w, flags)
 
     w = await migrate_item_attrs(cid, w)
@@ -668,12 +693,13 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "sock_recommendation": build_sock_recommendation(best_sorted, (pick or {}).get("socks", "")),
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
         "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
+        "weather": weather_signature(weather_ctx, flags),
         "purchase_recommendation": purchase_recommendation,
     }
     if kb is None:
         result_kb = build_wardrobe_keyboard()
     text, entities = _build_look_message(
-        look_data, news=category_news.cached_line("wardrobe"),
+        look_data,  # без строки «На неделе»: карточка образа — только образ
     )
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
@@ -704,7 +730,7 @@ _ZONES_DESC = "; ".join(f"{z}: {', '.join(subs)}" for z, subs in ZONE_SUBCATS.it
 
 # Extracted to wardrobe_management.py: def _local_text_item.
 
-ZONE_SLUG = {"Верх": "top", "Низ": "bot", "Верхняя одежда": "out",
+ZONE_SLUG = {"Верх": "top", "Кофты": "sw", "Низ": "bot", "Верхняя одежда": "out",
              "Обувь": "shoe", "Аксессуары": "acc", "Другое": "oth"}
 ZONE_BY_SLUG = {slug: zone for zone, slug in ZONE_SLUG.items()}
 

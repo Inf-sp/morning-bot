@@ -70,10 +70,10 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
     facts = purchase.wardrobe_facts(_wardrobe(), cold_season=True)
     data = purchase.analysis(facts)
 
-    assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 4, 2, 1)
+    assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 3, 2, 1)  # худи — кофта, не верх
     assert data["weaknesses"] == ["1 пара обуви на все случаи", "нет тёплой куртки к зиме"]
     text = wardrobe_ui.purchase_screen({**data, "has_picks": True}).text
-    assert text.startswith("💳 Что докупить\n\nТвой шкаф · 9 вещей · 16 образов\n")
+    assert text.startswith("💳 Что докупить\n\nТвой шкаф · 9 вещей · 12 образов\n")
     assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
     assert "Самое полезное" not in text and "Явных пробелов нет" not in text
     assert "присматриваешь" not in text
@@ -128,7 +128,7 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     message = bot.sent[0]
     labels = _labels(message["reply_markup"])
     best = wardrobe._purchase_state(cid)["pool"][0]
-    assert (best["zone"], best["gain"]) == ("Обувь", 16)
+    assert (best["zone"], best["gain"]) == ("Обувь", 12)
     assert labels[0] == [best["item"]]
     assert labels[3:] == [["⬅️ Назад", "#️⃣ Главная"]]
     assert best["item"] not in message["text"] and "Самое полезное" not in message["text"]
@@ -254,7 +254,7 @@ def test_ungrounded_ai_reason_falls_back_to_code_facts():
     card = purchase.card(w, candidate, facts)
 
     assert "пиджак" not in card["why"]
-    assert card["why"].startswith("На 4 верха и 2 низа сейчас 1 пара обуви")
+    assert card["why"].startswith("На 3 верха и 2 низа сейчас 1 пара обуви")
 
 
 def test_old_purchase_callbacks_open_screen_one(monkeypatch):
