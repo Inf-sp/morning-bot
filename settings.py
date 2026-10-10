@@ -125,7 +125,7 @@ async def send_myday_blocks(bot, cid, q=None):
     rows = [[InlineKeyboardButton(("✅ " if myday_block_on(cid, key) else "□ ") + label,
                                   callback_data=f"set_mydaytgl_{key}")]
             for key, label in MYDAY_BLOCKS]
-    rows.append(nav_row("set_home"))
+    rows.append(nav_row("m_myday"))  # вход — «Настроить» под «Моим днём»
     await rich_delivery.show(bot, cid, settings_ui.myday_blocks(), reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 
@@ -297,8 +297,7 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("📍 Город", callback_data="set_city"),
          InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif"),
-         InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
-        [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
@@ -1223,6 +1222,8 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data == "set_myday":
         await send_myday_blocks(bot, cid, q)
+    elif data == "set_myday_new":  # «Настроить» под «Моим днём»: новым сообщением, сводка остаётся
+        await send_myday_blocks(bot, cid)
     elif data.startswith("set_mydaytgl_"):
         await toggle_myday_block(bot, cid, data[len("set_mydaytgl_"):], q)
     elif data.startswith("set_notifopen_"):

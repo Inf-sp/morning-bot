@@ -850,7 +850,9 @@ def _day_menu_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
-        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        # «Настроить» — какие блоки показывать; экран приходит новым сообщением.
+        [InlineKeyboardButton("🎚️ Настроить", callback_data="set_myday_new"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

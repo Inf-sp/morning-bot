@@ -66,7 +66,7 @@ def test_myday_menu_offers_detailed_day_and_week_weather():
     keyboard = myday._day_menu_kb().inline_keyboard
     callbacks = [button.callback_data for row in keyboard for button in row]
 
-    assert callbacks == ["a_w_full", "a_w_week", "m_menu"]
+    assert callbacks == ["a_w_full", "a_w_week", "set_myday_new", "m_menu"]
     assert keyboard[0][0].text == "🗓️ Полный прогноз на сегодня"
     assert keyboard[1][0].text == "🗓️ Погода на неделю"
 

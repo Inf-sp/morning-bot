@@ -22,8 +22,8 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     rows = [[b.text for b in row] for row in sent[0]["reply_markup"].inline_keyboard]
     assert "🔄 Обновить" not in [label for row in rows for label in row]
     assert rows == [
-        ["📍 Город", "🧠 Язык обучения"], ["🔔 Уведомления", "☀️ Мой день"],
-        ["📤 Экспорт"], ["#️⃣ Главная"],
+        ["📍 Город", "🧠 Язык обучения"], ["🔔 Уведомления", "📤 Экспорт"],
+        ["#️⃣ Главная"],
     ]
 
 
