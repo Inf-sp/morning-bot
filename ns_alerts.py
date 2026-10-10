@@ -6,6 +6,7 @@
 """
 import asyncio
 import logging
+import re
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -23,6 +24,7 @@ KIND = "ns_disruptions"
 ACTIVE_FROM_HOUR = 6
 ACTIVE_TO_HOUR = 23
 _STATE_KEY = "ns_alerts"
+_CYRILLIC = re.compile("[а-яё]", re.IGNORECASE)
 
 
 def is_active_time(now=None):
@@ -48,13 +50,24 @@ def _translate(disruption):
             f"Данные: {secure.wrap_untrusted(str(fields), 'сообщение NS')}. "
             "Верни JSON без markdown с теми же ключами и переводом значений.",
             300, tier="cheap", module="ns",
-            cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 1},
+            cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 2},
+            # Ответ без кириллицы (модель вернула нидерландский) — брак: пробуем следующий
+            # провайдер и не кэшируем.
+            result_validator=lambda value: isinstance(value, dict) and all(
+                _CYRILLIC.search(str(value.get(key) or "")) for key in fields),
         )
     except Exception:
         _log.info("NS disruption translation unavailable; using original text")
         return disruption
     translated = {key: str(data.get(key) or value) for key, value in fields.items()} if isinstance(data, dict) else {}
     return {**disruption, **translated}
+
+
+def incident_signature(item):
+    """Один инцидент: та же причина и то же ожидаемое окончание; без них — сама запись."""
+    cause = " ".join(str(item.get("cause") or "").casefold().split())
+    until = str(item.get("until") or "")[:16]
+    return f"{cause}|{until}" if cause and until else str(item.get("id") or "")
 
 
 async def check_user(bot, cid):
@@ -71,18 +84,30 @@ async def check_user(bot, cid):
         return
     # Один сбой на нескольких станциях города (Alkmaar и Alkmaar Noord) — одно предупреждение.
     current = list({item["id"]: item for feed in feeds for item in feed}.values())
-    previous = (store.get_profile(cid).get(_STATE_KEY) or {}).get("active") or {}
-    current_by_id = {item["id"]: item for item in current}
+    previous = {
+        disruption_id: value if isinstance(value, dict) else {"title": str(value), "sig": disruption_id}
+        for disruption_id, value in ((store.get_profile(cid).get(_STATE_KEY) or {}).get("active") or {}).items()
+    }
+    active = {item["id"]: {"title": item["title"], "sig": incident_signature(item)} for item in current}
+    # NS заводит одну неисправность отдельной записью на каждый маршрут (Amsterdam - Alkmaar,
+    # Haarlem - Alkmaar) — сообщаем об инциденте один раз.
+    known = {value["sig"] for value in previous.values()}
     for item in current:
-        if item["id"] not in previous:
-            msg = transport_ui.ns_alert(city, await asyncio.to_thread(_translate, item))
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
-    for disruption_id, title in previous.items():
-        if disruption_id not in current_by_id:
-            msg = transport_ui.ns_restored(title)
-            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        sig = active[item["id"]]["sig"]
+        if item["id"] in previous or sig in known:
+            continue
+        known.add(sig)
+        msg = transport_ui.ns_alert(city, await asyncio.to_thread(_translate, item))
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
+    still_active = {value["sig"] for value in active.values()}
+    restored = {}
+    for disruption_id, value in previous.items():
+        if disruption_id not in active and value["sig"] not in still_active:
+            restored.setdefault(value["sig"], value["title"])
+    for title in restored.values():
+        msg = transport_ui.ns_restored(title)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
-    active = {item["id"]: item["title"] for item in current}
     if active != previous:
         def save(profile):
             profile[_STATE_KEY] = {"active": active}

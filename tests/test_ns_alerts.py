@@ -183,3 +183,41 @@ def test_ns_toggle_is_shown_only_for_the_netherlands(monkeypatch):
     nl, de = ([b.text for row in message["reply_markup"].inline_keyboard for b in row] for message in sent)
     assert any("Поезда NS" in label for label in nl)
     assert not any("Поезда NS" in label for label in de)
+
+
+def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
+    _user(monkeypatch)
+    first = {"id": "a", "type": "DISRUPTION", "title": "Amsterdam - Alkmaar", "cause": "defecte trein",
+             "situation": "tussen Zaandam en Alkmaar rijden er geen Intercity's", "until": "2026-10-10T18:30:00+0200",
+             "extra": ""}
+    second = {**first, "id": "b", "title": "Haarlem - Alkmaar",
+              "situation": "tussen Uitgeest en Alkmaar rijden er minder treinen"}
+    feed = {"items": [first, second]}
+    monkeypatch.setattr(ns_alerts.ns_api, "active_disruptions", lambda _code: feed["items"])
+    bot = Bot()
+
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert len(bot.sent) == 1 and "Amsterdam - Alkmaar" in bot.sent[0]["text"]
+
+    feed["items"] = [second]  # один маршрут уже восстановлен, инцидент ещё идёт
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert len(bot.sent) == 1
+
+    feed["items"] = []
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert len(bot.sent) == 2 and bot.sent[-1]["text"].endswith("восстановлено")
+
+
+def test_translation_without_cyrillic_is_rejected(monkeypatch):
+    captured = {}
+
+    def fake_llm_json(*_args, result_validator=None, **_kwargs):
+        captured["validator"] = result_validator
+        return {"cause": "неисправный поезд"}
+
+    monkeypatch.setattr(ns_alerts.ai, "llm_json", fake_llm_json)
+    item = ns_alerts._translate({"cause": "defecte trein"})
+    assert item["cause"] == "неисправный поезд"
+    assert captured["validator"]({"cause": "неисправный поезд"})
+    assert not captured["validator"]({"cause": "defecte trein"})
