@@ -437,6 +437,15 @@ def _typing_pieces(text):
     return pieces
 
 
+def _with_final_period(text: str) -> str:
+    """Ответ модели иногда обрывается без точки — дописываем её после слова, цифры,
+    кавычки или скобки; знаки препинания, эмодзи и код не трогаем."""
+    text = (text or "").rstrip()
+    if text and not text.endswith("```") and (text[-1].isalnum() or text[-1] in "»\")'"):
+        return text + "."
+    return text
+
+
 async def chat_reply(bot, cid, text):
     store.last_action[str(cid)] = None
     store.last_source[str(cid)] = "Ассистент"
@@ -559,7 +568,7 @@ async def chat_reply(bot, cid, text):
                 )
             return
         await verify.safe_error(bot, cid, e); return
-    answer = _visible_model_text(answer).strip()
+    answer = _with_final_period(_visible_model_text(answer).strip())
     hist.append({"role": "assistant", "content": answer})
     store.chat_history[str(cid)] = hist[-10:]
     store.last_answer[str(cid)] = answer
