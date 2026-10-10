@@ -37,6 +37,16 @@ _STYLE_EMOJI = {
     "Спортивный": "👟",
 }
 
+# Строка внизу карточки, как «Итальянская кухня — это …» в Готовке.
+_STYLE_ABOUT = {
+    "Минимализм": "Минимализм — это нейтральные цвета, чистые линии и минимум деталей.",
+    "Городской": "Городской стиль — это свободный крой, удобные кеды и утилитарные детали.",
+    "Повседневный": "Повседневный стиль — это собранная базовая одежда без лишней спортивности.",
+    "Скандинавский": "Скандинавский стиль — это спокойные оттенки, натуральные ткани и удобные слои.",
+    "Классический": "Классический стиль — это строгие силуэты, рубашки и аккуратная обувь.",
+    "Спортивный": "Спортивный стиль — это функциональные вещи и свобода движения.",
+}
+
 
 def outfit_header(primary_style=""):
     """Единый заголовок образа: эмодзи отражает выбранный стиль."""
@@ -61,9 +71,9 @@ def empty_wardrobe():
 
 
 def render_wardrobe_message(look_data):
-    """Образ дня одним списком «Надень сегодня»: базовые вещи, затем дополнения.
+    """Образ дня в едином стиле с Готовкой: погода → вещи → строка о стиле.
 
-    Погода — одной строкой-причиной и только когда она повлияла на выбор.
+    Погода — одной строкой-причиной сверху и только когда она повлияла на выбор.
 
     look_data: {primary_style, items[{name, zone}], sock_recommendation,
                 how_to_wear[], weather_reason}
@@ -84,11 +94,6 @@ def render_wardrobe_message(look_data):
         socks = f"{socks.split(' — ', 1)[0]} носки"
     if socks:
         items.append(socks)
-    if items:
-        b.spacer()
-        for item in items:
-            b.line(f"- {item}")
-
     weather_reason = _clean_text(look_data.get("weather_reason"))
     # Старые сохранённые образы хранят строку со значком погоды.
     for icon in ("☂️", "💨", "🌡️", "☀️"):
@@ -96,6 +101,16 @@ def render_wardrobe_message(look_data):
     if weather_reason:
         b.spacer()
         b.line(weather_reason)
+
+    if items:
+        b.spacer()
+        for item in items:
+            b.line(f"- {item}")
+
+    about = _STYLE_ABOUT.get(primary_style)
+    if about:
+        b.spacer()
+        b.line(about)
 
     return b.build_stripped()
 

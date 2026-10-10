@@ -12,7 +12,6 @@ from trainer_engine import (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_BUILD_SENTENCE, EXERCISE_FIND_ERROR,
     EXERCISE_FILL_GAP,
-    EXERCISE_CHOOSE_REACTION,
 )
 from ui import learning as learning_ui
 from ui.navigation import nav_row
@@ -258,7 +257,6 @@ _EXERCISE_LABELS = {
     EXERCISE_BUILD_SENTENCE: "порядок слов в предложении",
     EXERCISE_FIND_ERROR: "поиск ошибок",
     EXERCISE_FILL_GAP: "грамматику в контексте",
-    EXERCISE_CHOOSE_REACTION: "реакции в разговоре",
 }
 
 

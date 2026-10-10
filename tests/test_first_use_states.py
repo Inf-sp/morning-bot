@@ -587,5 +587,5 @@ def test_each_daily_phrase_has_grammar_and_another_example():
         for phrase in phrases:
             assert phrase["translation"] and phrase["more"] and phrase["more_translation"]
             assert phrase["rule"].count("_") % 2 == 0 and "_" in phrase["rule"]
-            assert " — " in phrase["rule"] or phrase["rule"].startswith(("Present", "Третий"))
+            assert " → " in phrase["rule"] or phrase["rule"].startswith(("Present", "Третий"))
             assert phrase["more"] != phrase["text"]

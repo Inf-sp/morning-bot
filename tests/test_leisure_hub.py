@@ -110,7 +110,7 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
         "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
-        ["🎬 Кино", "📚 Книги", "🎧 Музыка"], ["✨ Новые премьеры"],
+        ["🎬 Кино", "📚 Книги", "🎧 Музыка"],
         ["🎚️ Настроить", "#️⃣ Главная"],
     ]
 
@@ -284,30 +284,6 @@ def test_what_to_watch_opens_cached_daily_card_without_new_pick(monkeypatch):
     asyncio.run(leisure_movies.send_current_movie(object(), "42"))
 
     assert sent == [("Дюна", "Dune")]
-
-
-def test_new_premieres_show_the_next_three_items_in_a_loop(monkeypatch):
-    import leisure_hub
-    from datetime import date
-
-    movies = [{"title": f"Фильм {index}", "date": "2026-10-01"} for index in range(1, 6)]
-    monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid: (date(2026, 10, 9), "NL"))
-    monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
-    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
-    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
-    monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: [])
-    leisure_hub._premiere_offsets.pop("42", None)
-    shown = []
-
-    async def send_hub(_bot, cid, q=None):
-        shown.append([item["title"] for item in leisure_hub.hub_data(cid)["movies"]])
-
-    monkeypatch.setattr(leisure_hub, "send_hub", send_hub)
-    assert [item["title"] for item in leisure_hub.hub_data("42")["movies"]] == ["Фильм 1", "Фильм 2", "Фильм 3"]
-    asyncio.run(leisure_hub.send_new_premieres(None, "42"))
-    asyncio.run(leisure_hub.send_new_premieres(None, "42"))
-
-    assert shown == [["Фильм 4", "Фильм 5", "Фильм 1"], ["Фильм 2", "Фильм 3", "Фильм 4"]]
 
 
 def test_hub_title_names_month_and_city():

@@ -1002,12 +1002,11 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже «Новые премьеры»."""
+    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже «Настроить | Главная»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
          InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("✨ Новые премьеры", callback_data="lz_more")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

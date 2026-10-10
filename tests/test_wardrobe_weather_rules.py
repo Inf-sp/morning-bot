@@ -176,16 +176,19 @@ def test_trends_are_searched_once_a_week(monkeypatch):
     assert calls == ["men's urban streetwear street style trends fall 2026"]
 
 
-def test_card_shows_weather_reason_after_list():
+def test_card_shows_weather_then_items_then_style_like_cooking():
     msg = render_wardrobe_message({
         "primary_style": "Городской", "items": [{"name": "Белая футболка", "zone": "Верх"}],
         "sock_recommendation": "Серые носки",
-        "weather_reason": "☂️ Дождь с 13:00 — непромокаемая верхняя одежда",
+        "weather_reason": "☂️ Дождь с 13:00, лучше выбрать непромокаемую верхнюю одежду.",
     })
 
-    lines = msg.text.splitlines()
-    assert lines.index("Дождь с 13:00 — непромокаемая верхняя одежда") == lines.index("- Серые носки") + 2
-    assert lines[-1] == "Дождь с 13:00 — непромокаемая верхняя одежда"
+    assert msg.text.splitlines() == [
+        "🧢 Надень сегодня · Городской", "",
+        "Дождь с 13:00, лучше выбрать непромокаемую верхнюю одежду.", "",
+        "- Белая футболка", "- Серые носки", "",
+        "Городской стиль — это свободный крой, удобные кеды и утилитарные детали.",
+    ]
     assert "☂️" not in render_wardrobe_message({"items": [{"name": "Футболка", "zone": "Верх"}]}).text
 
 

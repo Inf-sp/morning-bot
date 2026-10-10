@@ -21,10 +21,9 @@ import trainer_engine
 import trainer_exercises
 import trainer_grading
 import trainer_session
-from learning_dictionary import entry_language, entry_term, entry_translation
+from learning_dictionary import entry_language, entry_term
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
-    EXERCISE_CHOOSE_REACTION,
     EXERCISE_CHOOSE_TRANSLATION,
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
@@ -50,7 +49,8 @@ def _keyboard(rows):
 
 
 def _nav_row():
-    return [("⬅️ Назад", "m_learn"), ("#️⃣ Главная", "m_menu")]
+    # Под заданием и результатом — только «Главная», без «Назад».
+    return [("#️⃣ Главная", "m_menu")]
 
 
 def _result_keyboard(data, *, allow_remove=True):
@@ -96,26 +96,6 @@ def _correct_option_id(data, options):
     raise ValueError("training exercise has no correct option")
 
 
-async def _generate_situation(entry, language):
-    term = entry_term(entry)
-    prompt = f"""Ты методист разговорной практики для языка: {language}.
-Целевое слово/фраза: {secure.wrap_untrusted(term, "целевая фраза")} — {secure.wrap_untrusted(entry_translation(entry), "перевод")}.
-
-Придумай ОДНУ короткую реплику собеседника на {language}, в ответ на которую
-естественно употребить именно {secure.wrap_untrusted(term, "целевая фраза")}.
-
-Верни JSON: {{"line": "реплика собеседника", "line_ru": "перевод реплики"}}"""
-    try:
-        result = await ai.allm_json(prompt, 300, tier="cheap", module="learning_trainer")
-        if not isinstance(result, dict):
-            return None
-        line = " ".join(str(result.get("line") or "").split()).strip()[:240]
-        line_ru = " ".join(str(result.get("line_ru") or "").split()).strip()[:240]
-    except Exception:
-        return None
-    return {"line": line, "line_ru": line_ru} if line and line_ru else None
-
-
 async def _build_exercise(cid, item):
     repository = DictionaryRepository(cid)
     entry = item["entry"]
@@ -130,13 +110,8 @@ async def _build_exercise(cid, item):
             entry = refreshed
             item["entry"] = entry
     exercise_type = item["exercise_type"]
-    language = "английский" if entry_language(entry) == "en" else "нидерландский"
     other_entries = repository.training_entries(entry_language(entry))
-    situation = None
-    if exercise_type == EXERCISE_CHOOSE_REACTION:
-        situation = await _generate_situation(entry, language)
-    data = trainer_exercises.build_exercise(
-        entry, other_entries, exercise_type, situation=situation)
+    data = trainer_exercises.build_exercise(entry, other_entries, exercise_type)
     if data is None:
         return None
     correction = repository.correction_for(entry)
@@ -266,14 +241,10 @@ async def _send_exercise(bot, cid, data):
         if getattr(message, "poll", None):
             trainer_session.register_poll(cid, message.poll.id, data["_task_id"])
         return
-    if kind in (EXERCISE_FILL_GAP, EXERCISE_CHOOSE_REACTION):
-        renderers = {
-            EXERCISE_FILL_GAP: learning_ui.exercise_fill_gap,
-            EXERCISE_CHOOSE_REACTION: learning_ui.exercise_choose_reaction,
-        }
+    if kind == EXERCISE_FILL_GAP:
         options = _options(data)
         data["_options"] = options
-        message = renderers[kind](data)
+        message = learning_ui.exercise_fill_gap(data)
         rows = [[(option, f"ex_pick_{data['_task_id']}_{index}")] for index, option in enumerate(options)]
         rows.append(_nav_row())
         await bot.send_message(chat_id=cid, text=message.text, entities=message.entities,
@@ -389,7 +360,7 @@ async def pick_option(bot, cid, index, *, task_id=""):
     data = state["current"]
     if not _task_matches(data, task_id) or data["exercise_type"] not in (
         EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
-        EXERCISE_FILL_GAP, EXERCISE_CHOOSE_REACTION,
+        EXERCISE_FILL_GAP,
     ):
         return
     options = data.get("_options") or []
@@ -515,7 +486,7 @@ async def _grade_dutch_written(data, text):
             text,
             report,
             expected=str(data.get("correct") or ""),
-            task=str(data.get("ru") or data.get("situation") or ""),
+            task=str(data.get("ru") or ""),
         )
     explanation = decision.get("explanation") or _default_language_reason(report)
     report = {**report, "explanation": explanation}

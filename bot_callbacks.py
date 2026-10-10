@@ -429,7 +429,8 @@ ROUTES = (
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
     R("lz_prem", lambda c: leisure_hub.send_premieres_menu(c.bot, c.cid, q=c.q)),
-    R("lz_more", lambda c: leisure_hub.send_new_premieres(c.bot, c.cid, q=c.q)),
+    # «Новых премьер» больше нет: старая кнопка из истории чата открывает хаб.
+    R("lz_more", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),

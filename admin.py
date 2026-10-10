@@ -171,15 +171,25 @@ async def refresh_card(bot, cid, key, q=None):
     if not label:
         await send_card_refresh_menu(bot, cid, q, status="⚠️ Карточка не найдена.")
         return
+    import util
+    status = None
+    if q is not None:
+        # Зелёная плашка ожидания под меню, как в разделах, пока карточка собирается.
+        status = await util.StatusManager.start_inline(
+            q, bot=bot, cid=cid, stages=((0, f"Обновляю «{label.split(' ', 1)[-1]}»..."),),
+            preserve_message=True,
+        )
     try:
         result = await _refresh_card_cache(cid, key)
         if result is False:
             raise RuntimeError("card cache is incomplete")
+        outcome = f"✅ {label} обновлена."
     except Exception:
         _log.exception("admin card refresh failed cid=%s card=%s", cid, key)
-        await send_card_refresh_menu(bot, cid, q, status=f"⚠️ {label} не обновилась.")
-        return
-    await send_card_refresh_menu(bot, cid, q, status=f"✅ {label} обновлена.")
+        outcome = f"⚠️ {label} не обновилась."
+    if status is not None:
+        await status.stop(delete=True)
+    await send_card_refresh_menu(bot, cid, q, status=outcome)
 
 
 # ================= ПОЛЬЗОВАТЕЛИ =================

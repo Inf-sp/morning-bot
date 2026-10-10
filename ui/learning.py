@@ -57,18 +57,6 @@ def exercise_fill_gap(data):
     return msg
 
 
-def exercise_choose_reaction(data):
-    b = MessageBuilder()
-    b.section("💭 Что ответить")
-    b.spacer()
-    _q(b, "Тебе говорят", data["situation"])
-    if data.get("situation_ru"):
-        b.line(data["situation_ru"])
-    msg = b.build()
-    msg.text = msg.text.rstrip("\n")
-    return msg
-
-
 def exercise_result(data, is_correct, chosen="", language_report=None):
     """Единая карточка результата из уже сохранённой словарной записи."""
     entry = data.get("entry") if isinstance(data.get("entry"), dict) else {}

@@ -9,7 +9,6 @@ import re
 
 from trainer_engine import (
     EXERCISE_BUILD_SENTENCE,
-    EXERCISE_CHOOSE_REACTION,
     EXERCISE_CHOOSE_TRANSLATION,
     EXERCISE_FILL_GAP,
     EXERCISE_FIND_ERROR,
@@ -329,17 +328,6 @@ def _fill_gap(entry, other_entries, rng):
             "note": entry.get("breakdown") or ""}
 
 
-def _conversation(entry, other_entries, rng, situation):
-    if not situation or not situation.get("line"):
-        return None
-    correct = _cap(entry_term(entry))
-    wrong = _local_distractors(entry, correct, entry.get("lang", "nl"), rng)
-    if len(wrong) < 2:
-        return None
-    return {"situation": situation["line"], "situation_ru": situation.get("line_ru", ""),
-            "correct": correct, "wrong": wrong}
-
-
 _BUILDERS = {
     EXERCISE_CHOOSE_TRANSLATION: _choose_translation,
     EXERCISE_RECALL: _recall,
@@ -349,14 +337,11 @@ _BUILDERS = {
 }
 
 
-def build_exercise(entry, other_entries, exercise_type, *, situation=None, rng=None):
+def build_exercise(entry, other_entries, exercise_type, *, rng=None):
     """Возвращает полные данные одного из семи форматов или ``None``."""
     rng = rng or random
-    if exercise_type == EXERCISE_CHOOSE_REACTION:
-        data = _conversation(entry, other_entries, rng, situation)
-    else:
-        builder = _BUILDERS.get(exercise_type)
-        data = builder(entry, other_entries, rng) if builder else None
+    builder = _BUILDERS.get(exercise_type)
+    data = builder(entry, other_entries, rng) if builder else None
     if data is None:
         return None
     return {**data, "exercise_type": exercise_type, "term": entry_term(entry),

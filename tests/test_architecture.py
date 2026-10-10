@@ -82,11 +82,10 @@ def test_trainer_builds_every_exercise_and_round_trips_session():
         {"term": "meenemen", "translation": "брать с собой", "lang": "nl", "pos": "глагол"},
         {"term": "vervangen", "translation": "заменять", "lang": "nl", "pos": "глагол"},
     ]
-    situation = {"line": "Welke boeken kies je?", "line_ru": "Какие книги ты выбираешь?"}
     special = {engine.EXERCISE_FIND_ERROR: error_entry, engine.EXERCISE_FILL_GAP: gap_entry}
     for kind in engine.ALL_EXERCISES:
         entry = special.get(kind, base)
-        assert exercises.build_exercise(entry, others, kind, situation=situation, rng=random.Random(7)), kind
+        assert exercises.build_exercise(entry, others, kind, rng=random.Random(7)), kind
 
     queue = engine.build_training_queue([{**e, "srs_level": 0} for e in others], rng=random.Random(4))
     assert queue and all("exercise_type" in item for item in queue)

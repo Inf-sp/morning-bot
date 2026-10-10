@@ -14,12 +14,10 @@ EXERCISE_RECALL = "recall"
 EXERCISE_BUILD_SENTENCE = "build_sentence"
 EXERCISE_FIND_ERROR = "find_error"
 EXERCISE_FILL_GAP = "fill_gap"
-EXERCISE_CHOOSE_REACTION = "choose_reaction"
 
 ALL_EXERCISES = (
     EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL,
     EXERCISE_FIND_ERROR, EXERCISE_FILL_GAP,
-    EXERCISE_CHOOSE_REACTION,
 )
 
 QUEUE_BATCH_SIZE = 10
@@ -55,15 +53,10 @@ def select_exercise_type(entry, avoid="", rng=random):
             candidates.append(EXERCISE_FILL_GAP)
     elif level <= 3:
         candidates = [EXERCISE_RECALL, EXERCISE_FILL_GAP]
-        if entry.get("situation_type"):
-            candidates.append(EXERCISE_CHOOSE_REACTION)
         if kind == "rule":
             candidates.append(EXERCISE_FIND_ERROR)
     else:
-        candidates = [EXERCISE_RECALL]
-        if entry.get("situation_type"):
-            candidates.append(EXERCISE_CHOOSE_REACTION)
-        candidates.append(EXERCISE_FIND_ERROR)
+        candidates = [EXERCISE_RECALL, EXERCISE_FIND_ERROR]
         if rng.random() < 0.15:
             candidates.append(rng.choice((EXERCISE_CHOOSE_TRANSLATION, EXERCISE_RECALL)))
 

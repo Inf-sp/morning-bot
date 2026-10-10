@@ -25,24 +25,6 @@ def _today_and_cc(cid):
     return datetime.now(config.TZ).date(), str(store.get_settings(cid).get("cc") or "NL").upper()
 
 
-# «Новые премьеры» листают витрину премьер по кругу: cid -> (дата, сдвиг).
-# ponytail: в памяти процесса — после рестарта витрина снова с начала.
-_premiere_offsets: dict = {}
-
-
-def _window(items, offset, limit):
-    """limit премьер начиная со сдвига, по кругу; короткая витрина — целиком."""
-    items = list(items or [])
-    if len(items) <= limit:
-        return items
-    return [items[(offset + index) % len(items)] for index in range(limit)]
-
-
-def _offset(cid, today):
-    day, offset = _premiere_offsets.get(str(cid), (None, 0))
-    return offset if day == today else 0
-
-
 def new_music(cid, cc, today) -> list[dict]:
     """Свежие альбомы по музыкальным стилям пользователя (без стилей — по всем), разные артисты."""
     styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)
@@ -64,11 +46,10 @@ def hub_data(cid) -> dict:
     """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке."""
     today, cc = _today_and_cc(cid)
     limit = leisure_ui.LEISURE_HUB_LIMIT
-    offset = _offset(cid, today)
     return {
-        "movies": _window(leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True), offset, limit),
-        "books": _window(leisure_books._book_premieres_cache_get(today, allow_stale=True), offset, limit),
-        "music": _window(new_music(cid, cc, today), offset, limit),
+        "movies": list(leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or [])[:limit],
+        "books": list(leisure_books._book_premieres_cache_get(today, allow_stale=True) or [])[:limit],
+        "music": new_music(cid, cc, today)[:limit],
     }
 
 
@@ -97,13 +78,6 @@ async def send_hub(bot, cid, q=None):
         month=today.month, city=store.get_settings(cid).get("city") or "",
     )
     await _show(bot, cid, msg, q)
-
-
-async def send_new_premieres(bot, cid, q=None):
-    """«Новые премьеры»: следующие премьеры кино, книг и новая музыка в том же экране."""
-    today, _cc = _today_and_cc(cid)
-    _premiere_offsets[str(cid)] = (today, _offset(cid, today) + leisure_ui.LEISURE_HUB_LIMIT)
-    await send_hub(bot, cid, q)
 
 
 async def send_premieres_menu(bot, cid, q=None):
