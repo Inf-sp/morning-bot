@@ -6,7 +6,7 @@ def notifications(next_line=""):
     b = MessageBuilder()
     b.section(ui_label("broadcasts", "Уведомления"))
     b.line("На кнопке — что придёт и когда.")
-    b.line("Зелёные — включены, красные — выключены. Нажми, чтобы выбрать время или выключить.")
+    b.line("Зелёные — включены, без цвета — выключены. Нажми, чтобы выбрать время или выключить.")
     if next_line:
         b.spacer()
         b.line(next_line)
@@ -16,7 +16,7 @@ def notifications(next_line=""):
 def myday_blocks():
     b = MessageBuilder()
     b.section("☀️ Мой день")
-    b.line("Выбери, что показывать в сводке. Зелёные — показываются, красные — скрыты.")
+    b.line("Выбери, что показывать в сводке. Зелёные — показываются, без цвета — скрыты.")
     return b.build_stripped()
 
 
