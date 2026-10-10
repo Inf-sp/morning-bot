@@ -83,10 +83,8 @@ def test_settings_summary_line(monkeypatch):
              "notif_ns_disruptions": False, "notif_weekend_events": False,
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
-    monkeypatch.setattr(settings.store, "load_wardrobe", lambda _cid: {"zones": {
-        "Верх": {"Футболки": [{"id": "1"}, {"id": "2"}]}, "Обувь": {"Кеды": [{"id": "3"}]}}})
 
-    assert settings.settings_summary("42") == "Уведомлений включено: 2 · Кухонь: 2 · Вещей в шкафу: 3"
+    assert settings.settings_summary("42") == "включено 2"
 
 
 def test_myday_blocks_toggle_and_reset_day_cache(monkeypatch):

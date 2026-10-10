@@ -64,15 +64,15 @@ def wardrobe_style(styles):
 
 
 def settings_home(city="", language="", summary=""):
-    """Главный экран Настроек: город, язык обучения и короткая сводка."""
+    """Главный экран Настроек: жирные подписи «Город:», «Язык обучения:», «Уведомления:»."""
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
-    b.line(f"Город: {city or 'не выбран'}")
+    b.labeled_line("Город", city or "не выбран", lowercase=False)
     if language:
-        b.line(f"Язык обучения: {language[:1].upper()}{language[1:]}")
+        b.labeled_line("Язык обучения", f"{language[:1].upper()}{language[1:]}", lowercase=False)
     if summary:
-        b.line(summary)
+        b.labeled_line("Уведомления", summary)
     return b.build_stripped()
 
 

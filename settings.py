@@ -283,12 +283,10 @@ def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeybo
     ])
 
 def settings_summary(cid) -> str:
-    """«Уведомлений включено: 4 · Кухонь: 8 · Вещей в шкафу: 50»."""
-    from wardrobe_model import wardrobe_stats
+    """«включено 4» — сколько уведомлений включено."""
     enabled = sum(1 for kind, _label in NOTIF_TYPES
                   if notification_available(cid, kind) and notif_on(cid, kind))
-    items, _counts = wardrobe_stats(store.load_wardrobe(cid))
-    return f"Уведомлений включено: {enabled} · Кухонь: {len(cuisines(cid))} · Вещей в шкафу: {items}"
+    return f"включено {enabled}" if enabled else "выключены"
 
 
 async def send_home(bot, cid, q=None):

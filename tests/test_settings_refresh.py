@@ -59,8 +59,10 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
     text = sent[0]["text"]
-    assert text == ("🎚️ Настройки\n\nГород: Алкмар\nЯзык обучения: Нидерландский\n"
-                    "Уведомлений включено: 1 · Кухонь: 1 · Вещей в шкафу: 0")
+    assert text == "🎚️ Настройки\n\nГород: Алкмар\nЯзык обучения: Нидерландский\nУведомления: включено 1"
+    bold = [text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+            for e in sent[0]["entities"] if e.type == "bold"]
+    assert bold[-3:] == ["Город:", "Язык обучения:", "Уведомления:"]
     callbacks = [b.callback_data for row in sent[0]["reply_markup"].inline_keyboard for b in row]
     assert "set_learning_global" in callbacks
     assert "set_notif" in callbacks
