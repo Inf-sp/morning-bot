@@ -15,11 +15,11 @@ def _settings(monkeypatch, saved):
 
 
 def test_notification_time_defaults_and_only_known_slots(monkeypatch):
-    saved = {"notif_time_daily_words": "08:00", "notif_time_news_digest": "03:00"}
+    saved = {"notif_time_daily_words": "08:00", "notif_time_evening_weather": "03:00"}
     _settings(monkeypatch, saved)
 
     assert settings.notif_time("42", "daily_words") == "08:00"
-    assert settings.notif_time("42", "news_digest") == "19:00"  # неизвестное значение — по умолчанию
+    assert settings.notif_time("42", "evening_weather") == "20:00"  # неизвестное значение — по умолчанию
     assert settings.user_notif_label("42", "weekend_events") == "Концерты недели · пт 10:00"
     assert settings.user_notif_label("42", "ns_disruptions") == "Поезда NS · при сбое"
 
@@ -54,33 +54,33 @@ def test_notification_screen_toggles_and_picks_time(monkeypatch):
 
     monkeypatch.setattr(settings.rich_delivery, "show", show)
 
-    asyncio.run(settings.handle_callback(None, "42", "set_notiftime_news_digest_0800"))
-    asyncio.run(settings.handle_callback(None, "42", "set_notiftgl_news_digest"))
+    asyncio.run(settings.handle_callback(None, "42", "set_notiftime_evening_weather_1800"))
+    asyncio.run(settings.handle_callback(None, "42", "set_notiftgl_evening_weather"))
 
-    assert saved["notif_time_news_digest"] == "08:00" and saved["notif_news_digest"] is True
+    assert saved["notif_time_evening_weather"] == "18:00" and saved["notif_evening_weather"] is True
     text, labels, callbacks = shown[-1]
-    assert text.startswith("🔔 Главные новости · 08:00")
-    assert labels[:5] == [["✅ Присылать"], ["✅ 08:00"], ["□ 12:00"], ["□ 19:00"], ["□ 21:00"]]
+    assert text.startswith("🔔 Погода на завтра · 18:00")
+    assert labels[:4] == [["✅ Присылать"], ["✅ 18:00"], ["□ 20:00"], ["□ 21:00"]]
     assert callbacks[-1] == ["set_notif", "m_menu"]
 
 
 def test_next_notification_line(monkeypatch):
     from datetime import datetime
-    saved = {"notif_news_digest": True, "notif_daily_words": False, "notif_evening_weather": False,
+    saved = {"notif_evening_weather": True, "notif_daily_words": False,
              "notif_weekend_events": True}
     _settings(monkeypatch, saved)
     thursday_evening = datetime(2026, 10, 8, 20, 0, tzinfo=settings.config.TZ)
     thursday_noon = datetime(2026, 10, 8, 12, 0, tzinfo=settings.config.TZ)
 
-    assert settings.next_notification("42", thursday_noon) == "Следующая: Главные новости сегодня в 19:00"
+    assert settings.next_notification("42", thursday_noon) == "Следующая: Погода на завтра сегодня в 20:00"
     assert settings.next_notification("42", thursday_evening) == "Следующая: Концерты недели завтра в 10:00"
-    saved.update(notif_news_digest=False, notif_weekend_events=False)
+    saved.update(notif_evening_weather=False, notif_weekend_events=False)
     assert settings.next_notification("42", thursday_noon) == ""
 
 
 def test_settings_summary_line(monkeypatch):
-    saved = {"notif_news_digest": True, "notif_daily_words": True, "notif_weather_warn": False,
-             "notif_ns_disruptions": False, "notif_evening_weather": False, "notif_weekend_events": False,
+    saved = {"notif_evening_weather": True, "notif_daily_words": True, "notif_weather_warn": False,
+             "notif_ns_disruptions": False, "notif_weekend_events": False,
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
     monkeypatch.setattr(settings.store, "load_wardrobe", lambda _cid: {"zones": {
@@ -125,28 +125,3 @@ def test_myday_skips_disabled_blocks_without_preparing_them(monkeypatch):
     text, _entities = myday._build_day_text("42")
 
     assert "Погода" not in text and "Лайфхак" not in text and "©" not in text
-
-
-def test_news_topics_and_count_from_settings(monkeypatch):
-    import news_digest
-    from datetime import datetime, timedelta
-
-    now = datetime(2026, 10, 8, 19, tzinfo=settings.config.TZ)
-
-    def item(title, hours=1, **extra):
-        return {"source": "NOS", "title": title, "link": f"https://x/{abs(hash(title))}",
-                "published": now - timedelta(hours=hours), "summary": "", **extra}
-
-    items = [item("Ajax wint van PSV"), item("Nieuwe film van Verhoeven"), item("Kabinet valt"),
-             item("Planeet ontdekt", science=True), item("Fossiel gevonden", science=True),
-             item("Robot leert lopen", science=True)]
-
-    titles = [i["title"] for i in news_digest.select(items, "Alkmaar", now=now, topics_off=("sport", "politics"), limit=3)]
-
-    assert len(titles) == 3
-    assert "Ajax wint van PSV" not in titles and "Kabinet valt" not in titles
-    assert news_digest.topic(items[1]) == "culture" and news_digest.topic(items[0]) == "sport"
-
-    saved = {}
-    _settings(monkeypatch, saved)
-    assert settings.news_topics_off("42") == ["politics"] and settings.news_count("42") == 5

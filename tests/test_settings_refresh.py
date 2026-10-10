@@ -23,7 +23,7 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     assert "🔄 Обновить" not in [label for row in rows for label in row]
     assert rows == [
         ["📍 Город", "🧠 Язык обучения"], ["🔔 Уведомления", "☀️ Мой день"],
-        ["📰 Новости", "📤 Экспорт"], ["#️⃣ Главная"],
+        ["📤 Экспорт"], ["#️⃣ Главная"],
     ]
 
 

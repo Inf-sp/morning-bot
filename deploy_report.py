@@ -80,8 +80,6 @@ def load_release_title(version, release_notes) -> str:
         return _DEFAULT_TITLE
     if any(word in text for word in ("история", "релиз", "релизов", "обновлен", "обновлений")):
         return "Чистые обновления"
-    if "новост" in text:
-        return "Умнее новости"
     if "эмодз" in text or "ui-словар" in text or "централизованные значки" in text:
         return "Единый UI-стиль"
     if "рецепт" in text:

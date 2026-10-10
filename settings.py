@@ -8,7 +8,6 @@ from ui import settings as settings_ui
 from ui.constants import cuisine_label, ui_label
 import rich_delivery
 from ui.navigation import nav_row
-from ui.text import ru_plural
 
 _log = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ NOTIF_TYPES = [
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
-    ("news_digest",     "Главные новости"),
 ]
 
 CUISINE_OPTIONS = [
@@ -101,13 +99,12 @@ def set_(cid, key, value):
 NOTIF_TIMES = {
     "weather_warn":    ("08:00", ("07:00", "08:00", "09:00")),
     "daily_words":     ("11:00", ("08:00", "11:00", "14:00", "18:00")),
-    "news_digest":     ("19:00", ("08:00", "12:00", "19:00", "21:00")),
     "evening_weather": (EVENING_WEATHER_TIME, ("18:00", "20:00", "21:00")),
     "weekend_events":  ("10:00", ("09:00", "10:00", "18:00")),
 }
 _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
-    "news_digest": "Главные новости", "evening_weather": "Погода на завтра",
+    "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
 }
 
@@ -141,47 +138,6 @@ async def toggle_myday_block(bot, cid, key, q=None):
     await send_myday_blocks(bot, cid, q)
 
 
-NEWS_COUNTS = (3, 5)
-
-
-def news_topics_off(cid) -> list:
-    import news_digest
-    saved = get(cid, "news_topics_off", None)
-    valid = dict(news_digest.TOPICS)
-    return [key for key in (saved if isinstance(saved, list) else news_digest.DEFAULT_TOPICS_OFF) if key in valid]
-
-
-def news_count(cid) -> int:
-    saved = get(cid, "news_count", None)
-    return saved if saved in NEWS_COUNTS else NEWS_COUNTS[-1]
-
-
-async def send_news_settings(bot, cid, q=None):
-    import news_digest
-    off = news_topics_off(cid)
-    rows = [[InlineKeyboardButton(("□ " if key in off else "✅ ") + label, callback_data=f"set_newstgl_{key}")]
-            for key, label in news_digest.TOPICS]
-    count = news_count(cid)
-    rows.append([InlineKeyboardButton(("✅ " if n == count else "□ ") + f"{n} {ru_plural(n, 'новость', 'новости', 'новостей')}",
-                                      callback_data=f"set_newscount_{n}") for n in NEWS_COUNTS])
-    rows.append(nav_row("set_home"))
-    await rich_delivery.show(bot, cid, settings_ui.news_settings(), reply_markup=InlineKeyboardMarkup(rows), query=q)
-
-
-async def toggle_news_topic(bot, cid, key, q=None):
-    import news_digest
-    if key in dict(news_digest.TOPICS):
-        off = news_topics_off(cid)
-        set_(cid, "news_topics_off", [item for item in off if item != key] if key in off else [*off, key])
-    await send_news_settings(bot, cid, q)
-
-
-async def set_news_count(bot, cid, value, q=None):
-    if value.isdigit() and int(value) in NEWS_COUNTS:
-        set_(cid, "news_count", int(value))
-    await send_news_settings(bot, cid, q)
-
-
 def notif_time(cid, kind) -> str:
     """Выбранное время рассылки «HH:MM» или время по умолчанию; "" — у рассылки нет времени."""
     default, options = NOTIF_TIMES.get(kind, ("", ()))
@@ -198,7 +154,7 @@ _NOTIF_DAYS = {"weekend_events": (4,)}  # пятница; остальные —
 
 
 def next_notification(cid, now=None) -> str:
-    """«Следующая: Главные новости сегодня в 19:00» или "". Погодное предупреждение
+    """«Следующая: Обучение языку сегодня в 11:00» или "". Погодное предупреждение
     не считается: оно приходит только при важной погоде."""
     from datetime import datetime, timedelta
     now = now or datetime.now(config.TZ)
@@ -222,7 +178,7 @@ def next_notification(cid, now=None) -> str:
 
 
 def user_notif_label(cid, kind) -> str:
-    """«Главные новости · 19:00» с временем, выбранным пользователем."""
+    """«Обучение языку · 11:00» с временем, выбранным пользователем."""
     title = _NOTIF_TITLES.get(kind, kind)
     if kind == "ns_disruptions":
         return f"{title} · при сбое"
@@ -342,8 +298,7 @@ async def send_home(bot, cid, q=None):
          InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif"),
          InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
-        [InlineKeyboardButton("📰 Новости", callback_data="set_news"),
-         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+        [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     city = store.get_settings(cid).get("city") or ""
@@ -611,9 +566,6 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "ns_disruptions":
         import ns_alerts
         await ns_alerts.check_user(bot, cid)
-    elif kind == "news_digest":
-        import news_digest
-        await news_digest.send_digest(bot, cid)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -654,7 +606,6 @@ _ADMIN_NOTIFICATION_META = {
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
-    "news_digest":     ("19:00", "Главные новости"),
 }
 
 
@@ -1270,12 +1221,6 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_food_restriction(bot, cid, data[len("set_foodrestr_"):], q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
-    elif data == "set_news":
-        await send_news_settings(bot, cid, q)
-    elif data.startswith("set_newstgl_"):
-        await toggle_news_topic(bot, cid, data[len("set_newstgl_"):], q)
-    elif data.startswith("set_newscount_"):
-        await set_news_count(bot, cid, data[len("set_newscount_"):], q)
     elif data == "set_myday":
         await send_myday_blocks(bot, cid, q)
     elif data.startswith("set_mydaytgl_"):

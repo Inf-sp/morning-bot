@@ -1,57 +1,15 @@
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 
-import news_digest
 import public_holidays
 import sun
 from ui import myday as myday_ui
-from ui import news_digest as news_ui
 
 TZ = ZoneInfo("Europe/Amsterdam")
 NOW = datetime(2026, 10, 8, 19, 0, tzinfo=TZ)
-
-
-def _item(source, title, hours_ago=1, summary=""):
-    return {"source": source, "title": title, "link": f"https://x/{abs(hash(title))}",
-            "published": NOW - timedelta(hours=hours_ago), "summary": summary}
-
-
-def test_news_selection_prefers_science_and_limits_politics():
-    items = [
-        _item("NOS", "Kabinet valt na ruzie over begroting"),
-        _item("NU.nl", "Kabinet valt na ruzie over de begroting"),  # дубль NOS
-        _item("NU.nl", "Minister wil strengere regels"),             # вторая политика — не попадёт
-        _item("NH Nieuws", "Lagere celstraf geëist tegen danser uit Zwaag"),
-        _item("NH Nieuws", "Brug in Alkmaar dicht dit weekend"),
-        _item("NOS", "Podcast De Dag: geen Televizier-ring"),
-        _item("NOS", "Oud nieuws", hours_ago=30),
-        {**_item("NU.nl", "Planeet ontdekt die uit dode ster is ontstaan", hours_ago=40), "science": True},
-        _item("NOS", "Record astronauten"),
-    ]
-
-    titles = [item["title"] for item in news_digest.select(items, "Alkmaar", now=NOW)]
-
-    assert titles[0] == "Planeet ontdekt die uit dode ster is ontstaan"  # наука за 3 дня — первой
-    assert titles[1] == "Record astronauten"
-    assert "Brug in Alkmaar dicht dit weekend" in titles
-    assert "Oud nieuws" not in titles and not any("Podcast" in title for title in titles)
-    politics = [title for title in titles if news_digest._is_politics({"title": title, "summary": ""})]
-    assert len(politics) <= 1
-    assert len(titles) <= news_digest.MAX_ITEMS
-
-
-def test_news_card_links_titles_to_originals():
-    msg = news_ui.digest("Alkmaar", [
-        {"title": "Мост в Алкмаре закроют", "link": "https://nh/1", "source": "NH Nieuws"},
-        {"title": "Найдена новая планета", "link": "https://nu/2", "source": "NU.nl"},
-    ])
-
-    assert msg.text == ("📰 Главное за день · Alkmaar\n\n• Мост в Алкмаре закроют — NH Nieuws"
-                        "\n\n• Найдена новая планета — NU.nl")
-    assert [e.url for e in msg.entities if e.url] == ["https://nh/1", "https://nu/2"]
 
 
 def test_holidays_today_and_tomorrow_with_russian_names(monkeypatch):

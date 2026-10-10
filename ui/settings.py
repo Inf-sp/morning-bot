@@ -13,13 +13,6 @@ def notifications(next_line=""):
     return b.build_stripped()
 
 
-def news_settings():
-    b = MessageBuilder()
-    b.section("📰 Новости")
-    b.line("Темы вечерних новостей и сколько их присылать. Зелёные темы — включены.")
-    return b.build_stripped()
-
-
 def myday_blocks():
     b = MessageBuilder()
     b.section("☀️ Мой день")

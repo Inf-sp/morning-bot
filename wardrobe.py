@@ -157,8 +157,8 @@ def weather_signature(weather_ctx, flags):
     }
 
 
-def _build_look_message(look_data, *, news=None):
-    msg = wardrobe_ui.render_wardrobe_message(look_data, news=news)
+def _build_look_message(look_data):
+    msg = wardrobe_ui.render_wardrobe_message(look_data)
     return msg.text, msg.entities
 
 
@@ -543,7 +543,12 @@ def has_wardrobe_items(cid) -> bool:
     return bool(store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
 
 
-def _no_outfit_screen(result_kb, alternative=False):
+def _no_outfit_screen(result_kb, alternative=False, anchored=False):
+    if anchored:
+        return (
+            "С этой вещью полный образ пока не собрать: в шкафу не хватает верха, низа или обуви.",
+            result_kb,
+        )
     if alternative:
         return (
             "Другого полноценного комплекта для этих условий сейчас нет.",
@@ -559,9 +564,9 @@ def _no_outfit_screen(result_kb, alternative=False):
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
                      previous_style=None, q=None, silent=False,
-                     style=None):
+                     style=None, anchor_id=None):
     result_kb = kb or _wardrobe_home_kb()
-    cached = None if previous_item_ids else _get_cached_look(cid)
+    cached = None if previous_item_ids or anchor_id else _get_cached_look(cid)
     if cached:
         # Погода поменялась (дождь, ветер, холод) или образ собран без неё — пересобираем.
         current = weather_signature(*await asyncio.to_thread(_wear_weather, store.get_settings(cid)))
@@ -577,9 +582,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
         look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
-        text, entities = _build_look_message(
-            look_data,  # без строки «На неделе»: карточка образа — только образ
-        )
+        text, entities = _build_look_message(look_data)
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
             cached["look_data"] = look_data
@@ -652,11 +655,13 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         w, weather_ctx, wardrobe_history, style_block,
         previous_item_ids=previous_item_ids,
         selected_styles=selected_styles,
+        anchor_id=anchor_id,
     )
     if not outfits:
         if silent:
             return
-        no_text, no_kb = _no_outfit_screen(result_kb, alternative=bool(previous_item_ids))
+        no_text, no_kb = _no_outfit_screen(
+            result_kb, alternative=bool(previous_item_ids), anchored=bool(anchor_id))
         if status is not None:
             await status.replace(no_text, parse_mode="HTML", reply_markup=no_kb)
         else:
@@ -698,9 +703,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     }
     if kb is None:
         result_kb = build_wardrobe_keyboard()
-    text, entities = _build_look_message(
-        look_data,  # без строки «На неделе»: карточка образа — только образ
-    )
+    text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
     # он окажется привязан к устаревшей версии и станет невалидным сразу же.
@@ -797,6 +800,7 @@ async def send_item_card(bot, cid, item_id, q=None):
     zone_slug = ZONE_SLUG.get(zone, "oth")
     kb = _kb([
         [(delete_label("Удалить"), f"w_delete_{item_id}")],
+        [("Собрать образ", f"w_with_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
     ])
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)

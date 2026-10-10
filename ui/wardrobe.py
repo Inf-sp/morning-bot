@@ -1,7 +1,6 @@
 import re
 
 from .builder import MessageBuilder
-from .news import append_weekly_news
 from .text import ru_plural
 from wardrobe_model import public_zone_name, zone_of
 
@@ -61,7 +60,7 @@ def empty_wardrobe():
     return b.build_stripped()
 
 
-def render_wardrobe_message(look_data, *, news=None):
+def render_wardrobe_message(look_data):
     """Образ дня одним списком «Надень сегодня»: базовые вещи, затем дополнения.
 
     Погода — одной строкой-причиной и только когда она повлияла на выбор.
@@ -97,8 +96,6 @@ def render_wardrobe_message(look_data, *, news=None):
     if weather_reason:
         b.spacer()
         b.line(weather_reason)
-
-    append_weekly_news(b, news)
 
     return b.build_stripped()
 

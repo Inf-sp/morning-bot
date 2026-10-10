@@ -18,7 +18,9 @@ def _settings_style(choice):
 
 
 async def handle_callback(bot, cid, q, data, status=None):
-    if data == "w_look" or data.startswith("w_lookst_"):
+    if data == "w_look" or data.startswith(("w_lookst_", "w_with_")):
+        # w_with_<id> — «Собрать образ» из карточки вещи: образ дня с этой вещью.
+        anchor_id = data[len("w_with_"):] if data.startswith("w_with_") else None
         choice = data[len("w_lookst_"):] if data.startswith("w_lookst_") else ""
         style = (_settings_style(choice))
         previous = wardrobe._get_cached_look(cid) or {}
@@ -35,10 +37,11 @@ async def handle_callback(bot, cid, q, data, status=None):
         try:
             await wardrobe.send_looks(
                 bot, cid, status=status,
-                previous_item_ids=previous.get("item_ids") or [],
+                previous_item_ids=[] if anchor_id else previous.get("item_ids") or [],
                 previous_style_tip=previous_style_tip,
                 previous_style=previous_style,
                 style=style,
+                anchor_id=anchor_id,
             )
         except Exception as error:
             await verify.safe_error(bot, cid, error, back="m_wardrobe")

@@ -11,7 +11,6 @@ from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
 
 import config
 import ai
-import category_news
 import store
 import storage_driver
 import callback_topics
@@ -329,40 +328,6 @@ async def job_warm_weather_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 @ai.background_job
-async def job_refresh_category_news(context: ContextTypes.DEFAULT_TYPE):
-    """Globally refresh verified category news before home-screen warmups."""
-    if tracking.has_active_actions():
-        logging.info("category news refresh skipped: user action active")
-        context.job_queue.run_once(
-            job_refresh_category_news, when=60,
-            data={"category_news_retry": True},
-            **_job_options("category_news_refresh_retry"),
-        )
-        return
-    try:
-        report = await asyncio.to_thread(category_news.refresh_pool)
-        logging.info(
-            "category news refresh complete updated=%s retained=%s missing=%s",
-            ",".join(report.get("updated") or ()),
-            ",".join(report.get("retained") or ()),
-            ",".join(report.get("missing") or ()),
-        )
-        retrying = bool(
-            (getattr(getattr(context, "job", None), "data", None) or {}).get(
-                "category_news_retry"
-            )
-        )
-        if report.get("missing") and not retrying:
-            context.job_queue.run_once(
-                job_refresh_category_news, when=15 * 60,
-                data={"category_news_retry": True},
-                **_job_options("category_news_refresh_retry"),
-            )
-    except Exception:
-        logging.exception("category news refresh failed")
-
-
-@ai.background_job
 async def job_warm_movie_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
     """Ночью обновляет витрины кинопремьер по одной на страну."""
     seen_countries = set()
@@ -438,18 +403,6 @@ async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
             await settings.send_scheduled_notification(context.bot, cid, ns_alerts.KIND)
         except Exception:
             logging.exception("job_ns_disruptions failed for cid=%s", cid)
-
-
-@ai.background_job
-async def job_news_digest(context: ContextTypes.DEFAULT_TYPE):
-    """19:00: 3–5 главных новостей дня (NOS, NU.nl, NH Nieuws)."""
-    for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "news_digest") or not _slot_due(context, cid, "news_digest"):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, "news_digest")
-        except Exception:
-            logging.exception("job_news_digest failed for cid=%s", cid)
 
 
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
@@ -596,10 +549,6 @@ def _build_application():
     def _t(hm):
         return datetime.strptime(hm, "%H:%M").replace(tzinfo=TZ).timetz()
     jq.run_once(
-        job_refresh_category_news, when=3,
-        **_job_options("category_news_refresh_startup"),
-    )
-    jq.run_once(
         job_dictionary_maintenance,
         when=1,
         **_job_options("dictionary_maintenance_once"),
@@ -649,10 +598,6 @@ def _build_application():
             job_warm_home_pages, time=_t(time_label), days=tuple(range(7)), data="retry",
             **_job_options(f"warm_home_retry_{time_label.replace(':', '')}"),
         )
-    jq.run_daily(
-        job_refresh_category_news, time=_t("01:30"), days=tuple(range(7)),
-        **_job_options("category_news_refresh_daily"),
-    )
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
     # Внешние афиши прогреваются отдельно: премьеры — по понедельникам,
     # концерты — перед пятничной подборкой. Внутренние TTL не дают дублировать запросы.
@@ -674,7 +619,6 @@ def _build_application():
         ("weather_warn", job_weather_warn, tuple(range(7))),
         ("weekend_events", job_weekend_events, (4,)),
         ("daily_words", job_daily_words, tuple(range(7))),
-        ("news_digest", job_news_digest, tuple(range(7))),
         ("evening_weather", job_evening_weather, tuple(range(7))),
     )
     for kind, job, days in notification_jobs:

@@ -157,7 +157,6 @@ _TAVILY_SCENARIOS = {
     "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
-    "category_news": {"ttl": 6 * 3600, "economy": True, "advanced": False},
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"
@@ -214,7 +213,7 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
             "include_raw_content": False,
             "include_images": False,
         }
-        if topic in {"general", "news", "finance"}:
+        if topic in {"general", "finance"}:
             payload["topic"] = topic
         if time_range in {"day", "week", "month", "year", "d", "w", "m", "y"}:
             payload["time_range"] = time_range
@@ -268,13 +267,9 @@ def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general"
     if not config.FIRECRAWL_API_KEY:
         return []
     try:
-        news_search = topic == "news"
         payload = {"query": query, "limit": max_results}
-        if news_search:
-            payload["sources"] = ["news"]
         r = requests.post(
-            "https://api.firecrawl.dev/v2/search" if news_search
-            else "https://api.firecrawl.dev/v1/search",
+            "https://api.firecrawl.dev/v1/search",
             json=payload,
             headers={"Authorization": f"Bearer {config.FIRECRAWL_API_KEY}"},
             timeout=tracking.bounded_timeout(18),
@@ -286,8 +281,6 @@ def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general"
             _log.warning("firecrawl_search failed: HTTP %s", r.status_code)
             return []
         data = r.json().get("data") or []
-        if isinstance(data, dict):
-            data = data.get("news") or data.get("web") or []
         return [{
             "title": row.get("title", ""),
             "url": row.get("url", ""),

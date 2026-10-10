@@ -193,7 +193,6 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     import asyncio
     from datetime import timedelta
 
-    import category_news
     import config
     import settings
     import wardrobe
@@ -227,7 +226,6 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     monkeypatch.setattr(settings, "wardrobe_prefs_context", lambda _cid: "")
     monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Городской"])
     monkeypatch.setattr(wardrobe, "_get_or_create_purchase_recommendation", lambda *_a, **_k: None)
-    monkeypatch.setattr(category_news, "cached_line", lambda _key: "")
     monkeypatch.setattr(wardrobe, "save_outfit_feedback", lambda *_a: None)
     monkeypatch.setattr(wardrobe, "_save_cached_look", lambda _cid, ids, look_data: saved.update(ids=ids, look=look_data))
     monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles: list(wardrobe_stylist.BASE_TRENDS))
@@ -301,3 +299,16 @@ def test_cached_look_is_rebuilt_when_rain_appears(monkeypatch):
     assert wardrobe.weather_signature(*rainy) != cached["look_data"]["weather"]
     assert wardrobe.weather_signature(*dry_same) == cached["look_data"]["weather"]
     assert wardrobe.weather_signature({}, None) is None  # без погоды — не сравниваем
+
+
+def test_outfit_built_around_chosen_item():
+    from wardrobe_outfit import top_outfits
+    warm = wear_window(_hourly(24, 22), NOW)
+    w = _wardrobe(TEE, HOODIE, JEANS, SNEAKERS, RAIN_JACKET)
+
+    # Кофта в тепле сама не попадает, но по «Собрать образ» — в каждом комплекте и с футболкой.
+    outfits = top_outfits(w, warm, [], "", selected_styles=[], anchor_id="hoodie")
+    assert outfits and all({"hoodie", "tee"} <= _ids(outfit) for outfit in outfits)
+    assert all(RAIN_JACKET["id"] in _ids(o) for o in top_outfits(w, warm, [], "", selected_styles=[],
+                                                              anchor_id=RAIN_JACKET["id"]))
+    assert top_outfits(w, warm, [], "", selected_styles=[], anchor_id="missing") == []

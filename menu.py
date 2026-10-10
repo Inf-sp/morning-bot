@@ -1,6 +1,5 @@
 import logging
 
-import category_news
 import store
 from ui import menu as menu_ui
 
@@ -71,11 +70,11 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-def _day_menu_message(menu, news=None):
+def _day_menu_message(menu):
     import day_menu
     return menu_ui.day_menu(
         menu, cuisine_label=day_menu.cuisine_label(menu.get("cuisine")),
-        intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), ""), news=news,
+        intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), ""),
     )
 
 
@@ -121,16 +120,15 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         await _with_food_status(bot, cid, status, q, build_recipe)
         return
 
-    news = category_news.cached_line("food")
     if not refresh:
         ready = day_menu.get_cached_day_menu(cid)
         if ready is not None:
-            await _deliver(bot, cid, _day_menu_message(ready, news), status, q)
+            await _deliver(bot, cid, _day_menu_message(ready), status, q)
             return
 
     async def build_menu(status):
         menu = await asyncio.to_thread(day_menu.get_day_menu, cid, None, refresh, cuisine)
-        msg = _day_menu_message(menu, news)
+        msg = _day_menu_message(menu)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
     await _with_food_status(bot, cid, status, q, build_menu)

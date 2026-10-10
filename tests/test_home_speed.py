@@ -95,19 +95,7 @@ def test_home_warm_runs_ai_in_background_mode(monkeypatch):
     assert ai._is_background() is False
 
 
-def test_background_jobs_propagate_mode_into_threads(monkeypatch):
-    modes = []
-
-    def refresh_pool():
-        modes.append(ai._is_background())
-        return {}
-
-    monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
-    monkeypatch.setattr(bot.category_news, "refresh_pool", refresh_pool)
-
-    asyncio.run(bot.job_refresh_category_news(_Context(None)))
-
-    assert modes == [True]
+def test_background_jobs_are_wrapped():
     for job in (bot.job_warm_weather_cache, bot.job_warm_movie_premieres_cache,
                 bot.job_warm_book_premieres_cache,
                 bot.job_refresh_concerts_cache, bot.job_retry_dictionary_adds,

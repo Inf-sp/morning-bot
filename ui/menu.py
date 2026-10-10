@@ -7,7 +7,6 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_FLAG, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
 from .navigation import nav_row
-from .news import append_weekly_news
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -222,7 +221,7 @@ _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "d
 _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
 
 
-def day_menu(menu, *, cuisine_label, intro="", news=None):
+def day_menu(menu, *, cuisine_label, intro=""):
     """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов."""
     b = MessageBuilder()
     flag = CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
@@ -238,11 +237,10 @@ def day_menu(menu, *, cuisine_label, intro="", news=None):
     if intro:  # описание кухни — под блюдами: «Турецкая кухня — это мясо, овощи…»
         b.spacer()
         b.line(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
-    append_weekly_news(b, news)
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes]))
 
 
-def food_menu(idea=None, *, meal="", news=None):
+def food_menu(idea=None, *, meal=""):
     """Полный рецепт блюда из меню дня для выбранного приёма пищи."""
     idea = idea or {}
     b = MessageBuilder()

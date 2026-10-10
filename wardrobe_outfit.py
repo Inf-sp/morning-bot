@@ -538,26 +538,36 @@ def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item
 
 
 def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,
-                selected_styles=None, limit=TOP_OUTFITS):
+                selected_styles=None, limit=TOP_OUTFITS, anchor_id=None):
     """До limit лучших разных полных комплектов, лучший первым.
 
     Перебирает ограниченные комбинации (топ-3 на зону) из вещей, прошедших
     жёсткие правила погоды; соседние варианты отличаются хотя бы одной вещью.
+    anchor_id — вещь из «Собрать образ»: она есть в каждом комплекте, даже если
+    погода для неё не идеальна, остальное подбирается под неё.
     """
     candidates = select_outfit_candidates(w, weather_ctx)
-    required = ["Верх", "Низ", "Обувь"]
-    if any(not candidates.get(z) for z in required):
+    anchor_zone, anchor = next(((zone, item) for zone, _sub, item in _flat_wardrobe_items(w)
+                                if anchor_id and item.get("id") == anchor_id), (None, None))
+    if anchor_id and anchor_zone not in ("Верх", "Кофты", "Низ", "Обувь", "Верхняя одежда"):
         return []
+    required = ["Верх", "Низ", "Обувь"]
+    if any(not candidates.get(z) and z != anchor_zone for z in required):
+        return []
+
+    def _pool(zone, top):
+        return [anchor] if zone == anchor_zone else top
 
     def _combos():
         import itertools
-        pools = [_top_candidates(candidates[z], selected_styles=selected_styles) for z in required]
-        optional_zones = [z for z in ("Кофты", "Верхняя одежда") if candidates.get(z)]
+        pools = [_pool(z, _top_candidates(candidates.get(z) or [], selected_styles=selected_styles))
+                 for z in required]
+        optional_zones = [z for z in ("Кофты", "Верхняя одежда") if candidates.get(z) or z == anchor_zone]
         for zone in optional_zones:
-            top = _top_candidates(candidates[zone], limit=2, selected_styles=selected_styles)
+            top = _top_candidates(candidates.get(zone) or [], limit=2, selected_styles=selected_styles)
             # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.
             mandatory = zone == "Верхняя одежда" and rules.needs_outerwear(weather_ctx)
-            pools.append(top if mandatory else [None] + top)
+            pools.append(_pool(zone, top if mandatory else [None] + top))
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]
 
@@ -572,6 +582,8 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
         for complete in _completed_layered_combos(combo, candidates, selected_styles)
     ]
     combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
+    if anchor:
+        combos = [combo for combo in combos if any(it.get("id") == anchor_id for it in combo)]
     if previous_item_ids:
         # «Новый образ» должен менять основу комплекта, а не одну случайную вещь:
         # минимум две замены; маленькому шкафу оставляем честную одну замену.
