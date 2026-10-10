@@ -35,3 +35,22 @@ def ns_restored(title) -> MessageSpec:
     b = MessageBuilder()
     b.line(f"✅ Движение {title} восстановлено" if title else "✅ Движение восстановлено")
     return b.build_stripped()
+
+
+def flight_deal(item, details) -> MessageSpec:
+    """Новая публикация авиадила: куда и за сколько; без разбора — заголовок источника."""
+    b = MessageBuilder()
+    b.section("✈️ Ошибочный тариф из Амстердама" if details.get("error_fare") else "✈️ Дешёвый билет из Амстердама")
+    b.spacer()
+    destination = details.get("destination") or ""
+    b.line(f"Amsterdam → {destination}" if destination else item.get("title") or "")
+    meta = [part for part in (
+        f"от {details['price']}" if details.get("price") else "",
+        details.get("trip") or "",
+        item.get("source") or "",
+    ) if part]
+    if meta:
+        b.line(" · ".join(meta))
+    b.spacer()
+    b.line("Такие цены держатся недолго — проверь даты и цену в публикации.")
+    return b.build_stripped()

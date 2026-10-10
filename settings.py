@@ -20,6 +20,7 @@ NOTIF_TYPES = [
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
+    ("flight_deals",    "Дешёвые билеты"),
 ]
 
 CUISINE_OPTIONS = [
@@ -106,6 +107,7 @@ _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
+    "flight_deals": "Дешёвые билеты",
 }
 
 
@@ -182,6 +184,8 @@ def user_notif_label(cid, kind) -> str:
     title = _NOTIF_TITLES.get(kind, kind)
     if kind == "ns_disruptions":
         return f"{title} · при сбое"
+    if kind == "flight_deals":
+        return f"{title} · из Амстердама"
     time_label = notif_time(cid, kind)
     if kind == "weather_warn":
         time_label += ", если есть повод"
@@ -563,6 +567,9 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "ns_disruptions":
         import ns_alerts
         await ns_alerts.check_user(bot, cid)
+    elif kind == "flight_deals":
+        import flight_deals
+        await flight_deals.check_user(bot, cid)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -603,6 +610,7 @@ _ADMIN_NOTIFICATION_META = {
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
+    "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
 }
 
 
@@ -617,8 +625,8 @@ def _time_sort_key(value: str) -> int:
 
 
 def notification_available(cid, kind) -> bool:
-    """«Поезда NS» — только для Нидерландов: в другой стране рассылка всё равно молчит."""
-    if kind == "ns_disruptions":
+    """«Поезда NS» и «Дешёвые билеты» (вылет из Амстердама) — только для Нидерландов."""
+    if kind in ("ns_disruptions", "flight_deals"):
         return str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL"
     return True
 

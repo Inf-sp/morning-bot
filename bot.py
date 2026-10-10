@@ -405,6 +405,30 @@ async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_ns_disruptions failed for cid=%s", cid)
 
 
+@ai.background_job
+async def job_flight_deals(context: ContextTypes.DEFAULT_TYPE):
+    """Каждые 10 минут 07:00–23:00: новые публикации авиадилов из Амстердама."""
+    import flight_deals
+
+    if not config.FLIGHT_DEAL_FEEDS or not flight_deals.is_active_time():
+        return
+    cids = [cid for cid in access.get_allowed_cids()
+            if settings.notification_available(cid, flight_deals.KIND)
+            and settings.notif_on(cid, flight_deals.KIND)]
+    if not cids:
+        return
+    # Ленты читаются один раз на всех пользователей.
+    deals = await asyncio.to_thread(flight_deals.current_deals)
+    if deals is None:
+        return
+    for cid in cids:
+        try:
+            await flight_deals.check_user(
+                settings._NotificationTrackingBot(context.bot, flight_deals.KIND), cid, deals)
+        except Exception:
+            logging.exception("job_flight_deals failed for cid=%s", cid)
+
+
 async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "evening_weather") or not _slot_due(context, cid, "evening_weather"):
@@ -572,6 +596,12 @@ def _build_application():
         interval=600,
         first=120,
         **_job_options("ns_disruptions_repeating"),
+    )
+    jq.run_repeating(
+        job_flight_deals,
+        interval=600,
+        first=180,
+        **_job_options("flight_deals_repeating"),
     )
     jq.run_repeating(
         job_retry_dictionary_adds,

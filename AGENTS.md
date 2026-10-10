@@ -171,6 +171,7 @@ LLM нужен для персонализации, свободного тек�
 | Мой день | `docs/day.md` |
 | Погода | `docs/weather.md` |
 | Поезда NS | `docs/ns.md` |
+| Дешёвые билеты | `docs/flight_deals.md` |
 | Гардероб | `docs/wardrobe.md` |
 | Готовка | `docs/food.md` |
 | Обучение / тренажёр | `docs/word-trainer.md` |

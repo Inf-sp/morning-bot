@@ -74,6 +74,15 @@ OPENROUTER_DAILY_LIMIT = _env_int("OPENROUTER_DAILY_LIMIT", 50)
 CF_NEURON_DAILY_LIMIT = _env_int("CF_NEURON_DAILY_LIMIT", 10000)
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 NS_API_KEY = os.environ.get("NS_API_KEY", "").strip()  # сбои поездов NS
+# Публикации авиадилов (ошибочные тарифы, распродажи): «Название|RSS-URL» через запятую.
+FLIGHT_DEAL_FEEDS = [
+    tuple(part.strip() for part in item.split("|", 1))
+    for item in os.environ.get(
+        "FLIGHT_DEAL_FEEDS",
+        "Secret Flying|https://www.secretflying.com/feed/,Fly4free|https://www.fly4free.com/feed/",
+    ).split(",")
+    if "|" in item and item.split("|", 1)[1].strip()
+]
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
