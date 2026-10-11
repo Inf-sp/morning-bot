@@ -29,7 +29,7 @@ CUISINE_SCENE = {
     "italian": "Amalfi Coast Italy", "japanese": "Mount Fuji Japan", "thai": "Phi Phi Islands Thailand",
     "mexican": "Chichen Itza Mexico", "indian": "Taj Mahal India", "chinese": "Great Wall of China",
     "turkish": "Cappadocia balloons Turkey", "french": "Paris Eiffel Tower",
-    "russian": "Saint Basil's Cathedral Moscow", "georgian": "Gergeti Trinity Church Georgia",
+    "russian": "Moscow Kremlin", "georgian": "Gergeti Trinity Church Georgia",
 }
 _PHOTO_TTL = 30 * 86400
 _PHOTO_RETRY = 86400  # оба сервиса недоступны — запасной вид, новая попытка через сутки
@@ -43,7 +43,7 @@ CUISINE_IMAGE = {
     "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/The_Great_Wall_of_China_at_Jinshanling-edit.jpg/1280px-The_Great_Wall_of_China_at_Jinshanling-edit.jpg",  # Великая Китайская стена
     "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg/1280px-Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg",  # Каппадокия
     "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg",  # Париж
-    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Saint_Basil%27s_Cathedral_in_Moscow.jpg/1280px-Saint_Basil%27s_Cathedral_in_Moscow.jpg",  # храм Василия Блаженного
+    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Moscow_Kremlin_%288281675670%29.jpg/1280px-Moscow_Kremlin_%288281675670%29.jpg",  # Московский Кремль
     "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Gergeti_Trinity_Church_09.23.jpg/1280px-Gergeti_Trinity_Church_09.23.jpg",  # Гергетская церковь
 }
 

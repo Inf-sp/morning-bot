@@ -272,21 +272,8 @@ def test_settings_and_home_stack_into_one_column_home_last():
         ["Назад", "Главная"]]
 
 
-def test_explicit_picture_keeps_link_preview_other_links_stay_off():
-    from telegram import LinkPreviewOptions
-
-    picture = LinkPreviewOptions(url="https://upload.wikimedia.org/x.jpg", prefer_large_media=True,
-                                 show_above_text=True)
-    kept = telegram_runtime.MenuCleanupBot._without_link_preview({"link_preview_options": picture})
-    plain = telegram_runtime.MenuCleanupBot._without_link_preview({"text": "https://example.org"})
-
-    assert kept["link_preview_options"] is picture and "disable_web_page_preview" not in kept
-    assert plain["disable_web_page_preview"] is True and "link_preview_options" not in plain
-
-
 def test_cuisine_photo_comes_from_photo_layer_cached_with_wikimedia_fallback(monkeypatch):
     import day_menu
-    import menu
     import travel_photos
 
     saved, queries = {}, []
@@ -304,10 +291,33 @@ def test_cuisine_photo_comes_from_photo_layer_cached_with_wikimedia_fallback(mon
     assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
     assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
     assert queries == ["Mount Fuji Japan"]  # второй раз — из кэша
-    picture = menu._cuisine_picture(day_menu.cuisine_photo("japanese"))["link_preview_options"]
-    assert picture.show_above_text and picture.prefer_large_media
-    assert menu._cuisine_picture({}) == {}
 
     monkeypatch.setattr(travel_photos, "find_landscape", lambda _query: None)
     assert day_menu.cuisine_photo("italian")["url"] == day_menu.CUISINE_IMAGE["italian"]
     assert set(day_menu.CUISINE_SCENE) == set(day_menu.CUISINE_IMAGE) == set(day_menu.CUISINE_INTRO)
+
+
+def test_day_menu_is_sent_as_photo_with_caption_and_falls_back_to_text():
+    import menu
+    from ui.builder import MessageSpec
+
+    class Bot:
+        def __init__(self):
+            self.photos, self.texts = [], []
+
+        async def send_photo(self, **kwargs):
+            self.photos.append(kwargs)
+
+        async def send_message(self, **kwargs):
+            self.texts.append(kwargs)
+
+    bot = Bot()
+    msg = MessageSpec(text="🇯🇵 Меню на сегодня · Японская кухня", entities=[])
+    asyncio.run(menu._deliver_menu(bot, "42", msg, {"url": "https://images.unsplash.com/fuji"}))
+    assert bot.photos[0]["photo"] == "https://images.unsplash.com/fuji"
+    assert bot.photos[0]["caption"] == msg.text and not bot.texts
+
+    long_msg = MessageSpec(text="x" * 1100, entities=[])
+    asyncio.run(menu._deliver_menu(bot, "42", long_msg, {"url": "https://images.unsplash.com/fuji"}))
+    asyncio.run(menu._deliver_menu(bot, "42", msg, {}))
+    assert len(bot.photos) == 1 and len(bot.texts) == 2  # длинная подпись и без фото — текстом

@@ -298,16 +298,8 @@ class MenuCleanupBot(ExtBot):
 
     @staticmethod
     def _without_link_preview(kwargs):
-        """Глобальный UI-контракт: бот не прикрепляет превью ссылок.
-
-        Исключение — явно заданная картинка (``LinkPreviewOptions`` с ``url``), например фото
-        кухни над меню Готовки: она показывается, ссылки в тексте превью не получают.
-        """
+        """Глобальный UI-контракт: бот никогда не прикрепляет превью ссылок."""
         kwargs = dict(kwargs)
-        options = kwargs.get("link_preview_options")
-        if getattr(options, "url", None) and not getattr(options, "is_disabled", False):
-            kwargs.pop("disable_web_page_preview", None)
-            return kwargs
         kwargs.pop("link_preview_options", None)
         kwargs["disable_web_page_preview"] = True
         return kwargs

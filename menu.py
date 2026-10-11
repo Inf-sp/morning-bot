@@ -71,14 +71,38 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-def _cuisine_picture(photo) -> dict:
-    """Крупный вид страны над меню дня — превью ссылки; без фото — {}."""
-    from telegram import LinkPreviewOptions
+_CAPTION_MAX = 1024  # лимит подписи к фото в Telegram
+
+
+async def _deliver_menu(bot, cid, msg, photo, status=None, q=None):
+    """Меню дня — фото страны с подписью; без фото или с длинным текстом — обычной карточкой.
+
+    Из карточки-фото меню обновляется на месте (edit_message_media); из текстового
+    экрана или со статусом ожидания приходит новым сообщением.
+    """
     url = (photo or {}).get("url")
-    if not url:
-        return {}
-    return {"link_preview_options": LinkPreviewOptions(
-        url=url, prefer_large_media=True, show_above_text=True)}
+    if not url or len(msg.text) > _CAPTION_MAX:
+        await _deliver(bot, cid, msg, status, q)
+        return
+    from telegram import InputMediaPhoto
+    if status is not None:
+        await status.stop(delete=True)
+        status.message = None  # статус уже снят — повторный stop() у владельца ничего не трогает
+    elif q is not None and getattr(q.message, "photo", None):
+        try:
+            await q.message.edit_media(
+                InputMediaPhoto(media=url, caption=msg.text, caption_entities=msg.entities),
+                reply_markup=msg.reply_markup,
+            )
+            return
+        except Exception:
+            _log.debug("_deliver_menu: photo edit failed", exc_info=True)
+    try:
+        await bot.send_photo(chat_id=cid, photo=url, caption=msg.text, caption_entities=msg.entities,
+                             reply_markup=msg.reply_markup)
+    except Exception:
+        _log.warning("food menu photo failed, sending text", exc_info=True)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
 
 async def _menu_photo(cid, menu) -> dict:
@@ -145,14 +169,12 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
         ready = day_menu.get_cached_day_menu(cid)
         if ready is not None:
             photo = await _menu_photo(cid, ready)
-            await _deliver(bot, cid, _day_menu_message(ready), status, q, **_cuisine_picture(photo))
+            await _deliver_menu(bot, cid, _day_menu_message(ready), photo, status, q)
             return
 
     async def build_menu(status):
         menu = await asyncio.to_thread(day_menu.get_day_menu, cid, None, refresh, cuisine)
         photo = await _menu_photo(cid, menu)
-        msg = _day_menu_message(menu)
-        await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-                             **_cuisine_picture(photo))
+        await _deliver_menu(bot, cid, _day_menu_message(menu), photo, status)
 
     await _with_food_status(bot, cid, status, q, build_menu)
