@@ -16,6 +16,18 @@ def _reset_ai_breaker():
 
 
 @pytest.fixture(autouse=True)
+def _no_concert_notes_ai(monkeypatch):
+    """Фразы об артистах концертов в тестах не запрашиваются у AI; нужный тест вернёт настоящую."""
+    import leisure_concerts
+
+    async def no_notes(_names):
+        return {}
+
+    monkeypatch.setattr(leisure_concerts, "artist_notes", no_notes)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_wikidata_network(monkeypatch):
     """Wikidata в тестах не вызывается по сети; нужный тест подменяет lookup сам."""
     import wikidata_books

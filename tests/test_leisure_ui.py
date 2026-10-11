@@ -83,9 +83,12 @@ def test_global_preferences_has_all_recommendation_sections():
     asyncio.run(settings.send_preferences(bot, "42"))
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
-        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🧠 Обучение", "🥣 Кухни"], ["🧵 Стиль", "🎧 Музыка"],
+        ["🎬 Кино", "📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
+    # Сводка всех предпочтений текстом: каждый раздел — своя строка.
+    for label in ("Обучение:", "Кухни:", "Ограничения в еде:", "Стиль:", "Музыка:", "Кино:", "Книги:"):
+        assert label in bot.sent[0]["text"]
 
 
 def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
@@ -977,16 +980,16 @@ def test_premiere_screens_are_compact_and_keep_book_links():
 
 def test_weekly_concerts_card_lists_my_artists_then_popular():
     message = leisure_movies.leisure_ui.weekly_concerts_card(
-        [{"title": "Placebo", "date": "2026-10-27", "url": "https://t.example/placebo",
-          "venue": "Ziggo Dome", "city": "Amsterdam", "genre": "Альтернативный рок"}],
-        [{"title": "Muse", "date": "2026-11-12", "url": "", "venue": "GelreDome", "city": "Arnhem",
-          "genre": "Рок"}],
+        [{"artist": "Placebo", "title": "Placebo: Never Let Me Go Tour", "date": "2026-10-27",
+          "url": "https://t.example/placebo", "venue": "Ziggo Dome", "city": "Amsterdam",
+          "about": "Культовый альтернативный рок."}],
+        [{"title": "Muse", "date": "2026-11-12", "url": "", "venue": "GelreDome", "city": "Arnhem"}],
     )
 
     assert message.text == (
         "🎫 Концерты недели\n\n"
-        "Твои артисты:\n• Placebo — 27 октября · Ziggo Dome, Amsterdam\n\n"
-        "Популярное рядом:\n• Muse — 12 ноября · Рок · GelreDome, Arnhem"
+        "Твои артисты:\n• Placebo — 27 октября, Ziggo Dome. Культовый альтернативный рок.\n\n"
+        "Популярное рядом:\n• Muse — 12 ноября, GelreDome."
     )
     assert [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK] == [
         "https://t.example/placebo",
@@ -1380,3 +1383,18 @@ def test_book_card_shows_author_country_year_and_genre():
 
 
 
+
+
+def test_preferences_summary_lists_every_section(monkeypatch):
+    values = {"cuisines": ["italian"], "food_restrictions": ["no_pork"], "movie_type_pref": "tv",
+              "movie_min_rating": "7.0", "book_recency": "new"}
+    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: values.get(key, default))
+    monkeypatch.setattr(settings.store, "learning_is_enabled", lambda _cid: False)
+    monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Скандинавский"])
+
+    summary = dict(settings.preferences_summary("42"))
+
+    assert summary["Обучение"] == "не изучаю"
+    assert summary["Кухни"] == "Итальянская" and summary["Ограничения в еде"] == "Без свинины"
+    assert summary["Стиль"] == "Скандинавский" and summary["Музыка"] == "не выбрано"
+    assert summary["Кино"] == "сериалы · от ⭐ 7.0" and summary["Книги"] == "новинки"

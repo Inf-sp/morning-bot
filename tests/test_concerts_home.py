@@ -227,7 +227,7 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
     assert msg.text.startswith("🎫 Концерты недели\n\nТвои артисты:\n• Romy — ")
-    assert "· Paradiso, Amsterdam" in msg.text
+    assert "• Romy — " in msg.text and ", Paradiso." in msg.text
     assert "Популярное рядом:\n• Lowlands 2026 — " in msg.text
 
 
@@ -272,7 +272,8 @@ def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypa
 
     assert msg.text.count("The Black Keys") == 1  # варианты одного пакета билетов схлопнуты
     assert msg.text.count("• ") == 1 + leisure_concerts._WEEKLY_POPULAR_LIMIT
-    assert "Artist 4" in msg.text and "Artist 5" not in msg.text  # популярного — до четырёх ближайших
+    # Без оценки известности — по площадке, затем по дате: три ближайших популярных артиста.
+    assert "Artist 3" in msg.text and "Artist 4" not in msg.text
 
 
 def test_weekly_concerts_notification_buttons(monkeypatch):
@@ -313,3 +314,79 @@ async def _async(value):
     ]
     assert "Romy" in classic_bot.classic[0]["text"]
     assert classic_bot.classic[0]["disable_web_page_preview"] is True
+
+
+REAL_ARTIST_NOTES = leisure_concerts.artist_notes
+
+
+def _tm_event(name, days, venue="Ziggo Dome", attractions=(), segment="Music", genre="Pop"):
+    from datetime import datetime, timedelta
+    day = datetime.now(leisure_concerts.config.TZ).date() + timedelta(days=days)
+    return {
+        "name": name,
+        "dates": {"start": {"localDate": day.isoformat()}},
+        "classifications": [{"segment": {"name": segment}, "genre": {"name": genre}}],
+        "_embedded": {"attractions": [{"name": a} for a in attractions],
+                      "venues": [{"name": venue, "city": {"name": "Amsterdam"}}]},
+    }
+
+
+def test_popular_shows_one_line_per_artist_and_most_famous_first(monkeypatch):
+    popular = [
+        _tm_event("Niall Horan: Dinner Party Live On Tour", 4),
+        _tm_event("Niall Horan | Venue Premium Packages", 4, "Ziggo Dome Club", genre="Community/Civic"),
+        _tm_event("Niall Horan: Dinner Party Live On Tour", 5),
+        _tm_event("Local Band", 3, "Paradiso", attractions=("Local Band",)),
+        _tm_event("Stevie Wonder", 17, attractions=("Stevie Wonder",)),
+        _tm_event("The Strokes", 1, attractions=("The Strokes",)),
+        _tm_event("Placebo", 6, attractions=("Placebo",)),
+    ]
+
+    async def notes(names):
+        fame = {"stevie wonder": 10, "the strokes": 9, "niall horan": 8, "local band": 2, "placebo": 8}
+        return {name.casefold(): {"fame": fame[name.casefold()],
+                                  "about": "Икона соула, пропускать нельзя." if name == "Stevie Wonder" else ""}
+                for name in names}
+
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [
+        _tm_event("Placebo", 6, attractions=("Placebo",))])
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: popular)
+    monkeypatch.setattr(leisure_concerts, "_concert_identity_text", lambda value: str(value).casefold())
+    monkeypatch.setattr(leisure_concerts, "artist_notes", notes)
+
+    text = asyncio.run(leisure_concerts._build_weekly_events_msg("42", 30, "🎫 Концерты на месяц")).text
+    popular_block = text.split("Популярное рядом:\n", 1)[1]
+
+    assert text.count("Niall Horan") == 1 and "Premium" not in text and "Dinner Party" not in text
+    assert popular_block.splitlines()[0].startswith("• Stevie Wonder — ")
+    assert popular_block.splitlines()[0].endswith(", Ziggo Dome. Икона соула, пропускать нельзя.")
+    assert [line.split(" — ")[0] for line in popular_block.splitlines()] == [
+        "• Stevie Wonder", "• The Strokes", "• Niall Horan"]  # Placebo уже в «Твоих артистах»
+
+
+def test_artist_notes_ask_ai_once_and_keep_failures_out(monkeypatch):
+    saved, calls = {}, []
+    monkeypatch.setattr(leisure_concerts, "artist_notes", REAL_ARTIST_NOTES)
+    monkeypatch.setattr(leisure_concerts.store, "_load", lambda _key: dict(saved))
+
+    def mutate(_key, change):
+        data, _ = change(dict(saved))
+        saved.clear()
+        saved.update(data)
+
+    monkeypatch.setattr(leisure_concerts.store, "mutate_kv", mutate)
+
+    async def ai_ok(prompt, *_a, **_k):
+        calls.append(prompt)
+        return {"items": [{"name": "Stevie Wonder", "fame": 10, "about_ru": "Икона соула, пропускать нельзя"},
+                          {"name": "Unknown", "fame": "x", "about_ru": "?"}]}
+
+    monkeypatch.setattr(leisure_concerts.ai, "allm_json", ai_ok)
+    first = asyncio.run(leisure_concerts.artist_notes(["Stevie Wonder", "Unknown"]))
+    again = asyncio.run(leisure_concerts.artist_notes(["Stevie Wonder"]))
+
+    key = leisure_concerts._concert_identity_text("Stevie Wonder")
+    assert first[key]["about"] == "Икона соула, пропускать нельзя." and first[key]["fame"] == 10
+    assert again[key]["fame"] == 10 and len(calls) == 1  # повторно AI не спрашивается
+    assert leisure_concerts._concert_identity_text("Unknown") not in saved  # неверный ответ не хранится

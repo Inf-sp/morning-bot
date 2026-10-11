@@ -957,22 +957,27 @@ def _event_sections(b: MessageBuilder, sections) -> bool:
     return any(added)
 
 
-def _weekly_concert_rows(b: MessageBuilder, title, items, *, with_genre=False):
-    """«• Placebo — 27 октября · Ziggo Dome, Amsterdam»; имя — ссылка на билеты."""
+def _weekly_concert_rows(b: MessageBuilder, title, items):
+    """«• Stevie Wonder — 28 октября, Ziggo Dome. Икона соула, пропускать нельзя.»
+
+    Один артист — одна строка; имя — ссылка на билеты, фраза об артисте — если есть.
+    """
     if not items:
         return
     b.spacer()
     b.bold(title)
     b.newline()
     for item in items:
-        place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
-        meta = [part for part in (item.get("genre") if with_genre else "", place) if part]
+        name = item.get("artist") or item.get("title")
+        place = item.get("venue") or item.get("city") or ""
         b.text_line("• ")
         if item.get("url"):
-            b.link(item["title"], item["url"])
+            b.link(name, item["url"])
         else:
-            b.text_line(item["title"])
-        b.text_line(" — " + _event_date_label(item.get("date")) + "".join(f" · {part}" for part in meta))
+            b.text_line(name)
+        line = " — " + ", ".join(part for part in (_event_date_label(item.get("date")), place) if part) + "."
+        about = str(item.get("about") or "").strip()
+        b.text_line(line + (f" {about}" if about else ""))
         b.newline()
 
 
@@ -981,7 +986,7 @@ def weekly_concerts_card(mine, popular, title="🎫 Концерты недел�
     b = MessageBuilder()
     b.title(title)
     _weekly_concert_rows(b, "Твои артисты:", mine)
-    _weekly_concert_rows(b, "Популярное рядом:", popular, with_genre=True)
+    _weekly_concert_rows(b, "Популярное рядом:", popular)
     return b.build_stripped()
 
 

@@ -297,7 +297,7 @@ async def send_home(bot, cid, q=None):
     rows = [
         # Два столбца. Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
         [InlineKeyboardButton("📍 Город", callback_data="set_city"),
-         InlineKeyboardButton("🧠 Язык обучения", callback_data="set_learning_global")],
+         InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif"),
          InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -315,17 +315,49 @@ async def send_home(bot, cid, q=None):
                            reply_markup=markup, transient=True)
 
 
+_NOT_SET = "не выбрано"
+
+
+def preferences_summary(cid) -> list:
+    """Все предпочтения из разделов одним списком [(раздел, значение)] — только чтение."""
+    import leisure_music
+    from dictionary_seed_ui import LEVEL_LABELS
+
+    if store.learning_is_enabled(cid):
+        code = store.get_learning_language(cid) or "nl"
+        level = LEVEL_LABELS.get(store.get_level(cid, code), "").split(" ", 1)[-1]
+        learning = " · ".join(part for part in (study_lang(cid).capitalize(), level) if part)
+    else:
+        learning = "не изучаю"
+    restrictions = dict(FOOD_RESTRICTIONS)
+    music = dict((key, label) for key, label, _prompt in leisure_music._MUSIC_GENRES)
+    movie = [{"movie": "фильмы", "tv": "сериалы"}.get(get(cid, "movie_type_pref", "") or "", ""),
+             "новинки" if get(cid, "movie_recency", "") == "new" else "",
+             f"от ⭐ {get(cid, 'movie_min_rating', '')}" if get(cid, "movie_min_rating", "") else ""]
+    books = ["новинки" if get(cid, "book_recency", "") == "new" else "",
+             f"от ⭐ {get(cid, 'book_min_rating', '')}" if get(cid, "book_min_rating", "") else ""]
+    return [
+        ("Обучение", learning),
+        ("Кухни", ", ".join(label.split(" ", 1)[-1] for label in cuisine_labels(cid)) or _NOT_SET),
+        ("Ограничения в еде", ", ".join(restrictions[key] for key in food_restrictions(cid)).capitalize() or "нет"),
+        ("Стиль", ", ".join(wardrobe_styles(cid)) or _NOT_SET),
+        ("Музыка", ", ".join(music[key] for key in leisure_music._music_styles(cid)) or _NOT_SET),
+        ("Кино", " · ".join(part for part in movie if part) or _NOT_SET),
+        ("Книги", " · ".join(part for part in books if part) or _NOT_SET),
+    ]
+
+
 async def send_preferences(bot, cid, q=None):
     rows = [
-        [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning")],
-        [InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
-        [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
-        [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
-        [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
+        [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning"),
+         InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
+        [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie"),
+         InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
         nav_row("set_home"),
     ]
-    msg = settings_ui.preferences_home()
+    msg = settings_ui.preferences_home(preferences_summary(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:

@@ -76,10 +76,15 @@ def settings_home(city="", language="", summary=""):
     return b.build_stripped()
 
 
-def preferences_home():
+def preferences_home(summary=()):
+    """Все предпочтения из разделов: «Кухни: Итальянская, Японская»; ниже кнопки для изменения."""
     b = MessageBuilder()
     b.section(PREFERENCES_LABEL)
-    b.line("Выбери, что учитывать в рекомендациях.")
+    b.spacer()
+    for label, value in summary:
+        b.labeled_line(label, value, lowercase=False)
+    if not summary:
+        b.line("Выбери, что учитывать в рекомендациях.")
     return b.build_stripped()
 
 

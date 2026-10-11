@@ -22,7 +22,7 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     rows = [[b.text for b in row] for row in sent[0]["reply_markup"].inline_keyboard]
     assert "🔄 Обновить" not in [label for row in rows for label in row]
     assert rows == [
-        ["📍 Город", "🧠 Язык обучения"], ["🔔 Уведомления", "📤 Экспорт"],
+        ["📍 Город", "📝 Предпочтения"], ["🔔 Уведомления", "📤 Экспорт"],
         ["#️⃣ Главная"],
     ]
 
@@ -64,5 +64,5 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
             for e in sent[0]["entities"] if e.type == "bold"]
     assert bold[-3:] == ["Город:", "Язык обучения:", "Уведомления:"]
     callbacks = [b.callback_data for row in sent[0]["reply_markup"].inline_keyboard for b in row]
-    assert "set_learning_global" in callbacks
+    assert "set_preferences" in callbacks
     assert "set_notif" in callbacks

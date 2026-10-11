@@ -156,6 +156,7 @@ CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese":
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
 CONCERT_ARTIST_CHECKS_KEY = "concert_artist_checks.json"  # {cid: {country: {artist: last check + future events}}}
+CONCERT_ARTIST_NOTES_KEY = "concert_artist_notes.json"  # {артист: короткая фраза, известность 1–10, ts}
 POPULAR_MUSIC_EVENTS_CACHE_KEY = "popular_music_events_cache.json"  # {country + week: подтверждённые крупные события}
 ARTIST_EXTERNAL_EVENTS_KEY = "artist_external_events.json"  # глобальный кэш внешнего поиска концертов (Tavily+Firecrawl) по нормализованному имени артиста, TTL 7 дней: {artist_key: {"ts": epoch, "events": [...]}}
 AI_RESPONSE_CACHE_KEY = "ai_response_cache.json"  # кэш дорогих AI-ответов по хэшу промпта
