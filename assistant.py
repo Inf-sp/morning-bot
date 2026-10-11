@@ -154,6 +154,13 @@ _MEAL_WITH_INGREDIENT_RE = re.compile(
     r"\b(завтрак|обед|ужин)\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
 )
 _GENERIC_RECIPE_INGREDIENTS = {"этого", "того", "них", "холодильника", "продуктов"}
+# Слова общей просьбы «что приготовить?» — без них в тексте остаётся суть конкретного запроса.
+_RECIPE_FILLER = {
+    "есть", "рецепт", "рецепта", "рецепты", "рецептик", "дай", "подскажи", "посоветуй", "предложи", "скинь",
+    "какой", "какие", "какой-нибудь", "что", "чего", "нибудь", "приготовить", "сготовить", "поесть", "покушать",
+    "можно", "мне", "нам", "пожалуйста", "хочу", "хочется", "на", "в", "к", "и", "или", "а", "у", "тебя",
+    "сегодня", "завтрак", "обед", "ужин", "завтрака", "обеда", "ужина", "быстро", "простой", "простое",
+}
 
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
 _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
@@ -348,6 +355,16 @@ def _detect_intent(text: str):
     return None
 
 
+def _specific_recipe_request(text: str):
+    """«есть рецепт быстрой выпечки в духовке к чаю из гранолы» → сама просьба для рецепта; общий
+    вопрос («что приготовить на ужин?», «дай рецепт») → None — тогда выбор «Завтрак / Обед / Ужин»."""
+    words = re.findall(r"[а-яёa-z-]+", str(text or "").casefold())
+    meaningful = [word for word in words if word not in _RECIPE_FILLER and len(word) > 2]
+    if len(meaningful) < 2:
+        return None
+    return " ".join(str(text).split()).strip(" ?!.")[:200]
+
+
 def _recipe_ingredients_from_chat(text: str):
     """Return an explicitly named ingredient for a direct recipe card."""
     meal_matched = _MEAL_WITH_INGREDIENT_RE.search(text or "")
@@ -379,7 +396,10 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
     # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
     # пользователь не открывал раздел через меню, и вести её было бы некуда.
     no_kb_bot = settings._NoKbBot(bot)
-    if action == "meal_recipe":
+    if action == "meal_request":
+        # Конкретная просьба — рецепт именно под неё, а не общий выбор приёма пищи.
+        await cooking.send_recipe(bot, cid, f"по просьбе пользователя: {recipe_ingredients}")
+    elif action == "meal_recipe":
         is_meal_request = str(recipe_ingredients or "").casefold().startswith(
             ("завтрак ", "обед ", "ужин ")
         )
@@ -475,6 +495,10 @@ async def chat_reply(bot, cid, text):
     # Intent-роутинг — сразу запускаем нужную функцию
     recipe_ingredients = _recipe_ingredients_from_chat(text)
     intent = "meal_recipe" if recipe_ingredients else _detect_intent(text)
+    if intent == "meal_picker":
+        request = _specific_recipe_request(text)
+        if request:
+            intent, recipe_ingredients = "meal_request", request
     if intent:
         await _run_intent(bot, cid, intent, recipe_ingredients)
         store.last_surface[str(cid)] = "chat"

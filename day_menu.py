@@ -22,37 +22,6 @@ _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 
-# Фото над меню дня — продукт, овощ или специя, которыми известна кухня (не город и не блюдо).
-# Ищется через общий слой travel_photos (Unsplash, при сбое Pexels) по запросу CUISINE_SCENE и хранится
-# 30 дней (смена запроса сбрасывает кэш); CUISINE_IMAGE — проверенный запасной кадр Wikimedia Commons.
-CUISINE_SCENE = {
-    "italian": "fresh basil tomatoes",
-    "japanese": "yuzu citrus",
-    "thai": "thai bird's eye chili",
-    "mexican": "jalapeno chili peppers",
-    "indian": "indian spices garam masala",
-    "chinese": "star anise spice",
-    "turkish": "pomegranate fruit",
-    "french": "lavender provence",
-    "russian": "beetroot vegetables",
-    "georgian": "walnuts",
-}
-_PHOTO_TTL = 30 * 86400
-_PHOTO_RETRY = 86400  # оба сервиса недоступны — запасной вид, новая попытка через сутки
-
-CUISINE_IMAGE = {
-    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Ocimum_basilicum_8zz.jpg/1280px-Ocimum_basilicum_8zz.jpg",  # базилик
-    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Yuzu_oranges_%286459456959%29.jpg/1280px-Yuzu_oranges_%286459456959%29.jpg",  # юдзу
-    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/Thai_peppers.jpg/1280px-Thai_peppers.jpg",  # тайский перец чили
-    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Immature_jalapeno_capsicum_annuum_var_annuum.jpeg/1280px-Immature_jalapeno_capsicum_annuum_var_annuum.jpeg",  # халапеньо
-    "indian": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Garammasalaphoto.jpg/1280px-Garammasalaphoto.jpg",  # гарам масала
-    "chinese": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Illicium_verum_1zz.jpg",  # бадьян
-    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Pomegranate_Juice_%282019%29.jpg/1280px-Pomegranate_Juice_%282019%29.jpg",  # гранат
-    "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Lavender_field_and_Mont_Ventoux.jpg/1280px-Lavender_field_and_Mont_Ventoux.jpg",  # лаванда Прованса
-    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Beetroots_in_a_basket.jpg/1280px-Beetroots_in_a_basket.jpg",  # свёкла
-    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Walnuts_-_whole_and_open_with_halved_kernel.jpg/1280px-Walnuts_-_whole_and_open_with_halved_kernel.jpg",  # грецкие орехи
-}
-
 # Вступление о кухне дня: характер и за что её любят.
 CUISINE_INTRO = {
     "italian": "Свежие продукты и простые сочетания: томаты, оливковое масло, сыр, свежая зелень — "
@@ -273,52 +242,10 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
     return menu
 
 
-def cuisine_photo(cuisine, cid=None) -> dict:
-    """{url, source} — вид страны кухни; {} — фото нет (подписи автора под меню нет).
-
-    Unsplash/Pexels через travel_photos, кэш 30 дней на кухню; без них — запасной вид Wikimedia.
-    """
-    import time
-    import travel_photos
-    cuisine = str(cuisine or "")
-    query = CUISINE_SCENE.get(cuisine)
-    if not query and cuisine.startswith(LOCAL_PREFIX):
-        import vacation
-        name = vacation.country_name_en(cid) if cid is not None else ""
-        query = f"{name} local fruit vegetables" if name else ""  # продукты страны отпуска
-    if not query:
-        return {}
-    saved = (store._load(config.CUISINE_PHOTOS_KEY) or {}).get(cuisine) or {}
-    # Сменился запрос (например, Москва → Петербург) — старое фото из кэша не берём.
-    if (isinstance(saved, dict) and saved.get("query") == query
-            and float(saved.get("expires") or 0) > time.time()):
-        return dict(saved.get("value") or {})
-    found = travel_photos.find_landscape(query) or {}
-    if found.get("url"):
-        value = {"url": found["url"], "source": found.get("provider", "")}
-        ttl = _PHOTO_TTL
-    else:
-        value = {"url": CUISINE_IMAGE[cuisine]} if cuisine in CUISINE_IMAGE else {}
-        ttl = _PHOTO_RETRY
-
-    def mutate(data):
-        data = data if isinstance(data, dict) else {}
-        data[cuisine] = {"value": value, "query": query, "expires": time.time() + ttl}
-        return data, None
-
-    store.mutate_kv(config.CUISINE_PHOTOS_KEY, mutate)
-    return value
-
-
 def warm_day_menu(cid, now=None) -> bool:
-    """Ночная подготовка меню дня (и фото кухни) без сообщений пользователю."""
+    """Ночная подготовка меню дня без сообщений пользователю."""
     try:
-        menu = get_day_menu(cid, now=now)
-        try:
-            cuisine_photo(menu.get("cuisine"), cid)
-        except Exception:
-            _log.debug("day menu photo warm failed", exc_info=True)
-        return bool(menu)
+        return bool(get_day_menu(cid, now=now))
     except Exception as error:
         _log.warning("day menu warm failed cid=%s: %r", cid, error)
         return False

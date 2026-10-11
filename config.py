@@ -161,7 +161,6 @@ COUNTRIES_TABLE_KEY = "countries_table.json"  # {ts, value: {cc: [названи
 ARTIST_COUNTRY_KEY = "artist_country.json"  # {артист: {ts, value: cc}} — MusicBrainz, полгода
 AUTHOR_COUNTRY_KEY = "author_country.json"  # {автор: {ts, value: cc}} — Wikidata, полгода
 ALBUM_NOTES_KEY = "album_notes.json"  # {«артист|альбом»: {ts, value: короткое описание}} — «Новая музыка»
-CUISINE_PHOTOS_KEY = "cuisine_photos.json"  # {кухня: {value: фото Unsplash/Pexels, expires}} — вид страны над меню
 COUNTRY_FACTS_KEY = "country_facts.json"  # {cc: {ts, value}} — факты о стране отпуска, 30 дней
 FX_RATES_KEY = "fx_rates.json"  # {"YYYY-MM-DD:ZAR": {ts, value}} — курс евро на день
 CONCERT_ARTIST_NOTES_KEY = "concert_artist_notes.json"  # {артист: короткая фраза, известность 1–10, ts}

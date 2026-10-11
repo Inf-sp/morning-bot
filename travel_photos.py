@@ -155,15 +155,6 @@ def _unsplash(query, strict=True, first_result=False):
         return None
 
 
-def find_landscape(query):
-    """Горизонтальный вид по запросу: Unsplash, при сбое — Pexels; None — ничего подходящего."""
-    name = " ".join(str(query or "").split()).strip()
-    if not name:
-        return None
-    return (_unsplash(name, strict=True, first_result=True)
-            or _pexels(name, strict=True, first_result=True))
-
-
 def find_illustration(query):
     """Find the first acceptable horizontal photo for the detective result.
 
