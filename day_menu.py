@@ -22,19 +22,19 @@ _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 
-# Фото кухни над меню дня (главные фото статей Википедии о кухнях, Wikimedia Commons;
-# ссылки проверены). Показывается превью ссылки над текстом, в рецептах картинки нет.
+# Фото страны кухни над меню дня — узнаваемый вид, не блюдо (главные фото статей Википедии,
+# Wikimedia Commons; ссылки проверены). Показывается превью ссылки над текстом, в рецептах картинки нет.
 CUISINE_IMAGE = {
-    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Pizza-3007395.jpg/1280px-Pizza-3007395.jpg",
-    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Sushi_platter.jpg/1280px-Sushi_platter.jpg",
-    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Tom_yam_kung_maenam.jpg/1280px-Tom_yam_kung_maenam.jpg",
-    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg/1280px-001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg",
-    "indian": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Tradtional_Thali.jpg",
-    "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Chinese_DimSum_%289023590541%29.jpg/1280px-Chinese_DimSum_%289023590541%29.jpg",
-    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Sigara_B%C3%B6rek.jpg/1280px-Sigara_B%C3%B6rek.jpg",
-    "french": "https://upload.wikimedia.org/wikipedia/commons/3/37/Ratatouille_home_cooked.jpg",
-    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Pelmeni_Russian.jpg/1280px-Pelmeni_Russian.jpg",
-    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Old_Tbilisi%2C_Georgian_khachapuri%2C_Georgia.jpg/1280px-Old_Tbilisi%2C_Georgian_khachapuri%2C_Georgia.jpg",
+    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg/1280px-Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg",  # Амальфитанское побережье
+    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg/1280px-View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg",  # Фудзи
+    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/KohPhiPhi.JPG/1280px-KohPhiPhi.JPG",  # острова Пхи-Пхи
+    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Chichen_Itza_3.jpg/1280px-Chichen_Itza_3.jpg",  # Чичен-Ица
+    "indian": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Taj_Mahal_%28Edited%29.jpeg/1280px-Taj_Mahal_%28Edited%29.jpeg",  # Тадж-Махал
+    "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/The_Great_Wall_of_China_at_Jinshanling-edit.jpg/1280px-The_Great_Wall_of_China_at_Jinshanling-edit.jpg",  # Великая Китайская стена
+    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg/1280px-Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg",  # Каппадокия
+    "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg",  # Париж
+    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Saint_Basil%27s_Cathedral_in_Moscow.jpg/1280px-Saint_Basil%27s_Cathedral_in_Moscow.jpg",  # храм Василия Блаженного
+    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Gergeti_Trinity_Church_09.23.jpg/1280px-Gergeti_Trinity_Church_09.23.jpg",  # Гергетская церковь
 }
 
 # Вступление о кухне дня: характер и за что её любят.
