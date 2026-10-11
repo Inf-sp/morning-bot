@@ -29,6 +29,7 @@ import settings
 import store
 import trainer
 import util
+import vacation
 import verify
 import wardrobe
 import weather
@@ -433,6 +434,7 @@ ROUTES = (
     R("lz_more", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
+    R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
     R("book_next", _picked(lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid)))),

@@ -902,8 +902,7 @@ def _vacation_blocks(cid) -> dict:
         "until": vacation.until_label(cid),
         "home": (trip.get("home") or {}).get("city", ""),
         "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
-        "phrases": vacation.phrases_today(cid) if vacation.phrasebook_replaces_learning(cid) else [],
-        "language": guide.get("language_ru", ""),
+        "word": vacation.word_today(cid) if vacation.replaces_learning(cid) else "",
     }
 
 
@@ -989,10 +988,11 @@ def _build_day_text(cid, *, refresh_current=False):
     is_weekend = now.weekday() >= 5
     learning_enabled = store.learning_is_enabled(cid)
     trip = _vacation_blocks(cid)
-    if trip.get("phrases"):
-        learning_enabled = False  # в отпуске вместо «Слова дня» — разговорник местного языка
-    word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
-    movie_rebus = {} if learning_enabled or trip.get("phrases") or not on("word") \
+    if trip.get("word"):  # в отпуске «Тренажер» — слово на языке страны
+        word_line, word_lang = (trip["word"], "") if on("word") else ("", "")
+    else:
+        word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
+    movie_rebus = {} if learning_enabled or trip.get("word") or not on("word") \
         else _movie_rebus_of_day(now.date())
     import wardrobe
     outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}

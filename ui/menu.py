@@ -134,8 +134,8 @@ def learning_menu(home: dict):
             [("#️⃣ Главная", "m_menu")],
         ]))
     code = home.get("lang_code", "nl")
-    flag = LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
-    title = "Английский" if code == "en" else "Нидерландский"
+    flag = home.get("flag") or LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
+    title = home.get("language") or ("Английский" if code == "en" else "Нидерландский")
 
     b = MessageBuilder()
     if not home.get("has_material"):
@@ -176,6 +176,13 @@ def learning_menu(home: dict):
         b.text_line(f" {_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
         b.newline()
 
+    if home.get("vacation"):
+        # В отпуске: тренировка по базовым словам страны, свой словарь — после возвращения.
+        return b.build_stripped(reply_markup=ikb([
+            [("🎯 Запустить тренировку", "vac_train")],
+            [(ui_label("game", "Угадать персонажа"), "a_game")],
+            [("#️⃣ Главная", "m_menu")],
+        ]))
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадать персонажа"), "a_game")],

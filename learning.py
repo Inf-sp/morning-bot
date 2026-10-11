@@ -124,6 +124,10 @@ def build_learning_home(cid):
     """Данные для главного экрана раздела 'Обучение': материал дня + короткий
     фокус тренировки. UI (ui/menu.py) только рендерит эти поля, не читает
     store и не выбирает материал сам — см. §8 CLAUDE.md."""
+    import vacation
+    trip = vacation.learning_home(cid)
+    if trip:
+        return trip  # в отпуске — язык страны; словарь и прогресс не трогаются
     if not store.learning_is_enabled(cid):
         return {"has_material": False, "disabled": True, "lang_code": ""}
     entry = select_daily_material(cid)

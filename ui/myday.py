@@ -105,16 +105,6 @@ def day_summary(
         for label, value in vacation["country_lines"]:
             b.labeled_line(label, value, lowercase=False)
         b.spacer()
-    if vacation.get("phrases"):
-        language = vacation.get("language") or ""
-        b.bold(f"🗣 Разговорник{' · ' + language if language else ''}:")
-        b.newline()
-        for phrase in vacation["phrases"]:
-            b.text_line(f"{phrase['text']} → {phrase['ru']}")
-            if phrase.get("say"):
-                b.text_line(f" [{phrase['say']}]")
-            b.newline()
-        b.spacer()
 
     if word_line:
         term, translation = _split_word_translation(word_line)

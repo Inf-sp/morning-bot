@@ -137,9 +137,8 @@ def test_hub_rotates_premieres_daily(monkeypatch):
     # Кино: одна премьера в день, все пять с описанием за пять дней, без пустых.
     assert all(len(data["movies"]) == 1 for data in days)
     assert {data["movies"][0]["title"] for data in days} == {f"Фильм {i}" for i in range(5)}
-    # Музыка: три альбома, на следующий день — следующие три.
-    assert len(days[0]["music"]) == 3 and not {a["title"] for a in days[0]["music"]} & {
-        a["title"] for a in days[1]["music"]}
+    # Музыка: один альбом в день, на следующий день — следующий.
+    assert len(days[0]["music"]) == 1 and days[0]["music"][0]["title"] != days[1]["music"][0]["title"]
 
 
 def test_concerts_button_opens_month_concerts(monkeypatch):
@@ -225,9 +224,11 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_books, "get_book_premieres", step("books"))
     monkeypatch.setattr(leisure_movies, "get_current_movie", step("movie_reco"))
     monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
+    monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
+    monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "music", "movie_reco"]
+    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "series", "album_notes"]
 
 
 def test_premieres_and_library_submenus():
@@ -375,3 +376,41 @@ def test_book_premiere_summaries_are_russian_or_dropped(monkeypatch):
 def test_hub_never_shows_english_description():
     msg = leisure_ui.leisure_hub_screen([], [{"title": "Book", "summary": "An English blurb."}], [])
     assert "English" not in msg.text and "«Book»" in msg.text
+
+
+def test_hub_shows_film_then_series_and_album_with_description():
+    msg = leisure_ui.leisure_hub_screen(
+        [{"title": "Дюна", "overview": "Пол едет на Арракис."},
+         {"kind": "tv", "name": "Одни из нас", "season_number": 2, "release_date": "2026-10-13",
+          "overview": "Элли и Джоэл снова в пути.", "url": "https://www.themoviedb.org/tv/1"}],
+        [],
+        [{"title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "date": "2026-10-03",
+          "about": "Мечтательный инди-поп с шумными гитарами."}],
+    )
+
+    assert "Премьеры кино:\n• «Дюна»\nПол едет на Арракис.\n• «Одни из нас» · 2-й сезон · 13 октября\n" \
+           "Элли и Джоэл снова в пути." in msg.text
+    assert msg.text.endswith("• «Blue Rev» — Alvvays · Инди · 3 октября\nМечтательный инди-поп с шумными гитарами.")
+
+
+def test_album_descriptions_are_stored_once(monkeypatch):
+    import leisure_hub
+    saved, calls = {}, []
+    monkeypatch.setattr(leisure_hub.store, "_load", lambda _key: dict(saved))
+
+    def mutate(_key, change):
+        data, _ = change(dict(saved))
+        saved.clear()
+        saved.update(data)
+
+    async def ai_ok(*_a, **_k):
+        calls.append(1)
+        return {"items": [{"id": 0, "about": "Мечтательный инди-поп"}]}
+
+    monkeypatch.setattr(leisure_hub.store, "mutate_kv", mutate)
+    monkeypatch.setattr(leisure_hub.ai, "allm_json", ai_ok)
+    album = {"title": "Blue Rev", "artist": "Alvvays"}
+    asyncio.run(leisure_hub.describe_albums([album]))
+    asyncio.run(leisure_hub.describe_albums([album]))
+
+    assert leisure_hub._album_notes()["alvvays|blue rev"] == "Мечтательный инди-поп." and calls == [1]

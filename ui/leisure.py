@@ -897,9 +897,21 @@ def _about_line(b: MessageBuilder, text) -> None:
         b.line(about)
 
 
+def _series_event_row(b: MessageBuilder, item) -> None:
+    """«• «Одни из нас» · 2-й сезон · 13 апреля» + описание; без номера сезона — «новый сериал»."""
+    season = int(item.get("season_number") or 0)
+    label = f"{season}-й сезон" if season > 1 else "новый сериал"
+    _weekly_item(b, f"«{item.get('name')}»", item.get("url") or "",
+                 (label, _event_date_label(item.get("release_date"))))
+    _about_line(b, item.get("overview"))
+
+
 def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
-    if rows:
+    """Фильм дня, под ним сериал дня (kind=tv) — своей строкой с номером сезона."""
+    series = [item for item in list(items or []) if item.get("kind") == "tv" and item.get("name")][:limit]
+    rows = [item for item in list(items or []) if item.get("kind") != "tv"
+            and _item_value(item, "title", "")][:limit]
+    if rows or series:
         b.section(title)
     for item in rows:
         movie_id = _item_value(item, "id", "")
@@ -910,7 +922,9 @@ def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url,
                      (genres, _event_date_label(_item_value(item, "date", ""))))
         _about_line(b, _item_value(item, "overview", ""))
-    return bool(rows)
+    for item in series:
+        _series_event_row(b, item)
+    return bool(rows or series)
 
 
 def _event_date_label(value) -> str:
@@ -927,6 +941,7 @@ def _music_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     for item in rows:
         _weekly_item(b, f"«{item['title']}» — {item['artist']}", item.get("url"),
                      (item.get("genre_label"), _event_date_label(item.get("date"))))
+        _about_line(b, item.get("about"))
     return bool(rows)
 
 
@@ -1017,7 +1032,7 @@ def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city
     if not _event_sections(b, (
         ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_FEATURED),
         ("Новые книги:", _book_event_rows, books, LEISURE_HUB_FEATURED),
-        ("Новая музыка:", _music_event_rows, music, LEISURE_HUB_LIMIT),
+        ("Новая музыка:", _music_event_rows, music, LEISURE_HUB_FEATURED),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
     return b.build_stripped(reply_markup=reply_markup)
