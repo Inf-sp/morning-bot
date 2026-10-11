@@ -315,3 +315,15 @@ def test_outfit_built_around_chosen_item():
     assert all(RAIN_JACKET["id"] in _ids(o) for o in top_outfits(w, warm, [], "", selected_styles=[],
                                                               anchor_id=RAIN_JACKET["id"]))
     assert top_outfits(w, warm, [], "", selected_styles=[], anchor_id="missing") == []
+
+
+def test_hoodie_never_goes_over_a_shirt():
+    shirt = _it("shirt", "Верх", "Голубая рубашка", "голубой")
+    cool = wear_window(_hourly(13, 11), NOW)
+    outfits = top_outfits(_wardrobe(TEE, shirt, HOODIE, JEANS, SNEAKERS), cool, [], "", selected_styles=[])
+
+    assert outfits and not any({"hoodie", "shirt"} <= _ids(outfit) for outfit in outfits)
+    assert any({"hoodie", "tee"} <= _ids(outfit) for outfit in outfits)
+    # Под худи только рубашка — образ с худи не собрать.
+    assert top_outfits(_wardrobe(shirt, HOODIE, JEANS, SNEAKERS), cool, [], "", selected_styles=[],
+                       anchor_id="hoodie") == []

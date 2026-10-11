@@ -146,6 +146,16 @@ def outfit_display_order(item):
     }.get(item.get("zone"), 9))
 
 
+_HOODIE_MARKERS = ("худи", "свитш", "толстов")
+
+
+def _hoodie_with_shirt(items):
+    """Худи, свитшот и толстовка носятся поверх футболки или лонгслива, не поверх рубашки."""
+    facts = [_item_facts(item) for item in items]
+    return (any(marker in fact for fact in facts for marker in _HOODIE_MARKERS)
+            and any("рубаш" in fact for fact in facts))
+
+
 def is_complete_outfit(items):
     """Проверяет, что дополнительный или верхний слой не заменил базовый верх."""
     roles = [outfit_role(item) for item in items]
@@ -582,6 +592,7 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
         for complete in _completed_layered_combos(combo, candidates, selected_styles)
     ]
     combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
+    combos = [combo for combo in combos if not _hoodie_with_shirt(combo)]
     if anchor:
         combos = [combo for combo in combos if any(it.get("id") == anchor_id for it in combo)]
     if previous_item_ids:
