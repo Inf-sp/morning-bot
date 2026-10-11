@@ -175,7 +175,7 @@ def test_selected_meal_card_uses_meal_and_cuisine_in_header():
         "steps": ["Поджарь хлеб", "Добавь томаты"],
     }, show_cuisine_emoji=False)
 
-    assert message.text.startswith("🍳 Что приготовить • Итальянская кухня")
+    assert message.text.startswith("🇮🇹 Что приготовить • Итальянская кухня")
     assert "Готовим сегодня" not in message.text
     assert "🇮🇹" not in message.text
 

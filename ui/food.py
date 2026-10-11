@@ -1,7 +1,7 @@
 import re
 
 from .builder import MessageBuilder
-from .constants import ui_label
+from .constants import CUISINE_FLAG, ui_label
 
 DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
@@ -123,7 +123,7 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
     """Карточка рецепта. Живёт в store.last_recipe/last_answer только до рестарта;
     MessageBuilder сохраняет разметку без промежуточного HTML.
 
-    Заголовок всегда «🍳 Что приготовить • Кухня» (docs/food.md).
+    Заголовок «🇮🇹 Что приготовить • Кухня»: флаг кухни, без него — 🍳 (docs/food.md).
     cuisine_emoji_fallback — словарь {cuisine_code: emoji} для случая, когда модель не
     вернула cuisine_emoji (§7 — обязателен fallback на случай пустого/нераспознанного значения)."""
     name = str(data.get("name", "")).strip()
@@ -147,7 +147,7 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
         chef_tip += "."
 
     b = MessageBuilder()
-    header = "🍳 Что приготовить"
+    header = f"{CUISINE_FLAG.get(cuisine_code, '🍳')} Что приготовить"
     if cuisine_label:
         cuisine_part = f"{cuisine_emoji} {cuisine_label}" if show_cuisine_emoji else cuisine_label
         header = f"{header} • {cuisine_part}"

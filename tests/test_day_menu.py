@@ -158,7 +158,7 @@ def test_meal_button_builds_recipe_of_that_menu_dish(monkeypatch):
 
     assert requested == [(13, "italian", "Pasta al pomodoro")]
     text, markup = shown[0]
-    assert text.startswith("🍳 Что приготовить на обед · Итальянская кухня\n\nPasta al pomodoro")
+    assert text.startswith("🇮🇹 Что приготовить на обед · Итальянская кухня\n\nPasta al pomodoro")
     assert [b.callback_data for b in markup.inline_keyboard[0]] == ["m_food", "m_menu"]
 
 
