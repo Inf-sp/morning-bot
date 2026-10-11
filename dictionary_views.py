@@ -85,12 +85,18 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         )])
     rows.append([InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")])
     rows.append(nav_row(back))
+    from ui.builder import MessageBuilder
+    b = MessageBuilder()
     if entries:
-        text = (f"{flag} Мой словарь · {len(entries)} слов\n\n"
-                "Слова разложены по темам; все они участвуют в тренировках.")
+        b.line(f"{flag} Мой словарь · {len(entries)} слов")
+        b.spacer()
+        b.italic("Слова разложены по темам; все они участвуют в тренировках.")
     else:
-        text = f"{flag} Мой словарь\n\nПока здесь нет слов."
-    await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)
+        b.line(f"{flag} Мой словарь")
+        b.spacer()
+        b.line("Пока здесь нет слов.")
+    msg = b.build_stripped()
+    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
 
 async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):

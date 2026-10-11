@@ -155,25 +155,22 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Фраза дня → грамматика → ещё пример; перевод везде через «→».
+    # Фраза дня → ещё пример → правило грамматики в конце курсивом; перевод везде через «→».
     phrase = home.get("live_language") or {}
     if phrase.get("text") and phrase.get("translation"):
         b.spacer()
         b.bold("Фраза дня:")
         b.text_line(f" {_without_period(phrase['text'])} → {_with_period(phrase['translation'])}")
         b.newline()
-    if phrase.get("rule"):
-        b.spacer()
-        b.bold("Грамматика:")
-        b.text_line(" ")
-        # _слово_ — пример на изучаемом языке, выделяется курсивом.
-        for index, part in enumerate(re.split(r"_([^_]+)_", str(phrase["rule"]).strip())):
-            (b.italic if index % 2 else b.text_line)(part)
-        b.newline()
     if phrase.get("more") and phrase.get("more_translation"):
         b.spacer()
         b.bold("Ещё пример:")
         b.text_line(f" {_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+        b.newline()
+    if phrase.get("rule"):
+        b.spacer()
+        # Финальная подсказка экрана — курсивом целиком; _слово_ в правиле — без подчёркиваний.
+        b.italic(re.sub(r"_([^_]+)_", r"\1", str(phrase["rule"]).strip()))
         b.newline()
 
     if home.get("vacation"):
@@ -243,7 +240,8 @@ def day_menu(menu, *, cuisine_label, intro="", flag=""):
         b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
     if intro:  # описание кухни — под блюдами: «Турецкая кухня — это мясо, овощи…»
         b.spacer()
-        b.line(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
+        b.italic(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
+        b.newline()
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes]))
 
 
@@ -298,7 +296,8 @@ def food_menu(idea=None, *, meal=""):
     tip = _cooking_sentence(idea.get("tip"))
     if tip:
         b.spacer()
-        b.line(tip)
+        b.italic(tip)  # финальная подсказка экрана — курсивом
+        b.newline()
 
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_food")]))
 

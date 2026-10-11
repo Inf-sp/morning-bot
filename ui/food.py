@@ -175,7 +175,8 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
             b.bullet(step)
     if chef_tip:
         b.spacer()
-        b.line(chef_tip)
+        b.italic(chef_tip)  # финальная подсказка экрана — курсивом
+        b.newline()
     return b.build_stripped()
 
 
@@ -195,7 +196,8 @@ def fridge_home(available):
     b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.newline()
     b.spacer()
-    b.line("Отмечай, что есть дома: меню и рецепты учитывают продукты в наличии.")
+    b.italic("Отмечай, что есть дома: меню и рецепты учитывают продукты в наличии.")
+    b.newline()
     return b.build_stripped()
 
 

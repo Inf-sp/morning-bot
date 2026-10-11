@@ -677,7 +677,7 @@ async def _render_view(bot, cid, view_id, q=None):
         # Как «Моё кино» и «Мои книги»: одна строка, артисты — кнопками по жанрам.
         lines = [f"<b>{esc(title)} · {total} {ru_plural(total, 'артист', 'артиста', 'артистов')}</b>"]
         if total:
-            lines += ["", "По ним подбираю новую музыку и ищу концерты."]
+            lines += ["", "<i>По ним подбираю новую музыку и ищу концерты.</i>"]
     elif ctx == "cinema_favorites" and total > 1:
         lines.append("По алфавиту")
     if total:

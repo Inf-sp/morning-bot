@@ -48,6 +48,27 @@ _STYLE_ABOUT = {
 }
 
 
+def style_about(primary_style="") -> str:
+    """«Городской стиль — это …» или ""."""
+    return _STYLE_ABOUT.get(_clean_text(primary_style), "")
+
+
+_COLOR_PAIR_ENDINGS = (
+    "спокойное сочетание, которое работает в любую погоду.",
+    "сочетание, которое выглядит собранно без усилий.",
+    "пара, которая не спорит между собой и легко носится весь день.",
+)
+
+
+def color_pair_line(first, second, variant=0) -> str:
+    """«Оливковый и бежевый — спокойное сочетание, которое работает в любую погоду.»"""
+    first, second = _clean_text(first), _clean_text(second)
+    if not first or not second:
+        return ""
+    ending = _COLOR_PAIR_ENDINGS[variant % len(_COLOR_PAIR_ENDINGS)]
+    return f"{first[:1].upper()}{first[1:]} и {second} — {ending}"
+
+
 def outfit_header(primary_style=""):
     """Единый заголовок образа: эмодзи отражает выбранный стиль."""
     style = _clean_text(primary_style)
@@ -107,10 +128,12 @@ def render_wardrobe_message(look_data):
         for item in items:
             b.line(f"- {item}")
 
-    about = _STYLE_ABOUT.get(primary_style)
-    if about:
+    # Финальная фраза — курсивом, без эмодзи и заголовка: цвета, силуэт или стиль (меняется по дням).
+    closing = _clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, "")
+    if closing:
         b.spacer()
-        b.line(about)
+        b.italic(closing)
+        b.newline()
 
     return b.build_stripped()
 
@@ -353,7 +376,8 @@ def _pluralize_dative_items(n):
 def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.title(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
-    b.line("Нажми на категорию, чтобы посмотреть вещи или удалить лишнее.")
+    b.italic("Нажми на категорию, чтобы посмотреть вещи или удалить лишнее.")
+    b.newline()
     return b.build_stripped()
 
 

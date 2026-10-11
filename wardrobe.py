@@ -157,6 +157,32 @@ def weather_signature(weather_ctx, flags):
     }
 
 
+_ADJECTIVE_ENDINGS = ("ый", "ий", "ой")
+
+
+def _closing_line(items, primary_style, style_tip):
+    """Финальная фраза карточки: по кругу сочетание цветов, силуэт и стиль.
+
+    Тип выбирается по дню и составу образа, поэтому «Новый образ» и новый день дают другую
+    фразу; тип без данных (все вещи одного цвета, нет стиля) пропускается.
+    """
+    import hashlib
+    colors = []
+    for item in items:
+        color = str((item.get("colors") or [""])[0] or "").strip().casefold()
+        if color.endswith(_ADJECTIVE_ENDINGS) and color not in colors and item.get("zone") != "Обувь":
+            colors.append(color)
+    seed = int(hashlib.md5("|".join(str(it.get("id") or "") for it in items).encode()).hexdigest(), 16)
+    seed += datetime.now(config.TZ).date().toordinal()
+    options = [
+        wardrobe_ui.color_pair_line(colors[0], colors[1], seed) if len(colors) >= 2 else "",
+        str(style_tip or "").strip(),
+        wardrobe_ui.style_about(primary_style),
+    ]
+    options = [option for option in options if option]
+    return options[seed % len(options)] if options else ""
+
+
 def _build_look_message(look_data):
     msg = wardrobe_ui.render_wardrobe_message(look_data)
     return msg.text, msg.entities
@@ -701,6 +727,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "weather": weather_signature(weather_ctx, flags),
         "purchase_recommendation": purchase_recommendation,
     }
+    look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
     if kb is None:
         result_kb = build_wardrobe_keyboard()
     text, entities = _build_look_message(look_data)
