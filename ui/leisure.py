@@ -889,7 +889,7 @@ def _short_about(text) -> str:
 
 def _about_line(b: MessageBuilder, text) -> None:
     about = _short_about(text)
-    if about:
+    if re.search(r"[а-яё]", about, re.I):  # только русский текст: английское описание не показываем
         b.line(about)
 
 

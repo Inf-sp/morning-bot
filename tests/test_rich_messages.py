@@ -156,7 +156,8 @@ def test_free_chat_streams_into_rich_draft_then_persists_final_answer(monkeypatc
     )
     assert bot_instance.rich[-1]["rich_message"]["blocks"][0]["type"] == "heading"
     assert bot_instance.classic == []
-    assert store.chat_history[cid][-1]["content"] == "Ответ\n- Первый пункт"
+    # Свободный ответ ассистента заканчивается точкой (assistant._with_final_period).
+    assert store.chat_history[cid][-1]["content"] == "Ответ\n- Первый пункт."
     store.chat_history.pop(cid, None)
 
 

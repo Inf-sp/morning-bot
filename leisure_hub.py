@@ -7,6 +7,7 @@
 """
 import asyncio
 import logging
+import re
 from datetime import datetime
 
 import apple_music
@@ -60,7 +61,8 @@ def hub_data(cid) -> dict:
     return {
         # Кино и книги — по одной в день, с описанием, если оно есть хотя бы у части списка.
         "movies": _daily([m for m in movies if m.get("overview")] or movies, today, one),
-        "books": _daily([b for b in books if b.get("summary")] or books, today, one),
+        "books": _daily([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)]
+                        or books, today, one),
         "music": _daily(new_music(cid, cc, today), today, leisure_ui.LEISURE_HUB_LIMIT),
     }
 

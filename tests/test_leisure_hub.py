@@ -355,3 +355,23 @@ def test_new_music_follows_music_styles_with_one_album_per_artist(monkeypatch):
     music = leisure_hub.new_music("42", "NL", date(2026, 10, 9))
 
     assert [(item["title"], item["genre_label"]) for item in music] == [("P1", "Поп"), ("A1", "Инди")]
+
+
+def test_book_premiere_summaries_are_russian_or_dropped(monkeypatch):
+    import leisure_books
+    items = [{"title": "Onyx", "summary": "A war is coming."}, {"title": "Тень", "summary": "Уже по-русски."},
+             {"title": "Other", "summary": "Untranslated text."}]
+
+    async def translate(*_a, **_k):
+        return {"items": [{"id": 0, "summary_ru": "Приближается война."}, {"id": 2, "summary_ru": "still english"}]}
+
+    monkeypatch.setattr(leisure_books.ai, "allm_json", translate)
+    result = asyncio.run(leisure_books._russian_premiere_summaries(items))
+
+    assert [item.get("summary") for item in result] == ["Приближается война.", "Уже по-русски.", None]
+    assert items[0]["summary"] == "A war is coming."  # исходный список не меняется
+
+
+def test_hub_never_shows_english_description():
+    msg = leisure_ui.leisure_hub_screen([], [{"title": "Book", "summary": "An English blurb."}], [])
+    assert "English" not in msg.text and "«Book»" in msg.text
