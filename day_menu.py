@@ -22,29 +22,35 @@ _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 
-# Вид страны над меню дня — узнаваемое место, не блюдо. Фото ищется через общий слой
-# travel_photos (Unsplash, при сбое Pexels) по запросу CUISINE_SCENE и хранится 30 дней;
-# CUISINE_IMAGE — проверенный запасной вид из Wikimedia Commons, если оба сервиса недоступны.
+# Фото над меню дня — продукт, овощ или специя, которыми известна кухня (не город и не блюдо).
+# Ищется через общий слой travel_photos (Unsplash, при сбое Pexels) по запросу CUISINE_SCENE и хранится
+# 30 дней (смена запроса сбрасывает кэш); CUISINE_IMAGE — проверенный запасной кадр Wikimedia Commons.
 CUISINE_SCENE = {
-    "italian": "Amalfi Coast Italy", "japanese": "Mount Fuji Japan", "thai": "Phi Phi Islands Thailand",
-    "mexican": "Chichen Itza Mexico", "indian": "Taj Mahal India", "chinese": "Great Wall of China",
-    "turkish": "Cappadocia balloons Turkey", "french": "Paris Eiffel Tower",
-    "russian": "Saint Petersburg Palace Bridge", "georgian": "Gergeti Trinity Church Georgia",
+    "italian": "fresh basil tomatoes",
+    "japanese": "yuzu citrus",
+    "thai": "thai bird's eye chili",
+    "mexican": "jalapeno chili peppers",
+    "indian": "indian spices garam masala",
+    "chinese": "star anise spice",
+    "turkish": "pomegranate fruit",
+    "french": "lavender provence",
+    "russian": "beetroot vegetables",
+    "georgian": "walnuts",
 }
 _PHOTO_TTL = 30 * 86400
 _PHOTO_RETRY = 86400  # оба сервиса недоступны — запасной вид, новая попытка через сутки
 
 CUISINE_IMAGE = {
-    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg/1280px-Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg",  # Амальфитанское побережье
-    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg/1280px-View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg",  # Фудзи
-    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/KohPhiPhi.JPG/1280px-KohPhiPhi.JPG",  # острова Пхи-Пхи
-    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Chichen_Itza_3.jpg/1280px-Chichen_Itza_3.jpg",  # Чичен-Ица
-    "indian": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Taj_Mahal_%28Edited%29.jpeg/1280px-Taj_Mahal_%28Edited%29.jpeg",  # Тадж-Махал
-    "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/The_Great_Wall_of_China_at_Jinshanling-edit.jpg/1280px-The_Great_Wall_of_China_at_Jinshanling-edit.jpg",  # Великая Китайская стена
-    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg/1280px-Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg",  # Каппадокия
-    "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg",  # Париж
-    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Palace_Bridge_SPB_%28img2%29.jpg/1280px-Palace_Bridge_SPB_%28img2%29.jpg",  # Санкт-Петербург, Дворцовый мост
-    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Gergeti_Trinity_Church_09.23.jpg/1280px-Gergeti_Trinity_Church_09.23.jpg",  # Гергетская церковь
+    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Ocimum_basilicum_8zz.jpg/1280px-Ocimum_basilicum_8zz.jpg",  # базилик
+    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Yuzu_oranges_%286459456959%29.jpg/1280px-Yuzu_oranges_%286459456959%29.jpg",  # юдзу
+    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/Thai_peppers.jpg/1280px-Thai_peppers.jpg",  # тайский перец чили
+    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Immature_jalapeno_capsicum_annuum_var_annuum.jpeg/1280px-Immature_jalapeno_capsicum_annuum_var_annuum.jpeg",  # халапеньо
+    "indian": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Garammasalaphoto.jpg/1280px-Garammasalaphoto.jpg",  # гарам масала
+    "chinese": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Illicium_verum_1zz.jpg",  # бадьян
+    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Pomegranate_Juice_%282019%29.jpg/1280px-Pomegranate_Juice_%282019%29.jpg",  # гранат
+    "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Lavender_field_and_Mont_Ventoux.jpg/1280px-Lavender_field_and_Mont_Ventoux.jpg",  # лаванда Прованса
+    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Beetroots_in_a_basket.jpg/1280px-Beetroots_in_a_basket.jpg",  # свёкла
+    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Walnuts_-_whole_and_open_with_halved_kernel.jpg/1280px-Walnuts_-_whole_and_open_with_halved_kernel.jpg",  # грецкие орехи
 }
 
 # Вступление о кухне дня: характер и за что её любят.
@@ -279,7 +285,7 @@ def cuisine_photo(cuisine, cid=None) -> dict:
     if not query and cuisine.startswith(LOCAL_PREFIX):
         import vacation
         name = vacation.country_name_en(cid) if cid is not None else ""
-        query = f"{name} landscape" if name else ""
+        query = f"{name} local fruit vegetables" if name else ""  # продукты страны отпуска
     if not query:
         return {}
     saved = (store._load(config.CUISINE_PHOTOS_KEY) or {}).get(cuisine) or {}

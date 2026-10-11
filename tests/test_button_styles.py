@@ -290,7 +290,7 @@ def test_cuisine_photo_comes_from_photo_layer_cached_with_wikimedia_fallback(mon
 
     assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
     assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
-    assert queries == ["Mount Fuji Japan"]  # второй раз — из кэша
+    assert queries == [day_menu.CUISINE_SCENE["japanese"]]  # второй раз — из кэша
 
     monkeypatch.setattr(travel_photos, "find_landscape", lambda _query: None)
     assert day_menu.cuisine_photo("italian")["url"] == day_menu.CUISINE_IMAGE["italian"]
@@ -331,4 +331,4 @@ def test_cuisine_photo_cache_resets_when_scene_query_changes(monkeypatch):
     monkeypatch.setattr(day_menu.store, "mutate_kv", lambda _key, change: saved.update(change(dict(saved))[0]))
     monkeypatch.setattr(travel_photos, "find_landscape", lambda query: {"url": f"https://{query}", "provider": "unsplash"})
 
-    assert day_menu.cuisine_photo("russian")["url"] == "https://Saint Petersburg Palace Bridge"
+    assert day_menu.cuisine_photo("russian")["url"] == f"https://{day_menu.CUISINE_SCENE['russian']}"
