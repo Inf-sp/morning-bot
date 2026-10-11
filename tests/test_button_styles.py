@@ -321,3 +321,14 @@ def test_day_menu_is_sent_as_photo_with_caption_and_falls_back_to_text():
     asyncio.run(menu._deliver_menu(bot, "42", long_msg, {"url": "https://images.unsplash.com/fuji"}))
     asyncio.run(menu._deliver_menu(bot, "42", msg, {}))
     assert len(bot.photos) == 1 and len(bot.texts) == 2  # длинная подпись и без фото — текстом
+
+
+def test_cuisine_photo_cache_resets_when_scene_query_changes(monkeypatch):
+    import day_menu
+    import travel_photos
+    saved = {"russian": {"value": {"url": "https://kremlin"}, "query": "Moscow Kremlin", "expires": 9e12}}
+    monkeypatch.setattr(day_menu.store, "_load", lambda _key: dict(saved))
+    monkeypatch.setattr(day_menu.store, "mutate_kv", lambda _key, change: saved.update(change(dict(saved))[0]))
+    monkeypatch.setattr(travel_photos, "find_landscape", lambda query: {"url": f"https://{query}", "provider": "unsplash"})
+
+    assert day_menu.cuisine_photo("russian")["url"] == "https://Saint Petersburg Palace Bridge"

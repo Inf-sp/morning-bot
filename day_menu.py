@@ -29,7 +29,7 @@ CUISINE_SCENE = {
     "italian": "Amalfi Coast Italy", "japanese": "Mount Fuji Japan", "thai": "Phi Phi Islands Thailand",
     "mexican": "Chichen Itza Mexico", "indian": "Taj Mahal India", "chinese": "Great Wall of China",
     "turkish": "Cappadocia balloons Turkey", "french": "Paris Eiffel Tower",
-    "russian": "Moscow Kremlin", "georgian": "Gergeti Trinity Church Georgia",
+    "russian": "Saint Petersburg Palace Bridge", "georgian": "Gergeti Trinity Church Georgia",
 }
 _PHOTO_TTL = 30 * 86400
 _PHOTO_RETRY = 86400  # оба сервиса недоступны — запасной вид, новая попытка через сутки
@@ -43,7 +43,7 @@ CUISINE_IMAGE = {
     "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/The_Great_Wall_of_China_at_Jinshanling-edit.jpg/1280px-The_Great_Wall_of_China_at_Jinshanling-edit.jpg",  # Великая Китайская стена
     "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg/1280px-Cappadocia_balloon_trip%2C_Ortahisar_Castle_%2811893715185%29.jpg",  # Каппадокия
     "french": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg",  # Париж
-    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Moscow_Kremlin_%288281675670%29.jpg/1280px-Moscow_Kremlin_%288281675670%29.jpg",  # Московский Кремль
+    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Palace_Bridge_SPB_%28img2%29.jpg/1280px-Palace_Bridge_SPB_%28img2%29.jpg",  # Санкт-Петербург, Дворцовый мост
     "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Gergeti_Trinity_Church_09.23.jpg/1280px-Gergeti_Trinity_Church_09.23.jpg",  # Гергетская церковь
 }
 
@@ -284,7 +284,9 @@ def cuisine_photo(cuisine, cid=None) -> dict:
     if not query:
         return {}
     saved = (store._load(config.CUISINE_PHOTOS_KEY) or {}).get(cuisine) or {}
-    if isinstance(saved, dict) and float(saved.get("expires") or 0) > time.time():
+    # Сменился запрос (например, Москва → Петербург) — старое фото из кэша не берём.
+    if (isinstance(saved, dict) and saved.get("query") == query
+            and float(saved.get("expires") or 0) > time.time()):
         return dict(saved.get("value") or {})
     found = travel_photos.find_landscape(query) or {}
     if found.get("url"):
@@ -296,7 +298,7 @@ def cuisine_photo(cuisine, cid=None) -> dict:
 
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[cuisine] = {"value": value, "expires": time.time() + ttl}
+        data[cuisine] = {"value": value, "query": query, "expires": time.time() + ttl}
         return data, None
 
     store.mutate_kv(config.CUISINE_PHOTOS_KEY, mutate)
