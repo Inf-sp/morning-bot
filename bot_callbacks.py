@@ -269,7 +269,7 @@ async def _yearly_tops(c):
 
 
 def _food_recipe(c):
-    """food_go_day_<кухня>: «Новое меню» на весь день в выбранной кухне.
+    """food_go_day_<кухня>: «Другое меню на сегодня» на весь день в выбранной кухне.
 
     Старые кнопки food_go_<приём пищи>_<кухня|any> тоже дают новое меню дня.
     """
@@ -383,7 +383,7 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
-    # «Новое меню»: кухня → новое меню на день (предпочтения не меняются).
+    # «Другое меню на сегодня»: кухня → новое меню на день (предпочтения не меняются).
     # food_meal_* — кнопки старых сообщений с шагом приёма пищи.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid)))),

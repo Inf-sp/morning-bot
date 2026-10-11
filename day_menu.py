@@ -254,7 +254,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
 
 
 def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
-    """Меню дня из кэша или новое; refresh — «Новое меню» (не повторяет текущее)."""
+    """Меню дня из кэша или новое; refresh — «Другое меню на сегодня» (не повторяет текущее)."""
     cached = get_cached_day_menu(cid, now)
     if cached and not refresh:
         return cached

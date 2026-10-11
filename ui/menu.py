@@ -338,20 +338,21 @@ def fridge_empty_for_mine():
 
 
 def food_card_kb(meals=None):
-    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Новое меню», холодильник."""
+    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Другое меню на сегодня», «Из моих продуктов»."""
     meals = meals or [meal for meal, _label in _MEAL_NAMES]
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
-        # Рецепт из отмеченных продуктов холодильника под время суток; меню дня — из любых продуктов.
+        # «Другое меню на сегодня» заменяет меню этого дня; ниже — рецепт из отмеченных продуктов
+        # холодильника под время суток (меню дня — из любых продуктов).
+        [InlineKeyboardButton("✨ Другое меню на сегодня", callback_data="food_pick")],
         [InlineKeyboardButton("🧊 Из моих продуктов", callback_data="food_mine")],
-        [InlineKeyboardButton("✨ Новое меню", callback_data="food_pick")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="as_fridge_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 
 def food_cuisine_kb(cuisines):
-    """«Новое меню»: кухня нового меню на день; cuisines — [(код, подпись)]."""
+    """«Другое меню на сегодня»: кухня нового меню на день; cuisines — [(код, подпись)]."""
     rows = [[InlineKeyboardButton(label, callback_data=f"food_go_day_{key}")]
             for key, label in cuisines]
     rows.append(nav_row("food_card"))

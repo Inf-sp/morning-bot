@@ -109,8 +109,8 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
+        [("✨ Другое меню на сегодня", "food_pick")],
         [("🧊 Из моих продуктов", "food_mine")],
-        [("✨ Новое меню", "food_pick")],
         [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
 
