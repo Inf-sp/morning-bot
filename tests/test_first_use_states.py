@@ -104,19 +104,18 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Фраза дня: Geen probleem → Без проблем.",
-        "Ещё пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
-        "Zodra — как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-    ]
+        "Грамматика: Zodra",
+        "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
+        "Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
+    ]  # фраза дня — в «Моём дне», здесь грамматика: тема → пример → объяснение курсивом
 
     def marked(kind):
         raw = message.text.encode("utf-16-le")
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("bold")[1:] == ["Фраза дня:", "Ещё пример:"]
-    # Правило грамматики — финальная подсказка экрана: целиком курсивом, без подписи.
-    assert marked("italic") == ["Zodra — как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
+    assert marked("bold")[1:] == ["Грамматика:", "Пример:"]
+    assert marked("italic") == ["Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
     assert marked("spoiler") == []
 
 

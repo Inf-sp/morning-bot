@@ -120,6 +120,19 @@ def _with_period(value) -> str:
     return value if not value or value[-1] in ".!?…" else value + "."
 
 
+def _grammar_parts(rule) -> tuple:
+    """«_Hoeven … te_ → нужно, обычно с _niet_…» → («Hoeven … te», «Нужно, обычно с niet…»)."""
+    rule = re.sub(r"_([^_]+)_", r"\1", str(rule or "")).strip()
+    # Тема отделена «→» (старые и AI-правила — «—»): берём первый разделитель.
+    parts = re.split(r"\s(?:→|—)\s", rule, maxsplit=1)
+    topic, explanation = (parts + [""])[:2]
+    separator = len(parts) > 1
+    if not separator:
+        return "", _with_period(rule) if rule else ""
+    explanation = explanation.strip()
+    return topic.strip(), _with_period(explanation[:1].upper() + explanation[1:])
+
+
 def learning_menu(home: dict):
     """Главный экран обучения: материал дня, прогресс и следующий шаг."""
     if home.get("disabled"):
@@ -155,22 +168,22 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Фраза дня → ещё пример → правило грамматики в конце курсивом; перевод везде через «→».
+    # Грамматика: тема → Пример → объяснение курсивом (фраза дня — в «Моём дне», строка «Тренажер»).
     phrase = home.get("live_language") or {}
-    if phrase.get("text") and phrase.get("translation"):
+    topic, explanation = _grammar_parts(phrase.get("rule"))
+    if topic:
         b.spacer()
-        b.bold("Фраза дня:")
-        b.text_line(f" {_without_period(phrase['text'])} → {_with_period(phrase['translation'])}")
+        b.bold("Грамматика:")
+        b.text_line(f" {topic}")
         b.newline()
     if phrase.get("more") and phrase.get("more_translation"):
         b.spacer()
-        b.bold("Ещё пример:")
+        b.bold("Пример:")
         b.text_line(f" {_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
         b.newline()
-    if phrase.get("rule"):
+    if explanation:
         b.spacer()
-        # Финальная подсказка экрана — курсивом целиком; _слово_ в правиле — без подчёркиваний.
-        b.italic(re.sub(r"_([^_]+)_", r"\1", str(phrase["rule"]).strip()))
+        b.italic(explanation)  # финальная подсказка экрана — курсивом
         b.newline()
 
     if home.get("vacation"):

@@ -735,18 +735,21 @@ def _compact_translation(text):
     return ", ".join(values)
 
 def _word_of_day(cid):
-    """Запись дня для карточки 'Мой день' — тот же материал, что показывает
-    экран 'Обучение' (см. learning.select_daily_material): выбор и его
-    побочные эффекты (last_shown_at) живут в learning.py, здесь только формат."""
+    """Фраза дня для строки «Тренажер»: «Doe maar rustig aan → Не торопись.» (перевод — под спойлером).
+
+    Фраза дня живёт в «Моём дне»; экран «Обучение» начинается с грамматики (live_language).
+    """
     if not store.learning_is_enabled(cid):
         return "", ""
-    entry = learning.select_daily_material(cid)
+    import live_language
     lang = learning._active_language_code(cid)
-    if not entry:
+    variant = int((store.get_profile(cid) or {}).get("learning_home_variant") or 0)
+    phrase = live_language.daily_phrase(lang, variant=variant)
+    text = str(phrase.get("text") or "").strip().rstrip(".")
+    translation = str(phrase.get("translation") or "").strip().rstrip(".")
+    if not text or not translation:
         return "", lang
-    term = dictionary.entry_term(entry)
-    ru = _compact_translation(dictionary.entry_translation(entry))
-    return f"{_cap(term)} → {_cap(ru)}.", lang
+    return f"{_cap(text)} → {_cap(translation)}.", lang
 
 
 def _movie_rebus_of_day(day):
@@ -755,7 +758,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 17
+_DAY_CACHE_VERSION = 18
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):

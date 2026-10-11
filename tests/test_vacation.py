@@ -103,7 +103,8 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
     assert msg.text.startswith("🇿🇦 Изучаем сегодня · Африкаанс")
-    assert "Фраза дня:" in msg.text and "Ещё пример:" in msg.text and msg.text.endswith("Hoe → как.")
+    assert "Грамматика: Hoe" in msg.text and "Пример: Hoe laat? → Который час?" in msg.text
+    assert msg.text.endswith("Как.") and "Фраза дня" not in msg.text
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
     assert vacation.lesson_today("42", date(2026, 10, 12)) != vacation.lesson_today("42", date(2026, 10, 13))
     assert vacation.word_today("42", date(2026, 10, 12)).count(" → ") == 1

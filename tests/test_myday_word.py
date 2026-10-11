@@ -96,15 +96,15 @@ def test_myday_skips_language_material_when_learning_is_disabled(monkeypatch):
     assert myday._word_of_day("42") == ("", "")
 
 
-def test_myday_word_removes_duplicate_translation_variants(monkeypatch):
+def test_myday_trainer_line_is_the_phrase_of_the_day(monkeypatch):
+    import live_language
     monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: True)
-    monkeypatch.setattr(myday.learning, "select_daily_material", lambda _cid: {
-        "term": "aantonen",
-        "translation": "Показывать, доказывать; Доказывать, показывать",
-    })
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
     monkeypatch.setattr(myday.learning, "_active_language_code", lambda _cid: "nl")
+    monkeypatch.setattr(live_language, "daily_phrase", lambda _lang, variant=0: {
+        "text": "Doe maar rustig aan.", "translation": "Не торопись"})
 
-    assert myday._word_of_day("42") == ("Aantonen → Показывать, доказывать.", "nl")
+    assert myday._word_of_day("42") == ("Doe maar rustig aan → Не торопись.", "nl")
 
 
 def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
