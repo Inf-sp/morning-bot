@@ -115,7 +115,8 @@ def title_label(tm) -> str:
 
 # ---------- страна артиста: MusicBrainz ----------
 
-def _person_cache(key, name, loader):
+def _person_cache(key, name, loader, fetch=True):
+    """Значение из кэша; fetch=False — только кэш, без сети (экран Досуга не ждёт)."""
     norm = " ".join(str(name or "").split()).casefold()
     if not norm:
         return ""
@@ -123,6 +124,8 @@ def _person_cache(key, name, loader):
     entry = saved.get(norm) if isinstance(saved, dict) else None
     if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < _PERSON_TTL:
         return entry.get("value") or ""
+    if not fetch:
+        return ""
     try:
         value = loader(name)
     except Exception:
@@ -157,12 +160,42 @@ def _musicbrainz_country(name):
     return ""
 
 
-def artist_label(name) -> str:
+def artist_label(name, fetch=True) -> str:
     """«🇬🇧 Великобритания» для артиста или ""."""
-    return label(_person_cache(config.ARTIST_COUNTRY_KEY, name, _musicbrainz_country))
+    return label(_person_cache(config.ARTIST_COUNTRY_KEY, name, _musicbrainz_country, fetch))
 
 
-def author_label(name) -> str:
+def author_label(name, fetch=True) -> str:
     """«🇬🇧 Великобритания» для автора книги (гражданство в Wikidata) или ""."""
     import wikidata_books
-    return label(_person_cache(config.AUTHOR_COUNTRY_KEY, name, wikidata_books.author_country))
+    return label(_person_cache(config.AUTHOR_COUNTRY_KEY, name, wikidata_books.author_country, fetch))
+
+
+def title_info(kind, tmdb_id, fetch=True) -> dict:
+    """{country_label, network} фильма или сериала из деталей TMDb (кэш 30 дней); fetch=False — только кэш."""
+    if not tmdb_id:
+        return {}
+    key = f"{kind or 'movie'}:{tmdb_id}"
+    saved = store._load(config.TMDB_TITLE_INFO_KEY) or {}
+    entry = saved.get(key) if isinstance(saved, dict) else None
+    if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < 30 * 86400:
+        value = entry.get("value") or {}
+    elif not fetch:
+        return {}
+    else:
+        import tmdb
+        try:
+            details = tmdb.detail(tmdb_id, kind or "movie") or {}
+        except Exception:
+            _log.warning("tmdb title info failed %s", key, exc_info=True)
+            return {}
+        value = {"countries": title_countries(details), "network": details.get("network") or ""}
+
+        def mutate(data):
+            data = data if isinstance(data, dict) else {}
+            data[key] = {"ts": time.time(), "value": value}
+            return data, None
+
+        store.mutate_kv(config.TMDB_TITLE_INFO_KEY, mutate)
+    countries = value.get("countries") or []
+    return {"country_label": label(countries[0]) if countries else "", "network": value.get("network") or ""}

@@ -424,6 +424,8 @@ def detail(tmdb_id, kind):
         base["next_episode"] = data.get("next_episode_to_air") or None
         rt = data.get("episode_run_time") or []
         base["episode_runtime"] = rt[0] if rt else 0
+        networks = [n.get("name") for n in (data.get("networks") or []) if n.get("name")]
+        base["network"] = networks[0] if networks else ""  # студия/канал сериала: HBO, Netflix…
     util.ttl_set("tmdb_detail", ck, base)
     return base
 

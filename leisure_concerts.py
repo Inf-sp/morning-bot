@@ -1168,7 +1168,8 @@ def cached_favorite_concerts(cid, limit):
 _MONTH_CONCERT_DAYS = 30  # кнопка «Концерты» в Досуге — ближайшие 30 дней
 
 
-async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели"):
+async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели",
+                                   min_mine=0):
     """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
 
     Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
@@ -1183,6 +1184,12 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
     mine = concert_items_between(
         _concerts_cache_get(cid, cc) or [], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
     )
+    if len(mine) < min_mine:
+        # «Твои артисты» — минимум min_mine ближайших: за горизонтом берём и более поздние концерты.
+        mine = concert_items_between(
+            _concerts_cache_get(cid, cc) or [], period_start, period_start + timedelta(days=365),
+            max(min_mine, len(mine)),
+        )
     taken = {_concert_identity_text(item["artist"]) for item in mine}
     nearby = [
         item for item in concert_items_between(
@@ -1277,8 +1284,15 @@ JSON: {{"items":[{{"name":"","fame":1,"about_ru":""}}]}}
 
 
 async def build_month_concerts_msg(cid):
-    """Экран «Концерты» из Досуга: ближайшие 30 дней из кэша концертов; AI — только для новых артистов."""
-    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, "🎫 Концерты на месяц")
+    """Экран «Концерты» из Досуга: «🎫 Ближайшие концерты · Нидерланды» — 30 дней, у своих артистов
+    минимум 3 ближайших; из кэша концертов, AI — только для новых артистов."""
+    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=3)
+
+
+def month_concerts_title(cid) -> str:
+    settings_data = store.get_settings(cid) or {}
+    country = _concert_country_name(str(settings_data.get("cc") or "NL"), settings_data.get("country") or "")
+    return f"🎫 Ближайшие концерты · {country}" if country else "🎫 Ближайшие концерты"
 
 
 async def send_weekend_events(bot, cid):

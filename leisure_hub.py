@@ -130,6 +130,13 @@ JSON: {{"items":[{{"id":0,"about":""}}]}}
         store.mutate_kv(config.ALBUM_NOTES_KEY, mutate)
 
 
+async def _warm_details(cid):
+    """Страна, студия сериала, страна автора и артиста — для сегодняшних и завтрашних пунктов хаба."""
+    today, _cc = _today_and_cc(cid)
+    for day in (today, today + timedelta(days=1)):
+        await asyncio.to_thread(hub_data, cid, day, True)
+
+
 async def _warm_album_notes(cid):
     """Описания альбомов на сегодня и завтра — заранее, чтобы хаб не ждал AI."""
     today, cc = _today_and_cc(cid)
@@ -137,9 +144,14 @@ async def _warm_album_notes(cid):
     await describe_albums(_daily(albums, today, 1) + _daily(albums, today + timedelta(days=1), 1))
 
 
-def hub_data(cid) -> dict:
-    """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке."""
+def hub_data(cid, day=None, fetch=False) -> dict:
+    """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке.
+
+    Страна, студия сериала, страна автора и артиста — из кэшей (fetch=False); ночной прогрев
+    (fetch=True) заранее догружает их для сегодняшних и завтрашних пунктов.
+    """
     today, cc = _today_and_cc(cid)
+    today = day or today
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
     books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
     import countries
@@ -151,13 +163,17 @@ def hub_data(cid) -> dict:
     notes = _album_notes()
     album = [{**item, "about": notes.get(_album_key(item), "")}
              for item in _daily(new_music(cid, cc, today), today, one)]
+    picked_movies = (_daily([m for m in movies if m.get("overview")] or movies, today, one)
+                     + _daily([s for s in series if s.get("overview")] or series, today, one))
+    picked_books = _daily([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)]
+                          or books, today, one)
     return {
         # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
-        "movies": _daily([m for m in movies if m.get("overview")] or movies, today, one)
-                  + _daily([s for s in series if s.get("overview")] or series, today, one),
-        "books": _daily([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)]
-                        or books, today, one),
-        "music": album,
+        "movies": [{**item, **countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)}
+                   for item in picked_movies],
+        "books": [{**item, "country_label": countries.author_label(item.get("author"), fetch)}
+                  for item in picked_books],
+        "music": [{**item, "country_label": countries.artist_label(item.get("artist"), fetch)} for item in album],
     }
 
 
@@ -196,7 +212,8 @@ async def send_concerts(bot, cid, q=None):
     from telegram import InlineKeyboardMarkup
     from ui.navigation import nav_row
     from dataclasses import replace
-    msg = await leisure_concerts.build_month_concerts_msg(cid) or leisure_ui.no_month_concerts()
+    msg = (await leisure_concerts.build_month_concerts_msg(cid)
+           or leisure_ui.no_month_concerts(leisure_concerts.month_concerts_title(cid)))
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
 
@@ -234,6 +251,7 @@ async def warm_hub_cache(cid):
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
         ("series", lambda: _warm_series(cid)),
         ("album_notes", lambda: _warm_album_notes(cid)),
+        ("details", lambda: _warm_details(cid)),
     )
     ok = True
     for name, call in steps:

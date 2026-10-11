@@ -33,8 +33,9 @@ def _no_country_network(monkeypatch):
     import countries
 
     monkeypatch.setattr(countries, "_table", lambda: {})
-    monkeypatch.setattr(countries, "artist_label", lambda _name: "")
-    monkeypatch.setattr(countries, "author_label", lambda _name: "")
+    monkeypatch.setattr(countries, "artist_label", lambda _name, fetch=True: "")
+    monkeypatch.setattr(countries, "author_label", lambda _name, fetch=True: "")
+    monkeypatch.setattr(countries, "title_info", lambda *_a, **_k: {})
     yield
 
 

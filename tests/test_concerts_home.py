@@ -390,3 +390,18 @@ def test_artist_notes_ask_ai_once_and_keep_failures_out(monkeypatch):
     assert first[key]["about"] == "Икона соула, пропускать нельзя." and first[key]["fame"] == 10
     assert again[key]["fame"] == 10 and len(calls) == 1  # повторно AI не спрашивается
     assert leisure_concerts._concert_identity_text("Unknown") not in saved  # неверный ответ не хранится
+
+
+def test_month_concerts_show_at_least_three_of_my_artists_and_country_title(monkeypatch):
+    mine = [_tm_event("Placebo", 5, attractions=("Placebo",)),
+            _tm_event("Muse", 60, attractions=("Muse",)),
+            _tm_event("Keane", 90, attractions=("Keane",)),
+            _tm_event("Blur", 120, attractions=("Blur",))]
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: mine)
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: [])
+
+    text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
+
+    assert text.startswith("🎫 Ближайшие концерты · Нидерланды")
+    assert [name for name in ("Placebo", "Muse", "Keane", "Blur") if name in text] == ["Placebo", "Muse", "Keane"]

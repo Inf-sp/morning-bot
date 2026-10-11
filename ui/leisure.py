@@ -183,11 +183,6 @@ def movie_card(item, tm):
         b.spacer()
         b.line(" · ".join(meta_parts))
 
-    # 3. Статус и объём сериала (для фильма пусто — длительность и страна не показываются).
-    detail = _detail_line(tm)
-    if detail:
-        b.spacer()
-        b.line(detail)
 
     # 4. О чём — короткое описание (2-4 строки).
     if tm and tm.get("overview"):
@@ -199,6 +194,13 @@ def movie_card(item, tm):
     if reason:
         b.spacer()
         b.line(reason)
+
+    # 6. Статус и объём сериала («Завершено · 6 сезонов • 63 серии») — финальная строка курсивом.
+    detail = _detail_line(tm)
+    if detail:
+        b.spacer()
+        b.italic(detail)
+        b.newline()
 
     return title, b.build_stripped()
 
@@ -281,7 +283,8 @@ def _fmt_date(iso):
 
 
 def book_text(item):
-    """Карточка книги: название → автор · страна · год · оригинал → жанр → сюжет."""
+    """Карточка книги как в кино: название → автор → «⭐ 4.2 · жанр · 🇬🇧 Страна · год» → описание →
+    об авторе → интересный факт (премия, экранизация) курсивом в конце."""
     author = str(item.get("author") or "").strip()
     country = str(item.get("country") or "").strip()
     title = str(item.get("title") or "Книга").strip()
@@ -305,28 +308,25 @@ def book_text(item):
     b = MessageBuilder()
     b.bold(title)
     b.newline()
-    metadata = [value for value in (
-        author,
-        country,
-        year,
-        original if original.casefold() != title.casefold() else "",
-    ) if value]
+    byline = [value for value in (author, original if original.casefold() != title.casefold() else "") if value]
+    if byline:
+        b.line(" · ".join(byline))
+    # Рейтинг — только при достаточном числе оценок, как у кино.
+    rating = _weekly_rating(item.get("rating"), item.get("ratings_count"), 5).removesuffix("/5") \
+        if int(item.get("ratings_count") or 0) >= _BOOK_MIN_RATINGS else ""
+    metadata = [value for value in (rating, genre[:1].lower() + genre[1:] if genre else "", country, year) if value]
     if metadata:
         b.line(" · ".join(metadata))
-    if genre:
-        b.line(f"Жанр: {genre}")
 
     plot_source = item.get("plot") or item.get("description") or item.get("desc")
     if plot_source:
         plot = " ".join(str(plot_source).split()).strip()
         sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", plot) if part.strip()]
-        # Короткое описание: 1–2 предложения, не длиннее нескольких строк.
-        plot = clip(" ".join(sentences[:2]), limit=320)
+        # Описание без подписи «Сюжет»: до пяти предложений, как подробный пересказ.
+        plot = clip(" ".join(sentences[:5]), limit=700)
         if plot and plot[-1] not in ".!?…":
             plot += "."
         b.spacer()
-        b.bold("Сюжет")
-        b.newline()
         b.line(plot)
     about = str(item.get("author_about") or "").strip()
     other_books = [str(value).strip() for value in item.get("author_books") or [] if str(value).strip()]
@@ -338,7 +338,15 @@ def book_text(item):
             b.line(about if about[-1] in ".!?…" else about + ".")
         if other_books:
             b.line("Другие книги: " + ", ".join(f"«{value}»" for value in other_books[:3]))
+    fact = " ".join(str(item.get("fact") or "").split()).strip()
+    if fact and re.search(r"[а-яё]", fact, re.I):
+        b.spacer()
+        b.italic(fact if fact[-1] in ".!?…" else fact + ".")  # интересное о книге — курсивом в конце
+        b.newline()
     return b.build_stripped()
+
+
+_BOOK_MIN_RATINGS = 5
 
 
 def book_add_candidate_card(data):
@@ -904,13 +912,20 @@ def _about_line(b: MessageBuilder, text) -> None:
         b.line(about)
 
 
+def _hub_item(b: MessageBuilder, title, url="", meta=(), about="") -> None:
+    """Строка Досуга одним абзацем: «• «Название» · жанр · 🇺🇸 США · Короткое описание.» — без даты."""
+    about = _short_about(about)
+    if not re.search(r"[а-яё]", about, re.I):  # только русский текст
+        about = ""
+    _weekly_item(b, title, url, (*meta, about))
+
+
 def _series_event_row(b: MessageBuilder, item) -> None:
-    """«• «Одни из нас» · 2-й сезон · 13 апреля» + описание; без номера сезона — «новый сериал»."""
+    """«• «Суд» · новый сериал · 🇺🇸 США · HBO · Описание.»; новый сезон — «2-й сезон»."""
     season = int(item.get("season_number") or 0)
     label = f"{season}-й сезон" if season > 1 else "новый сериал"
-    _weekly_item(b, f"«{item.get('name')}»", item.get("url") or "",
-                 (label, _event_date_label(item.get("release_date"))))
-    _about_line(b, item.get("overview"))
+    _hub_item(b, f"«{item.get('name')}»", item.get("url") or "",
+              (label, item.get("country_label"), item.get("network")), item.get("overview"))
 
 
 def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
@@ -926,9 +941,8 @@ def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         if not url and movie_id:
             url = f"https://www.themoviedb.org/movie/{movie_id}"
         genres = _movie_genres_for_line(item).replace(", ", " · ")
-        _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url,
-                     (genres, _event_date_label(_item_value(item, "date", ""))))
-        _about_line(b, _item_value(item, "overview", ""))
+        _hub_item(b, f"«{_item_value(item, 'title', '')}»", url,
+                  (genres, item.get("country_label")), _item_value(item, "overview", ""))
     for item in series:
         _series_event_row(b, item)
     return bool(rows or series)
@@ -946,9 +960,8 @@ def _music_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     if rows:
         b.section(title)
     for item in rows:
-        _weekly_item(b, f"«{item['title']}» — {item['artist']}", item.get("url"),
-                     (item.get("genre_label"), _event_date_label(item.get("date"))))
-        _about_line(b, item.get("about"))
+        _hub_item(b, f"«{item['title']}» — {item['artist']}", item.get("url"),
+                  (item.get("genre_label"), item.get("country_label")), item.get("about"))
     return bool(rows)
 
 
@@ -969,11 +982,10 @@ def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         rating = _weekly_rating(
             _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
         )
-        _weekly_item(
+        _hub_item(
             b, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
-            (_book_premiere_genres(item), _event_date_label(_item_value(item, "published_date", "")), rating),
+            (_book_premiere_genres(item), rating, item.get("country_label")), _item_value(item, "summary", ""),
         )
-        _about_line(b, _item_value(item, "summary", ""))
     return bool(rows)
 
 
@@ -1065,9 +1077,9 @@ def leisure_hub_kb():
     ])
 
 
-def no_month_concerts() -> MessageSpec:
+def no_month_concerts(title="🎫 Ближайшие концерты") -> MessageSpec:
     b = MessageBuilder()
-    b.title("🎫 Концерты на месяц")
+    b.title(title)
     b.line("В ближайшие 30 дней концертов рядом не нашлось.")
     return b.build_stripped()
 

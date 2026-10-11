@@ -156,6 +156,7 @@ CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese":
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
 CONCERT_ARTIST_CHECKS_KEY = "concert_artist_checks.json"  # {cid: {country: {artist: last check + future events}}}
+TMDB_TITLE_INFO_KEY = "tmdb_title_info.json"  # {kind:id: {ts, value: {countries, network}}} — для строк Досуга
 COUNTRIES_TABLE_KEY = "countries_table.json"  # {ts, value: {cc: [название, регион]}} — mledoze, 90 дней
 ARTIST_COUNTRY_KEY = "artist_country.json"  # {артист: {ts, value: cc}} — MusicBrainz, полгода
 AUTHOR_COUNTRY_KEY = "author_country.json"  # {автор: {ts, value: cc}} — Wikidata, полгода

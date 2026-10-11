@@ -100,9 +100,10 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
+    # Одной строкой: «• «Название» · метаданные · описание», без дат.
     assert msg.text.startswith(
-        "🍿 Досуг\n\nПремьеры кино:\n• «Дюна»\nПол Атрейдес отправляется на Арракис.\n\nНовые книги:")
-    assert msg.text.endswith("Новая музыка:\n• «Blue Rev» — Alvvays · Инди · 3 октября")
+        "🍿 Досуг\n\nПремьеры кино:\n• «Дюна» · Пол Атрейдес отправляется на Арракис.\n\nНовые книги:")
+    assert msg.text.endswith("Новая музыка:\n• «Blue Rev» — Alvvays · Инди")
     assert "Концерты" not in msg.text
     for title in ("Премьеры кино:", "Новые книги:", "«Дюна»", "«Книга»"):
         assert title in msg.text
@@ -226,9 +227,10 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
     monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
     monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
+    monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "series", "album_notes"]
+    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "series", "album_notes", "details"]
 
 
 def test_premieres_and_library_submenus():
@@ -388,9 +390,9 @@ def test_hub_shows_film_then_series_and_album_with_description():
           "about": "Мечтательный инди-поп с шумными гитарами."}],
     )
 
-    assert "Премьеры кино:\n• «Дюна»\nПол едет на Арракис.\n• «Одни из нас» · 2-й сезон · 13 октября\n" \
+    assert "Премьеры кино:\n• «Дюна» · Пол едет на Арракис.\n• «Одни из нас» · 2-й сезон · " \
            "Элли и Джоэл снова в пути." in msg.text
-    assert msg.text.endswith("• «Blue Rev» — Alvvays · Инди · 3 октября\nМечтательный инди-поп с шумными гитарами.")
+    assert msg.text.endswith("• «Blue Rev» — Alvvays · Инди · Мечтательный инди-поп с шумными гитарами.")
 
 
 def test_album_descriptions_are_stored_once(monkeypatch):
@@ -414,3 +416,17 @@ def test_album_descriptions_are_stored_once(monkeypatch):
     asyncio.run(leisure_hub.describe_albums([album]))
 
     assert leisure_hub._album_notes()["alvvays|blue rev"] == "Мечтательный инди-поп." and calls == [1]
+
+
+def test_hub_rows_show_country_and_series_network_from_cache():
+    msg = leisure_ui.leisure_hub_screen(
+        [{"title": "Диггер", "genres": "комедия, драма", "country_label": "🇺🇸 США", "date": "2026-10-01",
+          "overview": "Самый могущественный человек отправляется на миссию."},
+         {"kind": "tv", "name": "Суд", "country_label": "🇺🇸 США", "network": "HBO", "release_date": "2026-09-11",
+          "overview": "Дочь рабочего подвергается насилию."}],
+        [], [],
+    )
+    lines = msg.text.split("Премьеры кино:\n", 1)[1].splitlines()
+    assert lines[0] == "• «Диггер» · комедия · драма · 🇺🇸 США · Самый могущественный человек отправляется на миссию."
+    assert lines[1] == "• «Суд» · новый сериал · 🇺🇸 США · HBO · Дочь рабочего подвергается насилию."
+    assert "октября" not in msg.text and "сентября" not in msg.text

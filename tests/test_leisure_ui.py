@@ -877,12 +877,10 @@ def test_book_card_has_modern_compact_hierarchy():
     })
     assert message.text == (
         "Ночной город\n\n"
-        "Автор · 2026 · Night Night Fawn\n"
-        "Жанр: Фэнтези\n\n"
-        "Сюжет\n"
-        "Первое. Второе."  # короткое описание: 1–2 предложения
+        "Автор · Night Night Fawn\n"
+        "⭐ 4.7 · фэнтези · 2026\n\n"  # как в кино: рейтинг · жанр · страна · год
+        "Первое. Второе. Третье. Четвёртое. Пятое."  # описание без «Сюжет»: до пяти предложений
     )
-    assert "⭐" not in message.text
     assert "Почему стоит читать" not in message.text
     assert "цитат" not in message.text.casefold()
 
@@ -1380,7 +1378,7 @@ def test_book_card_shows_author_country_year_and_genre():
         "year": "2021", "genre": "Фантастика", "plot": "Учёный просыпается на корабле.",
     }).text
 
-    assert text.startswith("Проект «Аве Мария»\n\nЭнди Вейер · США · 2021\nЖанр: Фантастика")
+    assert text.startswith("Проект «Аве Мария»\n\nЭнди Вейер\nфантастика · США · 2021\n\nУчёный")
 
 
 
@@ -1400,3 +1398,18 @@ def test_preferences_summary_lists_every_section(monkeypatch):
     assert summary["Кухни"] == "Итальянская" and summary["Ограничения в еде"] == "Без свинины"
     assert summary["Стиль"] == "Скандинавский" and summary["Музыка"] == "не выбрано"
     assert summary["Кино"] == "сериалы · от ⭐ 7.0" and summary["Книги"] == "новинки"
+
+
+def test_book_card_ends_with_italic_fact_and_series_card_with_italic_status():
+    book = leisure_movies.leisure_ui.book_text({
+        "title": "Марсианин", "author": "Энди Вейер", "plot": "Инженер выживает на Марсе.",
+        "fact": "Экранизирован Ридли Скоттом в 2015 году"})
+    italic = [book.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+              for e in book.entities if e.type == "italic"]
+    assert book.text.endswith("Экранизирован Ридли Скоттом в 2015 году.") and italic == [
+        "Экранизирован Ридли Скоттом в 2015 году."]
+
+    _title, card = leisure_movies.leisure_ui.movie_card({"title": "Тьма"}, {
+        "name": "Тьма", "kind": "tv", "status": "Ended", "seasons": 3, "episodes": 26, "overview": "Время."})
+    assert card.text.endswith("Завершено · 3 сезона • 26 серий")
+    assert any(e.type == "italic" for e in card.entities)

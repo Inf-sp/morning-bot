@@ -169,7 +169,7 @@ def test_manual_book_add_shows_one_verified_card_before_saving(monkeypatch):
     message = bot.messages[0]
     assert message["photo"] == "https://images.test/martian.jpg"
     assert "Марсианин" in message["caption"]
-    assert "Энди Вейер · 2011" in message["caption"]
+    assert "Энди Вейер\n" in message["caption"] and "2011" in message["caption"]
     assert _labels(message["reply_markup"]) == [["✅ Добавить книгу"], ["✨ Другая книга"]]
 
 
@@ -220,7 +220,7 @@ def test_manual_book_other_edits_card_to_next_author_without_saving(monkeypatch)
 
     assert added == []
     assert query.edits[0]["media"].media == "https://images.test/dumaurier.jpg"
-    assert "Джордж Дюморье · 1897" in query.edits[0]["media"].caption
+    assert "Джордж Дюморье\n1897" in query.edits[0]["media"].caption
     assert _labels(query.edits[0]["reply_markup"]) == [["✅ Добавить книгу"], ["✨ Другая книга"]]
 
 
