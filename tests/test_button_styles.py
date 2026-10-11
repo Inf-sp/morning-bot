@@ -170,7 +170,7 @@ def test_toggles_become_green_or_standard_without_marks_and_keep_marks_without_c
     assert [row[0]["text"] for row in plain][1:] == ["✅ 🇳🇱 Нидерландский", "□ ⭐️ 7+"]
 
 
-def test_preferences_button_is_blue_right_above_back_and_home():
+def test_preferences_button_is_green_right_under_add():
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Мои фильмы", callback_data="list")],
         [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="movie_prefs")],
@@ -179,9 +179,16 @@ def test_preferences_button_is_blue_right_above_back_and_home():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [(row[0]["text"], row[0].get("style")) for row in rows] == [
-        ("Добавить фильм", "success"), ("Мои фильмы", None),
-        ("Выбрать предпочтения", "primary"), ("Назад", "primary"),
+        ("Добавить фильм", "success"), ("Выбрать предпочтения", "success"),
+        ("Мои фильмы", None), ("Назад", "primary"),
     ]
+    no_add = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Мои фильмы", callback_data="list")],
+        [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="movie_prefs")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_leisure")],
+    ])
+    assert [row[0]["text"] for row in telegram_runtime._enhance_markup(no_add)["inline_keyboard"]] == [
+        "Мои фильмы", "Выбрать предпочтения", "Назад"]
 
 
 def test_forecast_buttons_have_standard_color():

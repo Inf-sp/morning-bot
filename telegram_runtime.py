@@ -217,7 +217,7 @@ def _enhance_markup(markup, level=2):
                 continue
             for pattern, style, bucket in (
                 (_REFRESH_RE, "success", refresh_rows), (_ADD_RE, "success", add_rows),
-                (_PREFS_RE, "primary", prefs_rows),
+                (_PREFS_RE, "success", prefs_rows),
                 (_DELETE_RE, "danger", None), (_BLUE_RE, "primary", None),
             ):
                 if pattern.match(text):
@@ -239,7 +239,7 @@ def _enhance_markup(markup, level=2):
     if not changed:
         return None
     # Сверху «Другой/Обновить…», затем «Добавить…», дальше исходный порядок;
-    # «Выбрать предпочтения» (синяя) — прямо над «Назад | Главная».
+    # «Выбрать предпочтения» (зелёная) — сразу под «Добавить…», без него — над «Назад | Главная».
     order = sorted(
         (index for index in range(len(rows)) if index not in prefs_rows),
         key=lambda index: (
@@ -251,6 +251,8 @@ def _enhance_markup(markup, level=2):
          if any(_BACK_HOME_RE.match(str(button.get("text") or "")) for button in rows[index])),
         len(order),
     )
+    if add_rows:
+        nav_at = max(position for position, index in enumerate(order) if index in add_rows) + 1
     order[nav_at:nav_at] = sorted(prefs_rows)
     result = []
     for row in (rows[index] for index in order):
