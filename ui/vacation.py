@@ -1,0 +1,94 @@
+"""Тексты режима «✈️ В отпуске»: вход, возвращение, блоки «Страна» и «Разговорник»."""
+from .builder import MessageBuilder
+
+
+def ask_city():
+    b = MessageBuilder()
+    b.section("✈️ В отпуске")
+    b.spacer()
+    b.line("Напиши город, куда едешь, например Cape Town.")
+    b.line("Погода, праздники, кухня, концерты и премьеры переключатся на эту страну, "
+           "а в «Моём дне» появятся факты о ней и разговорник.")
+    return b.build_stripped()
+
+
+def ask_days(city):
+    b = MessageBuilder()
+    b.section(f"✈️ {city}".rstrip())
+    b.spacer()
+    b.line("До какого дня отпуск? В этот день я сам верну домашний город.")
+    return b.build_stripped()
+
+
+def started(city, until="", home=""):
+    b = MessageBuilder()
+    b.section(f"✈️ Хорошего отпуска · {city}".rstrip(" ·"))
+    b.spacer()
+    parts = [f"Отпуск {until}" if until else "Отпуск без даты возвращения"]
+    if home:
+        parts.append(f"дома — {home}")
+    b.line(" · ".join(parts) + ".")
+    b.line("Вернуться раньше — кнопкой «Вернуться домой» под «Моим днём» или в Настройках.")
+    return b.build_stripped()
+
+
+def returned(home, automatic=False):
+    b = MessageBuilder()
+    b.section("🏠 С возвращением!")
+    b.spacer()
+    start = "Отпуск закончился, снова" if automatic else "Снова"
+    b.line(f"{start} {home}: погода, кухня, концерты и обучение — как раньше.")
+    return b.build_stripped()
+
+
+def _number(value) -> str:
+    return f"{int(value):,}".replace(",", " ")
+
+
+def _population(value) -> str:
+    value = float(value)
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}".replace(".", ",").replace(",0", "") + " млн"
+    if value >= 1000:
+        return f"{value / 1000:.0f} тыс."
+    return _number(value)
+
+
+def _hours(diff) -> str:
+    if diff is None:
+        return ""
+    if not diff:
+        return "как в Амстердаме"
+    value = f"{abs(diff):g}".replace(".", ",")
+    return f"на {value} ч {'больше' if diff > 0 else 'меньше'}, чем в Амстердаме"
+
+
+def country_lines(facts, guide=None) -> list:
+    """[(подпись, значение)] для блока «Страна»; пустые факты пропускаются."""
+    country = facts.get("country") or {}
+    guide = guide or {}
+    lines = []
+    if country.get("capital"):
+        lines.append(("Столица", country["capital"]))
+    population = facts.get("population") or {}
+    if population.get("value"):
+        year = f" ({population['year']})" if population.get("year") else ""
+        lines.append(("Население", _population(population["value"]) + year))
+    if country.get("area"):
+        lines.append(("Площадь", f"{_number(country['area'])} км²"))
+    languages = [guide.get("languages_ru", {}).get(name, name) for name in country.get("languages") or []]
+    if languages:
+        extra = f" и ещё {len(languages) - 2}" if len(languages) > 2 else ""
+        lines.append(("Языки", ", ".join(languages[:2]) + extra))
+    if country.get("currency"):
+        currency = country["currency"] + (f" ({country['symbol']})" if country.get("symbol") else "")
+        rate = facts.get("rate")
+        if rate:
+            symbol = country.get("symbol") or country["currency"]
+            currency += f" · 1 € = {rate:.2f}".replace(".", ",") + f" {symbol}"
+        lines.append(("Валюта", currency))
+    if _hours(facts.get("hours")):
+        lines.append(("Время", _hours(facts.get("hours"))))
+    if country.get("calling"):
+        lines.append(("Телефонный код", country["calling"]))
+    return lines

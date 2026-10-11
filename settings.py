@@ -313,10 +313,17 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+        [vacation_button(cid)],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     data = store.get_settings(cid) or {}
     city = " · ".join(part for part in (data.get("city"), data.get("country")) if part)
+    import vacation
+    trip = vacation.state(cid)
+    if trip:
+        home = (trip.get("home") or {}).get("city", "")
+        city += " · ✈️ отпуск" + (f" {vacation.until_label(cid)}" if vacation.until_label(cid) else "") \
+            + (f", дома {home}" if home else "")
     msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
@@ -352,6 +359,14 @@ def preferences_summary(cid) -> list:
         ("Кино", " · ".join(part for part in movie if part) or _NOT_SET),
         ("Книги", " · ".join(part for part in books if part) or _NOT_SET),
     ]
+
+
+def vacation_button(cid):
+    """«✈️ В отпуске» или, пока отпуск идёт, «🏠 Вернуться домой»."""
+    import vacation
+    if vacation.active(cid):
+        return InlineKeyboardButton("🏠 Вернуться домой", callback_data="set_vachome")
+    return InlineKeyboardButton("✈️ В отпуске", callback_data="set_vac")
 
 
 async def send_preferences(bot, cid, q=None):
@@ -1287,6 +1302,15 @@ async def handle_callback(bot, cid, data, q=None):
     elif (data == "set_learning" or data == "toggle_learning_language"
           or data.startswith("set_learning_language_") or data.startswith("set_learning_level_")):
         await learning_preferences.handle_learning_settings_callback(bot, cid, q, data)
+    elif data == "set_vac":
+        import vacation
+        await vacation.ask_city(bot, cid)
+    elif data.startswith("set_vacd_"):
+        import vacation
+        await vacation.set_days(bot, cid, data[len("set_vacd_"):], q)
+    elif data == "set_vachome":
+        import vacation
+        await vacation.return_home(bot, cid)
     elif data == "set_city":
         store.pending_input[cid] = "setcity"
         msg = settings_ui.city_input()

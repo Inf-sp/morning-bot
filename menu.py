@@ -84,8 +84,9 @@ def _cuisine_picture(menu) -> dict:
 def _day_menu_message(menu):
     import day_menu
     return menu_ui.day_menu(
-        menu, cuisine_label=day_menu.cuisine_label(menu.get("cuisine")),
+        menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
         intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), ""),
+        flag=day_menu.cuisine_flag(menu.get("cuisine")),
     )
 
 

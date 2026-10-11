@@ -84,6 +84,18 @@ def fits_restrictions(dish, restrictions) -> bool:
     return not any(marker in text for key in restrictions for marker in _RESTRICTION_MARKERS.get(key, ()))
 
 
+LOCAL_PREFIX = "local_"  # кухня страны отпуска: local_za
+
+
+def cuisine_flag(cuisine) -> str:
+    """Флаг кухни для заголовка меню; кухня страны отпуска — флаг страны."""
+    from ui.constants import CUISINE_FLAG
+    import util
+    if str(cuisine).startswith(LOCAL_PREFIX):
+        return util.flag_from_cc(str(cuisine)[len(LOCAL_PREFIX):]) or "🍳"
+    return CUISINE_FLAG.get(str(cuisine or ""), "🍳")
+
+
 def cuisine_label(cuisine) -> str:
     """«Итальянская» — подпись кухни без эмодзи."""
     label = next((label for key, label in _settings().CUISINE_OPTIONS if key == cuisine), cuisine)
@@ -91,7 +103,15 @@ def cuisine_label(cuisine) -> str:
 
 
 def day_cuisine(cid, day) -> str:
-    """Кухня дня: по кругу из предпочтений, без них — из всех кухонь."""
+    """Кухня дня: в отпуске — кухня страны; дома по кругу из предпочтений, без них — из всех."""
+    import vacation
+    trip = vacation.cuisine(cid)
+    if trip:
+        return trip
+    return home_cuisine(cid, day)
+
+
+def home_cuisine(cid, day) -> str:
     pool = _settings().cuisines(cid) or [key for key, _label in _settings().CUISINE_OPTIONS]
     return pool[day.toordinal() % len(pool)]
 
@@ -140,7 +160,7 @@ def _clean(value, limit) -> str:
     return text if 0 < len(text) <= limit else ""
 
 
-def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="") -> str:
+def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="") -> str:
     lines = "\n".join(f"- {meal}: {typical_dish_line(cuisine, meal)}" for meal in meals)
     limits = (f"Обязательные ограничения в еде: {restrictions_text}. Блюдо, которое их нарушает, — ошибка.\n"
               if restrictions_text else "")
@@ -151,7 +171,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     avoid = (f"Не повторяй блюда: {secure.wrap_untrusted(', '.join(avoided_names[-60:]), 'история меню')}.\n"
              if avoided_names else "")
     return (
-        f"Составь меню на один день в одной кухне: {cuisine_label(cuisine)}.\n"
+        f"Составь меню на один день в одной кухне: {label or cuisine_label(cuisine)}.\n"
         f"Нужны типичные домашние блюда этой кухни на: {', '.join(names[meal] for meal in meals)} — то, что в "
         "этой стране действительно едят на этот приём пищи, без фьюжна и случайных комбинаций.\n"
         f"Типичные варианты:\n{lines}\n"
@@ -164,10 +184,11 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     )
 
 
-def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="") -> dict:
+def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="") -> dict:
     try:
         data = ai.llm_json(
-            _prompt(cuisine, available, avoided_names, meals, restrictions_text), 500, tier="cheap", module="food",
+            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label), 500,
+            tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
@@ -192,7 +213,16 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     available = recipe_generation._home_idea_context(cid, now=now).get("available") or []
     meals = _settings().food_meals(cid)
     restrictions = _settings().food_restrictions(cid)
-    data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid))
+    label = ""
+    if cuisine.startswith(LOCAL_PREFIX):
+        import vacation
+        label = vacation.local_cuisine_label(cid)
+    data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid), label)
+    if label and not all(isinstance(data.get(meal), dict) and _clean(data[meal].get("name"), _NAME_MAX)
+                         for meal in meals):
+        # Кухни страны отпуска нет во встроенном списке блюд: без ответа AI — обычная кухня дня.
+        cuisine, label = home_cuisine(cid, day), ""
+        data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid))
     dishes, used = {}, set()
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
@@ -204,7 +234,8 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
             dish = {"name": name, "note": note}
         used.add(dish["name"].casefold())
         dishes[meal] = dish
-    return {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
+    menu = {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
+    return {**menu, "cuisine_label": label} if label else menu
 
 
 def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
@@ -245,5 +276,6 @@ def dish_recipe(cid, meal, now=None) -> dict:
         raise ValueError(f"meal {meal} is not in today's menu")
     moment = (now or datetime.now(config.TZ)).replace(
         hour=MEAL_HOURS[meal], minute=0, second=0, microsecond=0)
-    return recipe_generation.get_cooking_home_idea(
-        cid, now=moment, cuisine=menu["cuisine"], dish=dish)
+    # Кухни страны отпуска нет среди кухонь рецептов: блюдо задано, кухня — международная.
+    cuisine = "international" if str(menu["cuisine"]).startswith(LOCAL_PREFIX) else menu["cuisine"]
+    return recipe_generation.get_cooking_home_idea(cid, now=moment, cuisine=cuisine, dish=dish)

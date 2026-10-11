@@ -1,0 +1,145 @@
+import asyncio
+from datetime import date
+
+import day_menu
+import settings
+import store
+import vacation
+from ui import myday as myday_ui
+from ui import vacation as vacation_ui
+
+HOME = {"lat": 52.63, "lon": 4.74, "city": "Алкмар", "country": "Нидерланды", "cc": "NL"}
+CAPE = {"lat": -33.9, "lon": 18.4, "city": "Кейптаун", "country": "ЮАР", "cc": "za"}
+
+
+class Bot:
+    def __init__(self):
+        self.sent = []
+
+    async def send_message(self, **kwargs):
+        self.sent.append(kwargs)
+
+
+def _env(monkeypatch, place=None):
+    saved, places = {}, {"now": dict(place or HOME)}
+    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: saved.get(key, default))
+    monkeypatch.setattr(settings, "set_", lambda _cid, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(store, "get_settings", lambda _cid: dict(places["now"]))
+    monkeypatch.setattr(store, "set_settings", lambda _cid, lat, lon, city, country="", cc="": places.__setitem__(
+        "now", {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}))
+    monkeypatch.setattr(store, "mutate_profile", lambda *_a, **_k: None)
+    monkeypatch.setattr(vacation, "_reset_day_caches", lambda _cid: None)
+    return saved, places
+
+
+def test_vacation_city_then_days_then_return_home(monkeypatch):
+    saved, places = _env(monkeypatch)
+    import weather
+    import myday
+
+    async def set_city(_bot, _cid, _text, **kwargs):
+        assert kwargs["retry_kind"] == "vacation_city" and kwargs["announce"] is False
+        places["now"] = dict(CAPE)
+        return True
+
+    async def plany(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(weather, "set_city_text", set_city)
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
+    monkeypatch.setattr(myday, "send_plany", plany)
+    bot = Bot()
+
+    asyncio.run(vacation.ask_city(bot, "42"))
+    assert store.pending_input["42"] == "vacation_city"
+    asyncio.run(vacation.city_entered(bot, "42", "Cape Town"))
+    assert vacation.state("42")["home"]["city"] == "Алкмар" and vacation.state("42")["cc"] == "ZA"
+    assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
+        ["set_vacd_3"], ["set_vacd_7"], ["set_vacd_14"], ["set_vacd_0"]]
+
+    asyncio.run(vacation.set_days(bot, "42", "7"))
+    assert vacation.state("42")["until"] and vacation.until_label("42").startswith("до ")
+
+    asyncio.run(vacation.return_home(bot, "42"))
+    assert places["now"]["city"] == "Алкмар" and not vacation.active("42")
+    assert bot.sent[-1]["text"].startswith("🏠 С возвращением!")
+
+
+def test_ordinary_city_change_ends_vacation_without_restoring(monkeypatch):
+    saved, places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "until": "", "cc": "ZA"}
+
+    vacation.forget("42")
+
+    assert not vacation.active("42") and places["now"]["city"] == "Кейптаун"
+
+
+def test_vacation_ends_on_return_day(monkeypatch):
+    import access
+    saved, places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "until": "2026-10-20", "cc": "ZA"}
+    monkeypatch.setattr(access, "get_allowed_cids", lambda: ["42"])
+
+    asyncio.run(vacation.finish_due(Bot(), today=date(2026, 10, 19)))
+    assert vacation.active("42")
+    asyncio.run(vacation.finish_due(Bot(), today=date(2026, 10, 20)))
+    assert not vacation.active("42") and places["now"]["city"] == "Алкмар"
+
+
+def test_phrasebook_rotates_and_replaces_learning_only_for_other_language(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    phrases = [{"text": f"Frase {i}", "ru": f"Фраза {i}", "say": ""} for i in range(15)]
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"language_code": "af", "phrases": phrases}}
+    monkeypatch.setattr(store, "get_learning_language", lambda _cid: "nl")
+
+    first, second = vacation.phrases_today("42", date(2026, 10, 12)), vacation.phrases_today("42", date(2026, 10, 13))
+    assert len(first) == 5 and not {p["text"] for p in first} & {p["text"] for p in second}
+    assert vacation.phrasebook_replaces_learning("42")
+    saved["vacation"]["guide"]["language_code"] = "nl"  # Бельгия: учишь нидерландский — остаётся «Слово дня»
+    assert not vacation.phrasebook_replaces_learning("42")
+
+
+def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "IT"}
+    assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "italian"
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"cuisine_ru": "Южноафриканская"}}
+    assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "local_za"
+    assert day_menu.cuisine_flag("local_za") == "🇿🇦"
+
+    import recipe_generation
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda *_a, **_k: {"available": []})
+    monkeypatch.setattr(store, "get_profile", lambda _cid: {})
+    calls = []
+
+    def ai_dishes(_cid, cuisine, *_a, **_k):
+        calls.append(cuisine)
+        if cuisine == "local_za":
+            return {meal: {"name": f"Bobotie {meal}", "note": "запеканка"} for meal in day_menu.MEALS}
+        return {}
+
+    monkeypatch.setattr(day_menu, "_ai_dishes", ai_dishes)
+    menu = day_menu.build_day_menu("42", cuisine="local_za")
+    assert menu["cuisine_label"] == "Южноафриканская" and menu["dishes"]["lunch"]["name"] == "Bobotie lunch"
+
+    monkeypatch.setattr(day_menu, "_ai_dishes", lambda *_a, **_k: {})
+    fallback = day_menu.build_day_menu("42", cuisine="local_za")
+    assert not fallback["cuisine"].startswith("local_") and "cuisine_label" not in fallback
+
+
+def test_country_block_and_summary_lines():
+    facts = {"country": {"capital": "Pretoria", "area": 1221037, "languages": ["Afrikaans", "English", "Zulu"],
+                         "currency": "ZAR", "symbol": "R", "calling": "+27"},
+             "population": {"value": 64747319, "year": "2025"}, "rate": 18.527, "hours": 1}
+    lines = dict(vacation_ui.country_lines(facts, {"languages_ru": {"Afrikaans": "африкаанс", "English": "английский"}}))
+
+    assert lines == {
+        "Столица": "Pretoria", "Население": "64,7 млн (2025)", "Площадь": "1 221 037 км²",
+        "Языки": "африкаанс, английский и ещё 1", "Валюта": "ZAR (R) · 1 € = 18,53 R",
+        "Время": "на 1 ч больше, чем в Амстердаме", "Телефонный код": "+27",
+    }
+    text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", vacation={
+        "until": "до 20 октября", "home": "Алкмар", "country_lines": [("Столица", "Pretoria")],
+        "phrases": [{"text": "Dankie", "ru": "Спасибо", "say": "данки"}], "language": "африкаанс"}).text
+    assert "✈️ В отпуске до 20 октября · дома Алкмар" in text
+    assert "🌍 Страна:\nСтолица: Pretoria" in text and "🗣 Разговорник · африкаанс:\nDankie → Спасибо [данки]" in text

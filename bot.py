@@ -36,6 +36,7 @@ import home_cache
 from process_guard import PollingLease, process_identity
 import onboard
 import tracking
+import vacation
 from telegram_runtime import MenuCleanupBot as _MenuCleanupBot, RetryingHTTPXRequest as _RetryingHTTPXRequest
 from deploy_report import (
     get_app_version,
@@ -357,10 +358,20 @@ async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 @ai.background_job
+async def job_vacation_return(context: ContextTypes.DEFAULT_TYPE):
+    """День возвращения из отпуска: домашний город обратно."""
+    try:
+        await vacation.finish_due(context.bot)
+    except Exception:
+        logging.exception("job_vacation_return failed")
+
+
 async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words") or not _slot_due(context, cid, "daily_words"):
             continue
+        if vacation.phrasebook_replaces_learning(cid):
+            continue  # в отпуске обучение на паузе: в «Моём дне» разговорник местного языка
         try:
             await settings.send_scheduled_notification(context.bot, cid, "daily_words")
         except Exception:
@@ -628,6 +639,8 @@ def _build_application():
             job_warm_home_pages, time=_t(time_label), days=tuple(range(7)), data="retry",
             **_job_options(f"warm_home_retry_{time_label.replace(':', '')}"),
         )
+    jq.run_daily(job_vacation_return, time=_t("00:01"), days=tuple(range(7)),
+                 **_job_options("vacation_return_daily"))
     jq.run_daily(job_warm_weather_cache, time=_t("07:55"), days=tuple(range(7)), **_job_options("warm_weather_cache_daily"))
     # Внешние афиши прогреваются отдельно: премьеры — по понедельникам,
     # концерты — перед пятничной подборкой. Внутренние TTL не дают дублировать запросы.

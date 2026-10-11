@@ -100,7 +100,12 @@ async def handle(update, context, remove_reply_keyboard):
         if kind == "onboard_city":
             await onboard.handle_city(bot, cid, text); return
         if kind == "setcity":
+            import vacation
+            vacation.forget(cid)  # обычная смена города заканчивает отпуск: новый город — дом
             await weather.set_city_text(bot, cid, text); return
+        if kind == "vacation_city":
+            import vacation
+            await vacation.city_entered(bot, cid, text); return
         if kind == "concert_artist_search":
             import leisure_concerts
             await leisure_concerts.find_artist_concerts(bot, cid, text); return

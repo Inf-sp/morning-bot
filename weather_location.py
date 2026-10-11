@@ -15,7 +15,8 @@ from ui import weather as weather_ui
 _log = logging.getLogger(__name__)
 
 
-async def set_city_text(bot, cid, name, show_brief=True):
+async def set_city_text(bot, cid, name, show_brief=True, announce=True, retry_kind="setcity"):
+    """Город по названию; True — сохранён. retry_kind — что ждать после «не нашёл»."""
     import re as _re
     raw = (name or "").strip()
     q = _re.sub(r"\s*-\s*", "-", raw)
@@ -91,10 +92,10 @@ async def set_city_text(bot, cid, name, show_brief=True):
                     }]
                     break
         if not result:
-            store.pending_input[str(cid)] = "setcity"
+            store.pending_input[str(cid)] = retry_kind
             msg = weather_ui.city_not_found(raw)
             await bot.send_message(chat_id=cid, text=msg.text)
-            return
+            return False
         city = result[0]
         country = city.get("country", "")
         country_code = city.get("country_code", "")
@@ -119,16 +120,19 @@ async def set_city_text(bot, cid, name, show_brief=True):
             myday.reset_day_cache(cid)
         except Exception:
             _log.debug("set_city_text: ignored error", exc_info=True)
-        msg = weather_ui.city_changed(city_name, country, country_code)
-        await bot.send_message(chat_id=cid, text=msg.text)
+        if announce:
+            msg = weather_ui.city_changed(city_name, country, country_code)
+            await bot.send_message(chat_id=cid, text=msg.text)
         if show_brief:
             try:
                 import myday
                 await myday.send_plany(bot, cid)
             except Exception:
                 _log.debug("set_city_text: ignored error", exc_info=True)
+        return True
     except Exception as error:
         await verify.safe_error(bot, cid, error, back="m_myday")
+        return False
 
 
 async def location_handler(update, context):

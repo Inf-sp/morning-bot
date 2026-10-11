@@ -221,10 +221,10 @@ _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "d
 _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
 
 
-def day_menu(menu, *, cuisine_label, intro=""):
+def day_menu(menu, *, cuisine_label, intro="", flag=""):
     """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов."""
     b = MessageBuilder()
-    flag = CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
+    flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     b.section(f"{flag} Меню на сегодня · {cuisine_label} кухня")
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]

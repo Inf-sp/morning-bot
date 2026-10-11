@@ -59,6 +59,7 @@ def day_summary(
     quote_author="",
     rail_works=None,
     holidays=None,
+    vacation=None,
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -71,6 +72,13 @@ def day_summary(
         place += f" {flag}"
     b.bold(f"Мой день · {header} · {place}".rstrip(" ·"))
     b.newline()
+    vacation = vacation or {}
+    if vacation:
+        trip = " · ".join(part for part in (
+            "✈️ В отпуске " + (vacation.get("until") or "").strip(),
+            f"дома {vacation['home']}" if vacation.get("home") else "",
+        ) if part.strip())
+        b.line(trip.replace("отпуске ·", "отпуске ·").strip())
     b.spacer()
 
     if weather_line:
@@ -90,6 +98,23 @@ def day_summary(
             b.text_line("🚧 ")
             b.labeled_line("Работы на ЖД", text, lowercase=False)
             b.spacer()
+
+    if vacation.get("country_lines"):
+        b.bold("🌍 Страна:")
+        b.newline()
+        for label, value in vacation["country_lines"]:
+            b.labeled_line(label, value, lowercase=False)
+        b.spacer()
+    if vacation.get("phrases"):
+        language = vacation.get("language") or ""
+        b.bold(f"🗣 Разговорник{' · ' + language if language else ''}:")
+        b.newline()
+        for phrase in vacation["phrases"]:
+            b.text_line(f"{phrase['text']} → {phrase['ru']}")
+            if phrase.get("say"):
+                b.text_line(f" [{phrase['say']}]")
+            b.newline()
+        b.spacer()
 
     if word_line:
         term, translation = _split_word_translation(word_line)

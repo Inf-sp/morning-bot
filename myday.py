@@ -846,10 +846,14 @@ def _cache_misses_ready_sections(cache, cid):
     ready = _ready_day_sections(cid)
     return ready["outfit"] and " Образ:" not in text
 
-def _day_menu_kb():
+def _day_menu_kb(cid=None):
+    import vacation
+    trip = [[InlineKeyboardButton("🏠 Вернуться домой", callback_data="set_vachome")]] \
+        if cid is not None and vacation.active(cid) else []
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
+        *trip,
         # «Настроить» — какие блоки показывать; экран приходит новым сообщением.
         [InlineKeyboardButton("🎚️ Настроить", callback_data="set_myday_new"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -884,6 +888,23 @@ def _rail_works(cid):
 
 class _BlockOff(Exception):
     """Блок выключен пользователем — не ошибка, просто не показываем."""
+
+
+def _vacation_blocks(cid) -> dict:
+    """В отпуске: строка «✈️ …», факты о стране и разговорник; дома — {}."""
+    import vacation
+    if not vacation.active(cid):
+        return {}
+    from ui import vacation as vacation_ui
+    guide = vacation.guide(cid)
+    trip = vacation.state(cid) or {}
+    return {
+        "until": vacation.until_label(cid),
+        "home": (trip.get("home") or {}).get("city", ""),
+        "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
+        "phrases": vacation.phrases_today(cid) if vacation.phrasebook_replaces_learning(cid) else [],
+        "language": guide.get("language_ru", ""),
+    }
 
 
 def _build_day_text(cid, *, refresh_current=False):
@@ -967,8 +988,12 @@ def _build_day_text(cid, *, refresh_current=False):
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
     is_weekend = now.weekday() >= 5
     learning_enabled = store.learning_is_enabled(cid)
+    trip = _vacation_blocks(cid)
+    if trip.get("phrases"):
+        learning_enabled = False  # в отпуске вместо «Слова дня» — разговорник местного языка
     word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
-    movie_rebus = {} if learning_enabled or not on("word") else _movie_rebus_of_day(now.date())
+    movie_rebus = {} if learning_enabled or trip.get("phrases") or not on("word") \
+        else _movie_rebus_of_day(now.date())
     import wardrobe
     outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
@@ -999,6 +1024,7 @@ def _build_day_text(cid, *, refresh_current=False):
         quote_author=quote.get("src", ""),
         rail_works=_rail_works(cid) if on("rail") else [],
         holidays=_holidays(s) if on("holidays") else [],
+        vacation=trip,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
@@ -1051,12 +1077,12 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
     cached = cache
     if status is not None:
         await status.replace(
-            cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb(),
+            cached["text"], entities=cached.get("entities"), reply_markup=_day_menu_kb(cid),
         )
         return
     await bot.send_message(
         chat_id=cid, text=cached["text"], entities=cached.get("entities"),
-        reply_markup=_day_menu_kb(),
+        reply_markup=_day_menu_kb(cid),
     )
 
 
