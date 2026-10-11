@@ -891,7 +891,7 @@ class _BlockOff(Exception):
 
 
 def _vacation_blocks(cid) -> dict:
-    """В отпуске: строка «✈️ …», факты о стране и разговорник; дома — {}."""
+    """В отпуске: строка «✈️ …», факты о стране и слово дня на языке страны; дома — {}."""
     import vacation
     if not vacation.active(cid):
         return {}

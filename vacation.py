@@ -1,4 +1,4 @@
-"""Режим «✈️ В отпуске»: временный город, факты о стране, разговорник и кухня страны.
+"""Режим «✈️ В отпуске»: временный город, факты о стране, обучение на языке страны и её кухня.
 
 Домашний город хранится в настройках (`vacation.home`). Погода, праздники, концерты и
 премьеры читают текущий город и меняются сами; «Поезда NS» и билеты из Амстердама
@@ -122,7 +122,7 @@ async def set_days(bot, cid, value, q=None):
         except Exception:
             _log.debug("vacation: days keyboard not cleared", exc_info=True)
     import asyncio
-    await asyncio.to_thread(guide, cid)  # разговорник и кухня страны — один AI-запрос заранее
+    await asyncio.to_thread(guide, cid)  # уроки языка и кухня страны — один AI-запрос заранее
     place = store.get_settings(cid)
     msg = vacation_ui.started(place.get("city", ""), until_label(cid), (current["home"] or {}).get("city", ""))
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
