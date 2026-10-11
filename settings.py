@@ -354,9 +354,7 @@ def preferences_summary(cid) -> list:
     music = dict((key, label) for key, label, _prompt in leisure_music._MUSIC_GENRES)
     import countries
     import movie_recommendation
-    movie = [{"movie": "фильмы", "tv": "сериалы"}.get(get(cid, "movie_type_pref", "") or "", ""),
-             countries.regions_off_text(movie_recommendation.regions_off(cid)),
-             "новинки" if get(cid, "movie_recency", "") == "new" else "",
+    movie = [countries.regions_off_text(movie_recommendation.regions_off(cid)),
              f"от ⭐ {get(cid, 'movie_min_rating', '')}" if get(cid, "movie_min_rating", "") else ""]
     books = ["новинки" if get(cid, "book_recency", "") == "new" else "",
              f"от ⭐ {get(cid, 'book_min_rating', '')}" if get(cid, "book_min_rating", "") else ""]
@@ -380,13 +378,13 @@ def vacation_button(cid):
 
 
 async def send_preferences(bot, cid, q=None):
-    rows = [
-        [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning"),
-         InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
-        [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
-        [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie"),
-         InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
+    rows = [  # по одной в строке; внизу «Назад | Главная»
+        [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning")],
+        [InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
+        [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
+        [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
         nav_row("set_home"),
     ]
     msg = settings_ui.preferences_home(preferences_summary(cid))

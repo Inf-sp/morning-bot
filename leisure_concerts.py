@@ -1285,8 +1285,8 @@ JSON: {{"items":[{{"name":"","fame":1,"about_ru":""}}]}}
 
 async def build_month_concerts_msg(cid):
     """Экран «Концерты» из Досуга: «🎫 Ближайшие концерты · Нидерланды» — 30 дней, у своих артистов
-    минимум 3 ближайших; из кэша концертов, AI — только для новых артистов."""
-    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=3)
+    минимум 5 ближайших; из кэша концертов, AI — только для новых артистов."""
+    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=5)
 
 
 def month_concerts_title(cid) -> str:

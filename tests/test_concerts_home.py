@@ -404,4 +404,5 @@ def test_month_concerts_show_at_least_three_of_my_artists_and_country_title(monk
     text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
 
     assert text.startswith("🎫 Ближайшие концерты · Нидерланды")
-    assert [name for name in ("Placebo", "Muse", "Keane", "Blur") if name in text] == ["Placebo", "Muse", "Keane"]
+    # Минимум пять своих: за 30 дней только Placebo — добираются более поздние (здесь всего четыре).
+    assert [name for name in ("Placebo", "Muse", "Keane", "Blur") if name in text] == ["Placebo", "Muse", "Keane", "Blur"]

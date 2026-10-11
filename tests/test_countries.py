@@ -1,6 +1,8 @@
 import asyncio
 
 import countries
+
+REAL_TITLE_INFO = countries.title_info
 import leisure_movies  # noqa: F401 — порядок импорта как в боте (movie_recommendation ↔ leisure_movies)
 import movie_engine
 import movie_recommendation
@@ -84,3 +86,24 @@ def test_engine_pick_checks_production_country_from_details(monkeypatch):
         "42", [{"id": 1, "kind": "movie"}, {"id": 2, "kind": "movie"}], {"regions_off": ["americas"]})
 
     assert tm["name"] == "Париж"
+
+
+def test_country_cache_never_keeps_failures_and_rechecks_empty_on_warm(monkeypatch):
+    import tmdb
+    saved, calls = {}, []
+    monkeypatch.setattr(countries, "title_info", REAL_TITLE_INFO)
+    monkeypatch.setattr(countries.store, "_load", lambda _key: dict(saved))
+    monkeypatch.setattr(countries.store, "mutate_kv", lambda _key, change: saved.update(change(dict(saved))[0]))
+    answers = iter([None, {"countries": ["US"], "network": "HBO"}])
+    monkeypatch.setattr(tmdb, "detail", lambda *_a: calls.append(1) or next(answers))
+
+    assert countries.title_info("tv", 7) == {}  # TMDb не ответил — пустоту не запоминаем
+    assert saved == {}
+    assert countries.title_info("tv", 7) == {"country_label": "🇺🇸 USA", "network": "HBO"}
+    assert countries.title_info("tv", 7, fetch=False)["network"] == "HBO" and len(calls) == 2
+
+    people = {"x": {"ts": 9e12, "value": ""}}
+    monkeypatch.setattr(countries.store, "_load", lambda _key: dict(people))
+    monkeypatch.setattr(countries.store, "mutate_kv", lambda _key, change: people.update(change(dict(people))[0]))
+    assert countries._person_cache("k", "X", lambda _n: "GB", fetch=False) == ""  # экран — только кэш
+    assert countries._person_cache("k", "X", lambda _n: "GB", fetch=True) == "GB"  # прогрев перепроверил

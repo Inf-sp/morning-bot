@@ -710,8 +710,6 @@ async def send_current_movie(bot, cid, status=None):
 
 from movie_recommendation import (  # noqa: E402 — movie_recommendation uses names defined above
     _INCLUSIVE_MOVIE_TITLES,
-    _PREF_TYPE,
-    _PREF_RECENCY,
     _PREF_RATING,
     _movie_prefs,
     _inclusive_movie_pick,

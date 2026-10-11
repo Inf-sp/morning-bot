@@ -126,7 +126,9 @@ def _person_cache(key, name, loader, fetch=True):
         return ""
     saved = store._load(key) or {}
     entry = saved.get(norm) if isinstance(saved, dict) else None
-    if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < _PERSON_TTL:
+    fresh = isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < _PERSON_TTL
+    # «Не нашли» не держим полгода: прогрев и «Обновить карточки» (fetch=True) спрашивают снова.
+    if fresh and (entry.get("value") or not fetch):
         return entry.get("value") or ""
     if not fetch:
         return ""
@@ -172,7 +174,8 @@ def artist_label(name, fetch=True) -> str:
 def author_label(name, fetch=True) -> str:
     """«🇬🇧 Великобритания» для автора книги (гражданство в Wikidata) или ""."""
     import wikidata_books
-    return label(_person_cache(config.AUTHOR_COUNTRY_KEY, name, wikidata_books.author_country, fetch))
+    first = str(name or "").split(",")[0].strip()  # «A, B» — соавторы через запятую: ищем первого
+    return label(_person_cache(config.AUTHOR_COUNTRY_KEY, first, wikidata_books.author_country, fetch))
 
 
 def title_info(kind, tmdb_id, fetch=True) -> dict:
@@ -182,7 +185,9 @@ def title_info(kind, tmdb_id, fetch=True) -> dict:
     key = f"{kind or 'movie'}:{tmdb_id}"
     saved = store._load(config.TMDB_TITLE_INFO_KEY) or {}
     entry = saved.get(key) if isinstance(saved, dict) else None
-    if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < 30 * 86400:
+    fresh = isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < 30 * 86400
+    known = fresh and bool((entry.get("value") or {}).get("countries"))
+    if fresh and (known or not fetch):
         value = entry.get("value") or {}
     elif not fetch:
         return {}
@@ -192,6 +197,9 @@ def title_info(kind, tmdb_id, fetch=True) -> dict:
             details = tmdb.detail(tmdb_id, kind or "movie") or {}
         except Exception:
             _log.warning("tmdb title info failed %s", key, exc_info=True)
+            return {}
+        if not details:  # TMDb не ответил — не запоминаем пустоту, следующий прогрев спросит снова
+            _log.warning("tmdb title info: no details for %s", key)
             return {}
         value = {"countries": title_countries(details), "network": details.get("network") or ""}
 

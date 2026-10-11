@@ -83,8 +83,8 @@ def test_global_preferences_has_all_recommendation_sections():
     asyncio.run(settings.send_preferences(bot, "42"))
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🧠 Обучение", "🥣 Кухни"], ["🧵 Стиль", "🎧 Музыка"],
-        ["🎬 Кино", "📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
+        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     # Сводка всех предпочтений текстом: каждый раздел — своя строка.
     for label in ("Обучение:", "Кухни:", "Ограничения в еде:", "Стиль:", "Музыка:", "Кино:", "Книги:"):
@@ -97,10 +97,6 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
     rows = _labels(leisure_movies._movie_prefs_kb("42"))
 
     assert rows == [
-        ["□ 🎬 Фильмы"],
-        ["□ Сериалы"],
-        ["□ Новинки"],
-        ["✅ Любые годы"],
         ["□ ⭐️ 6.5"],
         ["□ ⭐️ 7.0"],
         ["□ ⭐️ 7.5"],
@@ -1397,7 +1393,7 @@ def test_preferences_summary_lists_every_section(monkeypatch):
     assert summary["Обучение"] == "не изучаю"
     assert summary["Кухни"] == "Итальянская" and summary["Ограничения в еде"] == "Без свинины"
     assert summary["Стиль"] == "Скандинавский" and summary["Музыка"] == "не выбрано"
-    assert summary["Кино"] == "сериалы · от ⭐ 7.0" and summary["Книги"] == "новинки"
+    assert summary["Кино"] == "от ⭐ 7.0" and summary["Книги"] == "новинки"
 
 
 def test_book_card_ends_with_italic_fact_and_series_card_with_italic_status():

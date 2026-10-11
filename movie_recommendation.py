@@ -21,7 +21,6 @@ from leisure_collection import (
     movie_title_for_lookup,
     normalize_movie_items,
 )
-from ui.constants import ui_label
 from ui.navigation import nav_row
 import rich_delivery
 
@@ -30,9 +29,10 @@ _log = logging.getLogger(__name__)
 
 def _movie_prefs(cid):
     """Предпочтения кино из настроек → dict для движка (приоритеты, не запреты)."""
+    # Тип (фильмы/сериалы) и новизна больше не выбираются — старые сохранённые значения не действуют.
     return {
-        "type_pref": settings.get(cid, "movie_type_pref", "") or None,
-        "recency": settings.get(cid, "movie_recency", "") or None,
+        "type_pref": None,
+        "recency": None,
         "min_rating": _as_float(settings.get(cid, "movie_min_rating", None)),
         "regions_off": regions_off(cid),
     }
@@ -271,21 +271,12 @@ async def _show_menu_over_card(bot, cid, text, kb, q):
 
 
 # ---------- экран «Предпочтения кино» ----------
-_PREF_TYPE = [(ui_label("cinema", "Фильмы"), "movie"), ("Сериалы", "tv")]
-_PREF_RECENCY = [("Новинки", "new"), ("Любые годы", "")]
 _PREF_RATING = [("6.5", "6.5"), ("7.0", "7.0"), ("7.5", "7.5"), ("8.0", "8.0")]
 
 
 def _movie_prefs_kb(cid):
-    tpref = settings.get(cid, "movie_type_pref", "") or ""
-    rpref = settings.get(cid, "movie_recency", "") or ""
     rating = str(settings.get(cid, "movie_min_rating", "") or "")
-    rows = [[InlineKeyboardButton(("✅ " if tpref == value else "□ ") + label,
-                                  callback_data=f"mpref_type_{value}")]
-            for label, value in _PREF_TYPE]
-    rows.extend([[InlineKeyboardButton(("✅ " if rpref == value else "□ ") + label,
-                                      callback_data=f"mpref_recency_{value or 'any'}")]
-                 for label, value in _PREF_RECENCY])
+    rows = []
     rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "□ ") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
@@ -301,24 +292,15 @@ def _movie_prefs_kb(cid):
 
 async def send_movie_prefs(bot, cid, q=None):
     text = ("🎬 Кино\n\n"
-            "Тип, новизна и оценка — приоритеты: я учитываю их при подборе. Регионы — строгий "
+            "Минимальная оценка — приоритет: я учитываю её при подборе. Регионы — строгий "
             "фильтр: из выключенного региона фильмы и сериалы не предлагаются.")
     kb = _movie_prefs_kb(cid)
     await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
 async def toggle_movie_pref(bot, cid, data, q=None):
-    """Обработка mpref_* переключателей."""
-    if data.startswith("mpref_type_"):
-        v = data[len("mpref_type_"):]
-        if v in {"movie", "tv"}:
-            current = settings.get(cid, "movie_type_pref", "") or ""
-            settings.set_(cid, "movie_type_pref", "" if current == v else v)
-    elif data.startswith("mpref_recency_"):
-        v = data[len("mpref_recency_"):]
-        if v in {"new", "any"}:
-            settings.set_(cid, "movie_recency", "" if v == "any" else v)
-    elif data.startswith("mpref_region_"):
+    """Обработка mpref_* переключателей (старые mpref_type_/mpref_recency_ из истории — просто экран)."""
+    if data.startswith("mpref_region_"):
         import countries
         key = data[len("mpref_region_"):]
         if key in dict(countries.REGIONS):
