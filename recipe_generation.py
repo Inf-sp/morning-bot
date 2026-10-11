@@ -833,7 +833,9 @@ def _home_idea_complete(idea) -> bool:
     required = ("name", "minutes", "ingredients", "steps")
     if not all(idea.get(field) for field in required):
         return False
-    visible_texts = [idea.get("name"), *(idea.get("ingredients") or [])]
+    # Название может быть оригинальным латиницей («Ciambellone», «Ratatouille» — так пишет меню дня);
+    # что ответ русский, проверяют ингредиенты и шаги.
+    visible_texts = list(idea.get("ingredients") or [])
     visible_texts.extend(step.get("text") for step in (idea.get("steps") or []))
     if not all(re.search(r"[а-яё]", str(text or ""), re.I) for text in visible_texts):
         return False
@@ -1123,6 +1125,9 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
     if dish and is_new(idea):
         # Рецепт блюда из меню: то же название, что в меню, и метка для кэша дня.
         idea = {**idea, "name": dish["name"], "dish": dish["name"]}
+    if dish and not is_new(idea):
+        # Рецепт другого блюда вместо выбранного в меню хуже честной ошибки с повтором.
+        raise ValueError(f"recipe for menu dish {dish['name']!r} is not ready")
     if not is_new(idea):
         idea = next((card for card in map(lambda source: _source_home_idea(source, context), sources)
                      if is_new(card)), {})

@@ -249,3 +249,28 @@ def test_recipe_context_includes_restrictions(monkeypatch):
     context = recipe_generation._home_idea_context("42")
 
     assert context["diet_prefs"] == "без острого; без свинины, бекона и ветчины"
+
+
+def test_menu_dish_recipe_with_original_latin_name_is_accepted():
+    idea = {"name": "Ciambellone", "minutes": 50, "ingredients": ["мука", "яйца", "сахар"],
+            "steps": [{"text": "Смешай муку с яйцами и сахаром"}], "reason": "к кофе", "tip": "Проверь шпажкой"}
+
+    assert recipe_generation._home_idea_complete(idea)
+    assert not recipe_generation._home_idea_complete({**idea, "ingredients": ["flour", "eggs"],
+                                                      "steps": [{"text": "Mix"}]})  # ответ не по-русски
+
+
+def test_menu_dish_never_falls_back_to_an_unrelated_recipe(monkeypatch):
+    import pytest
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda *_a, **_k: {
+        "meal": "breakfast", "signature": "s", "available": ["яйца"], "month": "2026-10", "pool_signature": "p"})
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea", lambda *_a, **_k: None)
+    monkeypatch.setattr(recipe_generation, "_home_month_pool", lambda *_a: [])
+    monkeypatch.setattr(recipe_generation, "_home_idea_prompt", lambda *_a, **_k: "prompt")
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("AI down")))
+    monkeypatch.setattr(recipe_generation, "_home_local_idea", lambda *_a, **_k: pytest.fail("омлет вместо блюда меню"))
+
+    with pytest.raises(ValueError):
+        recipe_generation.get_cooking_home_idea(
+            "42", cuisine="italian", dish={"name": "Ciambellone", "note": "домашний кекс к кофе"})
