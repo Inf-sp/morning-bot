@@ -177,7 +177,7 @@ def test_selected_meal_card_uses_meal_and_cuisine_in_header():
 
     assert message.text.startswith("🇮🇹 Что приготовить • Итальянская кухня")
     assert "Готовим сегодня" not in message.text
-    assert "🇮🇹" not in message.text
+    assert message.text.count("🇮🇹") == 1  # флаг кухни — только в начале заголовка
 
 
 def test_all_llms_down_still_returns_spoonacular_card(monkeypatch):
