@@ -284,11 +284,30 @@ def test_explicit_picture_keeps_link_preview_other_links_stay_off():
     assert plain["disable_web_page_preview"] is True and "link_preview_options" not in plain
 
 
-def test_day_menu_gets_its_cuisine_picture_recipe_does_not():
+def test_cuisine_photo_comes_from_photo_layer_cached_with_wikimedia_fallback(monkeypatch):
     import day_menu
     import menu
+    import travel_photos
 
-    picture = menu._cuisine_picture({"cuisine": "japanese"})["link_preview_options"]
-    assert picture.url == day_menu.CUISINE_IMAGE["japanese"] and picture.show_above_text
-    assert menu._cuisine_picture({"cuisine": "unknown"}) == {}
-    assert set(day_menu.CUISINE_IMAGE) == set(day_menu.CUISINE_INTRO)
+    saved, queries = {}, []
+    monkeypatch.setattr(day_menu.store, "_load", lambda _key: dict(saved))
+
+    def mutate(_key, change):
+        data, _ = change(dict(saved))
+        saved.clear()
+        saved.update(data)
+
+    monkeypatch.setattr(day_menu.store, "mutate_kv", mutate)
+    monkeypatch.setattr(travel_photos, "find_landscape", lambda query: queries.append(query) or {
+        "url": "https://images.unsplash.com/fuji", "provider": "unsplash"})
+
+    assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
+    assert day_menu.cuisine_photo("japanese")["url"] == "https://images.unsplash.com/fuji"
+    assert queries == ["Mount Fuji Japan"]  # второй раз — из кэша
+    picture = menu._cuisine_picture(day_menu.cuisine_photo("japanese"))["link_preview_options"]
+    assert picture.show_above_text and picture.prefer_large_media
+    assert menu._cuisine_picture({}) == {}
+
+    monkeypatch.setattr(travel_photos, "find_landscape", lambda _query: None)
+    assert day_menu.cuisine_photo("italian")["url"] == day_menu.CUISINE_IMAGE["italian"]
+    assert set(day_menu.CUISINE_SCENE) == set(day_menu.CUISINE_IMAGE) == set(day_menu.CUISINE_INTRO)

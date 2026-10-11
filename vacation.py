@@ -193,6 +193,7 @@ def _country_record(cc):
     idd = row.get("idd") or {}
     suffixes = idd.get("suffixes") or []
     return {
+        "name_en": (row.get("name") or {}).get("common", ""),
         "name_ru": ((row.get("translations") or {}).get("rus") or {}).get("common", ""),
         "capital": (row.get("capital") or [""])[0],
         "area": row.get("area") or 0,
@@ -344,6 +345,16 @@ def cuisine(cid) -> str:
         return ""
     cc = current.get("cc", "")
     return CC_CUISINE.get(cc) or (f"{LOCAL_PREFIX}{cc.lower()}" if cc else "")
+
+
+def country_name_en(cid) -> str:
+    """«South Africa» — для поиска фото страны; без данных — ""."""
+    cc = (state(cid) or {}).get("cc", "")
+    try:
+        record = _cached(config.COUNTRY_FACTS_KEY, cc, lambda: _country_record(cc)) or {}
+    except Exception:
+        record = {}
+    return record.get("name_en", "")
 
 
 def local_cuisine_label(cid) -> str:

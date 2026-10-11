@@ -22,8 +22,18 @@ _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 
-# Фото страны кухни над меню дня — узнаваемый вид, не блюдо (главные фото статей Википедии,
-# Wikimedia Commons; ссылки проверены). Показывается превью ссылки над текстом, в рецептах картинки нет.
+# Вид страны над меню дня — узнаваемое место, не блюдо. Фото ищется через общий слой
+# travel_photos (Unsplash, при сбое Pexels) по запросу CUISINE_SCENE и хранится 30 дней;
+# CUISINE_IMAGE — проверенный запасной вид из Wikimedia Commons, если оба сервиса недоступны.
+CUISINE_SCENE = {
+    "italian": "Amalfi Coast Italy", "japanese": "Mount Fuji Japan", "thai": "Phi Phi Islands Thailand",
+    "mexican": "Chichen Itza Mexico", "indian": "Taj Mahal India", "chinese": "Great Wall of China",
+    "turkish": "Cappadocia balloons Turkey", "french": "Paris Eiffel Tower",
+    "russian": "Saint Basil's Cathedral Moscow", "georgian": "Gergeti Trinity Church Georgia",
+}
+_PHOTO_TTL = 30 * 86400
+_PHOTO_RETRY = 86400  # оба сервиса недоступны — запасной вид, новая попытка через сутки
+
 CUISINE_IMAGE = {
     "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg/1280px-Amalfi_Coast_%28Italy%2C_October_2020%29_-_75_%2850558355441%29.jpg",  # Амальфитанское побережье
     "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg/1280px-View_of_Mount_Fuji_from_%C5%8Cwakudani_20211202.jpg",  # Фудзи
@@ -258,10 +268,50 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
     return menu
 
 
+def cuisine_photo(cuisine, cid=None) -> dict:
+    """{url, source} — вид страны кухни; {} — фото нет (подписи автора под меню нет).
+
+    Unsplash/Pexels через travel_photos, кэш 30 дней на кухню; без них — запасной вид Wikimedia.
+    """
+    import time
+    import travel_photos
+    cuisine = str(cuisine or "")
+    query = CUISINE_SCENE.get(cuisine)
+    if not query and cuisine.startswith(LOCAL_PREFIX):
+        import vacation
+        name = vacation.country_name_en(cid) if cid is not None else ""
+        query = f"{name} landscape" if name else ""
+    if not query:
+        return {}
+    saved = (store._load(config.CUISINE_PHOTOS_KEY) or {}).get(cuisine) or {}
+    if isinstance(saved, dict) and float(saved.get("expires") or 0) > time.time():
+        return dict(saved.get("value") or {})
+    found = travel_photos.find_landscape(query) or {}
+    if found.get("url"):
+        value = {"url": found["url"], "source": found.get("provider", "")}
+        ttl = _PHOTO_TTL
+    else:
+        value = {"url": CUISINE_IMAGE[cuisine]} if cuisine in CUISINE_IMAGE else {}
+        ttl = _PHOTO_RETRY
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        data[cuisine] = {"value": value, "expires": time.time() + ttl}
+        return data, None
+
+    store.mutate_kv(config.CUISINE_PHOTOS_KEY, mutate)
+    return value
+
+
 def warm_day_menu(cid, now=None) -> bool:
-    """Ночная подготовка меню дня без сообщений пользователю."""
+    """Ночная подготовка меню дня (и фото кухни) без сообщений пользователю."""
     try:
-        return bool(get_day_menu(cid, now=now))
+        menu = get_day_menu(cid, now=now)
+        try:
+            cuisine_photo(menu.get("cuisine"), cid)
+        except Exception:
+            _log.debug("day menu photo warm failed", exc_info=True)
+        return bool(menu)
     except Exception as error:
         _log.warning("day menu warm failed cid=%s: %r", cid, error)
         return False

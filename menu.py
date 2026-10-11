@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import store
@@ -70,15 +71,23 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-def _cuisine_picture(menu) -> dict:
-    """Крупное фото кухни над меню дня — превью ссылки; без фото — {}."""
-    import day_menu
+def _cuisine_picture(photo) -> dict:
+    """Крупный вид страны над меню дня — превью ссылки; без фото — {}."""
     from telegram import LinkPreviewOptions
-    url = day_menu.CUISINE_IMAGE.get(str((menu or {}).get("cuisine") or ""))
+    url = (photo or {}).get("url")
     if not url:
         return {}
     return {"link_preview_options": LinkPreviewOptions(
         url=url, prefer_large_media=True, show_above_text=True)}
+
+
+async def _menu_photo(cid, menu) -> dict:
+    import day_menu
+    try:
+        return await asyncio.to_thread(day_menu.cuisine_photo, menu.get("cuisine"), cid)
+    except Exception:
+        _log.debug("cuisine photo failed", exc_info=True)
+        return {}
 
 
 def _day_menu_message(menu):
@@ -135,13 +144,15 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
     if not refresh:
         ready = day_menu.get_cached_day_menu(cid)
         if ready is not None:
-            await _deliver(bot, cid, _day_menu_message(ready), status, q, **_cuisine_picture(ready))
+            photo = await _menu_photo(cid, ready)
+            await _deliver(bot, cid, _day_menu_message(ready), status, q, **_cuisine_picture(photo))
             return
 
     async def build_menu(status):
         menu = await asyncio.to_thread(day_menu.get_day_menu, cid, None, refresh, cuisine)
+        photo = await _menu_photo(cid, menu)
         msg = _day_menu_message(menu)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
-                             **_cuisine_picture(menu))
+                             **_cuisine_picture(photo))
 
     await _with_food_status(bot, cid, status, q, build_menu)

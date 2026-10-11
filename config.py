@@ -156,6 +156,7 @@ CUISINE_WEIGHTS_KEY = "cuisine_weights.json"  # {cid: {"italian": 3, "japanese":
 QUOTE_AUTHORS_KEY = "quote_authors_seen.json"
 CONCERTS_CACHE_KEY = "concerts_cache.json"  # {cid: {"ts": epoch, "cc": "NL", "events": [...]}}, прогревается перед пятничной афишей
 CONCERT_ARTIST_CHECKS_KEY = "concert_artist_checks.json"  # {cid: {country: {artist: last check + future events}}}
+CUISINE_PHOTOS_KEY = "cuisine_photos.json"  # {кухня: {value: фото Unsplash/Pexels, expires}} — вид страны над меню
 COUNTRY_FACTS_KEY = "country_facts.json"  # {cc: {ts, value}} — факты о стране отпуска, 30 дней
 FX_RATES_KEY = "fx_rates.json"  # {"YYYY-MM-DD:ZAR": {ts, value}} — курс евро на день
 CONCERT_ARTIST_NOTES_KEY = "concert_artist_notes.json"  # {артист: короткая фраза, известность 1–10, ts}
