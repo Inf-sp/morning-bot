@@ -72,3 +72,14 @@ def test_author_country_skips_historic_state_without_iso(monkeypatch):
     monkeypatch.setattr(wikidata_books, "_get", lambda _params: next(responses))
 
     assert wikidata_books.author_country("H. G. Wells") == "GB"
+
+
+def test_engine_pick_checks_production_country_from_details(monkeypatch):
+    monkeypatch.setattr(countries, "_table", lambda: TABLE)
+    details = {1: {"name": "Голливуд", "countries": ["US"]}, 2: {"name": "Париж", "countries": ["FR"]}}
+    monkeypatch.setattr(movie_recommendation.tmdb, "detail", lambda tmdb_id, _kind: details[tmdb_id])
+
+    it, tm = movie_recommendation._first_allowed_card(
+        "42", [{"id": 1, "kind": "movie"}, {"id": 2, "kind": "movie"}], {"regions_off": ["americas"]})
+
+    assert tm["name"] == "Париж"

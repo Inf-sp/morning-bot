@@ -102,8 +102,21 @@ async def _tmdb_engine_pick(cid, prefs=None, timeout=None):
         return None, None
     if not cands:
         return None, None
-    c = cands[0]
-    return _candidate_to_card(cid, c)
+    return _first_allowed_card(cid, cands, prefs)
+
+
+_REGION_CHECKS = 5  # в списках TMDb у фильмов нет страны — проверяем по деталям первых кандидатов
+
+
+def _first_allowed_card(cid, cands, prefs, reason=None):
+    """Первый кандидат, чья страна производства (детали TMDb) не в выключенном регионе."""
+    import countries
+    off = (prefs or {}).get("regions_off")
+    for c in cands[:_REGION_CHECKS] if off else cands[:1]:
+        it, tm = _candidate_to_card(cid, c, reason=reason)
+        if countries.allowed(tm, off):
+            return it, tm
+    return None, None
 
 
 def _candidate_to_card(cid, c, reason=None):
@@ -403,7 +416,9 @@ def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
                 pool[f"{c['kind']}:{c['id']}"] = c
         if pool:
             ranked = movie_engine.rank(list(pool.values()), taste, prefs)
-            return _candidate_to_card(cid, ranked[0], reason=reason)
+            it, tm = _first_allowed_card(cid, ranked, prefs, reason=reason)
+            if tm:
+                return it, tm
     return None, None
 
 
