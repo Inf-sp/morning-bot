@@ -287,23 +287,37 @@ def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeybo
     ])
 
 def settings_summary(cid) -> str:
-    """«включено 4» — сколько уведомлений включено."""
+    """«включено 4 · следующая: Погода на завтра сегодня в 20:00»."""
     enabled = sum(1 for kind, _label in NOTIF_TYPES
                   if notification_available(cid, kind) and notif_on(cid, kind))
-    return f"включено {enabled}" if enabled else "выключены"
+    if not enabled:
+        return "выключены"
+    upcoming = next_notification(cid)
+    return f"включено {enabled}" + (f" · {upcoming[:1].lower()}{upcoming[1:]}" if upcoming else "")
+
+
+def learning_line(cid) -> str:
+    """«Нидерландский · Сложный (B1+)» или «не изучаю»."""
+    from dictionary_seed_ui import LEVEL_LABELS
+    if not store.learning_is_enabled(cid):
+        return "не изучаю"
+    code = store.get_learning_language(cid) or "nl"
+    level = LEVEL_LABELS.get(store.get_level(cid, code), "").split(" ", 1)[-1]
+    return " · ".join(part for part in (study_lang(cid).capitalize(), level) if part)
 
 
 async def send_home(bot, cid, q=None):
     rows = [
-        # Два столбца. Язык обучения — тот же экран, что в «Предпочтениях»; «Назад» ведёт в Настройки.
-        [InlineKeyboardButton("📍 Город", callback_data="set_city"),
-         InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
-        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif"),
-         InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
+        # Один столбец; язык обучения меняется в «Предпочтения → Обучение».
+        [InlineKeyboardButton("📍 Город", callback_data="set_city")],
+        [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
+        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
+        [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
-    city = store.get_settings(cid).get("city") or ""
-    msg = settings_ui.settings_home(city, study_lang(cid), settings_summary(cid))
+    data = store.get_settings(cid) or {}
+    city = " · ".join(part for part in (data.get("city"), data.get("country")) if part)
+    msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -321,14 +335,7 @@ _NOT_SET = "не выбрано"
 def preferences_summary(cid) -> list:
     """Все предпочтения из разделов одним списком [(раздел, значение)] — только чтение."""
     import leisure_music
-    from dictionary_seed_ui import LEVEL_LABELS
-
-    if store.learning_is_enabled(cid):
-        code = store.get_learning_language(cid) or "nl"
-        level = LEVEL_LABELS.get(store.get_level(cid, code), "").split(" ", 1)[-1]
-        learning = " · ".join(part for part in (study_lang(cid).capitalize(), level) if part)
-    else:
-        learning = "не изучаю"
+    learning = learning_line(cid)
     restrictions = dict(FOOD_RESTRICTIONS)
     music = dict((key, label) for key, label, _prompt in leisure_music._MUSIC_GENRES)
     movie = [{"movie": "фильмы", "tv": "сериалы"}.get(get(cid, "movie_type_pref", "") or "", ""),

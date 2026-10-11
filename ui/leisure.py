@@ -52,6 +52,8 @@ def favorite_movies_home(total):
     if not total:
         b.spacer()
         b.line("Добавь любимые фильмы и сериалы — подбор станет точнее.")
+    else:
+        b.line("По любимым фильмам и сериалам подбираю похожее.")
     return b.build_stripped()
 
 
@@ -61,6 +63,8 @@ def favorite_books_home(total):
     if not total:
         b.spacer()
         b.line("Добавь любимые книги — следующие рекомендации станут точнее.")
+    else:
+        b.line("По любимым книгам подбираю похожие.")
     return b.build_stripped()
 
 

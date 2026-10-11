@@ -22,8 +22,7 @@ def test_settings_home_has_no_manual_refresh_button(monkeypatch):
     rows = [[b.text for b in row] for row in sent[0]["reply_markup"].inline_keyboard]
     assert "🔄 Обновить" not in [label for row in rows for label in row]
     assert rows == [
-        ["📍 Город", "📝 Предпочтения"], ["🔔 Уведомления", "📤 Экспорт"],
-        ["#️⃣ Главная"],
+        ["📍 Город"], ["📝 Предпочтения"], ["🔔 Уведомления"], ["📤 Экспорт"], ["#️⃣ Главная"],
     ]
 
 
@@ -50,8 +49,9 @@ def test_old_refresh_button_returns_to_current_settings(monkeypatch):
 
 def test_settings_home_shows_city_language_and_summary(monkeypatch):
     sent = []
-    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Алкмар"})
-    monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
+    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Алкмар", "country": "Нидерланды"})
+    monkeypatch.setattr(settings, "learning_line", lambda _cid: "Нидерландский · Сложный (B1+)")
+    monkeypatch.setattr(settings, "next_notification", lambda _cid: "Следующая: Погода на завтра сегодня в 20:00")
     monkeypatch.setattr(settings, "notif_on", lambda _cid, kind: kind == "evening_weather")
     monkeypatch.setattr(settings, "cuisines", lambda _cid: ["italian"])
     monkeypatch.setattr(settings.store, "load_wardrobe", lambda _cid: {"zones": {}})
@@ -59,7 +59,12 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
     text = sent[0]["text"]
-    assert text == "🎚️ Настройки\n\nГород: Алкмар\nЯзык обучения: Нидерландский\nУведомления: включено 1"
+    assert text == (
+        "🎚️ Настройки\n\nГород: Алкмар · Нидерланды\nЯзык обучения: Нидерландский · Сложный (B1+)\n"
+        "Уведомления: включено 1 · следующая: Погода на завтра сегодня в 20:00\n\n"
+        "Здесь общие параметры бота. Свои данные разделов (шкаф, холодильник, словарь, библиотека) — "
+        "кнопкой «Настроить» внутри раздела."
+    )
     bold = [text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
             for e in sent[0]["entities"] if e.type == "bold"]
     assert bold[-3:] == ["Город:", "Язык обучения:", "Уведомления:"]

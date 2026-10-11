@@ -86,7 +86,8 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     rows.append([InlineKeyboardButton("✨ Сгенерировать набор слов", callback_data=f"a_dictseed_start_{lang}")])
     rows.append(nav_row(back))
     if entries:
-        text = f"{flag} Мой словарь · {len(entries)} слов"
+        text = (f"{flag} Мой словарь · {len(entries)} слов\n\n"
+                "Слова разложены по темам; все они участвуют в тренировках.")
     else:
         text = f"{flag} Мой словарь\n\nПока здесь нет слов."
     await _show_screen(bot, cid, text, None, InlineKeyboardMarkup(rows), q=q)

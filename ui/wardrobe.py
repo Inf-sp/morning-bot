@@ -353,6 +353,7 @@ def _pluralize_dative_items(n):
 def wardrobe_home_screen(total):
     b = MessageBuilder()
     b.title(f"🎚️ Мой шкаф · {total} {_pluralize_items(total)}")
+    b.line("Нажми на категорию, чтобы посмотреть вещи или удалить лишнее.")
     return b.build_stripped()
 
 

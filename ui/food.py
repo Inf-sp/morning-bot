@@ -193,6 +193,9 @@ def fridge_home(available):
     title = ui_label("products", "Мой холодильник").removeprefix("🧊 ").removeprefix("🎚️ ")
     b.bold("🎚️ " + title)
     b.text_line(f" · {available} {_products_label(available)} в наличии")
+    b.newline()
+    b.spacer()
+    b.line("Отмечай, что есть дома: меню и рецепты учитывают продукты в наличии.")
     return b.build_stripped()
 
 

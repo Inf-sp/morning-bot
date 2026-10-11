@@ -84,7 +84,7 @@ def test_settings_summary_line(monkeypatch):
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
 
-    assert settings.settings_summary("42") == "включено 2"
+    assert settings.settings_summary("42").startswith("включено 2 · следующая: ")
 
 
 def test_myday_blocks_toggle_and_reset_day_cache(monkeypatch):

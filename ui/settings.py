@@ -73,6 +73,9 @@ def settings_home(city="", language="", summary=""):
         b.labeled_line("Язык обучения", f"{language[:1].upper()}{language[1:]}", lowercase=False)
     if summary:
         b.labeled_line("Уведомления", summary)
+    b.spacer()
+    b.line("Здесь общие параметры бота. Свои данные разделов (шкаф, холодильник, словарь, "
+           "библиотека) — кнопкой «Настроить» внутри раздела.")
     return b.build_stripped()
 
 

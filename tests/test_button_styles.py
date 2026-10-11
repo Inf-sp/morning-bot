@@ -270,3 +270,25 @@ def test_settings_and_home_stack_into_one_column_home_last():
         ["Настроить"], ["Главная"]]
     assert [[b["text"] for b in row] for row in telegram_runtime._enhance_markup(back)["inline_keyboard"]] == [
         ["Назад", "Главная"]]
+
+
+def test_explicit_picture_keeps_link_preview_other_links_stay_off():
+    from telegram import LinkPreviewOptions
+
+    picture = LinkPreviewOptions(url="https://upload.wikimedia.org/x.jpg", prefer_large_media=True,
+                                 show_above_text=True)
+    kept = telegram_runtime.MenuCleanupBot._without_link_preview({"link_preview_options": picture})
+    plain = telegram_runtime.MenuCleanupBot._without_link_preview({"text": "https://example.org"})
+
+    assert kept["link_preview_options"] is picture and "disable_web_page_preview" not in kept
+    assert plain["disable_web_page_preview"] is True and "link_preview_options" not in plain
+
+
+def test_day_menu_gets_its_cuisine_picture_recipe_does_not():
+    import day_menu
+    import menu
+
+    picture = menu._cuisine_picture({"cuisine": "japanese"})["link_preview_options"]
+    assert picture.url == day_menu.CUISINE_IMAGE["japanese"] and picture.show_above_text
+    assert menu._cuisine_picture({"cuisine": "unknown"}) == {}
+    assert set(day_menu.CUISINE_IMAGE) == set(day_menu.CUISINE_INTRO)

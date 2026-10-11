@@ -628,7 +628,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
     labels = _labels(bot.message["reply_markup"])
-    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь"
+    assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nНажми на категорию, чтобы посмотреть вещи или удалить лишнее."
     assert ["Футболки и рубашки · 1"] in labels and ["Обувь · 0"] in labels
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
@@ -667,7 +667,7 @@ def test_closet_screen_shows_only_the_title_line(monkeypatch):
     bot = RecordingBot()
     asyncio.run(wardrobe.send_wardrobe_zones(bot, "closet-test"))
 
-    assert bot.message["text"] == "🎚️ Мой шкаф · 3 вещи"
+    assert bot.message["text"] == "🎚️ Мой шкаф · 3 вещи\n\nНажми на категорию, чтобы посмотреть вещи или удалить лишнее."
 
 
 def test_closet_category_has_add_item_button_above_navigation(monkeypatch):

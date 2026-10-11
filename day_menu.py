@@ -22,6 +22,21 @@ _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 
+# Фото кухни над меню дня (главные фото статей Википедии о кухнях, Wikimedia Commons;
+# ссылки проверены). Показывается превью ссылки над текстом, в рецептах картинки нет.
+CUISINE_IMAGE = {
+    "italian": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Pizza-3007395.jpg/1280px-Pizza-3007395.jpg",
+    "japanese": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Sushi_platter.jpg/1280px-Sushi_platter.jpg",
+    "thai": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Tom_yam_kung_maenam.jpg/1280px-Tom_yam_kung_maenam.jpg",
+    "mexican": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg/1280px-001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg",
+    "indian": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Tradtional_Thali.jpg",
+    "chinese": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Chinese_DimSum_%289023590541%29.jpg/1280px-Chinese_DimSum_%289023590541%29.jpg",
+    "turkish": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Sigara_B%C3%B6rek.jpg/1280px-Sigara_B%C3%B6rek.jpg",
+    "french": "https://upload.wikimedia.org/wikipedia/commons/3/37/Ratatouille_home_cooked.jpg",
+    "russian": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Pelmeni_Russian.jpg/1280px-Pelmeni_Russian.jpg",
+    "georgian": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Old_Tbilisi%2C_Georgian_khachapuri%2C_Georgia.jpg/1280px-Old_Tbilisi%2C_Georgian_khachapuri%2C_Georgia.jpg",
+}
+
 # Вступление о кухне дня: характер и за что её любят.
 CUISINE_INTRO = {
     "italian": "Свежие продукты и простые сочетания: томаты, оливковое масло, сыр, свежая зелень — "
