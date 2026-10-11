@@ -66,11 +66,15 @@ def _table() -> dict:
     return value
 
 
+# Привычные сокращения вместо двухбуквенного ISO-кода.
+_SHORT_CODES = {"US": "USA", "GB": "UK", "AE": "UAE"}
+
+
 def label(cc) -> str:
-    """«🇯🇵 Япония» или ""."""
+    """Страна в Досуге — флаг и сокращение: «🇷🇺 RU», «🇺🇸 USA», «🇬🇧 UK»; без кода — ""."""
     cc = str(cc or "").upper()
-    name = (_table().get(cc) or [""])[0]
-    return f"{util.flag_from_cc(cc)} {name}".strip() if name else ""
+    flag = util.flag_from_cc(cc)
+    return f"{flag} {_SHORT_CODES.get(cc, cc)}" if flag else ""
 
 
 def region(cc) -> str:

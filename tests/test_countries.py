@@ -21,7 +21,8 @@ def test_regions_filter_by_country_then_language_unknown_passes(monkeypatch):
     assert not countries.allowed({"original_language": "ko"}, off)  # страны нет — по языку оригинала
     assert countries.allowed({"original_language": "en"}, off)  # английский неоднозначен — не отсеиваем
     assert countries.allowed({"countries": ["AU"]}, off) and countries.allowed({}, off)
-    assert countries.title_label({"countries": ["JP"]}) == "🇯🇵 Япония"
+    assert countries.title_label({"countries": ["JP"]}) == "🇯🇵 JP"
+    assert countries.label("US") == "🇺🇸 USA" and countries.label("RU") == "🇷🇺 RU" and countries.label("") == ""
     assert countries.regions_off_text(off) == "без Азии и России"
 
 
@@ -50,10 +51,10 @@ def test_region_toggle_and_engine_filter(monkeypatch):
 
 def test_cards_show_country_only_when_known():
     title, msg = leisure_ui.movie_card({"title": "Дюна"}, {
-        "name": "Дюна", "kind": "movie", "genres": "фантастика", "country_label": "🇺🇸 США", "year": 2021})
-    assert "фантастика · 🇺🇸 США · 2021" in msg.text
-    assert leisure_ui.artist_card({"artist": "Alvvays", "country_label": "🇨🇦 Канада"}).text.startswith(
-        "🎸 Alvvays\n\n🇨🇦 Канада")  # после заголовка — пустая строка по UI-контракту
+        "name": "Дюна", "kind": "movie", "genres": "фантастика", "country_label": "🇺🇸 USA", "year": 2021})
+    assert "фантастика · 🇺🇸 USA · 2021" in msg.text
+    assert leisure_ui.artist_card({"artist": "Alvvays", "country_label": "🇨🇦 CA"}).text.startswith(
+        "🎸 Alvvays\n\n🇨🇦 CA")  # после заголовка — пустая строка по UI-контракту
     assert "\n" not in leisure_ui.artist_card({"artist": "Alvvays", "country_label": ""}).text
 
 

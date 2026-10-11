@@ -420,13 +420,13 @@ def test_album_descriptions_are_stored_once(monkeypatch):
 
 def test_hub_rows_show_country_and_series_network_from_cache():
     msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Диггер", "genres": "комедия, драма", "country_label": "🇺🇸 США", "date": "2026-10-01",
+        [{"title": "Диггер", "genres": "комедия, драма", "country_label": "🇺🇸 USA", "date": "2026-10-01",
           "overview": "Самый могущественный человек отправляется на миссию."},
-         {"kind": "tv", "name": "Суд", "country_label": "🇺🇸 США", "network": "HBO", "release_date": "2026-09-11",
+         {"kind": "tv", "name": "Суд", "country_label": "🇺🇸 USA", "network": "HBO", "release_date": "2026-09-11",
           "overview": "Дочь рабочего подвергается насилию."}],
         [], [],
     )
     lines = msg.text.split("Премьеры кино:\n", 1)[1].splitlines()
-    assert lines[0] == "• «Диггер» · комедия · драма · 🇺🇸 США · Самый могущественный человек отправляется на миссию."
-    assert lines[1] == "• «Суд» · новый сериал · 🇺🇸 США · HBO · Дочь рабочего подвергается насилию."
+    assert lines[0] == "• «Диггер» · комедия · драма · 🇺🇸 USA · Самый могущественный человек отправляется на миссию."
+    assert lines[1] == "• «Суд» · новый сериал · 🇺🇸 USA · HBO · Дочь рабочего подвергается насилию."
     assert "октября" not in msg.text and "сентября" not in msg.text
