@@ -105,12 +105,14 @@ def test_movie_preferences_keep_only_type_recency_and_rating(monkeypatch):
         ["□ ⭐️ 7.0"],
         ["□ ⭐️ 7.5"],
         ["□ ⭐️ 8.0"],
+        ["✅ Азия"], ["✅ Америка"], ["✅ Европа"], ["✅ Россия"], ["✅ Африка"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert leisure_movies._movie_prefs("42") == {
         "type_pref": None,
         "recency": None,
         "min_rating": None,
+        "regions_off": [],
     }
 
 

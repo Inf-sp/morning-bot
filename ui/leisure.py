@@ -171,6 +171,8 @@ def movie_card(item, tm):
         meta_parts.append("🏳️‍🌈 ЛГБТ")
     if tm and tm.get("genres"):
         meta_parts.append(tm["genres"])
+    if tm and tm.get("country_label"):
+        meta_parts.append(tm["country_label"])
     # Дата выхода — в той же строке: полная дата премьеры, если известна, иначе год.
     release = (_event_date_label((tm or {}).get("release_date")) if tm else "") or year
     if release:
@@ -356,6 +358,9 @@ def artist_card(data):
     b.text_line("🎸 ")
     b.bold(artist)
     b.newline()
+    if data.get("country_label"):
+        b.text_line(data["country_label"])
+        b.newline()
     if data.get("desc"):
         b.spacer()
         b.line(data["desc"])

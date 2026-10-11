@@ -59,6 +59,7 @@ class CinemaMovie:
     country_code: str
     is_theatrical: bool
     vote_count: int = 0
+    original_language: str = ""
 
 
 def _get(path, params, timeout=12, language=None):
@@ -309,6 +310,7 @@ def _cinema_movie(x, country_code):
         # статус подтверждается отдельно через /release_dates.
         is_theatrical=False,
         vote_count=int(x.get("vote_count") or 0),
+        original_language=str(x.get("original_language") or "").lower(),
     )
 
 
@@ -335,6 +337,9 @@ def normalize(x, kind=None):
         "poster": _poster(x.get("poster_path")),
         "url": f"https://www.themoviedb.org/{kind}/{x.get('id')}" if x.get("id") else "",
         "overview": x.get("overview", "") or "",
+        # Для фильтра регионов кино: страна происхождения (сериалы, detail) и язык оригинала.
+        "origin_country": [str(cc).upper() for cc in (x.get("origin_country") or []) if cc],
+        "original_language": str(x.get("original_language") or "").lower(),
     }
 
 

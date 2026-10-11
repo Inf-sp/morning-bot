@@ -553,6 +553,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             if preview:
                 return cached
             cached = await _attach_track_links(cached)
+            cached = await _with_country(cached)
             _cache_artist(cid, cached)
             store.last_recos[str(cid)] = {"kind": "listen", "items": [artist]}
             store.last_source[str(cid)] = "Музыка"
@@ -648,6 +649,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         return
     artist = data.get("artist", "")
     data = await _attach_track_links(data)
+    data = await _with_country(data)
     _cache_artist(cid, data)
     if preview:
         return data
@@ -666,6 +668,18 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await _deliver_artist_card(
         bot, cid, msg, _listen_kb(), status=status)
+
+
+async def _with_country(data):
+    """Страна артиста из MusicBrainz (хранится полгода); нет данных — без строки."""
+    if data.get("country_label") is not None:
+        return data
+    import countries
+    try:
+        label = await asyncio.wait_for(asyncio.to_thread(countries.artist_label, data.get("artist", "")), 6)
+    except Exception:
+        label = ""
+    return {**data, "country_label": label}
 
 
 async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):

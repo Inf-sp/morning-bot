@@ -28,6 +28,17 @@ def _no_concert_notes_ai(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_country_network(monkeypatch):
+    """Таблица стран, MusicBrainz и Wikidata-гражданство в тестах не запрашиваются."""
+    import countries
+
+    monkeypatch.setattr(countries, "_table", lambda: {})
+    monkeypatch.setattr(countries, "artist_label", lambda _name: "")
+    monkeypatch.setattr(countries, "author_label", lambda _name: "")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_wikidata_network(monkeypatch):
     """Wikidata в тестах не вызывается по сети; нужный тест подменяет lookup сам."""
     import wikidata_books

@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 
 import config
+import countries
 import store
 import tmdb
 import movie_engine
@@ -58,6 +59,8 @@ def _display_title(it, tm):
     return f"{name} ({year})" if year else name
 
 def _movie_card(it, tm):
+    if tm and not tm.get("country_label"):
+        tm = {**tm, "country_label": countries.title_label(tm)}
     return leisure_ui.movie_card(it, tm)
 
 
@@ -425,6 +428,8 @@ def _pick_good_movie(items, used_titles, prefs=None):
             return it, tm
         rating = (tm or {}).get("rating") or 0
         vote_count = int((tm or {}).get("vote_count") or 0)
+        if tm and not countries.allowed(tm, (prefs or {}).get("regions_off")):
+            continue
         if rating >= MIN_TMDB_RATING and vote_count >= movie_engine.MIN_VOTE_COUNT:
             accepted.append((movie_engine._score(tm or {}, {
                 "genres": {}, "countries": {}, "kind_pref": None,
@@ -458,6 +463,10 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
         )
         tm["poster"] = poster or tm.get("poster")
         tm["trailer_url"] = trailer or ""
+        if not countries.title_countries(tm):  # страна производства — из деталей TMDb (кэш сутки)
+            details = await asyncio.to_thread(tmdb.detail, tm.get("id"), kind)
+            tm["countries"] = (details or {}).get("countries") or []
+        tm["country_label"] = await asyncio.to_thread(countries.title_label, tm)
     title, msg = _movie_card(it, tm)
     kb = _movie_kb(i, category=category)
     if tm and tm.get("poster"):

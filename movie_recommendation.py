@@ -34,7 +34,15 @@ def _movie_prefs(cid):
         "type_pref": settings.get(cid, "movie_type_pref", "") or None,
         "recency": settings.get(cid, "movie_recency", "") or None,
         "min_rating": _as_float(settings.get(cid, "movie_min_rating", None)),
+        "regions_off": regions_off(cid),
     }
+
+
+def regions_off(cid) -> list:
+    """Выключенные регионы кино: [asia, africa…]; по умолчанию включены все."""
+    import countries
+    saved = settings.get(cid, "movie_regions_off", []) or []
+    return [key for key, _label in countries.REGIONS if key in saved]
 
 
 _INCLUSIVE_MOVIE_TITLES = (
@@ -268,14 +276,20 @@ def _movie_prefs_kb(cid):
     rows.extend([[InlineKeyboardButton(("✅ " if rating == value else "□ ") + f"⭐️ {label}",
                                       callback_data=f"mpref_rating_{value}")]
                  for label, value in _PREF_RATING])
+    import countries
+    off = regions_off(cid)
+    # Регионы — как остальные переключатели, по одному в строке: выключенный не попадает в рекомендации.
+    rows.extend([[InlineKeyboardButton(("□ " if key in off else "✅ ") + label,
+                                       callback_data=f"mpref_region_{key}")]
+                 for key, label in countries.REGIONS])
     rows.append(nav_row("movie_favorites"))
     return InlineKeyboardMarkup(rows)
 
 
 async def send_movie_prefs(bot, cid, q=None):
     text = ("🎬 Кино\n\n"
-            "Это приоритеты, а не жёсткие фильтры — я учитываю их при подборе, "
-            "но всё равно могу предложить что-то за их пределами.")
+            "Тип, новизна и оценка — приоритеты: я учитываю их при подборе. Регионы — строгий "
+            "фильтр: из выключенного региона фильмы и сериалы не предлагаются.")
     kb = _movie_prefs_kb(cid)
     await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
@@ -291,6 +305,12 @@ async def toggle_movie_pref(bot, cid, data, q=None):
         v = data[len("mpref_recency_"):]
         if v in {"new", "any"}:
             settings.set_(cid, "movie_recency", "" if v == "any" else v)
+    elif data.startswith("mpref_region_"):
+        import countries
+        key = data[len("mpref_region_"):]
+        if key in dict(countries.REGIONS):
+            off = regions_off(cid)
+            settings.set_(cid, "movie_regions_off", [k for k in off if k != key] if key in off else [*off, key])
     elif data.startswith("mpref_rating_"):
         v = data[len("mpref_rating_"):]
         if v in {value for _label, value in _PREF_RATING}:
@@ -353,6 +373,7 @@ def _passes_genre_gate(c, require_genre_ids=None):
 
 
 def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
+    import countries
     """Берёт кандидатов из discover (movie+tv), фильтрует по вкусу/исключениям, ранжирует.
 
     Жанр — обязательный пост-фильтр (см. _passes_genre_gate): показанный тайтл
@@ -376,6 +397,8 @@ def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
                 if not c.get("id") or movie_engine._norm(c.get("name")) in excluded:
                     continue
                 if not _passes_genre_gate(c, require_genre_ids):
+                    continue
+                if not countries.allowed(c, (prefs or {}).get("regions_off")):
                     continue
                 pool[f"{c['kind']}:{c['id']}"] = c
         if pool:

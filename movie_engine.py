@@ -177,10 +177,15 @@ def collect_candidates(taste):
 
 # ---------- фильтрация ----------
 def filter_candidates(cid, pool, min_rating):
+    import countries
+    import movie_recommendation
     excluded = _excluded_norms(cid)
+    regions_off = movie_recommendation.regions_off(cid)
     out = []
     for c in pool.values():
         if _norm(c.get("name")) in excluded:
+            continue
+        if not countries.allowed(c, regions_off):  # выключенный регион — строгий фильтр
             continue
         if c.get("adult") or int(c.get("vote_count") or 0) < MIN_VOTE_COUNT:
             continue

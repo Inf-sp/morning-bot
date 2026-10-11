@@ -1486,6 +1486,12 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
         it = dict(it or {})
     it = await _with_book_details(it)
     it = _with_book_url(it)
+    if not it.get("country") and it.get("author"):
+        import countries
+        try:  # страна автора — гражданство в Wikidata (хранится полгода); нет данных — без неё
+            it["country"] = await asyncio.wait_for(asyncio.to_thread(countries.author_label, it["author"]), 6)
+        except Exception:
+            it["country"] = ""
     msg = _book_text(it)
     kb = _book_kb(i)
     cover = it.get("cover_url")

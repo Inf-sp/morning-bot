@@ -345,7 +345,10 @@ def preferences_summary(cid) -> list:
     learning = learning_line(cid)
     restrictions = dict(FOOD_RESTRICTIONS)
     music = dict((key, label) for key, label, _prompt in leisure_music._MUSIC_GENRES)
+    import countries
+    import movie_recommendation
     movie = [{"movie": "фильмы", "tv": "сериалы"}.get(get(cid, "movie_type_pref", "") or "", ""),
+             countries.regions_off_text(movie_recommendation.regions_off(cid)),
              "новинки" if get(cid, "movie_recency", "") == "new" else "",
              f"от ⭐ {get(cid, 'movie_min_rating', '')}" if get(cid, "movie_min_rating", "") else ""]
     books = ["новинки" if get(cid, "book_recency", "") == "new" else "",

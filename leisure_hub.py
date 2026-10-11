@@ -76,7 +76,8 @@ async def _warm_series(cid):
         return
     import movie_discovery
     items = await movie_discovery.get_series_premieres(cid)
-    keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating")
+    keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating",
+            "origin_country", "original_language")
     items = [{key: item.get(key) for key in keep} for item in items or []]
     store.mutate_profile(cid, lambda profile: (
         {**profile, "hub_series": {"date": today.isoformat(), "items": items}}, None))
@@ -141,7 +142,11 @@ def hub_data(cid) -> dict:
     today, cc = _today_and_cc(cid)
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
     books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
-    series = _cached_series(cid, today) or []
+    import countries
+    import movie_recommendation
+    off = movie_recommendation.regions_off(cid)
+    movies = [item for item in movies if countries.allowed(item, off)]
+    series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)]
     one = leisure_ui.LEISURE_HUB_FEATURED
     notes = _album_notes()
     album = [{**item, "about": notes.get(_album_key(item), "")}

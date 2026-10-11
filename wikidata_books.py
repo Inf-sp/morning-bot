@@ -137,3 +137,40 @@ def _lookup(title, language):
         "author_ru": author_ru,
         "year": _year(work),
     }
+
+
+_HUMAN = "Q5"
+_WRITER_MARKERS = ("writer", "novelist", "author", "poet", "писатель", "писательница", "поэт", "автор")
+
+
+def author_country(name) -> str:
+    """ISO-код страны гражданства автора (P27 → P297) или ""; сбой сети — _Unavailable."""
+    name = " ".join(str(name or "").split()).strip()
+    if not name:
+        return ""
+    search = _get({"action": "wbsearchentities", "search": name, "language": "en", "type": "item", "limit": 5})
+    ids = [item.get("id") for item in (search or {}).get("search") or [] if item.get("id")]
+    if not ids:
+        return ""
+    data = _get({"action": "wbgetentities", "ids": "|".join(ids), "props": "claims|descriptions",
+                 "languages": "en|ru"})
+    entities = (data or {}).get("entities") or {}
+    for entity_id in ids:  # порядок поиска — по релевантности
+        entity = entities.get(entity_id) or {}
+        description = " ".join(str(value.get("value") or "")
+                               for value in (entity.get("descriptions") or {}).values()).casefold()
+        if _HUMAN not in _claim_ids(entity, "P31") or not any(m in description for m in _WRITER_MARKERS):
+            continue
+        citizenship = _claim_ids(entity, "P27")
+        if not citizenship:
+            return ""
+        # Историческое государство (Соединённое Королевство 1801–1922) кода ISO не имеет — берём следующее.
+        found = _get({"action": "wbgetentities", "ids": "|".join(citizenship[:5]), "props": "claims"})
+        for country_id in citizenship[:5]:
+            claims = (((found or {}).get("entities") or {}).get(country_id) or {}).get("claims") or {}
+            for claim in claims.get("P297") or []:
+                value = ((claim.get("mainsnak") or {}).get("datavalue") or {}).get("value")
+                if isinstance(value, str) and len(value) == 2:
+                    return value.upper()
+        return ""
+    return ""

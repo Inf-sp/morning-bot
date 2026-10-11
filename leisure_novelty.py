@@ -57,8 +57,11 @@ async def _items(cid, kind) -> list[dict]:
     if kind == "movie":
         # Только фильмы, которые уже идут в кино: будущие премьеры не советуем.
         today = date.today().isoformat()
+        import countries
+        import movie_recommendation
+        off = movie_recommendation.regions_off(cid)
         return [dict(item) for item in await leisure_movies.get_movie_premieres(cid)
-                if str(item.get("date") or "")[:10] <= today]
+                if str(item.get("date") or "")[:10] <= today and countries.allowed(item, off)]
     if kind == "book":
         return [dict(item) for item in await leisure_books._book_premieres_with_covers()]
     styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)

@@ -120,6 +120,7 @@ def _movie_premiere_item(movie, today):
         "rating": float(getattr(movie, "rating", 0) or 0),
         "popularity": float(getattr(movie, "popularity", 0) or 0),
         "vote_count": int(getattr(movie, "vote_count", 0) or 0),
+        "original_language": str(getattr(movie, "original_language", "") or ""),
     }
 
 
