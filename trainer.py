@@ -55,7 +55,10 @@ def _nav_row():
 
 def _result_keyboard(data, *, allow_remove=True):
     # После верного ответа следующее задание приходит само — кнопка не нужна.
-    rows = [] if data.get("_result_correct") else [[("✨ Следующее задание", f"ex_next_{data['_task_id']}")]]
+    # После ошибки слово продолжаем учить: только «Следующее задание», без «Удалить».
+    if not data.get("_result_correct"):
+        return _keyboard([[("✨ Следующее задание", f"ex_next_{data['_task_id']}")], _nav_row()])
+    rows = []
     if allow_remove and not data.get("_removed"):
         rows.append([("❌ Удалить", f"ex_remove_{data['_task_id']}")])
     rows.append(_nav_row())

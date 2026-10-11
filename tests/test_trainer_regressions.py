@@ -151,14 +151,14 @@ def test_starting_new_trainer_session_invalidates_old_polls():
     trainer_session.finish(cid)
 
 
-def test_trainer_result_offers_remove_from_learning():
+def test_wrong_answer_offers_next_task_without_remove():
     labels = [
         button.text
         for row in trainer._result_keyboard({"_task_id": "task-1"}).inline_keyboard
         for button in row
     ]
 
-    assert labels[:2] == ["✨ Следующее задание", "❌ Удалить"]
+    assert labels == ["✨ Следующее задание", "#️⃣ Главная"]
 
 
 def test_correct_answer_sends_next_task_without_button(monkeypatch):
@@ -199,7 +199,7 @@ def test_correct_answer_sends_next_task_without_button(monkeypatch):
     assert trainer._answered_task(state, "task-True") is data
 
     labels, _data = answer(False)
-    assert labels[0] == "✨ Следующее задание" and rendered == [cid]
+    assert labels[0] == "✨ Следующее задание" and "❌ Удалить" not in labels and rendered == [cid]
     trainer_session.finish(cid)
 
 
