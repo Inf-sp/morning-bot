@@ -42,14 +42,26 @@ def new_music(cid, cc, today) -> list[dict]:
     return items
 
 
+def _daily(items, today, count):
+    """count пунктов недельного списка на сегодня: каждый день — следующие, по кругу."""
+    items = list(items or [])
+    if len(items) <= count:
+        return items
+    start = today.toordinal() * count
+    return [items[(start + index) % len(items)] for index in range(count)]
+
+
 def hub_data(cid) -> dict:
     """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке."""
     today, cc = _today_and_cc(cid)
-    limit = leisure_ui.LEISURE_HUB_LIMIT
+    movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
+    books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
+    one = leisure_ui.LEISURE_HUB_FEATURED
     return {
-        "movies": list(leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or [])[:limit],
-        "books": list(leisure_books._book_premieres_cache_get(today, allow_stale=True) or [])[:limit],
-        "music": new_music(cid, cc, today)[:limit],
+        # Кино и книги — по одной в день, с описанием, если оно есть хотя бы у части списка.
+        "movies": _daily([m for m in movies if m.get("overview")] or movies, today, one),
+        "books": _daily([b for b in books if b.get("summary")] or books, today, one),
+        "music": _daily(new_music(cid, cc, today), today, leisure_ui.LEISURE_HUB_LIMIT),
     }
 
 
@@ -78,6 +90,15 @@ async def send_hub(bot, cid, q=None):
         month=today.month, city=store.get_settings(cid).get("city") or "",
     )
     await _show(bot, cid, msg, q)
+
+
+async def send_concerts(bot, cid, q=None):
+    """«Концерты» в Досуге: любимые артисты и популярное рядом на ближайшие 30 дней."""
+    from telegram import InlineKeyboardMarkup
+    from ui.navigation import nav_row
+    from dataclasses import replace
+    msg = await leisure_concerts.build_month_concerts_msg(cid) or leisure_ui.no_month_concerts()
+    await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
 
 async def send_premieres_menu(bot, cid, q=None):

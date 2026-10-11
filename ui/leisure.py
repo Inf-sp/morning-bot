@@ -875,6 +875,24 @@ def _weekly_item(builder: MessageBuilder, title, url="", meta=()) -> None:
     builder.newline()
 
 
+_ABOUT_MAX = 160
+
+
+def _short_about(text) -> str:
+    """Первое предложение описания, до _ABOUT_MAX символов."""
+    text = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
+    sentence = re.split(r"(?<=[.!?…])\s+", text, maxsplit=1)[0]
+    if len(sentence) > _ABOUT_MAX:
+        sentence = sentence[:_ABOUT_MAX].rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
+    return sentence
+
+
+def _about_line(b: MessageBuilder, text) -> None:
+    about = _short_about(text)
+    if about:
+        b.line(about)
+
+
 def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
     rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
     if rows:
@@ -887,6 +905,7 @@ def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
         genres = _movie_genres_for_line(item).replace(", ", " · ")
         _weekly_item(b, f"«{_item_value(item, 'title', '')}»", url,
                      (genres, _event_date_label(_item_value(item, "date", ""))))
+        _about_line(b, _item_value(item, "overview", ""))
     return bool(rows)
 
 
@@ -928,6 +947,7 @@ def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
             b, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
             (_book_premiere_genres(item), _event_date_label(_item_value(item, "published_date", "")), rating),
         )
+        _about_line(b, _item_value(item, "summary", ""))
     return bool(rows)
 
 
@@ -956,16 +976,17 @@ def _weekly_concert_rows(b: MessageBuilder, title, items, *, with_genre=False):
         b.newline()
 
 
-def weekly_concerts_card(mine, popular) -> MessageSpec:
-    """Рассылка «Концерты недели»: концерты любимых артистов, затем популярное рядом."""
+def weekly_concerts_card(mine, popular, title="🎫 Концерты недели") -> MessageSpec:
+    """Рассылка «Концерты недели» и экран «Концерты» Досуга: любимые артисты, затем популярное рядом."""
     b = MessageBuilder()
-    b.title("🎫 Концерты недели")
+    b.title(title)
     _weekly_concert_rows(b, "Твои артисты:", mine)
     _weekly_concert_rows(b, "Популярное рядом:", popular, with_genre=True)
     return b.build_stripped()
 
 
-LEISURE_HUB_LIMIT = 3
+LEISURE_HUB_LIMIT = 3      # новая музыка — три альбома в день
+LEISURE_HUB_FEATURED = 1   # кино и книги — по одной премьере в день с описанием
 
 
 _MONTHS_IN = ("в январе", "в феврале", "в марте", "в апреле", "в мае", "в июне", "в июле",
@@ -985,8 +1006,8 @@ def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city
         title += f" · {str(city).strip()}"
     b.title(title)
     if not _event_sections(b, (
-        ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_LIMIT),
-        ("Новые книги:", _book_event_rows, books, LEISURE_HUB_LIMIT),
+        ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_FEATURED),
+        ("Новые книги:", _book_event_rows, books, LEISURE_HUB_FEATURED),
         ("Новая музыка:", _music_event_rows, music, LEISURE_HUB_LIMIT),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
@@ -1002,14 +1023,22 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже «Настроить | Главная»."""
+    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже широкая «Концерты»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
          InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
+        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+def no_month_concerts() -> MessageSpec:
+    b = MessageBuilder()
+    b.title("🎫 Концерты на месяц")
+    b.line("В ближайшие 30 дней концертов рядом не нашлось.")
+    return b.build_stripped()
 
 
 def leisure_premieres_menu() -> MessageSpec:

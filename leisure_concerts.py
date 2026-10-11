@@ -1142,7 +1142,10 @@ def cached_favorite_concerts(cid, limit):
     )
 
 
-async def _build_weekly_events_msg(cid):
+_MONTH_CONCERT_DAYS = 30  # кнопка «Концерты» в Досуге — ближайшие 30 дней
+
+
+async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели"):
     """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
 
     Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
@@ -1153,7 +1156,7 @@ async def _build_weekly_events_msg(cid):
     s = store.get_settings(cid)
     cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
     period_start = datetime.now(config.TZ).date()
-    period_end = period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
+    period_end = period_start + timedelta(days=days)
     mine = concert_items_between(
         _concerts_cache_get(cid, cc) or [], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
     )
@@ -1167,7 +1170,12 @@ async def _build_weekly_events_msg(cid):
     ][:_WEEKLY_POPULAR_LIMIT]
     if not mine and not popular:
         return None
-    return leisure_ui.weekly_concerts_card(mine, popular)
+    return leisure_ui.weekly_concerts_card(mine, popular, title=title)
+
+
+async def build_month_concerts_msg(cid):
+    """Экран «Концерты» из Досуга: ближайшие 30 дней, без сети."""
+    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, "🎫 Концерты на месяц")
 
 
 async def send_weekend_events(bot, cid):

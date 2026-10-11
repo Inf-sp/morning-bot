@@ -92,27 +92,74 @@ def test_main_menu_has_leisure_hub_instead_of_four_sections():
 
 def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
     msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Дюна", "trailer_url": "https://y.example"}],
+        [{"title": "Дюна", "trailer_url": "https://y.example",
+          "overview": "Пол Атрейдес отправляется на Арракис. Дальше спойлеры."}],
         [{"title": "Книга", "url": "https://b.example"}] * 5,
         [{"title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "date": "2026-10-03",
           "url": "https://t.example"}],
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
-    assert msg.text.startswith("🍿 Досуг\n\nПремьеры кино:\n• «Дюна»\n\nНовые книги:")
+    assert msg.text.startswith(
+        "🍿 Досуг\n\nПремьеры кино:\n• «Дюна»\nПол Атрейдес отправляется на Арракис.\n\nНовые книги:")
     assert msg.text.endswith("Новая музыка:\n• «Blue Rev» — Alvvays · Инди · 3 октября")
     assert "Концерты" not in msg.text
     for title in ("Премьеры кино:", "Новые книги:", "«Дюна»", "«Книга»"):
         assert title in msg.text
     assert "игр" not in msg.text
-    assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_LIMIT
+    assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_FEATURED == 1
     assert {entity.url for entity in msg.entities if entity.url} >= {
         "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
         ["🎬 Кино", "📚 Книги", "🎧 Музыка"],
+        ["🎫 Концерты"],
         ["🎚️ Настроить", "#️⃣ Главная"],
     ]
+
+
+def test_hub_rotates_premieres_daily(monkeypatch):
+    import leisure_hub
+    from datetime import date, timedelta
+
+    movies = [{"title": f"Фильм {i}", "overview": "Описание."} for i in range(5)] + [{"title": "Без описания"}]
+    albums = [{"title": f"Альбом {i}", "artist": f"A{i}"} for i in range(10)]
+    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
+    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
+    monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: albums)
+
+    days = []
+    for offset in range(5):
+        day = date(2026, 10, 12) + timedelta(days=offset)
+        monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid, day=day: (day, "NL"))
+        days.append(leisure_hub.hub_data("42"))
+
+    # Кино: одна премьера в день, все пять с описанием за пять дней, без пустых.
+    assert all(len(data["movies"]) == 1 for data in days)
+    assert {data["movies"][0]["title"] for data in days} == {f"Фильм {i}" for i in range(5)}
+    # Музыка: три альбома, на следующий день — следующие три.
+    assert len(days[0]["music"]) == 3 and not {a["title"] for a in days[0]["music"]} & {
+        a["title"] for a in days[1]["music"]}
+
+
+def test_concerts_button_opens_month_concerts(monkeypatch):
+    import leisure_hub
+    shown = []
+
+    async def month(_cid):
+        return leisure_ui.weekly_concerts_card(
+            [{"title": "Placebo", "date": "2026-10-27", "venue": "Ziggo Dome", "city": "Amsterdam"}], [],
+            title="🎫 Концерты на месяц")
+
+    async def show(_bot, _cid, msg, q=None):
+        shown.append(msg)
+
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "build_month_concerts_msg", month)
+    monkeypatch.setattr(leisure_hub, "_show", show)
+    asyncio.run(leisure_hub.send_concerts(None, "42"))
+
+    assert shown[0].text.startswith("🎫 Концерты на месяц") and "Placebo" in shown[0].text
+    assert _callbacks(shown[0].reply_markup) == ["m_leisure", "m_menu"]
 
 
 def test_hub_hides_empty_blocks():

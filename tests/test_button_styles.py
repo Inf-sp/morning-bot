@@ -249,3 +249,17 @@ def test_leisure_dislike_row_goes_above_other_recommendation():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [row[0]["text"] for row in rows] == ["Не нравится", "Другой фильм", "Назад"]
+
+
+def test_settings_and_home_stack_into_one_column_home_last():
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+         InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib")],
+    ])
+    back = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="x"),
+                                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
+
+    assert [[b["text"] for b in row] for row in telegram_runtime._enhance_markup(markup)["inline_keyboard"]] == [
+        ["Настроить"], ["Главная"]]
+    assert [[b["text"] for b in row] for row in telegram_runtime._enhance_markup(back)["inline_keyboard"]] == [
+        ["Назад", "Главная"]]

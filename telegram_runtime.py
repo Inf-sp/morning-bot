@@ -252,7 +252,14 @@ def _enhance_markup(markup, level=2):
         len(order),
     )
     order[nav_at:nav_at] = sorted(prefs_rows)
-    return {"inline_keyboard": [rows[index] for index in order]}
+    result = []
+    for row in (rows[index] for index in order):
+        # «Настроить | Главная» — в один столбец: «Настроить», в самом низу «Главная».
+        if [str(button.get("text") or "") for button in row] == ["Настроить", "Главная"]:
+            result += [[row[0]], [row[1]]]
+        else:
+            result.append(row)
+    return {"inline_keyboard": result}
 
 
 class MenuCleanupBot(ExtBot):
