@@ -263,8 +263,12 @@ def day_menu(menu, *, cuisine_label, intro="", flag=""):
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes]))
 
 
-def food_menu(idea=None, *, meal=""):
-    """Полный рецепт блюда из меню дня для выбранного приёма пищи."""
+def food_menu(idea=None, *, meal="", from_fridge=False):
+    """Полный рецепт блюда из меню дня для выбранного приёма пищи.
+
+    from_fridge — рецепт «Из моих продуктов»: строка «Не хватает» и кнопка «Другой рецепт»;
+    у блюда меню дня (из любых продуктов) их нет.
+    """
     idea = idea or {}
     b = MessageBuilder()
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
@@ -288,7 +292,7 @@ def food_menu(idea=None, *, meal=""):
     missing = idea.get("missing_ingredients") or idea.get("missing") or []
     if isinstance(missing, str):
         missing = [missing]
-    missing = [str(item).strip() for item in missing if str(item).strip()]
+    missing = [str(item).strip() for item in missing if str(item).strip()] if from_fridge else []
     if missing:
         b.spacer()
         b.bold("Не хватает:")
@@ -317,7 +321,20 @@ def food_menu(idea=None, *, meal=""):
         b.italic(tip)  # финальная подсказка экрана — курсивом
         b.newline()
 
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_food")]))
+    rows = [[InlineKeyboardButton("✨ Другой рецепт", callback_data="food_mine_new")]] if from_fridge else []
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*rows, nav_row("m_food")]))
+
+
+def fridge_empty_for_mine():
+    """«Из моих продуктов» при пустом холодильнике: добавить продукты."""
+    b = MessageBuilder()
+    b.section("🧊 Из моих продуктов")
+    b.spacer()
+    b.line("В холодильнике нет отмеченных продуктов. Добавь, что есть дома, — и я соберу рецепт из них.")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Добавить продукт", callback_data="as_fridge_add")],
+        nav_row("m_food"),
+    ]))
 
 
 def food_card_kb(meals=None):
@@ -325,6 +342,8 @@ def food_card_kb(meals=None):
     meals = meals or [meal for meal, _label in _MEAL_NAMES]
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
+        # Рецепт из отмеченных продуктов холодильника под время суток; меню дня — из любых продуктов.
+        [InlineKeyboardButton("🧊 Из моих продуктов", callback_data="food_mine")],
         [InlineKeyboardButton("✨ Новое меню", callback_data="food_pick")],
         [InlineKeyboardButton("🎚️ Настроить", callback_data="as_fridge_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

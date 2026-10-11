@@ -147,6 +147,27 @@ async def _with_food_status(bot, cid, status, q, build):
             await status.stop(delete=True)
 
 
+async def send_mine_recipe(bot, cid, status=None, refresh=False):
+    """«Из моих продуктов»: рецепт только из отмеченных продуктов, приём пищи — по времени суток."""
+    import recipe_generation
+    from datetime import datetime
+    from fridge_model import _fridge_available
+    import config
+
+    if not _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid))):
+        msg = menu_ui.fridge_empty_for_mine()
+        await _deliver(bot, cid, msg, status)
+        return
+
+    async def build(status):
+        meal = recipe_generation._home_meal_for_hour(datetime.now(config.TZ).hour)
+        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh)
+        msg = menu_ui.food_menu(idea, meal=meal, from_fridge=True)
+        await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
+
+    await _with_food_status(bot, cid, status, None, build)
+
+
 async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None, cuisine=None):
     """Главный экран Готовки — меню на день; meal — полный рецепт блюда этого приёма пищи.
 

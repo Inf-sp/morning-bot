@@ -65,7 +65,7 @@ def test_ai_menu_is_validated_and_saved_with_history(monkeypatch):
     assert dishes["breakfast"] == {"name": "Crostata", "note": "песочный пирог с джемом"}
     assert dishes["dinner"]["name"] != "Crostata"  # повтор в одном меню заменён типичным блюдом
     assert dishes["dinner"]["name"] in {name for name, _ in recipe_generation.TYPICAL_DISHES["italian"]["dinner"]}
-    assert "Итальянская" in prompts[0] and "яйца" in prompts[0]
+    assert "Итальянская" in prompts[0] and "яйца" not in prompts[0]  # меню дня — из любых продуктов
     assert profile["cooking_day_menu"]["date"] == "2026-10-09"
     assert "Crostata" in profile["cooking_day_menu_history"]["names"]
     assert day_menu.get_cached_day_menu("42", now=NOW) == menu_data
@@ -109,6 +109,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
+        [("🧊 Из моих продуктов", "food_mine")],
         [("✨ Новое меню", "food_pick")],
         [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -274,3 +275,36 @@ def test_menu_dish_never_falls_back_to_an_unrelated_recipe(monkeypatch):
     with pytest.raises(ValueError):
         recipe_generation.get_cooking_home_idea(
             "42", cuisine="italian", dish={"name": "Ciambellone", "note": "домашний кекс к кофе"})
+
+
+def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
+    calls, shown = [], []
+    monkeypatch.setattr(menu.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda cid, now=None, refresh=False: calls.append(
+        refresh) or {"name": "Омлет с сыром", "cuisine": "french", "ingredients": ["яйца", "сыр"],
+                     "missing_ingredients": ["зелень"], "steps": [{"text": "Взбей яйца"}]})
+    monkeypatch.setattr(recipe_generation, "_home_meal_for_hour", lambda _hour: "dinner")
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            shown.append((text, kwargs["reply_markup"]))
+
+    asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True))
+
+    text, markup = shown[0]
+    assert calls == [True] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
+    assert "Не хватает:\nзелень" in text
+    assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_new"], ["m_food", "m_menu"]]
+
+
+def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
+    sent = []
+    monkeypatch.setattr(menu.store, "get_list", lambda *_a: [])
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            sent.append((text, kwargs["reply_markup"]))
+
+    asyncio.run(menu.send_mine_recipe(object(), "42", status=Status()))
+    assert sent[0][0].startswith("🧊 Из моих продуктов")
+    assert sent[0][1].inline_keyboard[0][0].callback_data == "as_fridge_add"

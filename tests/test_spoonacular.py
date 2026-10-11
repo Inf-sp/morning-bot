@@ -207,7 +207,7 @@ def test_code_card_formats_source_fields_without_ai():
         "steps": ["Boil the pasta.", "Add the vegetables."],
         "image": "https://img.spoonacular.com/recipes/716429-556x370.jpg",
         "code_fallback": True,
-    })
+    }, from_fridge=True)  # «Не хватает» — у рецепта «Из моих продуктов»
 
     assert "порц." not in message.text
     assert "⏱" not in message.text

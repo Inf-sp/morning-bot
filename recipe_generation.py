@@ -1028,6 +1028,9 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
     dish — {name, note} блюда из меню дня: тогда нужен рецепт именно этого блюда.
     """
     context = _home_idea_context(cid, now=now, cuisine=cuisine)
+    if dish:
+        # Блюдо меню дня — из любых продуктов: холодильник не ограничивает рецепт.
+        context = {**context, "available": [], "unavailable": [], "has_fridge": False}
     profile = store.get_profile(cid)
     entries = profile.get("cooking_home_ideas") or {}
     cached = entries.get(context["meal"]) if isinstance(entries, dict) else None

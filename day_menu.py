@@ -214,13 +214,12 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
 
 def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     """Новое меню на день: блюда AI, прошедшие проверку, иначе типичные из списка."""
-    import recipe_generation
     day = _today(now)
     cuisine = cuisine or day_cuisine(cid, day)
     profile = store.get_profile(cid) or {}
     avoided_names = list(dict.fromkeys([*_history(profile, now), *avoid]))
     avoided = {name.casefold() for name in avoided_names}
-    available = recipe_generation._home_idea_context(cid, now=now).get("available") or []
+    available = []  # меню дня — популярные блюда из любых продуктов; из холодильника — «Из моих продуктов»
     meals = _settings().food_meals(cid)
     restrictions = _settings().food_restrictions(cid)
     label = ""

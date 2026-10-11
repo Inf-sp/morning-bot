@@ -435,6 +435,9 @@ ROUTES = (
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
+    R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
+    R("food_mine_new", lambda c: c.status(
+        lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status, refresh=True))),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
     R("book_next", _picked(lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid)))),
