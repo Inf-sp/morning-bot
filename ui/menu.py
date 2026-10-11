@@ -170,7 +170,12 @@ def learning_menu(home: dict):
 
     # Грамматика: тема → Пример → объяснение курсивом (фраза дня — в «Моём дне», строка «Тренажер»).
     phrase = home.get("live_language") or {}
-    topic, explanation = _grammar_parts(phrase.get("rule"))
+    if phrase.get("topic") and phrase.get("explain"):
+        topic, explanation = phrase["topic"], _with_period(phrase["explain"])
+        if phrase.get("meaning"):
+            topic += f" → {phrase['meaning']}"
+    else:  # прежний краткий формат правила
+        topic, explanation = _grammar_parts(phrase.get("rule"))
     if topic:
         b.spacer()
         b.bold("Грамматика:")

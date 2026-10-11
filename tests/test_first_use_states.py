@@ -589,3 +589,20 @@ def test_each_daily_phrase_has_grammar_and_another_example():
             assert phrase["rule"].count("_") % 2 == 0 and "_" in phrase["rule"]
             assert " → " in phrase["rule"] or phrase["rule"].startswith(("Present", "Третий"))
             assert phrase["more"] != phrase["text"]
+
+
+def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
+    import live_language
+    from ui import menu as menu_ui
+    lesson = next(item for item in live_language._DAILY_PHRASES["nl"] if item["topic"] == "Hoeven … te")
+
+    text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
+
+    assert text.split("\n\n")[1:] == [
+        "Грамматика: Hoeven … te → не нужно что-то делать",
+        "Пример: Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
+        "Обычно используется с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце: "
+        "We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
+    ]
+    assert all(item.get("topic") and item.get("meaning") and item.get("explain")
+               for items in live_language._DAILY_PHRASES.values() for item in items)

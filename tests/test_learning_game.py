@@ -31,7 +31,7 @@ def test_dutch_detective_result_shows_explanation_and_words_without_russian_labe
 
     assert message.text.startswith("✅ Zaak opgelost!")
     assert "Een kat heeft snorharen" in message.text
-    assert "📚 Onthoud:" in message.text
+    assert "Onthoud:" in message.text and "📚" not in message.text
     assert "• snorharen → усы" in message.text
     assert "Дело раскрыто" not in message.text
     assert "Почему:" not in message.text
@@ -263,7 +263,7 @@ def test_detective_expands_local_catalogue_after_the_legacy_cards_are_played(mon
 def test_detective_result_keyboard_uses_renamed_followup_button():
     kb = learning_game._game_result_kb(learning_game.GAME_UI["русский"])
 
-    assert kb.inline_keyboard[0][0].text == "✨ Ещё одна загадка"
+    assert kb.inline_keyboard[0][0].text == "✨ Ещё загадка"
 
 
 def test_detective_rejects_vague_clues_without_a_signature():
@@ -527,3 +527,12 @@ def test_detective_photo_search_returns_first_horizontal_result(monkeypatch):
     photo = travel_photos.find_illustration("Кошка")
 
     assert photo["id"] == "first"
+
+
+def test_detective_card_and_hint_end_with_italic_answer_instruction():
+    from ui import learning as learning_ui
+    ui = learning_game.GAME_UI["нидерландский"]
+    for msg in (learning_ui.game_card(ui, "Ik heb snorharen."), learning_ui.game_hint(ui, "Ik jaag op muizen.")):
+        italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+                  for e in msg.entities if e.type == "italic"]
+        assert msg.text.rstrip().endswith(ui["reply_next"]) and italic[-1] == ui["reply_next"]

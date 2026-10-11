@@ -164,7 +164,9 @@ def game_card(ui, description, category=""):
         b.spacer()
     b.line(description)
     b.spacer()
-    b.line(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    # Финальная подсказка экрана — курсивом.
+    b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -195,7 +197,7 @@ def game_found(ui, answer, body="", words=None):
     ][:3]
     if valid_words:
         b.spacer()
-        b.bold(ui.get("remember", "📚 Запомни:"))
+        b.bold(ui.get("remember", "Запомни:"))
         b.newline()
         for item in valid_words:
             b.bullet(f"{item['word']} → {item['translation']}")
@@ -210,6 +212,8 @@ def game_hint(ui, hint):
     b.spacer()
     b.bold(hint)
     b.spacer()
+    b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    b.newline()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs={"style": "danger"})],
         [

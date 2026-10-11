@@ -90,7 +90,7 @@ def _guide(code="af"):
     lessons = [{"text": f"Les {i}", "translation": f"Урок {i}", "rule": "_Hoe_ → как.", "more": "Hoe laat?",
                 "more_translation": "Который час?"} for i in range(7)]
     words = [{"text": f"Woord {i}", "ru": f"Слово {i}", "say": f"вурд {i}"} for i in range(30)]
-    return {"v": 2, "language_code": code, "language_ru": "Африкаанс", "lessons": lessons, "words": words}
+    return {"v": 3, "language_code": code, "language_ru": "Африкаанс", "lessons": lessons, "words": words}
 
 
 def test_learning_switches_to_country_language_only_for_other_language(monkeypatch):
@@ -135,7 +135,7 @@ def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
     saved, _places = _env(monkeypatch, CAPE)
     saved["vacation"] = {"home": HOME, "cc": "IT"}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "italian"
-    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 2, "cuisine_ru": "Южноафриканская"}}
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 3, "cuisine_ru": "Южноафриканская"}}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "local_za"
     assert day_menu.cuisine_flag("local_za") == "🇿🇦"
 

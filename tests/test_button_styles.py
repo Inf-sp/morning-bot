@@ -240,12 +240,12 @@ def test_main_section_actions_have_standard_color():
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert [row[0].get("style") for row in rows] == [None] * len(labels)
     assert [row[0]["text"] for row in rows] == [label.split(" ", 1)[1] for label in labels]
-    # «Ещё одна загадка» тоже стандартная; остальные «Другой … / Ещё …» по-прежнему зелёные.
+    # «Ещё загадка» тоже стандартная; остальные «Другой … / Ещё …» по-прежнему зелёные.
     other = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
-        [InlineKeyboardButton("✨ Ещё одна загадка", callback_data="m")],
+        [InlineKeyboardButton("✨ Ещё загадка", callback_data="m")],
         [InlineKeyboardButton("✨ Ещё один вариант", callback_data="v")]]))["inline_keyboard"]
     styles = {row[0]["text"]: row[0].get("style") for row in other}
-    assert styles == {"Ещё одна загадка": None, "Ещё один вариант": "success"}
+    assert styles == {"Ещё загадка": None, "Ещё один вариант": "success"}
 
 
 def test_leisure_dislike_row_goes_above_other_recommendation():
