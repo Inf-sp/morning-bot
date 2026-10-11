@@ -45,29 +45,88 @@ def test_chat_command_adds_dutch_article_lifehack_to_json(tmp_path, monkeypatch)
     )
 
 
-def test_local_lifehack_is_mixed_with_existing_ai_pool(monkeypatch):
+def _pool(monkeypatch, items, last_topic=""):
+    saved = {"42": {"default": {"items": items, "last_topic": last_topic}}}
     monkeypatch.setattr(myday, "_pool_ensure_fresh", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(myday, "_pool_get", lambda *_args: {
-        "items": [{
-            "id": 1,
-            "text": "Чтобы быстрее собрать вещи, подготовь одежду вечером.",
-            "category": "продуктивность",
-            "shown_at": None,
-        }],
-    })
-    monkeypatch.setattr(myday, "_local_lifehack_candidates", lambda *_args, **_kwargs: [{
-        "id": "local:1",
-        "text": "DE — синий, HET — оранжевый. Представляй слова с de синими, а с het — оранжевыми.",
-        "category": "язык",
-        "emoji": "🇳🇱",
-    }])
-    monkeypatch.setattr(myday.random, "random", lambda: 0.1)
-    monkeypatch.setattr(myday.store, "set_list", lambda *_args: None)
+    monkeypatch.setattr(myday, "_pool_get", lambda *_args: saved["42"]["default"])
+    monkeypatch.setattr(myday, "_lifehack_signature", lambda _cid: "sig")
 
-    label, text = myday.daily_lifehack("42")
+    def mutate(_key, change):
+        change(saved)
 
-    assert label == "🇳🇱 Язык"
-    assert text.startswith("DE — синий")
+    monkeypatch.setattr(myday.store, "mutate_kv", mutate)
+    return saved["42"]["default"]
+
+
+TIPS = [
+    {"id": 1, "topic": "home", "text": "Протри экран телефона микрофиброй раз в день, чтобы меньше бликов.", "shown_at": None},
+    {"id": 2, "topic": "wardrobe", "text": "Суши шерстяную кофту на полотенце горизонтально, чтобы она не растянулась.", "shown_at": None},
+    {"id": 3, "topic": "kitchen", "text": "Храни авокадо отдельно от бананов, чтобы оно не перезрело за ночь.", "shown_at": None},
+]
+
+
+def test_lifehack_prefers_weather_topic_then_alternates_topics(monkeypatch):
+    monkeypatch.setattr(myday, "lifehack_topics_on", lambda _cid: ["wardrobe", "kitchen", "home"])
+    bucket = _pool(monkeypatch, [dict(tip) for tip in TIPS], last_topic="home")
+
+    label, text = myday.daily_lifehack("42", rain=True)  # дождь — гардероб первым
+    assert label == "👔 Гардероб" and text.startswith("Суши шерстяную кофту")
+    label, text = myday.daily_lifehack("42")  # вчера гардероб — сегодня другая тема
+    assert bucket["last_topic"] != "wardrobe" and not text.startswith("Суши")
+
+
+def test_disabled_topic_and_general_base_only_as_fallback(monkeypatch):
+    monkeypatch.setattr(myday, "lifehack_topics_on", lambda _cid: ["kitchen"])
+    _pool(monkeypatch, [dict(tip) for tip in TIPS])
+    monkeypatch.setattr(myday, "_local_lifehack_candidates", lambda *_a, **_k: (_ for _ in ()).throw(
+        AssertionError("общая база при живом пуле не нужна")))
+
+    assert myday.daily_lifehack("42")[0] == "🥣 Кухня"
+
+    _pool(monkeypatch, [])
+    monkeypatch.setattr(myday, "_mark_local_lifehack_seen", lambda *_a: None)
+    monkeypatch.setattr(myday, "_local_lifehack_candidates", lambda *_a, **_k: [
+        {"id": "l1", "category": "язык", "text": "de/het"},
+        {"id": "l2", "category": "кухня", "text": "Заморозь зелень в масле, чтобы она дольше хранилась."}])
+    assert myday.daily_lifehack("42")[1].startswith("Заморозь зелень")  # только включённая тема
+
+
+def test_lifehack_pool_is_personal_and_regenerates_when_data_changes(monkeypatch):
+    import settings
+    prompts, stored = [], []
+    monkeypatch.setattr(myday, "lifehack_topics_on", lambda _cid: ["wardrobe", "language"])
+    monkeypatch.setattr(myday, "_lifehack_profile", lambda _cid: {
+        "wardrobe": ["Серая худи хлопок", "Пуховик"], "language": {"language": "нидерландский", "level": "B1+"},
+        "kitchen": {"products": ["авокадо"]}})
+    monkeypatch.setattr(myday, "_store_ai_lifehacks", lambda items: stored.append(items))
+
+    def llm(prompt, *_a, **_k):
+        prompts.append(prompt)
+        return {"tips": [
+            {"topic": "wardrobe", "text": "Стирай серую худи наизнанку при 30 градусах, чтобы принт не трескался."},
+            {"topic": "kitchen", "text": "Храни авокадо в холодильнике после разреза, чтобы оно не потемнело."},
+        ]}
+
+    monkeypatch.setattr(myday.ai, "llm_json", llm)
+    tips = myday._generate_lifehack_pool("42")
+
+    assert [extra["topic"] for _text, extra in tips] == ["wardrobe"]  # выключенная тема отброшена
+    assert "Серая худи" in prompts[0] and "авокадо" not in prompts[0]
+    assert stored == []  # персональные советы не попадают в общий каталог
+    del settings
+
+    saved, generated = {}, []
+    monkeypatch.setattr(myday, "_pool_get", lambda *_a: saved.get("b") or {})
+    monkeypatch.setattr(myday, "_pool_save", lambda _k, _c, _p, items, signature="": saved.__setitem__(
+        "b", {"items": items, "signature": signature, "week": myday._iso_week_key(),
+              "version": myday._LIFEHACK_POOL_VERSION}))
+    many = [(f"Сложи кофту рулоном номер {i}, чтобы она не мялась в шкафу и быстрее сохла.", {"topic": "wardrobe"})
+            for i in range(8)]
+    gen = lambda: generated.append(1) or many  # noqa: E731
+    myday._pool_ensure_fresh("k", "42", "default", gen, signature="a")
+    myday._pool_ensure_fresh("k", "42", "default", gen, signature="a")
+    myday._pool_ensure_fresh("k", "42", "default", gen, signature="b")  # новая вещь, продукт или язык
+    assert len(generated) == 2
 
 
 def test_lifehack_command_can_collect_text_in_second_message(monkeypatch):
@@ -131,3 +190,21 @@ def test_lifehack_catalog_is_seeded_into_store_once(tmp_path, monkeypatch):
     (tmp_path / "lifehacks.json").write_text("[]", encoding="utf-8")
 
     assert [item["id"] for item in myday.lifehack_records()] == ["lh_1"]
+
+
+def test_lifehack_topics_toggle_on_myday_settings(monkeypatch):
+    import asyncio
+    import settings
+    saved, shown, resets = {}, [], []
+    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: saved.get(key, default))
+    monkeypatch.setattr(settings, "set_", lambda _cid, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(myday, "reset_day_cache", resets.append)
+
+    async def show(_bot, _cid, _msg, reply_markup=None, query=None):
+        shown.append([b.text for row in reply_markup.inline_keyboard for b in row])
+
+    monkeypatch.setattr(settings.rich_delivery, "show", show)
+    asyncio.run(settings.handle_callback(None, "42", "set_lhtopic_language"))
+
+    assert myday.lifehack_topics_on("42") == ["wardrobe", "kitchen", "city", "home"]
+    assert "□ Язык" in shown[-1] and "✅ Гардероб" in shown[-1] and resets == ["42"]

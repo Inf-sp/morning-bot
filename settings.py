@@ -124,9 +124,16 @@ def myday_block_on(cid, key) -> bool:
 
 
 async def send_myday_blocks(bot, cid, q=None):
+    import myday
     rows = [[InlineKeyboardButton(("✅ " if myday_block_on(cid, key) else "□ ") + label,
                                   callback_data=f"set_mydaytgl_{key}")]
             for key, label in MYDAY_BLOCKS]
+    if myday_block_on(cid, "lifehack"):
+        # Темы лайфхаков — по одной в строке; выключенная тема не показывается.
+        on = myday.lifehack_topics_on(cid)
+        rows.extend([[InlineKeyboardButton(("✅ " if key in on else "□ ") + label.split(" ", 1)[-1],
+                                           callback_data=f"set_lhtopic_{key}")]
+                     for key, label in myday.LIFEHACK_TOPICS])
     rows.append(nav_row("m_myday"))  # вход — «Настроить» под «Моим днём»
     await rich_delivery.show(bot, cid, settings_ui.myday_blocks(), reply_markup=InlineKeyboardMarkup(rows), query=q)
 
@@ -1287,6 +1294,14 @@ async def handle_callback(bot, cid, data, q=None):
         await send_myday_blocks(bot, cid, q)
     elif data == "set_myday_new":  # «Настроить» под «Моим днём»: новым сообщением, сводка остаётся
         await send_myday_blocks(bot, cid)
+    elif data.startswith("set_lhtopic_"):
+        import myday
+        key = data[len("set_lhtopic_"):]
+        if key in dict(myday.LIFEHACK_TOPICS):
+            off = [item for item in (get(cid, "lifehack_topics_off", []) or []) if item in dict(myday.LIFEHACK_TOPICS)]
+            set_(cid, "lifehack_topics_off", [item for item in off if item != key] if key in off else [*off, key])
+            myday.reset_day_cache(cid)
+        await send_myday_blocks(bot, cid, q)
     elif data.startswith("set_mydaytgl_"):
         await toggle_myday_block(bot, cid, data[len("set_mydaytgl_"):], q)
     elif data.startswith("set_notifopen_"):
