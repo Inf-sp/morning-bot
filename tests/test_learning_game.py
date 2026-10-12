@@ -606,3 +606,34 @@ def test_fallback_card_gets_ai_fact_instead_of_generic_line(monkeypatch):
 
     assert sent[0]["text"] == "✅ Zaak opgelost!\n\nde broccoli\n\nBroccoli is familie van de bloemkool."
     assert "Deze extra hint" not in sent[0]["text"]
+
+
+def test_ordinary_ai_riddle_is_accepted_without_magic_marker_words():
+    riddle = {
+        "description": "Ik ben een grote vrucht. Van buiten ben ik groen en hard, van binnen rood en zoet. "
+                       "In de zomer eten mensen mij graag koud.",
+        "answer": "de watermeloen", "aliases": ["арбуз", "watermelon"],
+        "hint": "Ik heb veel zwarte pitjes.", "explain": "Een watermeloen bestaat voor 92% uit water.",
+    }
+    assert learning_game._description_is_guessable(riddle, "нидерландский")
+    # Подсказка, которая просто повторяет описание, — брак.
+    assert not learning_game._description_is_guessable({**riddle, "hint": "Ik ben een grote vrucht."}, "нидерландский")
+
+
+def test_when_every_riddle_was_played_the_oldest_comes_back_instead_of_error(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    cards = list(learning_game._LOCAL_GAME_CARDS["нидерландский"]) + learning_game._extra_local_game_cards("нидерландский")
+    played = [card["answer"] for card in cards]  # всё сыграно, первой — самая давняя
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "нидерландский"}})
+    monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: played)
+    monkeypatch.setattr(learning_game, "_remember_game_answer", lambda *_a: None)
+    monkeypatch.setattr(learning_game, "game_data", lambda *_a, **_k: {})  # AI недоступен
+    asyncio.run(learning_game.send_game(Bot(), "42"))
+
+    assert "geen nieuw raadsel" not in sent[0]["text"]
+    assert learning_game.store.game_state["42"]["answer"] == cards[0]["answer"]

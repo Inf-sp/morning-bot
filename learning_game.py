@@ -231,20 +231,6 @@ def _remember_game_answer(cid, d):
     _set_game_recent(cid, rec)
 
 
-_GAME_SIGNATURE_MARKERS = (
-    "ус", "whisker", "snorhaar", "snorhar", "муз", "mouse", "mice", "muis", "хобот", "trunk", "slurf", "грива", "mane", "manen",
-    "паутина", "web", "spinnen", "волшебн", "wand", "toverstaf", "зелён", "зелен", "green", "groen",
-    "болот", "swamp", "moeras", "крыл", "wing", "vleugel", "чёрно-бел", "черно-бел", "black and white", "zwart-wit",
-    "лёд", "лед", "ice", "ijs", "мёд", "мед", "honey", "honing", "маск", "mask", "gotham", "готэм",
-    "hogwarts", "хогвартс", "arendelle", "аренд", "fiona", "фиона", "minnie", "минни", "mufasa", "муфаса",
-    "дональд", "donald", "красн.*шорт", "red shorts", "rode broek", "осёл", "осел", "donkey",
-    "картоф", "potato", "aardappel", "сыр", "cheese", "kaas", "колес", "wheel", "wiel", "руль", "steering wheel", "stuur",
-    "водител", "driver", "chauffeur", "пилот", "pilot", "piloot", "врач", "doctor", "arts", "учител", "teacher", "leraar",
-    "пожарн", "firefighter", "brandweer", "автобус", "bus", "поезд", "train", "trein", "самолёт", "самолет", "plane", "vliegtuig",
-    "мяу", "meow", "miauw", "лаять", "bark", "blaf", "woof", "хвост", "tail", "staart", "лап", "paws", "poten",
-    "печь", "oven", "fornuis", "экран", "screen", "scherm", "звон", "ring", "bellen", "больн", "sick", "ziek",
-    "больниц", "hospital", "ziekenhuis", "пациент", "patient", "patiënt", "ученик", "student", "leerling",
-)
 _GAME_VAGUE_CLUE_MARKERS = (
     "активен ночью", "active at night", "'s nachts actief", "большие глаза", "big eyes", "grote ogen",
     "любит рыбу", "likes fish", "houdt van vis", "известн.*друг", "известн.*подруг", "known friend",
@@ -459,6 +445,18 @@ def _local_game_data(clue_lang, recent):
     return {}
 
 
+def _oldest_local_card(lang, recent):
+    """Все локальные загадки сыграны: та, что была давнее всех, — лучше, чем «новой загадки нет»."""
+    cards = list(_LOCAL_GAME_CARDS.get(lang) or _LOCAL_GAME_CARDS["английский"]) + _extra_local_game_cards(lang)
+
+    def played_at(card):
+        names = [card.get("answer"), *(card.get("aliases") or [])]
+        return next((index for index, old in enumerate(recent) if any(_game_same(old, name) for name in names)), -1)
+
+    card = min(cards, key=played_at) if cards else None
+    return {**card, "_local": True} if card else {}
+
+
 def _description_is_guessable(data, lang=None):
     """Проверяет связное языковое описание, а не список отдельных улик."""
     description = " ".join(str(data.get("description") or "").split())
@@ -478,22 +476,14 @@ def _description_is_guessable(data, lang=None):
         or not _game_has_target_language(data.get("explain", ""), lang)
     ):
         return False
-    if data.get("_trusted_local") or (lang and lang not in _BASE_GAME_LANGS):
-        # Маркеры отличительных признаков — для английского и нидерландского; для языка страны
-        # отпуска достаточно структурных проверок выше.
+    if data.get("_trusted_local"):
         return True
+    # Туманные улики («активен ночью», «большие глаза») — не больше одной; подсказка добавляет новое,
+    # а не повторяет описание. Жёсткого списка «обязательных» слов нет: он отбрасывал нормальные загадки.
     combined = " ".join((description, hint, data.get("explain", ""))).casefold()
-    vague_count = sum(bool(re.search(marker, combined)) for marker in _GAME_VAGUE_CLUE_MARKERS)
-    signature_count = sum(bool(re.search(marker, combined)) for marker in _GAME_SIGNATURE_MARKERS)
-    hint_signature_count = sum(bool(re.search(marker, hint.casefold())) for marker in _GAME_SIGNATURE_MARKERS)
-    if signature_count < 1 or vague_count >= 2 or hint_signature_count < 1:
+    if sum(bool(re.search(marker, combined)) for marker in _GAME_VAGUE_CLUE_MARKERS) >= 2:
         return False
-    # Подсказка обязана добавлять отличительный признак, а не повторять общий текст.
-    return any(
-        marker not in description.casefold()
-        for marker in _GAME_SIGNATURE_MARKERS
-        if re.search(marker, hint.casefold())
-    )
+    return hint.casefold().rstrip(".!") not in description.casefold()
 
 
 def game_data(clue_lang, recent, attempt=0, country=""):
@@ -620,7 +610,7 @@ async def send_game(bot, cid, status=None):
             # Повторы и невалидный формат от AI не должны оставлять пользователя
             # без раунда. Локальный резерв сверяем только с реальными сыгранными
             # загадками: неудачная попытка AI не может спрятать новую карточку.
-            fallback = _local_game_data(lang, recent)
+            fallback = _local_game_data(lang, recent) or _oldest_local_card(lang, recent)
             if fallback.get("answer") and _description_is_guessable(fallback, lang):
                 d = fallback
             else:
