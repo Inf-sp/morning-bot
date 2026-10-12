@@ -1,8 +1,11 @@
 """Маршрутизация inline callback-кнопок."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import NamedTuple
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import access
 import callback_topics
@@ -45,55 +48,108 @@ def _status_topic(data):
 
 
 def _status_stages(data):
-    """Возвращает статусы ожидания с понятным первым действием."""
+    """Фразы ожидания на нажатой кнопке: меняются, пока экран готовится, и говорят, что происходит."""
     topic = _status_topic(data)
-    stages = util.StatusManager.TOPIC_STAGES.get(topic) if topic else None
-    if not stages:
-        stages = util.StatusManager.STAGES
 
-    def progress(first, second, final):
-        return ((0, first), (2, second), (6, final))
+    def progress(*texts):
+        return tuple(zip((0, 1.5, 3.5, 6), texts))
 
-    if data in ("m_food", "m_food_next") or data.startswith("food_go_"):
-        return progress("🍳 Составляю меню...", "🧊 Сверяю холодильник...", "📝 Подбираю блюда...")
+    if data in ("m_food", "m_food_next", "food_pick") or data.startswith("food_go_"):
+        return progress("🍳 Составляю меню...", "🌍 Выбираю кухню дня...", "🥕 Подбираю блюда...", "📝 Пишу меню...")
     if data.startswith("a_recipe_"):
-        return progress("🍳 Готовлю рецепт...", "🧊 Сверяю холодильник...", "📝 Пишу шаги...")
-    if data.startswith(("as_food", "as_fridge_cook", "food_")):
-        first = "⏳ Ищу рецепт..."
-    elif data == "w_look":
-        first = "⏳ Ищу образ..."
-    elif data.startswith(("movie_", "a_watch")):
-        first = "🎬 Ищу кино..."
-    elif data.startswith(("book_", "a_read")):
-        first = "📚 Ищу книгу..."
-    elif data.startswith(("music_", "listen", "a_listen")):
-        first = "🎧 Ищу музыку..."
-    elif data.startswith("a_concerts"):
-        return progress("🎫 Ищу концерт...", "📅 Проверяю афишу...", "📝 Готовлю события...")
-    elif data.startswith(("game", "a_game")):
-        return progress("🕵️ Ищу загадку...", "📖 Проверяю текст...", "🧩 Собираю загадку...")
-    elif data.startswith(("a_dict", "word_")):
-        return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "📝 Готовлю карточку...")
-    elif data.startswith(("a_train", "a_tr_", "ex_", "again_tr_")):
-        first = "🧠 Ищу задание..."
-    elif data == "m_wardrobe":
-        first = "⏳ Ищу образ..."
-    elif data in ("a_plany", "m_myday", "weather_myday"):
-        return progress("☀️ Собираю мой день...", "🌦️ Сверяю планы...", "📝 Готовлю сводку...")
-    elif data in ("a_w_full", "a_w_week"):
-        return progress("🌦️ Ищу прогноз...", "🗓️ Сверяю дни...", "📝 Готовлю прогноз...")
-    elif topic == "wardrobe":
-        first = "⏳ Ищу образ..."
-    elif topic == "food":
-        first = "⏳ Ищу рецепт..."
-    elif topic == "learning":
-        first = "🧠 Ищу задание..."
-    elif topic == "leisure":
-        first = "✨ Ищу рекомендацию..."
-    else:
-        return stages
-    return ((0, first), *stages[1:])
+        return progress("📖 Открываю книгу рецептов...", "🥄 Отмеряю ингредиенты...", "🔥 Пишу шаги...",
+                        "✨ Добавляю совет шефа...")
+    if data.startswith("food_mine"):
+        return progress("🧊 Заглядываю в холодильник...", "🥕 Смотрю, что есть...", "🍳 Придумываю блюдо...",
+                        "📝 Пишу рецепт...")
+    if data.startswith(("as_food", "as_fridge_cook", "food_", "as_recipe")):
+        return progress("⏳ Ищу рецепт...", "🥕 Сверяю продукты...", "🍳 Готовлю рецепт...", "📝 Пишу шаги...")
+    if data in ("m_wardrobe", "w_look") or data.startswith(("w_lookst_", "w_with_")):
+        return progress("👕 Открываю шкаф...", "🌦️ Смотрю на погоду...", "🎨 Подбираю цвета...", "🧩 Собираю образ...")
+    if data.startswith("w_buy"):
+        return progress("🛍️ Смотрю шкаф...", "🧮 Считаю сочетания...", "🔎 Ищу пробелы...", "📝 Готовлю список...")
+    if data in ("m_leisure", "lz_more", "watch", "read", "listen"):
+        return progress("🎬 Смотрю афиши кинотеатров...", "📚 Листаю новые книги...", "🎧 Слушаю свежие альбомы...",
+                        "🍿 Собираю досуг...")
+    if data == "lz_concerts" or data.startswith(("a_concerts", "concerts_")):
+        return progress("🎫 Проверяю афиши...", "🎸 Ищу твоих артистов...", "🏟️ Смотрю площадки рядом...",
+                        "📝 Собираю концерты...")
+    if data.startswith("nov_"):
+        return progress("🆕 Ищу свежие релизы...", "🌍 Смотрю страну...", "📝 Пишу описание...", "✨ Почти готово...")
+    if data.startswith(("movie_", "a_watch", "mfi:", "m_movie")):
+        return progress("🎬 Перебираю фильмы...", "🍿 Сверяю с твоим вкусом...", "⭐ Смотрю оценки...",
+                        "🎞️ Ищу трейлер...")
+    if data.startswith(("book_", "a_read", "bfi:")):
+        return progress("📚 Листаю полки...", "🔖 Сверяю с твоим вкусом...", "⭐ Смотрю отзывы читателей...",
+                        "📝 Готовлю карточку...")
+    if data.startswith(("music_", "listen", "a_listen", "artist_")):
+        return progress("🎧 Слушаю новинки...", "🎸 Ищу похожих артистов...", "🎵 Подбираю треки...",
+                        "📝 Готовлю карточку...")
+    if data.startswith(("game", "a_game")):
+        return progress("🕵️ Ищу загадку...", "📖 Пишу описание...", "🧩 Прячу подсказки...", "🔎 Проверяю ответ...")
+    if data.startswith(("a_dict", "word_")):
+        return progress("📖 Ищу слово...", "🔤 Проверяю форму...", "🗂️ Раскладываю по темам...", "📝 Готовлю карточку...")
+    if data.startswith(("a_train", "a_tr_", "ex_", "again_tr_", "vac_train")):
+        return progress("🧠 Ищу задание...", "📚 Подбираю слова...", "🎯 Готовлю упражнение...", "✨ Почти готово...")
+    if data in ("m_learn",) or topic == "learning":
+        return progress("🧠 Открываю урок...", "📖 Выбираю тему дня...", "✍️ Пишу пример...", "✨ Почти готово...")
+    if data in ("a_plany", "m_myday", "weather_myday"):
+        return progress("☀️ Смотрю на погоду...", "👕 Подбираю образ...", "🦉 Ищу лайфхак...", "📝 Собираю мой день...")
+    if data in ("a_w_full", "a_w_week") or data.startswith("weather"):
+        return progress("🌦️ Смотрю прогноз...", "🌡️ Сверяю температуру...", "💨 Проверяю ветер...",
+                        "📝 Готовлю прогноз...")
+    if data.startswith("adm_"):
+        return progress("🛠️ Проверяю систему...", "📊 Собираю данные...", "📝 Готовлю отчёт...", "✨ Почти готово...")
+    if data.startswith(("set_", "as_")):
+        return progress("⚙️ Открываю настройки...", "🔍 Проверяю данные...", "📝 Готовлю экран...", "✨ Почти готово...")
+    if topic == "wardrobe":
+        return progress("👕 Открываю шкаф...", "🔍 Ищу вещи...", "🧩 Собираю экран...", "✨ Почти готово...")
+    if topic == "food":
+        return progress("🍳 Заглядываю на кухню...", "🥕 Сверяю продукты...", "📝 Готовлю экран...", "✨ Почти готово...")
+    if topic == "leisure":
+        return progress("✨ Ищу рекомендацию...", "🎯 Учитываю предпочтения...", "📝 Готовлю карточку...",
+                        "🍿 Почти готово...")
+    return progress("⏳ Готовлю ответ...", "🔍 Проверяю данные...", "📝 Собираю экран...", "✨ Почти готово...")
 
+
+_WAITING_AFTER = 0.7  # быстрый экран — без мигания; дольше — зелёная плашка ожидания на нажатой кнопке
+
+
+async def _run_with_waiting(q, data, task, status_used):
+    """Отложенный индикатор для любой кнопки: если ответ не готов за _WAITING_AFTER и у сценария нет
+    своего статуса, на нажатой кнопке появляются меняющиеся фразы ожидания. Как только обработчик сам
+    изменил сообщение (новый экран), индикатор останавливается и прежние кнопки не возвращает."""
+    import telegram_runtime
+    done, _pending = await asyncio.wait({task}, timeout=_WAITING_AFTER)
+    message = getattr(q, "message", None)
+    if done or status_used() or data == "noop" or message is None:
+        return await task
+    chat_id, message_id = message.chat_id, message.message_id
+    base, own = telegram_runtime.message_edits(chat_id, message_id), 0
+    original = message.reply_markup
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        for delay, text in _status_stages(data):
+            wait = delay - (loop.time() - started)
+            if wait > 0:
+                await asyncio.wait({task}, timeout=wait)
+            if task.done() or status_used() or telegram_runtime.message_edits(chat_id, message_id) != base + own:
+                break
+            try:
+                await message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(text, callback_data="noop")]]))
+                own += 1
+            except Exception:
+                break
+        return await task
+    finally:
+        # Обработчик не трогал сообщение (прислал ответ отдельно) — возвращаем прежние кнопки.
+        if own and telegram_runtime.message_edits(chat_id, message_id) == base + own:
+            try:
+                await message.edit_reply_markup(reply_markup=original)
+            except Exception:
+                _log.debug("waiting indicator: markup restore failed data=%s", data, exc_info=True)
 
 
 class R(NamedTuple):
@@ -549,7 +605,10 @@ async def handle(update, context, remove_reply_keyboard):
     bot = context.bot
     data = _legacy_alias(q.data)
 
+    status_used = []
+
     async def _inline_status(call, *, preserve_message=True):
+        status_used.append(True)  # у сценария свой индикатор — отложенный не нужен
         section = home_cache.SECTION_BY_CALLBACK.get(data)
         if section and home_cache.is_ready(section, cid):
             # Экран раздела уже готов («Назад», повторный вход): без индикатора.
@@ -589,4 +648,5 @@ async def handle(update, context, remove_reply_keyboard):
         trainer.cancel(cid)
     route = _first(ROUTES, data)
     if route:
-        await route.handler(Ctx(bot, cid, q, data, _inline_status))
+        task = asyncio.ensure_future(route.handler(Ctx(bot, cid, q, data, _inline_status)))
+        await _run_with_waiting(q, data, task, lambda: bool(status_used))

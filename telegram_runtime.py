@@ -265,12 +265,33 @@ def _enhance_markup(markup, level=2):
     return {"inline_keyboard": result}
 
 
+# Сколько раз бот менял или удалял сообщение (chat_id, message_id): индикатор ожидания по нему
+# понимает, что обработчик уже показал новый экран, и не затирает его старыми кнопками.
+_EDIT_ENDPOINTS = {"editMessageText", "editMessageCaption", "editMessageMedia",
+                   "editMessageReplyMarkup", "deleteMessage"}
+_message_edits: dict = {}
+_MESSAGE_EDITS_MAX = 5000
+
+
+def message_edits(chat_id, message_id) -> int:
+    return _message_edits.get((str(chat_id), int(message_id or 0)), 0)
+
+
+def _count_edit(endpoint, data):
+    if endpoint in _EDIT_ENDPOINTS and data.get("message_id"):
+        if len(_message_edits) > _MESSAGE_EDITS_MAX:
+            _message_edits.clear()  # ponytail: грубая очистка, счётчик нужен только на секунды нажатия
+        key = (str(data.get("chat_id")), int(data["message_id"]))
+        _message_edits[key] = _message_edits.get(key, 0) + 1
+
+
 class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
     async def _post(self, endpoint, data=None, *, api_kwargs=None, **kwargs):
         global _buttons_enhanced, _button_level
         data = {**(data or {}), **(api_kwargs or {})}
+        _count_edit(endpoint, data)
         start = _button_level if _buttons_enhanced else 0
         last_error = None
         for level in range(start, -1, -1):

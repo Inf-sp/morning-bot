@@ -62,28 +62,3 @@ def test_book_fact_is_asked_even_without_publisher_description(monkeypatch):
     assert item["fact"].startswith("В 2024 году Netflix") and "экранизация" in prompts[0]
     text = leisure_ui.book_text(item).text
     assert text.endswith("В 2024 году Netflix выпустил сериал по роману.")
-
-
-def test_hub_shows_green_waiting_status_while_collecting(monkeypatch):
-    import leisure_hub
-    import util
-    events = []
-
-    class Status:
-        async def stop(self, delete=True):
-            events.append("stop")
-
-    async def start_inline(_q, **kwargs):
-        events.append(kwargs["stages"][0][1])
-        return Status()
-
-    async def show(*_a, **_k):
-        events.append("show")
-
-    monkeypatch.setattr(util.StatusManager, "start_inline", start_inline)
-    monkeypatch.setattr(leisure_hub, "hub_data", lambda _cid: {"movies": [], "books": [], "music": []})
-    monkeypatch.setattr(leisure_hub, "_show", show)
-    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {})
-    asyncio.run(leisure_hub.send_hub(None, "42", q=object()))
-
-    assert events == ["🍿 Собираю досуг...", "stop", "show"]

@@ -196,17 +196,8 @@ async def _show(bot, cid, msg, q=None):
 
 async def send_hub(bot, cid, q=None):
     today, _cc = _today_and_cc(cid)
-    status = None
-    if q is not None:
-        # Зелёная плашка ожидания на нажатой кнопке, как в других разделах.
-        import util
-        status = await util.StatusManager.start_inline(
-            q, bot=bot, cid=cid, stages=((0, "🍿 Собираю досуг..."),), preserve_message=True)
-    try:
-        data = await asyncio.to_thread(hub_data, cid)
-    finally:
-        if status is not None:
-            await status.stop(delete=True)
+    # Плашка ожидания «🎬 Смотрю афиши кинотеатров...» — общий индикатор роутера (bot_callbacks).
+    data = await asyncio.to_thread(hub_data, cid)
     msg = leisure_ui.leisure_hub_screen(
         **data, reply_markup=leisure_ui.leisure_hub_kb(),
         month=today.month, city=store.get_settings(cid).get("city") or "",

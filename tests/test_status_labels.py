@@ -124,27 +124,97 @@ def test_learning_notification_opens_learning_without_replacing_words(monkeypatc
 def test_inline_status_starts_with_action_specific_text():
     cases = {
         "m_food_next": "🍳 Составляю меню...",
-        "w_look": "⏳ Ищу образ...",
-        "movie_reco": "🎬 Ищу кино...",
-        "book_reco": "📚 Ищу книгу...",
-        "music_g_indie": "🎧 Ищу музыку...",
-        "listen_no": "🎧 Ищу музыку...",
-        "a_concerts_nl": "🎫 Ищу концерт...",
+        "w_look": "👕 Открываю шкаф...",
+        "movie_reco": "🎬 Перебираю фильмы...",
+        "book_reco": "📚 Листаю полки...",
+        "music_g_indie": "🎧 Слушаю новинки...",
+        "listen_no": "🎧 Слушаю новинки...",
+        "a_concerts_nl": "🎫 Проверяю афиши...",
+        "lz_concerts": "🎫 Проверяю афиши...",
+        "m_leisure": "🎬 Смотрю афиши кинотеатров...",
         "game_again": "🕵️ Ищу загадку...",
-        "a_watch": "🎬 Ищу кино...",
-        "a_read": "📚 Ищу книгу...",
-        "a_listen": "🎧 Ищу музыку...",
-        "m_food": "🍳 Составляю меню...",
-        "a_recipe_lunch": "🍳 Готовлю рецепт...",
-        "m_wardrobe": "⏳ Ищу образ...",
-        "movie_next": "🎬 Ищу кино...",
-        "book_next": "📚 Ищу книгу...",
-        "music_next": "🎧 Ищу музыку...",
-        "m_myday": "☀️ Собираю мой день...",
+        "a_recipe_lunch": "📖 Открываю книгу рецептов...",
+        "food_mine": "🧊 Заглядываю в холодильник...",
+        "m_myday": "☀️ Смотрю на погоду...",
+        "set_preferences": "⚙️ Открываю настройки...",
     }
 
     for data, expected in cases.items():
-        assert bot_callbacks._status_stages(data)[0][1] == expected
+        stages = bot_callbacks._status_stages(data)
+        assert stages[0][1] == expected
+        # Фразы меняются: четыре разные, все с «...» — зелёная кнопка ожидания.
+        assert [delay for delay, _ in stages] == [0, 1.5, 3.5, 6]
+        assert len({text for _, text in stages}) == 4 and all(text.endswith("...") for _, text in stages)
+
+
+def test_slow_button_shows_rotating_waiting_text_and_restores_keyboard(monkeypatch):
+    import telegram_runtime
+    edits = []
+
+    class Message:
+        chat_id, message_id, reply_markup = "42", 7, "ORIGINAL"
+
+        async def edit_reply_markup(self, reply_markup=None):
+            telegram_runtime._count_edit("editMessageReplyMarkup", {"chat_id": "42", "message_id": 7})
+            edits.append(reply_markup if reply_markup == "ORIGINAL" else reply_markup.inline_keyboard[0][0].text)
+
+    class Query:
+        message = Message()
+
+    monkeypatch.setattr(bot_callbacks, "_WAITING_AFTER", 0.01)
+    monkeypatch.setattr(bot_callbacks, "_status_stages", lambda _data: ((0, "Раз..."), (0.02, "Два...")))
+
+    async def slow():
+        await asyncio.sleep(0.06)
+
+    async def run():
+        await bot_callbacks._run_with_waiting(Query(), "lz_concerts", asyncio.ensure_future(slow()), lambda: False)
+
+    asyncio.run(run())
+    assert edits == ["Раз...", "Два...", "ORIGINAL"]  # ответ пришёл отдельно — кнопки вернулись
+
+
+def test_waiting_indicator_stops_when_handler_shows_new_screen(monkeypatch):
+    import telegram_runtime
+    edits = []
+
+    class Message:
+        chat_id, message_id, reply_markup = "43", 8, "ORIGINAL"
+
+        async def edit_reply_markup(self, reply_markup=None):
+            telegram_runtime._count_edit("editMessageReplyMarkup", {"chat_id": "43", "message_id": 8})
+            edits.append(reply_markup if reply_markup == "ORIGINAL" else reply_markup.inline_keyboard[0][0].text)
+
+    class Query:
+        message = Message()
+
+    monkeypatch.setattr(bot_callbacks, "_WAITING_AFTER", 0.01)
+    monkeypatch.setattr(bot_callbacks, "_status_stages", lambda _data: ((0, "Раз..."), (0.03, "Два...")))
+
+    async def handler_edits_screen():
+        await asyncio.sleep(0.02)
+        telegram_runtime._count_edit("editMessageText", {"chat_id": "43", "message_id": 8})  # новый экран
+        await asyncio.sleep(0.04)
+
+    async def run():
+        await bot_callbacks._run_with_waiting(Query(), "m_leisure", asyncio.ensure_future(handler_edits_screen()),
+                                              lambda: False)
+
+    asyncio.run(run())
+    assert edits == ["Раз..."]  # новый экран не затёрт ни следующей фразой, ни старыми кнопками
+
+
+def test_fast_button_shows_no_waiting_indicator():
+    class Query:
+        message = None
+
+    async def fast():
+        return "ok"
+
+    async def run():
+        return await bot_callbacks._run_with_waiting(Query(), "set_home", asyncio.ensure_future(fast()), lambda: False)
+
+    assert asyncio.run(run()) == "ok"
 
 
 def test_long_main_screens_have_a_specific_tracking_topic():
@@ -162,15 +232,15 @@ def test_long_main_screens_have_a_specific_tracking_topic():
         assert bot_callbacks._status_topic(data) == expected
 
 
-def test_long_inline_actions_have_three_distinct_progress_stages():
+def test_long_inline_actions_have_four_distinct_progress_stages():
     for data in (
         "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",
         "listen_no", "music_g_indie", "a_concerts_nl",
         "a_dictadd_smart_nl", "ex_next_task", "m_myday",
     ):
         stages = bot_callbacks._status_stages(data)
-        assert [delay for delay, _text in stages] == [0, 2, 6]
-        assert len({text for _delay, text in stages}) == 3
+        assert [delay for delay, _text in stages] == [0, 1.5, 3.5, 6]
+        assert len({text for _delay, text in stages}) == 4
 
 
 def test_removed_travel_callbacks_open_main_menu(monkeypatch):
