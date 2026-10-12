@@ -22,17 +22,14 @@ class FakeBot:
         self.messages.append(kwargs)
 
 
-def test_dutch_detective_result_shows_explanation_and_words_without_russian_labels():
+def test_dutch_detective_result_shows_fact_without_word_list_or_russian_labels():
     message = learning_ui.game_found(
         learning_game.GAME_UI["нидерландский"], "De kat",
         "Een kat heeft snorharen en jaagt soms op muizen.",
-        [{"word": "snorharen", "translation": "усы"}],
     )
 
-    assert message.text.startswith("✅ Zaak opgelost!")
-    assert "Een kat heeft snorharen" in message.text
-    assert "Onthoud:" in message.text and "📚" not in message.text
-    assert "• snorharen → усы" in message.text
+    assert message.text == "✅ Zaak opgelost!\n\nDe kat\n\nEen kat heeft snorharen en jaagt soms op muizen."
+    assert "Onthoud:" not in message.text and "→" not in message.text
     assert "Дело раскрыто" not in message.text
     assert "Почему:" not in message.text
     assert "Waarom:" not in message.text
@@ -591,3 +588,21 @@ def test_riddle_and_hint_are_quotes_and_fact_closes_the_answer():
     assert found.text.startswith("✅ Zaak opgelost!\n\nde watermeloen")
     assert found.text.endswith("Een watermeloen bestaat voor 92% uit water.")
     assert styled(found, "italic")[-1] == "Een watermeloen bestaat voor 92% uit water."
+
+
+def test_fallback_card_gets_ai_fact_instead_of_generic_line(monkeypatch):
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "нидерландский"}})
+    monkeypatch.setattr(learning_game.ai, "llm_json", lambda *_a, **_k: {
+        "fact": "Broccoli is familie van de bloemkool."})
+    monkeypatch.setattr(learning_game, "_get_english_query", lambda _st: "")
+    state = {"answer": "de broccoli", "answer_en": "broccoli", "explain": "", "local": True}
+    asyncio.run(learning_game._send_game_result(Bot(), "42", state, learning_game.GAME_UI["нидерландский"], None))
+
+    assert sent[0]["text"] == "✅ Zaak opgelost!\n\nde broccoli\n\nBroccoli is familie van de bloemkool."
+    assert "Deze extra hint" not in sent[0]["text"]

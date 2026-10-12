@@ -184,22 +184,13 @@ def game_no_new_round(ui):
     return msg
 
 
-def game_found(ui, answer, body="", words=None):
+def game_found(ui, answer, body=""):
+    """«✅ Zaak opgelost!», ответ жирным и курсивом — интересный факт об ответе на языке загадки."""
     b = MessageBuilder()
     b.section(ui["found"])
     b.spacer()
     b.bold(answer)
     b.newline()
-    valid_words = [
-        item for item in (words or [])
-        if isinstance(item, dict) and item.get("word") and item.get("translation")
-    ][:3]
-    if valid_words:
-        b.spacer()
-        b.bold(ui.get("remember", "Запомни:"))
-        b.newline()
-        for item in valid_words:
-            b.bullet(f"{item['word']} → {item['translation']}")
     body = " ".join(str(body or "").split())
     if body:
         b.spacer()

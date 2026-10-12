@@ -47,7 +47,6 @@ GAME_UI = {
         "choose": "Выбери верный ответ.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Дело раскрыто!",
-        "remember": "Запомни:",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -66,7 +65,6 @@ GAME_UI = {
         "choose": "Choose the right answer.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Case solved!",
-        "remember": "Remember:",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -85,7 +83,6 @@ GAME_UI = {
         "choose": "Kies het juiste antwoord.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Zaak opgelost!",
-        "remember": "Onthoud:",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -436,14 +433,14 @@ def _extra_local_game_cards(clue_lang):
                 "Veel mensen kennen mij goed. Je kunt mij in het dagelijks leven of in de natuur zien. "
                 f"{nl_clue}"
             )
-            hint, explain = nl_hint, "Deze extra hint maakt het antwoord duidelijker."
+            hint, explain = nl_hint, ""  # факт об ответе в разгадке пишет AI (_answer_fact)
             words = [{"word": "kennen", "translation": "знать"}, {"word": "natuur", "translation": "природа"}]
         else:
             description = (
                 "Many people know me well. You can see me in everyday life or in nature. "
                 f"{en_clue}"
             )
-            hint, explain = en_hint, "This extra clue makes the answer clearer."
+            hint, explain = en_hint, ""
             words = [{"word": "everyday", "translation": "повседневный"}, {"word": "nature", "translation": "природа"}]
         cards.append({
             "description": description, "answer": answer, "answer_en": english,
@@ -648,7 +645,9 @@ async def send_game(bot, cid, status=None):
                                   "hint": _dot(d.get("hint", "")),
                                   "hint_used": False,
                                   "explain": _dot(d.get("explain", "")),
-                                  "words": d.get("words", []), "tries": 0}
+                                  "words": d.get("words", []), "tries": 0,
+                                  # У запасных карточек explain — описание, а не факт: факт в разгадке — от AI.
+                                  "local": bool(d.get("_local"))}
     options, correct = _game_options(d, lang)
     store.game_state[str(cid)].update(options=options, correct=correct, wrong_picked=[])
     msg = learning_ui.game_card(ui, d.get("description", ""), category=category)
@@ -688,11 +687,36 @@ def _get_english_query(st):
     return ""
 
 
+def _answer_fact(answer, english, lang) -> str:
+    """Один интересный правдивый факт об ответе на языке загадки (для изучения языка); сбой — ""."""
+    try:
+        data = ai.llm_json(
+            f"Give one interesting, true, well-known fact about «{english or answer}» for a language learner "
+            f"(CEFR A2), one or two short sentences in {lang}. No invented numbers. JSON: {{\"fact\": \"\"}}",
+            200, tier="cheap", module="learning_game", fallback_allowed=True, privacy_level="public",
+            cache_context={"scenario": "game_answer_fact", "answer": english or answer, "lang": lang,
+                           "schema_version": 1},
+        )
+    except Exception:
+        _log.info("game answer fact unavailable for %r", answer)
+        return ""
+    fact = " ".join(str((data or {}).get("fact") or "").split()) if isinstance(data, dict) else ""
+    if not fact or (lang in _BASE_GAME_LANGS and re.search(r"[а-яё]", fact, re.I)):
+        return ""  # для английского и нидерландского русский ответ — брак
+    return fact
+
+
 async def _send_game_result(bot, cid, st, ui, kb):
     import travel_photos
-    msg = learning_ui.game_found(
-        ui, st.get("answer", ""), st.get("explain", ""), st.get("words", []),
-    )
+    fact = "" if st.get("local") else st.get("explain", "")
+    if not fact:
+        lang = store.game_config.get(str(cid), {}).get("lang") or "английский"
+        try:
+            fact = await asyncio.wait_for(asyncio.to_thread(
+                _answer_fact, st.get("answer", ""), st.get("answer_en", ""), lang), 8)
+        except Exception:
+            fact = ""
+    msg = learning_ui.game_found(ui, st.get("answer", ""), fact)
     query = _get_english_query(st)
     photo = None
     if query:
