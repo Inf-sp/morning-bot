@@ -158,7 +158,7 @@ def test_wrong_answer_offers_next_task_without_remove():
         for button in row
     ]
 
-    assert labels == ["✨ Следующее задание", "#️⃣ Главная"]
+    assert labels == ["✨ Следующее задание", "⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_correct_answer_sends_next_task_without_button(monkeypatch):
@@ -306,7 +306,7 @@ def test_recall_quiz_does_not_offer_a_free_text_button():
 
     labels = [button.text for row in bot.poll_kwargs["reply_markup"].inline_keyboard for button in row]
     assert "⌨️ Написать ответ" not in labels
-    assert labels[-1] == "#️⃣ Главная" and "⬅️ Назад" not in labels
+    assert labels[-2:] == ["⬅️ Назад", "#️⃣ Главная"]  # «Назад» — в раздел «Обучение»
 
 
 def test_exact_dutch_answer_cannot_be_downgraded_by_ai(monkeypatch):

@@ -640,7 +640,8 @@ async def send_quiz(bot, cid):
         correct_option_id=options.index(word["ru"]), is_anonymous=False,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✨ Следующее задание", callback_data="vac_train")],
-            [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"),
+             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
         ]),
     )
 
