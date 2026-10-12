@@ -11,6 +11,7 @@ import onboard
 import personal_collections
 import secure
 import settings
+import learning_game
 import store
 import tracking
 import trainer
@@ -51,7 +52,10 @@ async def handle(update, context, remove_reply_keyboard):
         store.challenge_state.pop(cid, None)
         return
 
-    # Игра отвечается только кнопками-вариантами: текст в чате загадка не перехватывает.
+    # Ответ на загадку текстом — пока игра ждёт ответа (любая другая кнопка бота снимает ожидание).
+    if cid in store.game_state:
+        if await learning_game.game_answer(bot, cid, text):
+            return
 
     pending_kind = store.pending_input.get(cid)
     if pending_kind is None:

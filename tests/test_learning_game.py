@@ -61,7 +61,8 @@ def test_hint_is_one_time_and_disappears_from_original_card(monkeypatch):
     message = Message()
     monkeypatch.setattr(
         learning_game.store, "game_state",
-        {"42": {"answer": "De kat", "hint": "Ik heb snorharen.", "hint_used": False}},
+        {"42": {"answer": "De kat", "hint": "Ik heb snorharen.", "hint_used": False,
+                "options": ["de hond", "De kat", "het konijn"], "correct": 1}},
     )
     monkeypatch.setattr(
         learning_game.store, "game_config",
@@ -81,8 +82,9 @@ def test_hint_is_one_time_and_disappears_from_original_card(monkeypatch):
         for button in row
     ]
     assert learning_game.store.game_state["42"]["hint_used"] is True
-    assert original_labels == ["😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
-    assert reply_labels == ["😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
+    # У загадки — только навигация; под подсказкой — варианты на языке загадки и «Сдаюсь».
+    assert original_labels == ["⬅️ Назад", "#️⃣ Главная"]
+    assert reply_labels == ["de hond", "De kat", "het konijn", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
 
 
 def test_detective_starts_easy_riddle_without_difficulty_prompt(monkeypatch):
@@ -196,17 +198,17 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
 
     text = bot.messages[0]["text"]
     assert text.startswith("🕵️ Raad het personage\n\nCategorie: dier\n\n")
-    assert "volgende bericht" not in text  # ответ — кнопками
+    assert text.endswith("Schrijf je antwoord in het volgende bericht — elke taal is goed.")
     assert not any("а" <= char <= "я" for char in text.casefold())
     assert "Wie ben ik?" not in bot.messages[0]["text"]
     assert "Verdachte:" not in bot.messages[0]["text"]
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
-    # Три варианта ответа по-русски, затем «Подсказка», «Сдаюсь» и навигация.
-    assert labels[3:] == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"] and "De kat" in labels[:3]
-    assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 1, 1, 1, 2]
-    hint, reveal = (row[0] for row in bot.messages[0]["reply_markup"].inline_keyboard[3:5])
-    assert (dict(hint.api_kwargs or {}), reveal.api_kwargs) == ({}, {"style": "danger"})
+    # Сразу — только «Подсказка» и навигация: варианты и «Сдаюсь» появятся под подсказкой.
+    assert labels == ["💡 Подсказка", "⬅️ Назад", "#️⃣ Главная"]
+    assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 2]
+    state = learning_game.store.game_state["42"]
+    assert state["options"][state["correct"]] == "De kat" and len(state["options"]) == 3
 
 
 def test_detective_card_is_fully_in_the_study_language():
@@ -216,6 +218,7 @@ def test_detective_card_is_fully_in_the_study_language():
 
     assert message.text == (
         "🕵️ Guess the character\n\nCategory: animal\n\nI have whiskers and I like warm places."
+        "\n\nWrite your answer in the next message — any language works."
     )
     assert learning_ui.game_card(learning_game.GAME_UI["русский"], "Я кот.", category="животное").text \
         .startswith("🕵️ Угадай персонажа · Русский\n\nКатегория: животное")
@@ -533,18 +536,26 @@ def test_detective_photo_search_returns_first_horizontal_result(monkeypatch):
     assert photo["id"] == "first"
 
 
-def test_detective_card_offers_three_answer_buttons_instead_of_typing():
-    from ui import learning as learning_ui
+def test_hint_offers_three_options_in_the_riddle_language():
     ui = learning_game.GAME_UI["нидерландский"]
-    card = {"answer": "de kat", "aliases": ["кошка", "cat"], "category": "animal", "wrong": ["лиса", "Кошка"]}
-    options, correct = learning_game._game_options(card)
+    card = {"answer": "de kat", "aliases": ["кошка", "cat"], "category": "animal", "wrong": ["de vos", "De Kat"]}
+    options, correct = learning_game._game_options(card, "нидерландский")
 
-    assert len(options) == 3 and options[correct] == "Кошка" and "Лиса" in options  # дубль ответа не берётся
-    kb = learning_game._game_play_kb(ui, hint_available=True, options=options, hidden=[(correct + 1) % 3])
+    assert len(options) == 3 and options[correct] == "de kat" and "de vos" in options  # дубль ответа не берётся
+    assert all(not any("а" <= ch <= "я" for ch in option.casefold()) for option in options)
+    kb = learning_game._game_hint_kb(ui, options, hidden=[(correct + 1) % 3])
     datas = [b.callback_data for row in kb.inline_keyboard for b in row]
-    assert f"game_opt_{correct}" in datas and f"game_opt_{(correct + 1) % 3}" not in datas
-    msg = learning_ui.game_card(ui, "Ik heb snorharen.")
-    assert "volgende bericht" not in msg.text and msg.text.endswith("Ik heb snorharen.")
+    assert f"game_opt_{correct}" in datas and f"game_opt_{(correct + 1) % 3}" not in datas and "game_reveal" in datas
+
+
+def test_leaving_the_game_stops_waiting_for_a_text_answer(monkeypatch):
+    import bot_callbacks
+    monkeypatch.setattr(bot_callbacks.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_callbacks.settings, "handle_callback", lambda *_a, **_k: asyncio.sleep(0))
+    learning_game.store.game_state["42"] = {"answer": "de kat"}
+    query = type("Q", (), {"data": "set_vacation", "message": type("M", (), {"chat_id": "42", "message_id": 1})()})()
+    asyncio.run(bot_callbacks.handle(type("U", (), {"callback_query": query})(), type("C", (), {"bot": None})(), None))
+    assert "42" not in learning_game.store.game_state  # город отпуска уже не примется за ответ
 
 def test_game_in_vacation_uses_country_language(monkeypatch):
     import vacation

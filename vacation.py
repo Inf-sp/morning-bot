@@ -112,6 +112,15 @@ LOCAL_PREFIX = "local_"
 
 # Город отпуска ещё вводится: cid -> домашний город (в памяти; после рестарта — просто заново).
 _pending_home: dict = {}
+_pending_trip: dict = {}  # написана страна — ждём город: {cid: {"country": «Испания», "until": date|None}}
+
+
+def place_label(place) -> str:
+    """«Барселона, ES 🇪🇸» — город, код и флаг страны, как в заголовке «Моего дня»."""
+    import util
+    cc = str((place or {}).get("cc") or "").upper()
+    flag = util.flag_from_cc(cc) or ""
+    return " ".join(part for part in (", ".join(p for p in ((place or {}).get("city", ""), cc) if p), flag) if part)
 
 
 def _settings():
@@ -167,12 +176,28 @@ async def city_entered(bot, cid, text):
     """Город (и, если написаны, сроки) отпуска: с датой — сразу готово, без неё — вопрос о дате."""
     import asyncio
     import weather
+    import countries
+    import util
     home = _pending_home.pop(str(cid), None) or (state(cid) or {}).get("home") or dict(store.get_settings(cid))
     city_text, until = split_city_and_until(text)
-    ok = await weather.set_city_text(bot, cid, city_text, show_brief=False, announce=False,
+    cc, country = countries.country_by_name(city_text)
+    if cc:
+        # «Испания до 20 октября»: геокодер по названию страны ошибается — сначала уточняем город.
+        _pending_home[str(cid)] = home
+        _pending_trip[str(cid)] = {"country": country, "until": until}
+        store.pending_input[str(cid)] = "vacation_city"
+        msg = vacation_ui.ask_city_in_country(country, util.flag_from_cc(cc))
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        return
+    trip = _pending_trip.pop(str(cid), None) or {}
+    until = until or trip.get("until")
+    query = f"{city_text}, {trip['country']}" if trip.get("country") else city_text  # город в этой стране
+    ok = await weather.set_city_text(bot, cid, query, show_brief=False, announce=False,
                                               retry_kind="vacation_city")
     if not ok:
         _pending_home[str(cid)] = home  # город не найден — ждём новый ввод
+        if trip:
+            _pending_trip[str(cid)] = trip
         return
     place = store.get_settings(cid)
     _save(cid, {"home": home, "until": "", "cc": str(place.get("cc") or "").upper(),
@@ -181,14 +206,13 @@ async def city_entered(bot, cid, text):
     if until:
         await _finish(bot, cid, until)
         return
-    import util
     try:
         facts = await asyncio.wait_for(asyncio.to_thread(country_facts, cid), 15)
     except Exception:
         facts = {}
     short = [line for line in vacation_ui.country_lines(facts)
              if line[0] in ("Столица", "Население", "Валюта", "Время")]
-    msg = vacation_ui.ask_days(place.get("city", ""), util.flag_from_cc(place.get("cc", "")), short)
+    msg = vacation_ui.ask_days(place_label(place), "", short)
     rows = [[InlineKeyboardButton(label, callback_data=f"set_vacd_{days}")] for label, days in DAY_CHOICES]
     store.pending_input[str(cid)] = "vacation_until"  # дату можно написать в чат
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
@@ -238,7 +262,7 @@ async def _finish(bot, cid, until):
     except Exception:
         _log.warning("vacation holidays failed cid=%s", cid, exc_info=True)
         holidays = None
-    msg = vacation_ui.started(place.get("city", ""), until_label(cid), (current["home"] or {}).get("city", ""),
+    msg = vacation_ui.started(place_label(place), until_label(cid), (current["home"] or {}).get("city", ""),
                               holidays)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     import myday

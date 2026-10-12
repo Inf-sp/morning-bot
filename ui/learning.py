@@ -162,7 +162,11 @@ def game_card(ui, description, category=""):
     if category:
         b.line(f"{ui.get('category', 'Категория')}: {category}")
         b.spacer()
-    b.line(description)  # ответ — кнопками-вариантами под загадкой
+    b.line(description)
+    b.spacer()
+    # Финальная подсказка экрана — курсивом: ответ пишется в чат; варианты кнопками — после «Подсказки».
+    b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

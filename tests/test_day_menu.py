@@ -109,8 +109,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("✨ Другое меню на сегодня", "m_food_next")],
-        [("✨ Другая кухня", "food_pick")],
+        [("✨ Другое меню на сегодня", "food_pick")],
         [("🧊 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -340,7 +339,7 @@ def test_same_cuisine_again_and_again_rotates_dishes_without_ai(monkeypatch):
     _profile(monkeypatch)
     _ai(monkeypatch, RuntimeError("AI down"))
     seen = []
-    for _ in range(6):  # «Другая кухня → Русская» шесть раз подряд
+    for _ in range(6):  # «Другое меню на сегодня → Русская» шесть раз подряд
         menu_data = day_menu.get_day_menu("42", now=NOW, refresh=True, cuisine="russian")
         seen.append(tuple(dish["name"] for dish in menu_data["dishes"].values()))
 

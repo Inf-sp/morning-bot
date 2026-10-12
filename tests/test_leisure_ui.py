@@ -83,7 +83,7 @@ def test_global_preferences_has_all_recommendation_sections():
     asyncio.run(settings.send_preferences(bot, "42"))
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
-        ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
+        ["☀️ Мой день"], ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
         ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     # Сводка всех предпочтений текстом: каждый раздел — своя строка.

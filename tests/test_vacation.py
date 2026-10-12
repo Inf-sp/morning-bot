@@ -320,3 +320,65 @@ def test_concerts_in_trip_country_only_for_trip_dates(monkeypatch):
     monkeypatch.setattr(leisure_concerts, "concert_items_between", lambda _e, _s, end, _l: ends.append(end) or [])
     leisure_concerts.cached_favorite_concerts("42", 3)
     assert ends == [date(2026, 11, 11)]
+
+
+def test_country_instead_of_city_asks_for_city_and_keeps_date(monkeypatch):
+    import countries
+    import weather
+    saved, places = _env(monkeypatch)
+    monkeypatch.setattr(countries, "_table", lambda: {"ES": ["Испания", "europe", "Spain"], "AE": ["ОАЭ", "asia", "UAE"]})
+    queries, finished = [], []
+
+    async def set_city(_bot, _cid, text, **_kwargs):
+        queries.append(text)
+        places["now"] = {"lat": 41.4, "lon": 2.2, "city": "Барселона", "country": "Испания", "cc": "ES"}
+        return True
+
+    async def finish(_bot, _cid, until):
+        finished.append(until)
+
+    monkeypatch.setattr(weather, "set_city_text", set_city)
+    monkeypatch.setattr(vacation, "_finish", finish)
+    bot = Bot()
+
+    asyncio.run(vacation.city_entered(bot, "42", "Испания до 20 октября"))
+    assert queries == [] and bot.sent[0]["text"].startswith("✈️ Испания 🇪🇸\n\nКакой город?")
+    assert store.pending_input["42"] == "vacation_city"
+
+    asyncio.run(vacation.city_entered(bot, "42", "Барселона"))
+    assert queries == ["Барселона, Испания"]  # город ищется в этой стране
+    assert finished and finished[0].month == 10 and finished[0].day == 20  # дата из первого сообщения
+    assert vacation.place_label(places["now"]) == "Барселона, ES 🇪🇸"
+
+
+def test_disliked_book_is_hidden_under_all_its_titles(monkeypatch):
+    import asyncio as aio
+    import leisure_books
+    added = []
+    monkeypatch.setattr(leisure_books.store, "last_recos", {"42": {"kind": "movie", "items": ["Dune"]}})
+    monkeypatch.setattr(leisure_books, "_current_book", lambda _cid: {
+        "title": "Бесчестье", "title_en": "Disgrace", "original_title": "Disgrace"})
+    monkeypatch.setattr(leisure_books.recommendation_stoplist, "add", lambda _c, kind, name, _r: added.append(name))
+
+    async def advance(*_a):
+        return None
+
+    monkeypatch.setattr(leisure_books, "_advance_book", advance)
+    aio.run(leisure_books.book_dislike(None, "42", 0))
+    # Последним был фильм — но отмечается книга с карточки, под русским и оригинальным названием.
+    assert sorted(added) == ["Disgrace", "Бесчестье"]
+
+
+def test_vacation_hides_home_data_settings_buttons(monkeypatch):
+    import telegram_runtime
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    saved, _places = _env(monkeypatch, CAPE)
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другое меню на сегодня", callback_data="food_pick")],
+        [InlineKeyboardButton("🎚️ Настроить холодильник", callback_data="as_fridge_home"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    assert telegram_runtime._without_home_settings(markup, "42") is markup  # дома — без изменений
+    saved["vacation"] = {"home": HOME, "cc": "ZA"}
+    texts = [b.text for row in telegram_runtime._without_home_settings(markup, "42").inline_keyboard for b in row]
+    assert texts == ["✨ Другое меню на сегодня", "#️⃣ Главная"]

@@ -1809,7 +1809,7 @@ def _genre_fallback_book(cid, genre_key, extra_skip=()):
 
 def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
     """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей; в отпуске — сначала
-    книги авторов страны поездки (`country_cc` из ответа AI)."""
+    книги авторов страны поездки или о ней (`country_cc` / `setting_cc` из ответа AI)."""
     import vacation
     trip = vacation.trip_cc(cid)
     used = _book_used(cid) | {_title_key(x) for x in extra_skip}
@@ -1827,7 +1827,7 @@ def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
                 ratings_count = int(it.get("ratings_count") or 0)
             except (TypeError, ValueError):
                 ratings_count = 0
-            in_trip = bool(trip) and str(it.get("country_cc") or "").upper() == trip
+            in_trip = bool(trip) and trip in {str(it.get(key) or "").upper() for key in ("country_cc", "setting_cc")}
             candidates.append((in_trip, rating > 0 and ratings_count > 0, rating, ratings_count, -index, it))
     if candidates:
         candidates.sort(reverse=True, key=lambda row: row[:-1])
@@ -1940,11 +1940,27 @@ async def send_book_by_genre(bot, cid, genre_key):
     _cache_book(cid, prepared)
 
 
+def _current_book(cid) -> dict:
+    """Последняя показанная карточка книги (любой даты) — с её русским и оригинальным названиями."""
+    entry = (store._load(config.BOOK_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
+    return dict(entry["item"]) if isinstance(entry.get("item"), dict) else {}
+
+
 async def book_dislike(bot, cid, i):
-    rec = store.last_recos.get(str(cid))
-    if rec and i < len(rec["items"]):
-        title = rec["items"][i]
-        recommendation_stoplist.add(cid, "book", title, "hidden")
+    """«Не нравится»: книга больше не показывается ни под одним из своих названий."""
+    rec = store.last_recos.get(str(cid)) or {}
+    items = rec.get("items") or [] if rec.get("kind") == "book" else []
+    title = items[i] if i < len(items) else ""
+    current = _current_book(cid)
+    if current and (not title or _title_key(title) in _book_keys(current)):
+        # Карточку берём свою, а не общий «последний показ» (там мог быть фильм): все названия книги.
+        names = {current.get(key) for key in (
+            "title", "title_ru", "title_en", "original_title", "alternative_title")}
+    else:
+        names = {title}
+    for name in names:
+        if str(name or "").strip():
+            recommendation_stoplist.add(cid, "book", name, "hidden")
     await _advance_book(bot, cid)
 
 async def _advance_book(bot, cid):

@@ -61,10 +61,23 @@ def _table() -> dict:
         name = (((row.get("translations") or {}).get("rus") or {}).get("common")
                 or (row.get("name") or {}).get("common") or "")
         if cc:
-            value[cc] = [name, "russia" if cc == "RU" else region_keys.get(row.get("region"), "")]
+            value[cc] = [name, "russia" if cc == "RU" else region_keys.get(row.get("region"), ""),
+                         (row.get("name") or {}).get("common") or ""]
     if value:
         store._save(config.COUNTRIES_TABLE_KEY, {"ts": time.time(), "value": value})
     return value
+
+
+def country_by_name(text) -> tuple:
+    """(cc, название по-русски), если текст — название страны («Испания», «Spain»); иначе ("", "")."""
+    wanted = " ".join(str(text or "").split()).casefold().strip(" .,!")
+    if not wanted:
+        return "", ""
+    for cc, row in _table().items():
+        names = [str(value).casefold() for value in (row[0], row[2] if len(row) > 2 else "") if value]
+        if wanted in names:
+            return cc, row[0]
+    return "", ""
 
 
 # Привычные сокращения вместо двухбуквенного ISO-кода.

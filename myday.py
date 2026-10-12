@@ -453,9 +453,8 @@ def _day_menu_kb(cid=None):
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
         *trip,
-        # «Настроить» — какие блоки показывать; экран приходит новым сообщением.
-        [InlineKeyboardButton("🎚️ Настроить мой день", callback_data="set_myday_new"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        # Блоки сводки настраиваются в «Настройки → Предпочтения → ☀️ Мой день».
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 
 

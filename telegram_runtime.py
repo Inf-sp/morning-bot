@@ -307,6 +307,25 @@ def _count_edit(endpoint, data):
             _content_edits[key] = _content_edits.get(key, 0) + 1
 
 
+# «Настроить холодильник / шкаф / библиотеку» — свои данные дома; в отпуске эти кнопки не показываются.
+_HOME_DATA_CALLBACKS = {"as_fridge_home", "w_closet", "lz_lib"}
+
+
+def _without_home_settings(markup, chat_id):
+    """В отпуске убирает кнопки «🎚️ Настроить …» своих данных дома; без изменений — исходная разметка."""
+    if not isinstance(markup, InlineKeyboardMarkup) or chat_id is None:
+        return markup
+    configure = [button for row in markup.inline_keyboard for button in row
+                 if button.callback_data in _HOME_DATA_CALLBACKS and str(button.text).startswith("🎚️ Настроить")]
+    if not configure:
+        return markup
+    import vacation
+    if not vacation.active(str(chat_id)):
+        return markup
+    rows = [[button for button in row if button not in configure] for row in markup.inline_keyboard]
+    return InlineKeyboardMarkup([row for row in rows if row])
+
+
 class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
@@ -314,6 +333,8 @@ class MenuCleanupBot(ExtBot):
         global _buttons_enhanced, _button_level
         data = {**(data or {}), **(api_kwargs or {})}
         _count_edit(endpoint, data)
+        if "reply_markup" in data:
+            data["reply_markup"] = _without_home_settings(data["reply_markup"], data.get("chat_id"))
         start = _button_level if _buttons_enhanced else 0
         last_error = None
         for level in range(start, -1, -1):

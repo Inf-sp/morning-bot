@@ -14,6 +14,18 @@ def ask_city():
     return b.build_stripped()
 
 
+def ask_city_in_country(country, flag=""):
+    """Написана страна, а не город: какой город? Погода и всё остальное — по городу."""
+    b = MessageBuilder()
+    b.section(f"✈️ {country} {flag}".strip())
+    b.spacer()
+    b.line("Какой город? Напиши, например «Барселона» или «Барселона до 20 октября».")
+    b.spacer()
+    b.italic("Погода, кухня, концерты и праздники подбираются по городу.")
+    b.newline()
+    return b.build_stripped()
+
+
 def ask_days(city, flag="", facts=()):
     """«✈️ Кейптаун 🇿🇦», коротко о стране, внизу курсивом — вопрос о дате возвращения."""
     b = MessageBuilder()

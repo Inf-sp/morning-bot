@@ -129,7 +129,7 @@ async def send_myday_blocks(bot, cid, q=None):
     rows = [[InlineKeyboardButton(("✅ " if myday_block_on(cid, key) else "□ ") + label,
                                   callback_data=f"set_mydaytgl_{key}")]
             for key, label in MYDAY_BLOCKS]
-    rows.append(nav_row("m_myday"))  # вход — «Настроить» под «Моим днём»
+    rows.append(nav_row("set_preferences"))  # вход — «☀️ Мой день» в Предпочтениях
     await rich_delivery.show(bot, cid, settings_ui.myday_blocks(), reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 
@@ -376,6 +376,7 @@ def vacation_button(cid):
 
 async def send_preferences(bot, cid, q=None):
     rows = [  # по одной в строке; внизу «Назад | Главная»
+        [InlineKeyboardButton("☀️ Мой день", callback_data="set_myday")],
         [InlineKeyboardButton("🧠 Обучение", callback_data="set_pref_learning")],
         [InlineKeyboardButton("🥣 Кухни", callback_data="set_pref_cuisines")],
         [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style")],

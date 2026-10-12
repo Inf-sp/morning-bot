@@ -457,8 +457,8 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", _replaced(lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True)))),
-    # «Другое меню на сегодня» (m_food_next) — новые блюда той же кухни; «Другая кухня» (food_pick):
-    # кухня → новое меню на день (предпочтения не меняются). food_meal_* — кнопки старых сообщений.
+    # «Другое меню на сегодня» (food_pick): кухня → новое меню на день на месте прежнего (предпочтения
+    # не меняются). m_food_next — старые кнопки: новое меню той же кухни. food_meal_* — старые сообщения.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
                                                          show_mine=not vacation.active(c.cid)))),
@@ -668,6 +668,9 @@ async def handle(update, context, remove_reply_keyboard):
         return
     if data in ("m_learn", "m_menu"):
         trainer.cancel(cid)
+    if not data.startswith(("game", "a_game")) and data != "noop":
+        # Ушёл из игры (Настройки, отпуск, другой раздел): следующий текст в чате — уже не ответ на загадку.
+        store.game_state.pop(cid, None)
     route = _first(ROUTES, data)
     if route:
         task = asyncio.ensure_future(route.handler(Ctx(bot, cid, q, data, _inline_status)))
