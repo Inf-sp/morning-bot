@@ -54,6 +54,19 @@ def _label(holiday):
     return f"{local} — {russian}" if local and russian and russian != local else local or russian
 
 
+def holidays_between(cc, start: date, end: date) -> list:
+    """Государственные праздники страны в [start, end] по дате; сбой источника — []."""
+    cc = str(cc or "").upper()
+    if len(cc) != 2 or end < start:
+        return []
+    found = {}
+    for year in range(start.year, end.year + 1):
+        for holiday in _year_holidays(year, cc):
+            if start.isoformat() <= holiday["date"] <= end.isoformat():
+                found.setdefault((holiday["date"], holiday["local"] or holiday["name"]), holiday)
+    return [found[key] for key in sorted(found)]
+
+
 def holiday_lines(cc, today: date):
     """«Сегодня: Koningsdag — День короля» и/или «Завтра: …»; нет праздника или сбой — []."""
     cc = str(cc or "").upper()

@@ -35,7 +35,8 @@ def until_not_understood():
     return b.build_stripped()
 
 
-def started(city, until="", home=""):
+def started(city, until="", home="", holidays=None):
+    """holidays — [(«24 сентября», «Heritage Day — День наследия»)] в дни отпуска; None — источник недоступен."""
     b = MessageBuilder()
     b.section(f"✈️ Хорошего отпуска · {city}".rstrip(" ·"))
     b.spacer()
@@ -43,7 +44,19 @@ def started(city, until="", home=""):
     if home:
         parts.append(f"дома — {home}")
     b.line(" · ".join(parts) + ".")
-    b.line("Вернуться раньше — кнопкой «Вернуться домой» под «Моим днём» или в Настройках.")
+    if holidays is not None:
+        b.spacer()
+        if holidays:
+            b.bold("Праздники в эти дни:" if until else "Праздники в ближайший месяц:")
+            b.newline()
+            for day, name in holidays:
+                b.bullet(f"{day} · {name}")
+        else:
+            b.line("Государственных праздников в эти дни нет." if until
+                   else "В ближайший месяц государственных праздников нет.")
+    b.spacer()
+    b.italic("Вернуться раньше — кнопкой «Вернуться домой» под «Моим днём» или в Настройках.")
+    b.newline()
     return b.build_stripped()
 
 

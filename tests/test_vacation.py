@@ -5,6 +5,8 @@ import day_menu
 import settings
 import store
 import vacation
+
+REAL_TRIP_HOLIDAYS = vacation.trip_holidays
 from ui import myday as myday_ui
 from ui import vacation as vacation_ui
 
@@ -30,6 +32,7 @@ def _env(monkeypatch, place=None):
     monkeypatch.setattr(store, "mutate_profile", lambda *_a, **_k: None)
     monkeypatch.setattr(vacation, "_reset_day_caches", lambda _cid: None)
     monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})  # без сети
+    monkeypatch.setattr(vacation, "trip_holidays", lambda *_a: [])
     return saved, places
 
 
@@ -225,3 +228,24 @@ def test_ask_days_screen_shows_flag_facts_and_italic_question():
     italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
               for e in msg.entities if e.type == "italic"]
     assert italic and italic[-1].startswith("До какого дня отпуск?") and "дату в чат" in italic[-1]
+
+
+
+def test_holidays_of_the_trip_are_listed_with_russian_names(monkeypatch):
+    import public_holidays
+    saved, _places = _env(monkeypatch, {**CAPE, "cc": "ZA"})
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "2026-12-31"}
+    monkeypatch.setattr(vacation, "trip_holidays", REAL_TRIP_HOLIDAYS)
+    rows = [{"date": "2026-12-16", "local": "Day of Reconciliation", "name": "Day of Reconciliation"},
+            {"date": "2026-12-25", "local": "Christmas Day", "name": "Christmas Day"}]
+    monkeypatch.setattr(public_holidays, "_year_holidays", lambda *_a: rows)
+    monkeypatch.setattr(public_holidays, "holidays_between", lambda *_a: rows)
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: {"items": [
+        {"name": "Day of Reconciliation", "ru": "День примирения"}, {"name": "Christmas Day", "ru": "Рождество"}]})
+
+    lines = vacation.trip_holidays("42", date(2026, 12, 31))
+    assert lines == [("16 декабря", "Day of Reconciliation — День примирения"), ("25 декабря", "Christmas Day — Рождество")]
+
+    text = vacation_ui.started("Кейптаун", "до 31 декабря", "Алкмар", lines).text
+    assert "Праздники в эти дни:\n• 16 декабря · Day of Reconciliation — День примирения" in text
+    assert "Государственных праздников в эти дни нет." in vacation_ui.started("Кейптаун", "до 1 ноября", "", []).text
