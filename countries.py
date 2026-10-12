@@ -188,9 +188,20 @@ def main_artist(name) -> str:
     return _FEATURING_RE.split(str(name or "").strip(), maxsplit=1)[0].strip()
 
 
+def _artist_country(name):
+    """MusicBrainz, при сбое или без ответа — Wikidata (без ключа)."""
+    import wikidata_books
+    try:
+        found = _musicbrainz_country(name)
+    except Exception:
+        _log.warning("musicbrainz unavailable for %r, trying wikidata", name, exc_info=True)
+        found = ""
+    return found or wikidata_books.artist_country(name)
+
+
 def artist_label(name, fetch=True) -> str:
     """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
-    return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _musicbrainz_country, fetch))
+    return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _artist_country, fetch))
 
 
 def author_cc(name, fetch=True) -> str:

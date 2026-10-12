@@ -4,6 +4,8 @@ from datetime import date, timedelta
 
 import requests
 
+import config
+import store
 import util
 
 _log = logging.getLogger(__name__)
@@ -38,13 +40,20 @@ def _year_holidays(year, cc):
         rows = response.json() or []
     except Exception as error:
         _log.warning("Nager.Date unavailable cc=%s year=%s: %r", cc, year, error)
-        return []
+        # Список праздников на год не меняется: прежний сохранённый ответ — надёжный резерв.
+        return list((store._load(config.PUBLIC_HOLIDAYS_KEY) or {}).get(key) or [])
     holidays = [
         {"date": str(row.get("date") or ""), "local": str(row.get("localName") or "").strip(),
          "name": str(row.get("name") or "").strip()}
         for row in rows if isinstance(row, dict) and row.get("date")
     ]
     util.ttl_set("nager_holidays", key, holidays)
+    if holidays:
+        def mutate(data):
+            data = data if isinstance(data, dict) else {}
+            data[key] = holidays
+            return data, None
+        store.mutate_kv(config.PUBLIC_HOLIDAYS_KEY, mutate)
     return holidays
 
 

@@ -384,7 +384,15 @@ def _cached(key, cc, loader, ttl=_FACTS_TTL):
     entry = data.get(cc) if isinstance(data, dict) else None
     if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < ttl:
         return entry.get("value")
-    value = loader()
+    try:
+        value = loader()
+    except Exception:
+        if isinstance(entry, dict) and entry.get("value"):
+            _log.warning("vacation: source failed, using stale %s for %s", key, cc, exc_info=True)
+            return entry.get("value")  # источник недоступен — устаревшие данные лучше пустой строки
+        raise
+    if not value and isinstance(entry, dict):
+        return entry.get("value")
     if value:
         def mutate(saved):
             saved = saved if isinstance(saved, dict) else {}
@@ -429,8 +437,16 @@ def _eur_rate(currency):
     today = datetime.now(config.TZ).date().isoformat()
 
     def load():
-        data = requests.get("https://api.frankfurter.dev/v1/latest",
-                            params={"from": "EUR", "to": currency}, timeout=_TIMEOUT).json()
+        # ECB (Frankfurter), резерв без ключа — open.er-api.com (в т.ч. валюты, которых нет у ECB).
+        try:
+            data = requests.get("https://api.frankfurter.dev/v1/latest",
+                                params={"from": "EUR", "to": currency}, timeout=_TIMEOUT).json()
+            rate = (data.get("rates") or {}).get(currency)
+            if rate:
+                return rate
+        except Exception:
+            _log.warning("vacation: frankfurter unavailable, trying open.er-api", exc_info=True)
+        data = requests.get("https://open.er-api.com/v6/latest/EUR", timeout=_TIMEOUT).json()
         return (data.get("rates") or {}).get(currency)
 
     return _cached(config.FX_RATES_KEY, f"{today}:{currency}", load, ttl=86400)

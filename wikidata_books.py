@@ -143,8 +143,22 @@ _HUMAN = "Q5"
 _WRITER_MARKERS = ("writer", "novelist", "author", "poet", "писатель", "писательница", "поэт", "автор")
 
 
+_MUSIC_MARKERS = ("singer", "musician", "rapper", "band", "group", "composer", "producer", "dj",
+                  "певец", "певица", "музыкант", "рэпер", "группа", "композитор")
+_MUSIC_GROUPS = {"Q215380", "Q5741069", "Q641066", "Q2088357"}  # музыкальная группа, рок-группа, гёрлз-, бойз-бенд
+
+
 def author_country(name) -> str:
     """ISO-код страны гражданства автора (P27 → P297) или ""; сбой сети — _Unavailable."""
+    return _person_country(name, _WRITER_MARKERS)
+
+
+def artist_country(name) -> str:
+    """Резерв MusicBrainz: страна артиста или группы (гражданство P27 / страна происхождения P495)."""
+    return _person_country(name, _MUSIC_MARKERS, groups=_MUSIC_GROUPS)
+
+
+def _person_country(name, markers, groups=frozenset()) -> str:
     name = " ".join(str(name or "").split()).strip()
     if not name:
         return ""
@@ -159,9 +173,11 @@ def author_country(name) -> str:
         entity = entities.get(entity_id) or {}
         description = " ".join(str(value.get("value") or "")
                                for value in (entity.get("descriptions") or {}).values()).casefold()
-        if _HUMAN not in _claim_ids(entity, "P31") or not any(m in description for m in _WRITER_MARKERS):
+        kinds = set(_claim_ids(entity, "P31"))
+        is_group = bool(kinds & set(groups))
+        if not is_group and (_HUMAN not in kinds or not any(m in description for m in markers)):
             continue
-        citizenship = _claim_ids(entity, "P27")
+        citizenship = _claim_ids(entity, "P495" if is_group else "P27")
         if not citizenship:
             return ""
         # Историческое государство (Соединённое Королевство 1801–1922) кода ISO не имеет — берём следующее.

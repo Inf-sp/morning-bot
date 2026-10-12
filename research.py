@@ -314,6 +314,27 @@ def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
 
 
 
+def serpapi_search(query: str, max_results: int = 5, **_unused) -> list:
+    """Последний резерв веб-поиска (Google через SerpAPI, ключ SERP_API_KEY): [{title, url, content}]."""
+    if not config.SERP_API_KEY:
+        return []
+    try:
+        r = requests.get("https://serpapi.com/search.json", timeout=tracking.bounded_timeout(15), params={
+            "engine": "google", "q": query, "num": max_results, "hl": "en", "api_key": config.SERP_API_KEY,
+        })
+        ok = 200 <= r.status_code < 300
+        api_usage.record_request("serpapi", ok=ok, status_code=r.status_code,
+                                 error="" if ok else f"HTTP {r.status_code}")
+        if not ok:
+            return []
+        return [{"title": row.get("title", ""), "url": row.get("link", ""), "content": row.get("snippet", "")}
+                for row in (r.json().get("organic_results") or [])[:max_results] if row.get("link")]
+    except Exception as e:
+        api_usage.record_request("serpapi", ok=False, error=type(e).__name__)
+        _log.warning("serpapi_search failed: %s", str(e)[:120])
+        return []
+
+
 def web_search(query: str, max_results: int = 5, include_domains=None, *, scenario: str = "",
                allow_tavily: bool = False, search_priority: str = "firecrawl",
                topic: str = "general", time_range: str = "",
@@ -330,6 +351,8 @@ def web_search(query: str, max_results: int = 5, include_domains=None, *, scenar
     tavily_enabled = bool(allow_tavily and _tavily_allowed(scenario))
     providers = ((tavily_search, firecrawl_search) if search_priority == "tavily" and tavily_enabled
                  else ((firecrawl_search, tavily_search) if tavily_enabled else (firecrawl_search,)))
+    if scenario:
+        providers = (*providers, serpapi_search)  # оба основных молчат (лимит, сбой) — SerpAPI
     for provider in providers:
         rows = (provider(query, max_results=max_results, include_domains=domains,
                          scenario=scenario, topic=topic, time_range=time_range,

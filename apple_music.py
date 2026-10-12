@@ -1,4 +1,4 @@
-"""Свежие альбомы по жанру из открытой RSS-ленты Apple Music (без ключа).
+"""Свежие альбомы по жанру из открытой RSS-ленты Apple Music (без ключа); резерв — чарты Deezer (без ключа).
 
 Источник реальных релизов для «Новинки» в музыке: даты и названия не
 придумываются AI. Лента страны кэшируется на 6 часов в памяти процесса.
@@ -38,14 +38,53 @@ def _feed(cc) -> list[dict]:
     return rows
 
 
+_DEEZER_GENRES = {"indie": 85, "pop": 132, "electronic": 106, "rnb": 165, "rock": 152, "hiphop": 116}
+_DEEZER_ALBUMS = 12  # альбомов чарта жанра, у которых уточняется дата выхода
+
+
+def _deezer_releases(genre_key, since) -> list[dict]:
+    """Резерв, когда лента Apple недоступна: чарт альбомов жанра Deezer, дата выхода — из карточки
+    альбома; только свежие (с since). Кэш на 6 часов."""
+    genre_id = _DEEZER_GENRES.get(genre_key)
+    if not genre_id:
+        return []
+    cached = util.ttl_get("deezer_albums", genre_key, _TTL_SECONDS)
+    if cached is not None:
+        return cached
+    items = []
+    try:
+        rows = requests.get(f"https://api.deezer.com/chart/{genre_id}/albums", params={"limit": 25},
+                            timeout=_TIMEOUT_SECONDS).json().get("data") or []
+        for row in rows[:_DEEZER_ALBUMS]:
+            album = requests.get(f"https://api.deezer.com/album/{int(row['id'])}", timeout=_TIMEOUT_SECONDS).json()
+            try:
+                released = date.fromisoformat(str(album.get("release_date") or ""))
+            except ValueError:
+                continue
+            title = " ".join(str(row.get("title") or "").split())
+            artist = " ".join(str((row.get("artist") or {}).get("name") or "").split())
+            if title and artist and released >= since:
+                items.append({"title": title, "artist": artist, "date": released.isoformat(),
+                              "cover": str(row.get("cover_xl") or row.get("cover_big") or ""),
+                              "url": str(row.get("link") or ""), "genre": genre_key})
+    except Exception as error:
+        _log.warning("deezer releases unavailable genre=%s: %r", genre_key, error)
+        return []
+    util.ttl_set("deezer_albums", genre_key, items)
+    return items
+
+
 def new_releases(genre_key, cc="us", today=None) -> list[dict]:
     """[{title, artist, date, cover, url, genre}] альбомов жанра за последние 90 дней, новые первыми."""
     wanted = GENRE_IDS.get(genre_key)
     if not wanted:
         return []
     since = (today or date.today()) - timedelta(days=FRESH_DAYS)
+    feed = _feed(str(cc or "us").lower())
+    if not feed:
+        return sorted(_deezer_releases(genre_key, since), key=lambda item: item["date"], reverse=True)
     items = []
-    for row in _feed(str(cc or "us").lower()):
+    for row in feed:
         if not isinstance(row, dict) or not wanted & {str(g.get("genreId")) for g in row.get("genres") or []}:
             continue
         title = " ".join(str(row.get("name") or "").split())

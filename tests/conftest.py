@@ -41,6 +41,25 @@ def _no_country_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_deezer(monkeypatch):
+    """Резервные чарты Deezer в тестах не запрашиваются."""
+    import apple_music
+
+    monkeypatch.setattr(apple_music, "_deezer_releases", lambda *_a: [])
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_open_meteo(monkeypatch):
+    """Резервная погода Open-Meteo в тестах не запрашивается — как будто тоже недоступна."""
+    import weather_provider
+
+    monkeypatch.setattr(weather_provider, "_fetch_open_meteo",
+                        lambda *_a: (_ for _ in ()).throw(ConnectionError("no network in tests")))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_local_events_search(monkeypatch):
     """Веб-поиск местных событий в тестах не выполняется."""
     import local_events

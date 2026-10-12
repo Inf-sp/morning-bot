@@ -452,6 +452,55 @@ def _fetch_alert_details(alert_ids, timeout=15):
     return details
 
 
+_OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+_OPEN_METEO_HOURLY = ("temperature_2m", "apparent_temperature", "precipitation_probability", "precipitation",
+                      "windspeed_10m", "windgusts_10m", "winddirection_10m", "relativehumidity_2m",
+                      "uv_index", "cloudcover")
+_OPEN_METEO_DAILY = ("weathercode", "temperature_2m_max", "temperature_2m_min", "precipitation_probability_max",
+                     "precipitation_sum", "windspeed_10m_max", "windgusts_10m_max", "winddirection_10m_dominant",
+                     "uv_index_max", "sunrise", "sunset")
+_OPEN_METEO_CURRENT = ("temperature_2m", "apparent_temperature", "weathercode", "windspeed_10m", "windgusts_10m",
+                       "winddirection_10m", "uv_index", "cloudcover")
+
+
+def _fetch_open_meteo(lat, lon):
+    """Резерв без ключа: Open-Meteo в том же формате (WMO-коды, м/с, время Амстердама); без алертов."""
+    response = requests.get(_OPEN_METEO_URL, timeout=tracking.bounded_timeout(10), params={
+        "latitude": lat, "longitude": lon, "timezone": str(TZ), "forecast_days": 9, "wind_speed_unit": "ms",
+        "hourly": ",".join(_OPEN_METEO_HOURLY), "daily": ",".join(_OPEN_METEO_DAILY),
+        "current": ",".join(_OPEN_METEO_CURRENT),
+    })
+    response.raise_for_status()
+    payload = response.json()
+    hourly, daily = payload.get("hourly") or {}, payload.get("daily") or {}
+    if not daily.get("time") or not hourly.get("time"):
+        raise ValueError("open-meteo: empty forecast")
+    return {
+        "current": {**{key: (payload.get("current") or {}).get(key) for key in _OPEN_METEO_CURRENT},
+                    "visibility": None},
+        "hourly": {key: list(hourly.get(key) or []) for key in ("time", *_OPEN_METEO_HOURLY)},
+        "daily": {key: list(daily.get(key) or []) for key in ("time", *_OPEN_METEO_DAILY)},
+        "alert_ids": [], "alerts": [], "provider": "open-meteo", "daily_timeline": [],
+    }
+
+
+def _fallback_weather(key, cache_key, lat, lon, error):
+    """OpenWeather недоступен или лимит исчерпан: сегодняшний кэш, затем Open-Meteo; иначе — исходная ошибка."""
+    stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)
+    if stale is not None:
+        _log.warning("weather: using stale same-day forecast cache after fetch failure")
+        return stale
+    try:
+        data = _fetch_open_meteo(lat, lon)
+    except Exception:
+        _log.warning("weather: open-meteo fallback failed", exc_info=True)
+        raise error
+    _log.warning("weather: OpenWeather unavailable (%s), using Open-Meteo", type(error).__name__)
+    _WX_CACHE[key] = (time.time(), deepcopy(data))
+    _persistent_cache_save(cache_key, data)
+    return data
+
+
 def fetch_weather(lat, lon, days=2):
     """Прогноз точки (текущая погода, по часам, по дням); days — для совместимости, API отдаёт всё сразу."""
     key = (round(lat, 2), round(lon, 2))
@@ -460,10 +509,7 @@ def fetch_weather(lat, lon, days=2):
     if cached is not None:
         return cached
     if not config.WEATHER_API_KEY:
-        stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)
-        if stale is not None:
-            return stale
-        raise Exception("no weather api key")
+        return _fallback_weather(key, cache_key, lat, lon, Exception("no weather api key"))
 
     try:
         with ThreadPoolExecutor(max_workers=3) as pool:
@@ -486,12 +532,8 @@ def fetch_weather(lat, lon, days=2):
         _WX_CACHE[key] = (now, deepcopy(data))
         _persistent_cache_save(cache_key, data)
         return data
-    except Exception:
-        stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)
-        if stale is not None:
-            _log.warning("weather: using stale same-day forecast cache after fetch failure")
-            return stale
-        raise
+    except Exception as error:
+        return _fallback_weather(key, cache_key, lat, lon, error)
 
 
 def fetch_current_temp(lat, lon):
