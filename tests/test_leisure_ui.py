@@ -881,14 +881,13 @@ def test_book_card_has_modern_compact_hierarchy():
     assert "цитат" not in message.text.casefold()
 
 
-def test_book_card_shows_author_section_from_details():
+def test_book_card_has_no_author_section_even_for_old_cached_details():
     message = leisure_books._book_text({
         "title": "Книга", "author": "Автор", "plot": "О чём книга.",
         "author_about": "Американская писательница", "author_books": ["A", "B", "C", "D"],
     })
-    assert message.text.endswith(
-        "Об авторе\nАмериканская писательница.\nДругие книги: «A», «B», «C»"
-    )
+    assert "Об авторе" not in message.text and "Другие книги" not in message.text
+    assert message.text.endswith("О чём книга.")
 
 
 def test_book_card_hides_missing_metadata_instead_of_inventing_it():

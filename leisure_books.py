@@ -229,6 +229,71 @@ def _book_cover(title, title_en=""):
             continue
     return None
 
+# Язык обложки по стране автора; англоязычные и многоязычные страны (US, GB, BE, CH, CA, IN…) — английская.
+_COVER_LANG = {
+    "RU": "ru", "BY": "ru", "UA": "uk", "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "MX": "es",
+    "AR": "es", "CO": "es", "CL": "es", "PE": "es", "IT": "it", "PT": "pt", "BR": "pt", "NL": "nl",
+    "PL": "pl", "SE": "sv", "NO": "no", "DK": "da", "FI": "fi", "CZ": "cs", "HU": "hu", "GR": "el",
+    "TR": "tr", "JP": "ja", "CN": "zh", "KR": "ko", "IL": "he",
+}
+_COVER_TTL = 30 * 86400
+
+
+def _native_cover(it, lang):
+    """Большая обложка издания на языке lang: название и автор на этом языке — из Wikidata."""
+    title, title_en = str(it.get("title") or ""), str(it.get("title_en") or "")
+    info = wikidata_books.lookup(title_en, "en") if title_en else \
+        wikidata_books.lookup(title, "ru" if _CYRILLIC_RE.search(title) else "en")
+    info = info or {}
+    if lang == "ru":
+        native = info.get("title_ru") or (title if _CYRILLIC_RE.search(title) else "")
+        author = info.get("author_ru") or (it.get("author") if _CYRILLIC_RE.search(str(it.get("author"))) else "")
+    else:
+        native, author = info.get("title_original") or "", info.get("author_en") or ""
+    if not native:
+        return ""
+    volume = google_books.find_volume(native, "", author or "", lang=lang)
+    return google_books.volume_cover(volume.get("google_books_id")) if volume else ""
+
+
+def _best_book_cover(it) -> str:
+    """Обложка на языке страны автора (RU → русское издание) в большом размере.
+
+    Нет такой — большая английская из Google Books, затем Open Library, затем прежняя обложка.
+    """
+    import countries
+    title, title_en = str(it.get("title") or ""), str(it.get("title_en") or "")
+    author = str(it.get("author") or "")
+    key = f"{(title_en or title).casefold()}|{author.casefold()}"
+    saved = (store._load(config.BOOK_COVER_KEY) or {}).get(key) or {}
+    if saved.get("url") and time.time() - float(saved.get("ts") or 0) < _COVER_TTL:
+        return saved["url"]
+    lang = _COVER_LANG.get(countries.author_cc(author), "")
+    url = (_native_cover(it, lang) if lang else "") or google_books.volume_cover(it.get("google_books_id")) \
+        or _book_cover(title, title_en) or ""
+    if url:  # ponytail: запасная обложка тоже хранится 30 дней; сбой квоты Google не перепроверяется раньше
+        def mutate(data):
+            data = data if isinstance(data, dict) else {}
+            data[key] = {"ts": time.time(), "url": url}
+            return data, None
+        store.mutate_kv(config.BOOK_COVER_KEY, mutate)
+    return url or str(it.get("cover_url") or "").strip()
+
+
+async def _cover_for(it, limit=8.0) -> str:
+    """_best_book_cover с ограничением по времени; не успели — прежняя обложка."""
+    fallback = str(it.get("cover_url") or "").strip()
+    remaining = tracking.remaining_action_seconds()
+    timeout = min(limit, remaining - 0.5) if remaining is not None else limit
+    if timeout <= 0.2:
+        return fallback
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_best_book_cover, it), timeout=timeout) or fallback
+    except Exception:
+        _log.debug("book cover lookup failed", exc_info=True)
+        return fallback
+
+
 def _book_text(it):
     return leisure_ui.book_text(it)
 
@@ -944,7 +1009,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
     )])
     rows.append(nav_row("book_favorites"))
     kb = InlineKeyboardMarkup(rows)
-    cover = str(book.get("cover_url") or "").strip()
+    cover = await _cover_for(book, 6.0)
     if q is not None and cover:
         try:
             await q.edit_message_media(
@@ -994,7 +1059,7 @@ async def send_favorite_book_card(bot, cid, token, short_id, genre_index, page):
         [InlineKeyboardButton("❌ Удалить", callback_data=f"bfd:{token}:{short_id}:{genre_index}:{page}")],
         nav_row(f"bfg:{token}:{genre_index}:{page}"),
     ])
-    cover = str(book.get("cover_url") or "").strip()
+    cover = await _cover_for(book, 6.0)
     if cover:
         try:
             await bot.send_photo(chat_id=cid, photo=cover, caption=msg.text,
@@ -1383,38 +1448,10 @@ async def toggle_book_preference(bot, cid, data, q=None):
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
 
-def _author_other_books(author_en, skip_titles):
-    """До трёх других популярных книг автора из Google Books (проверенные названия)."""
-    if not author_en:
-        return []
-    skip = {google_books._norm(title) for title in skip_titles if title}
-    books, seen = [], set()
-    volumes = []
-    for item in google_books._search_items(f'inauthor:"{author_en}"', max_results=20):
-        try:
-            volumes.append(google_books._volume(item))
-        except (AttributeError, TypeError, ValueError):
-            continue
-    volumes.sort(key=lambda volume: -(volume.get("ratings_count") or 0))
-    for volume in volumes:
-        title = str(volume.get("title") or "").strip()
-        key = google_books._norm(title)
-        if (not title or key in seen or any(key in value or value in key for value in skip)
-                or volume.get("language") not in ("en", "")
-                or google_books._author_match_score(volume, author_en) < 0.55):
-            continue
-        seen.add(key)
-        books.append(title)
-        if len(books) == 3:
-            break
-    return books
-
-
 async def _with_book_details(it):
-    """Подробный сюжет по-русски и пара строк об авторе — только по источникам.
+    """Подробный сюжет по-русски и интересный факт — только по источникам.
 
-    Описание и другие книги автора берутся из Google Books; AI только пересказывает
-    описание по-русски и даёт короткую справку об авторе. Без источника строк нет.
+    Описание берётся из Google Books; AI только пересказывает его по-русски. Без источника строк нет.
     """
     it = dict(it or {})
     if it.get("details_ready") and "fact" in it:  # старые карточки без факта собираются заново
@@ -1431,28 +1468,21 @@ async def _with_book_details(it):
     volume = volume or {}
     description = str(volume.get("description") or it.get("description") or "").strip()
     author_en = str(volume.get("author") or ("" if _CYRILLIC_RE.search(author) else author)).strip()
-    try:
-        other_books = await asyncio.wait_for(asyncio.to_thread(
-            _author_other_books, author_en, [title, title_en, volume.get("title")],
-        ), timeout=4.0)
-    except Exception:
-        other_books = []
     # Свой русский текст каталога — запасной сюжет, если пересказ не получится.
     own = str(it.get("plot") or it.get("desc") or "").strip()
-    plot, about = (own if _CYRILLIC_RE.search(own) else ""), ""
+    plot = own if _CYRILLIC_RE.search(own) else ""
     if description or title:
         # Факт (экранизация, премия) нужен и без описания издателя: у классики его часто нет.
         plot_rule = ("Перескажи по-русски, о чём книга, по описанию издателя: 3–5 живых предложений "
                      "без спойлеров финала, без рекламных оборотов и оценок." if description
                      else "plot оставь пустым — описания издателя нет.")
         prompt = (
-            f"{plot_rule} Затем одной фразой — кто автор (только общеизвестный проверяемый факт; если "
-            "не уверен — пусто). И fact — одно интересное о книге одним предложением по-русски: в первую "
+            f"{plot_rule} Затем fact — одно интересное о книге одним предложением по-русски: в первую "
             "очередь экранизация (фильм или сериал, год, где вышел), иначе премия или мировой успех — "
             "только если точно знаешь, иначе пусто.\n"
             f"Книга: {secure.wrap_untrusted(f'{title_en or title} — {author_en or author}', 'книга')}\n"
             f"{secure.wrap_untrusted(description[:2500] or 'нет', 'описание издателя')}\n"
-            'JSON: {"plot": "...", "author_about": "...", "fact": ""}'
+            'JSON: {"plot": "...", "fact": ""}'
         )
         try:
             data = await ai.allm_json(
@@ -1460,7 +1490,7 @@ async def _with_book_details(it):
                 fallback_allowed=True, privacy_level="public", budget_seconds=8,
                 cache_context={"scenario": "book_details", "title": title_en or title,
                                "author": author_en or author, "description": description[:2500],
-                               "schema_version": 3},
+                               "schema_version": 4},
             )
         except Exception:
             data = {}
@@ -1468,15 +1498,9 @@ async def _with_book_details(it):
         ai_plot = " ".join(str(data.get("plot") or "").split())
         if _CYRILLIC_RE.search(ai_plot):
             plot = ai_plot
-        about = " ".join(str(data.get("author_about") or "").split())
-        if not _CYRILLIC_RE.search(about):
-            about = ""
         fact = " ".join(str(data.get("fact") or "").split())
         it["fact"] = fact if _CYRILLIC_RE.search(fact) else ""
-    it.update({
-        "plot": plot, "author_about": about, "author_books": other_books,
-        "details_ready": True,
-    })
+    it.update({"plot": plot, "details_ready": True})
     if volume.get("rating") and not it.get("rating"):
         it.update(rating=volume.get("rating"), ratings_count=volume.get("ratings_count"))
     # Сырое английское описание на карточке не показываем.
@@ -1509,20 +1533,7 @@ async def _send_book_card(bot, cid, it, i, *, enrich=True, status=None):
             it["country"] = ""
     msg = _book_text(it)
     kb = _book_kb(i)
-    cover = it.get("cover_url")
-    if not cover:
-        try:
-            remaining = tracking.remaining_action_seconds()
-            timeout = min(4.5, remaining - 0.5) if remaining is not None else 4.5
-            if timeout <= 0.2:
-                raise asyncio.TimeoutError
-            cover = await asyncio.wait_for(
-                asyncio.to_thread(
-                    _book_cover, it.get("title", ""), it.get("title_en", "")),
-                timeout=timeout,
-            )
-        except Exception:
-            cover = None
+    cover = await _cover_for(it)
     if cover:
         it["cover_url"] = cover
         try:

@@ -124,7 +124,7 @@ def _match_score(volume: dict, titles: list[str], author: str) -> float:
     return score
 
 
-def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevance") -> list[dict]:
+def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevance", lang: str = "") -> list[dict]:
     if not config.GOOGLE_BOOKS_API_KEY or not str(query or "").strip():
         return []
     order_by = "newest" if order_by == "newest" else "relevance"
@@ -132,7 +132,7 @@ def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevanc
         result_limit = max(1, min(40, int(max_results)))
     except (TypeError, ValueError):
         result_limit = 8
-    cache_key = f"{_norm(query)}|{order_by}|{result_limit}"
+    cache_key = f"{_norm(query)}|{order_by}|{result_limit}|{lang}"
     cached = util.ttl_get("google_books", cache_key, _CACHE_TTL)
     if isinstance(cached, list):
         return cached
@@ -162,6 +162,7 @@ def _search_items(query: str, max_results: int = 8, *, order_by: str = "relevanc
                     "orderBy": order_by,
                     "printType": "books",
                     "projection": "lite",
+                    **({"langRestrict": lang} if lang else {}),  # издания на этом языке
                 },
                 timeout=timeout,
             )
@@ -260,16 +261,22 @@ def search_new_releases(max_results: int = 20) -> list[dict]:
     return volumes
 
 
-def find_volume(title: str, alternative_title: str = "", author: str = "", *, english_only=False) -> dict | None:
-    """Возвращает наиболее похожее издание, не случайный первый результат."""
+def find_volume(title: str, alternative_title: str = "", author: str = "", *, english_only=False,
+                lang: str = "") -> dict | None:
+    """Возвращает наиболее похожее издание, не случайный первый результат.
+
+    lang — только издания на этом языке и с обложкой (обложка на языке страны автора).
+    """
     titles = [value for value in (alternative_title, title) if str(value or "").strip()]
     if not titles or not config.GOOGLE_BOOKS_API_KEY:
         return None
     query = " ".join(value for value in (titles[0], author) if str(value or "").strip())
     volumes = []
-    for item in _search_items(query):
+    for item in _search_items(query, lang=lang):
         try:
             volume = _volume(item)
+            if lang and (volume.get("language") != lang or not volume.get("cover_url")):
+                continue
             if not english_only or volume.get("language") == "en":
                 volumes.append(volume)
         except (AttributeError, TypeError, ValueError):
@@ -287,6 +294,41 @@ def find_volume(title: str, alternative_title: str = "", author: str = "", *, en
     if not ranked or ranked[0][0] < 0.58:
         return None
     return ranked[0][1]
+
+
+_COVER_SIZES = ("extraLarge", "large", "medium")
+_VOLUME_ID_RE = re.compile(r"[\w-]{4,40}")
+
+
+def volume_cover(volume_id: str) -> str:
+    """Большая обложка издания (~800–1280 px) из volumes/{id}: поиск отдаёт только миниатюру 128 px.
+
+    Нет большой версии, ключа или квоты, сбой — "" (миниатюру не растягиваем).
+    """
+    volume_id = str(volume_id or "")
+    if not config.GOOGLE_BOOKS_API_KEY or not _VOLUME_ID_RE.fullmatch(volume_id):
+        return ""
+    cached = util.ttl_get("google_books_cover", volume_id, _CACHE_TTL)
+    if cached is not None:
+        return cached
+    if not api_usage.google_books_requests()["allowed"]:
+        return ""
+    try:
+        response = requests.get(f"{_BASE_URL}/{volume_id}", timeout=6,
+                                params={"key": config.GOOGLE_BOOKS_API_KEY, "fields": "volumeInfo/imageLinks"})
+        links = ((response.json().get("volumeInfo") or {}).get("imageLinks") or {}) \
+            if response.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        _log.debug("volume_cover failed id=%s", volume_id, exc_info=True)
+        return ""
+    finally:
+        api_usage.google_books_requests(consume=True)
+    if links is None:
+        return ""
+    url = next((str(links[size]) for size in _COVER_SIZES if links.get(size)), "")
+    url = re.sub(r"&edge=curl", "", re.sub(r"^http://", "https://", url))
+    util.ttl_set("google_books_cover", volume_id, url)
+    return url
 
 
 def _author_match_score(volume: dict, author: str) -> float:

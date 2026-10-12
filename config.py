@@ -156,6 +156,7 @@ CONCERT_ARTIST_CHECKS_KEY = "concert_artist_checks.json"  # {cid: {country: {art
 TMDB_TITLE_INFO_KEY = "tmdb_title_info.json"  # {kind:id: {ts, value: {countries, network}}} — для строк Досуга
 COUNTRIES_TABLE_KEY = "countries_table.json"  # {ts, value: {cc: [название, регион]}} — mledoze, 90 дней
 ARTIST_COUNTRY_KEY = "artist_country.json"  # {артист: {ts, value: cc}} — MusicBrainz, полгода
+BOOK_COVER_KEY = "book_covers.json"  # {название|автор: {ts, url}} — обложка на языке страны автора, 30 дней
 AUTHOR_COUNTRY_KEY = "author_country.json"  # {автор: {ts, value: cc}} — Wikidata, полгода
 ALBUM_NOTES_KEY = "album_notes.json"  # {«артист|альбом»: {ts, value: короткое описание}} — «Новая музыка»
 COUNTRY_FACTS_KEY = "country_facts.json"  # {cc: {ts, value}} — факты о стране отпуска, 30 дней

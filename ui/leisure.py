@@ -331,16 +331,6 @@ def book_text(item):
             plot += "."
         b.spacer()
         b.line(plot)
-    about = str(item.get("author_about") or "").strip()
-    other_books = [str(value).strip() for value in item.get("author_books") or [] if str(value).strip()]
-    if about or other_books:
-        b.spacer()
-        b.bold("Об авторе")
-        b.newline()
-        if about:
-            b.line(about if about[-1] in ".!?…" else about + ".")
-        if other_books:
-            b.line("Другие книги: " + ", ".join(f"«{value}»" for value in other_books[:3]))
     fact = " ".join(str(item.get("fact") or "").split()).strip()
     if fact and re.search(r"[а-яё]", fact, re.I):
         b.spacer()

@@ -193,11 +193,16 @@ def artist_label(name, fetch=True) -> str:
     return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _musicbrainz_country, fetch))
 
 
-def author_label(name, fetch=True) -> str:
-    """«🇬🇧 Великобритания» для автора книги (гражданство в Wikidata) или ""."""
+def author_cc(name, fetch=True) -> str:
+    """ISO-код страны автора книги (гражданство в Wikidata) или ""."""
     import wikidata_books
     first = str(name or "").split(",")[0].strip()  # «A, B» — соавторы через запятую: ищем первого
-    return label(_person_cache(config.AUTHOR_COUNTRY_KEY, first, wikidata_books.author_country, fetch))
+    return _person_cache(config.AUTHOR_COUNTRY_KEY, first, wikidata_books.author_country, fetch)
+
+
+def author_label(name, fetch=True) -> str:
+    """«🇬🇧 Великобритания» для автора книги или ""."""
+    return label(author_cc(name, fetch))
 
 
 def title_info(kind, tmdb_id, fetch=True) -> dict:
