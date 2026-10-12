@@ -153,7 +153,8 @@ def _has_saved_example(entry):
 
 async def start(bot, cid, language, mode=None):
     store.challenge_state.pop(str(cid), None)
-    store.game_state.pop(str(cid), None)
+    import learning_game
+    learning_game.drop_round(cid)
     store.pending_input.pop(str(cid), None)
     lang_code = language if language in ("nl", "en") else ("nl" if language == "нидерландский" else "en")
     repository = DictionaryRepository(cid)

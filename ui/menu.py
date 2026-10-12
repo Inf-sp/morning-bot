@@ -195,12 +195,13 @@ def learning_menu(home: dict):
         # В отпуске: тренировка по базовым словам страны, свой словарь — после возвращения.
         return b.build_stripped(reply_markup=ikb([
             [("🎯 Запустить тренировку", "vac_train")],
-            [(ui_label("game", "Угадать персонажа"), "a_game")],
+            [(ui_label("game", "Угадай слово"), "a_game")],
             [("#️⃣ Главная", "m_menu")],
         ]))
     return b.build_stripped(reply_markup=ikb([
+        *([[("✨ Новая тема", "a_learning_refresh")]] if topic else []),  # следующая тема грамматики
         [("🎯 Запустить тренировку", f"a_train_{code}")],
-        [(ui_label("game", "Угадать персонажа"), "a_game")],
+        [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
     ]))
 

@@ -252,7 +252,7 @@ async def photo_handler(update, context):
 async def poll_answer_handler(update, context):
     import learning_game
     if await learning_game.game_poll_answer(context.bot, update.poll_answer):
-        return  # викторина-подсказка «Угадай персонажа»
+        return  # викторина-подсказка «Угадай слово»
     await trainer.handle_poll_answer(context.bot, update.poll_answer)
 
 

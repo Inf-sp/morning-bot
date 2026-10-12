@@ -191,7 +191,7 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     asyncio.run(learning_game.send_game(bot, "42"))
 
     text = bot.messages[0]["text"]
-    assert text.startswith("🕵️ Raad het personage\n\nCategorie: dier\n\n")
+    assert text.startswith("🕵️ Raad het woord\n\nCategorie: dier\n\n")
     assert text.endswith("Schrijf je antwoord in het volgende bericht — elke taal is goed.")
     assert not any("а" <= char <= "я" for char in text.casefold())
     assert "Wie ben ik?" not in bot.messages[0]["text"]
@@ -211,11 +211,11 @@ def test_detective_card_is_fully_in_the_study_language():
                                     category=ui["categories"]["животное"])
 
     assert message.text == (
-        "🕵️ Guess the character\n\nCategory: animal\n\nI have whiskers and I like warm places."
+        "🕵️ Guess the word\n\nCategory: animal\n\nI have whiskers and I like warm places."
         "\n\nWrite your answer in the next message — any language works."
     )
     assert learning_ui.game_card(learning_game.GAME_UI["русский"], "Я кот.", category="животное").text \
-        .startswith("🕵️ Угадай персонажа · Русский\n\nКатегория: животное")
+        .startswith("🕵️ Угадай слово · Русский\n\nКатегория: животное")
 
 
 def test_detective_expands_local_catalogue_after_the_legacy_cards_are_played(monkeypatch):
@@ -557,7 +557,7 @@ def test_game_in_vacation_uses_country_language(monkeypatch):
     monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: True)
     monkeypatch.setattr(vacation, "guide", lambda _cid: {"language_ru": "Африкаанс", "language_code": "af"})
     assert learning_game._game_lang("42") == "африкаанс"
-    assert learning_game._game_ui("африкаанс")["title"] == "Угадай персонажа · Африкаанс"
+    assert learning_game._game_ui("африкаанс")["title"] == "Угадай слово · Африкаанс"
 
     card = {"description": "Ek is 'n groot dier. Ek het 'n baie lang nek en lang bene. Ek eet blare van hoë bome in Afrika en ek is geel met bruin kolle.",
             "answer": "kameelperd", "aliases": ["жираф", "giraffe"], "hint": "Ek is die langste dier.",
@@ -677,3 +677,36 @@ def test_played_riddle_returns_only_after_half_a_year(monkeypatch):
         "game_seen_at": {"de kat": old, "de hond": fresh}})
     # Кошка — 200 дней назад (снова можно), собака — 10 дней (нельзя), медведь без даты — пока нельзя.
     assert learning_game._game_recent("42") == ["de hond", "de beer"]
+
+
+def test_riddle_survives_bot_restart_and_finished_riddle_offers_new_one(monkeypatch):
+    profile = {}
+
+    def mutate(_cid, change):
+        updated, _ = change(dict(profile))
+        profile.clear()
+        profile.update(updated)
+
+    monkeypatch.setattr(learning_game.store, "get_profile", lambda _cid: dict(profile))
+    monkeypatch.setattr(learning_game.store, "mutate_profile", mutate)
+    monkeypatch.setattr(learning_game.store, "game_state", {"42": {
+        "answer": "de kat", "hint": "Ik heb snorharen.", "options": ["de hond", "de kat", "het konijn"],
+        "correct": 1, "lang": "нидерландский"}})
+    monkeypatch.setattr(learning_game.store, "game_config", {})
+    learning_game._save_round("42")
+    learning_game.store.game_state.clear()  # перезапуск бота: память пуста
+
+    assert learning_game.has_round("42") and learning_game._round("42")["answer"] == "de kat"
+    assert learning_game._round_ui("42", learning_game._round("42"))["title"] == "Raad het woord"
+
+    replies = []
+
+    class Message:
+        async def reply_text(self, text, **kwargs):
+            replies.append((text, kwargs))
+
+    learning_game.drop_round("42")
+    asyncio.run(learning_game.game_hint(None, "42", type("Q", (), {"message": Message()})()))
+    text, kwargs = replies[0]
+    assert text == "Эта загадка уже закончилась — держи новую." and "Hint" not in text
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "game_again"

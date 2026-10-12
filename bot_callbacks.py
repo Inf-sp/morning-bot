@@ -670,7 +670,7 @@ async def handle(update, context, remove_reply_keyboard):
         trainer.cancel(cid)
     if not data.startswith(("game", "a_game")) and data != "noop":
         # Ушёл из игры (Настройки, отпуск, другой раздел): следующий текст в чате — уже не ответ на загадку.
-        store.game_state.pop(cid, None)
+        learning_game.drop_round(cid)
     route = _first(ROUTES, data)
     if route:
         task = asyncio.ensure_future(route.handler(Ctx(bot, cid, q, data, _inline_status)))

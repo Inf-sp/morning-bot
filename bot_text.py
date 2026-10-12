@@ -48,12 +48,12 @@ async def handle(update, context, remove_reply_keyboard):
     if await dictionary_import.try_add_dict_from_chat(bot, cid, text):
         if store.pending_input.get(cid) == previous_kind:
             store.pending_input.pop(cid, None)
-        store.game_state.pop(cid, None)
+        learning_game.drop_round(cid)
         store.challenge_state.pop(cid, None)
         return
 
     # Ответ на загадку текстом — пока игра ждёт ответа (любая другая кнопка бота снимает ожидание).
-    if cid in store.game_state:
+    if learning_game.has_round(cid):  # раунд хранится и в профиле — переживает перезапуск
         if await learning_game.game_answer(bot, cid, text):
             return
 

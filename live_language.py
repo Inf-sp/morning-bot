@@ -24,11 +24,12 @@ def grammar_topics(language) -> tuple:
     return tuple(data.get(language) or ())
 
 
-def grammar_of_day(cid, language="nl") -> dict:
+def grammar_of_day(cid, language="nl", renew=False) -> dict:
     """Тема грамматики на сегодня: держится до завтра, на следующий день — следующая ещё не показанная.
 
     Только темы уровня из настроек («Простой» — A1–A2, «Сложный» — B1–B2); сменили уровень — тема дня
     подбирается заново. Когда показаны все темы уровня — круг заново. Прогресс — в профиле по языку.
+    renew — «Новая тема»: сразу следующая несыгранная, она становится темой дня.
     """
     topics = grammar_topics(language) or grammar_topics("nl")
     if not topics:
@@ -38,7 +39,7 @@ def grammar_of_day(cid, language="nl") -> dict:
     level = store.get_level(cid, _LANGUAGE_NAMES.get(language, language))
     allowed = _LEVEL_TOPICS.get(level, _LEVEL_TOPICS["simple"])
     by_id = {topic["id"]: topic for topic in topics}
-    if (progress.get("date") == today and progress.get("id") in by_id
+    if (not renew and progress.get("date") == today and progress.get("id") in by_id
             and by_id[progress["id"]]["level"] in allowed):
         return _as_card(by_id[progress["id"]])
     ranked = sorted((topic for topic in topics if topic["level"] in allowed),

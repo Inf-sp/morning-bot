@@ -98,8 +98,9 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Как запомнить" not in message.text
     assert "🎯 Задание" not in message.text
     assert _labels(message.reply_markup) == [
+        ["✨ Новая тема"],  # следующая тема грамматики
         ["🎯 Запустить тренировку"],
-        ["🕵️ Угадать персонажа"],
+        ["🕵️ Угадай слово"],
         ["🎚️ Настроить словарь", "#️⃣ Главная"],
     ]
     assert "Прогресс:" not in message.text
@@ -140,8 +141,9 @@ def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary
     after = learning.refresh_learning_home("42")
 
     assert before["term"] == after["term"] == "Morgen"
-    # Грамматика — одна тема на день, обновление экрана её не меняет.
-    assert before["live_language"] == after["live_language"] and before["live_language"]["topic"]
+    # «Новая тема» — следующая тема грамматики; словарь не меняется.
+    assert before["live_language"]["topic"] != after["live_language"]["topic"]
+    assert learning.build_learning_home("42")["live_language"] == after["live_language"]  # она — тема дня
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):

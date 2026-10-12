@@ -44,13 +44,14 @@ def _flag(language):
 # Текст карточки игры — на активном языке обучения, кнопки остаются русскими.
 GAME_UI = {
     "русский": {
-        "title": "Угадай персонажа · Русский",
+        "title": "Угадай слово · Русский",
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
         "choose": "Выбери верный ответ.",
         "found": "✅ Дело раскрыто!",
         "answer_was": "💡 Верный ответ",
+        "ended": "Эта загадка уже закончилась — держи новую.",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -58,7 +59,7 @@ GAME_UI = {
         "retry": "Попробуй ещё один раз.",
     },
     "английский": {
-        "title": "Guess the character",
+        "title": "Guess the word",
         "reply_next": "Write your answer in the next message — any language works.",
         "category": "Category",
         "categories": {"животное": "animal", "еда": "food", "предмет": "object", "профессия": "job",
@@ -69,6 +70,7 @@ GAME_UI = {
         "choose": "Choose the right answer.",
         "found": "✅ Case solved!",
         "answer_was": "💡 The right answer",
+        "ended": "This riddle is already over — try a new one.",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -76,7 +78,7 @@ GAME_UI = {
         "retry": "Try one more time.",
     },
     "нидерландский": {
-        "title": "Raad het personage",
+        "title": "Raad het woord",
         "reply_next": "Schrijf je antwoord in het volgende bericht — elke taal is goed.",
         "category": "Categorie",
         "categories": {"животное": "dier", "еда": "eten", "предмет": "voorwerp", "профессия": "beroep",
@@ -87,6 +89,7 @@ GAME_UI = {
         "choose": "Kies het juiste antwoord.",
         "found": "✅ Zaak opgelost!",
         "answer_was": "💡 Het juiste antwoord",
+        "ended": "Dit raadsel is al voorbij — probeer een nieuw.",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -154,7 +157,7 @@ _BASE_GAME_LANGS = ("английский", "нидерландский")
 def _game_ui(lang=None):
     if lang and lang not in GAME_UI:
         # Язык страны отпуска: подписи по-русски, загадка — на языке страны.
-        return {**GAME_UI["русский"], "title": f"Угадай персонажа · {lang[:1].upper()}{lang[1:]}"}
+        return {**GAME_UI["русский"], "title": f"Угадай слово · {lang[:1].upper()}{lang[1:]}"}
     return GAME_UI.get(lang) or GAME_UI["русский"]
 
 
@@ -679,6 +682,46 @@ def _game_result_kb(ui):
     ])
 
 
+_ROUND_KEY = "game_round"  # текущая загадка в профиле: перезапуск бота (обновление кода) её не теряет
+
+
+def _round(cid):
+    """Текущая загадка: из памяти, после перезапуска — из профиля; нет — None."""
+    st = store.game_state.get(str(cid))
+    if st is None:
+        saved = (store.get_profile(cid) or {}).get(_ROUND_KEY)
+        if isinstance(saved, dict) and saved.get("answer"):
+            st = store.game_state[str(cid)] = dict(saved)
+    return st
+
+
+def _save_round(cid):
+    st = store.game_state.get(str(cid))
+    if st is not None:
+        store.mutate_profile(cid, lambda profile: ({**profile, _ROUND_KEY: dict(st)}, None))
+
+
+def _round_ui(cid, st=None):
+    """Подписи на языке раунда; язык хранится и в самом раунде — на случай перезапуска."""
+    lang = store.game_config.get(str(cid), {}).get("lang") or (st or {}).get("lang") or "русский"
+    return _game_ui(lang)
+
+
+def has_round(cid) -> bool:
+    return _round(cid) is not None
+
+
+def drop_round(cid):
+    """Раунд закончен или пользователь ушёл из игры: текст в чате больше не ответ на загадку."""
+    store.game_state.pop(str(cid), None)
+    if _ROUND_KEY in (store.get_profile(cid) or {}):
+        def clear(profile):
+            profile = dict(profile)
+            profile.pop(_ROUND_KEY, None)
+            return profile, None
+        store.mutate_profile(cid, clear)
+
+
 async def start(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)
     store.game_config[str(cid)] = {"lang": _game_lang(cid)}
@@ -743,7 +786,8 @@ async def send_game(bot, cid, status=None):
                                   # У запасных карточек explain — описание, а не факт: факт в разгадке — от AI.
                                   "local": bool(d.get("_local")) and not d.get("_fact")}
     options, correct = _game_options(d, lang)
-    store.game_state[str(cid)].update(options=options, correct=correct, wrong_picked=[])
+    store.game_state[str(cid)].update(options=options, correct=correct, wrong_picked=[], lang=lang)
+    _save_round(cid)
     msg = learning_ui.game_card(ui, d.get("description", ""), category=category)
     kb = _game_play_kb(ui, hint_available=True)
     if status is not None:
@@ -846,7 +890,7 @@ def _is_landscape_photo(photo):
 
 async def _finish_game_round(bot, cid, st, ui, solved=True):
     """Единое завершение раунда; solved=False — заголовок «💡 Het juiste antwoord» вместо «✅ Zaak opgelost!»."""
-    store.game_state.pop(str(cid), None)
+    drop_round(cid)
     _remember_game_answer(cid, st)
     await _send_game_result(bot, cid, st, ui, _game_result_kb(ui), solved=solved)
 
@@ -899,14 +943,15 @@ def _game_guess_correct(text, names):
 
 async def game_answer(bot, cid, text):
     """Ответ текстом в чат — пока игра ждёт ответа (любая другая кнопка бота это ожидание снимает)."""
-    st = store.game_state.get(str(cid))
+    st = _round(cid)
     if not st:
         return False
-    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
+    ui = _round_ui(cid, st)
     if _game_guess_correct(text, [st["answer"], *st.get("aliases", [])]):
         await _finish_game_round(bot, cid, st, ui)
         return True
     st["tries"] = st.get("tries", 0) + 1
+    _save_round(cid)
     if st["tries"] >= 2:
         await _finish_game_round(bot, cid, st, ui)
     else:
@@ -916,8 +961,8 @@ async def game_answer(bot, cid, text):
 
 
 async def game_hint(bot, cid, q):
-    st = store.game_state.get(str(cid))
-    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
+    st = _round(cid)
+    ui = _round_ui(cid, st)
     if st and not st.get("hint_used") and st.get("hint"):
         st["hint_used"] = True
         try:  # у загадки остаётся только навигация; варианты — в викторине под подсказкой
@@ -935,8 +980,11 @@ async def game_hint(bot, cid, q):
         )
         if getattr(message, "poll", None):
             _GAME_POLLS[str(message.poll.id)] = str(cid)
-    else:
-        await q.message.reply_text(ui["hint_title"])
+            st["poll_id"] = str(message.poll.id)
+        _save_round(cid)
+    elif not st:
+        # Загадка уже закончилась (или забыта) — не голое «💡 Hint», а предложение новой.
+        await q.message.reply_text(ui.get("ended", GAME_UI["русский"]["ended"]), reply_markup=_game_result_kb(ui))
 
 
 _GAME_POLLS: dict = {}  # id викторины-подсказки → чат; после перезапуска старая викторина просто молчит
@@ -947,14 +995,18 @@ async def game_poll_answer(bot, poll_answer) -> bool:
 
     False — это не викторина игры (её ждёт тренажёр).
     """
-    cid = _GAME_POLLS.pop(str(getattr(poll_answer, "poll_id", "")), None)
-    if cid is None:
-        return False
-    st = store.game_state.get(cid)
+    poll_id = str(getattr(poll_answer, "poll_id", ""))
+    cid = _GAME_POLLS.pop(poll_id, None)
+    if cid is None:  # после перезапуска — по пользователю и id викторины в сохранённом раунде
+        user = str(getattr(getattr(poll_answer, "user", None), "id", "") or "")
+        if not user or (_round(user) or {}).get("poll_id") != poll_id:
+            return False
+        cid = user
+    st = _round(cid)
     option_ids = list(getattr(poll_answer, "option_ids", None) or [])
     if not st or not option_ids:
         return True
-    ui = _game_ui(store.game_config.get(cid, {}).get("lang", "русский"))
+    ui = _round_ui(cid, st)
     await _finish_game_round(bot, cid, st, ui, solved=int(option_ids[0]) == st.get("correct"))
     return True
 
@@ -962,13 +1014,14 @@ async def game_poll_answer(bot, poll_answer) -> bool:
 async def game_option(bot, cid, q, index):
     """Выбран вариант ответа: верный — разгадка; неверный — вариант убирается, вторая ошибка — разгадка.
     Загадка остаётся в чате, результат приходит под ней."""
-    st = store.game_state.get(str(cid))
-    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
+    st = _round(cid)
+    ui = _round_ui(cid, st)
     if not st or not 0 <= index < len(st.get("options") or ()):
         return
     if index != st.get("correct"):
         st["tries"] = st.get("tries", 0) + 1
         st["wrong_picked"] = [*(st.get("wrong_picked") or []), index]
+        _save_round(cid)
         if st["tries"] < 2:
             kb = _game_hint_kb(ui, st["options"], st["wrong_picked"])
             try:
@@ -985,8 +1038,8 @@ async def game_option(bot, cid, q, index):
 
 
 async def game_reveal(bot, cid, q):
-    st = store.game_state.get(str(cid))
-    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
+    st = _round(cid)
+    ui = _round_ui(cid, st)
     if not st:
         return
     try:

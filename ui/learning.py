@@ -1,3 +1,4 @@
+import re
 
 from dictionary_model import study_card_is_complete
 from .builder import MessageBuilder
@@ -202,24 +203,26 @@ def game_found(ui, answer, body="", title=""):
     return msg
 
 
+def _without_leading_emoji(text) -> str:
+    """«🔼 Сложный (B1+)» → «Сложный (B1+)», «🇳🇱 Нидерландский» → «Нидерландский»."""
+    return re.sub(r"^[^\wА-Яа-яЁё(]+", "", str(text or "")).strip()
+
+
 def learning_settings(active_language, active_level=""):
+    """«Язык обучения · Нидерландский 🇳🇱», «Уровень: Сложный (B1+)» одной строкой, внизу курсивом — зачем."""
+    language = str(active_language or "").strip()
+    flag = language.split(" ", 1)[0] if language and not language[0].isalpha() else ""
+    title = _without_leading_emoji(language)
     b = MessageBuilder()
-    b.section("📝 Предпочтения")
+    b.section(" ".join(part for part in (f"Язык обучения · {title}", flag if flag != "🚫" else "") if part))
     b.spacer()
-    b.labeled_line("Язык обучения")
-    b.bold(active_language)
-    b.newline()
     if active_level:
+        b.labeled_line("Уровень", _without_leading_emoji(active_level), lowercase=False)
         b.spacer()
-        b.labeled_line("Уровень")
-        b.bold(active_level)
-        b.newline()
-    b.spacer()
-    if active_level:
-        b.text_line("Эти предпочтения влияют на карточку обучения, практику и уведомления.")
-    else:
-        b.text_line("Выбери язык, когда захочешь вернуться к практике.")
-    return b.build()
+    b.italic("Эти предпочтения влияют на карточку обучения, практику и уведомления." if active_level
+             else "Выбери язык, когда захочешь вернуться к практике.")
+    b.newline()
+    return b.build_stripped()
 
 
 def learning_level_settings(language):

@@ -162,11 +162,8 @@ def build_learning_home(cid):
 
 
 def refresh_learning_home(cid):
-    """Переключает только фразу дня с её правилом, не меняя материал словаря."""
-    store.mutate_profile(cid, lambda profile: (
-        {**profile, "learning_home_variant": int(profile.get("learning_home_variant") or 0) + 1},
-        None,
-    ))
+    """«Новая тема»: следующая несыгранная тема грамматики становится темой дня; словарь не меняется."""
+    live_language.grammar_of_day(cid, _active_language_code(cid), renew=True)
     return build_learning_home(cid)
 
 
