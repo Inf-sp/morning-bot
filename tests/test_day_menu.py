@@ -284,10 +284,9 @@ def test_menu_dish_never_falls_back_to_an_unrelated_recipe(monkeypatch):
 def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     calls, shown = [], []
     monkeypatch.setattr(menu.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
-    monkeypatch.setattr(day_menu, "next_fridge_cuisine", lambda _cid: "french")
-    monkeypatch.setattr(day_menu, "remember_fridge_cuisine", lambda _cid, cuisine: calls.append(cuisine))
+    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: {"cuisine": "french"})
     monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda cid, now=None, refresh=False, cuisine=None,
-                        dish=None, hint_cuisine=None: calls.append((refresh, hint_cuisine)) or {"name": "Омлет с сыром", "cuisine": "french", "ingredients": ["яйца", "сыр"],
+                        dish=None: calls.append((refresh, cuisine)) or {"name": "Омлет с сыром", "cuisine": "french", "ingredients": ["яйца", "сыр"],
                      "missing_ingredients": ["зелень"], "steps": [{"text": "Взбей яйца"}]})
     monkeypatch.setattr(recipe_generation, "_home_meal_for_hour", lambda _hour: "dinner")
 
@@ -298,8 +297,8 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True))
 
     text, markup = shown[0]
-    # Подсказка кухни по кругу, круг сдвигается после нового рецепта.
-    assert calls == [(True, "french"), "french"] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
+    # Кухня — как у меню дня на главном экране.
+    assert calls == [(True, "french")] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
     assert "Не хватает:\nзелень" in text
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_new"], ["m_food", "m_menu"]]
 
@@ -337,16 +336,44 @@ def test_other_menu_keeps_screen_cuisine_and_skips_near_repeats(monkeypatch):
     assert day_menu.is_repeat("Омлет с сыром", ["Омлет"]) and not day_menu.is_repeat("Куриный суп", ["Куриный шашлык"])
 
 
-def test_fridge_recipe_cuisines_go_round_without_last_three(monkeypatch):
-    profile = _profile(monkeypatch)
-    monkeypatch.setattr(day_menu._settings(), "cuisines", lambda _cid: ["italian", "georgian", "thai", "mexican", "russian"])
-    picked = []
-    for _ in range(6):
-        cuisine = day_menu.next_fridge_cuisine("42")
-        picked.append(cuisine)
-        day_menu.remember_fridge_cuisine("42", cuisine)
+def test_same_cuisine_again_and_again_rotates_dishes_without_ai(monkeypatch):
+    _profile(monkeypatch)
+    _ai(monkeypatch, RuntimeError("AI down"))
+    seen = []
+    for _ in range(6):  # «Другая кухня → Русская» шесть раз подряд
+        menu_data = day_menu.get_day_menu("42", now=NOW, refresh=True, cuisine="russian")
+        seen.append(tuple(dish["name"] for dish in menu_data["dishes"].values()))
 
-    assert picked == ["italian", "georgian", "thai", "mexican", "russian", "italian"]
-    profile["fridge_cuisine_history"] = ["italian"]
-    monkeypatch.setattr(day_menu._settings(), "cuisines", lambda _cid: ["italian", "georgian"])
-    assert day_menu.next_fridge_cuisine("42") == "georgian"  # две кухни — просто чередуются
+    assert all(a != b for a, b in zip(seen, seen[1:]))  # соседние меню не совпадают
+    lunches = [menu[1] for menu in seen]
+    assert len(set(lunches)) == len(lunches)  # обеды не повторяются, пока список не пройден
+
+
+def test_fallback_after_full_list_returns_least_recently_shown():
+    options = recipe_generation.TYPICAL_DISHES["thai"]["lunch"]
+    names = [name for name, _ in options]
+    shown = names[::-1]  # первым показан последний в списке — он «самый давний»
+    dish = day_menu._fallback_dish("thai", "lunch", NOW.date(), {n.casefold() for n in names}, (), shown)
+    assert dish["name"] == names[-1]
+
+
+def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
+    assert recipe_generation._idea_slot("lunch", None) == "fridge_lunch"
+    assert recipe_generation._idea_slot("lunch", {"name": "Борщ"}) == "lunch"
+
+    class Rebuild(Exception):
+        pass
+
+    monkeypatch.setattr(recipe_generation, "_home_idea_context", lambda *_a, **_k: {"meal": "lunch", "signature": "s"})
+    monkeypatch.setattr(recipe_generation.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(recipe_generation, "_home_month_pool", lambda *_a: (_ for _ in ()).throw(Rebuild()))
+    ready = {"name": "Паста", "cuisine": "italian"}
+    asked = []
+    monkeypatch.setattr(recipe_generation, "get_cached_cooking_home_idea",
+                        lambda _cid, now=None, fridge=False: asked.append(fridge) or ready)
+
+    assert recipe_generation.get_cooking_home_idea("42", cuisine="italian") == ready  # та же кухня — актуальный
+    import pytest
+    with pytest.raises(Rebuild):  # меню сменилось на русскую — собираем новый рецепт
+        recipe_generation.get_cooking_home_idea("42", cuisine="russian")
+    assert asked == [True, True]  # «Из моих продуктов» читает только свою ячейку

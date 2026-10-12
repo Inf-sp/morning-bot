@@ -258,3 +258,33 @@ def test_removed_travel_callbacks_open_main_menu(monkeypatch):
 
     assert [(m["text"], m["reply_markup"]) for m in sent] == [("menu", "kb")] * 4
     assert bot_callbacks._status_topic("a_trav_go") is None
+
+
+def test_replacing_card_deletes_old_only_after_new_card_arrived(monkeypatch):
+    import telegram_runtime
+    import verify
+    deleted = []
+
+    class Message:
+        chat_id, message_id = "77", 5
+
+        async def delete(self):
+            deleted.append(self.message_id)
+
+    ctx = bot_callbacks.Ctx(None, "77", type("Q", (), {"message": Message()})(), "movie_next", None)
+
+    async def sends_new_card(_c):
+        telegram_runtime._count_edit("sendPhoto", {"chat_id": "77"})
+
+    async def edits_in_place(_c):
+        telegram_runtime._count_edit("editMessageText", {"chat_id": "77", "message_id": 5})
+
+    async def fails(_c):
+        await verify.safe_error(RecordingBot([]), "77", RuntimeError("boom"))
+        telegram_runtime._count_edit("sendMessage", {"chat_id": "77"})  # текст ошибки — тоже отправка
+
+    asyncio.run(bot_callbacks._replaced(sends_new_card)(ctx))
+    assert deleted == [5]  # новая карточка пришла — прежняя удалена
+    for handler in (edits_in_place, fails):
+        asyncio.run(bot_callbacks._replaced(handler)(ctx))
+    assert deleted == [5]  # правка на месте или ошибка — прежняя остаётся

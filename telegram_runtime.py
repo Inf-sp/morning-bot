@@ -278,12 +278,33 @@ def message_edits(chat_id, message_id) -> int:
     return _message_edits.get((str(chat_id), int(message_id or 0)), 0)
 
 
+# Правки содержимого (не только кнопок) и отправки в чат: по ним «Другой…» понимает, заменил ли
+# обработчик карточку на месте или прислал новую (тогда прежнюю удаляет роутер).
+_CONTENT_ENDPOINTS = _EDIT_ENDPOINTS - {"editMessageReplyMarkup"}
+_SEND_ENDPOINTS = {"sendMessage", "sendPhoto", "sendMediaGroup", "sendAnimation", "sendVideo", "sendPoll"}
+_content_edits: dict = {}
+_chat_sends: dict = {}
+
+
+def message_content_edits(chat_id, message_id) -> int:
+    return _content_edits.get((str(chat_id), int(message_id or 0)), 0)
+
+
+def chat_sends(chat_id) -> int:
+    return _chat_sends.get(str(chat_id), 0)
+
+
 def _count_edit(endpoint, data):
+    if endpoint in _SEND_ENDPOINTS and data.get("chat_id") is not None:
+        _chat_sends[str(data["chat_id"])] = _chat_sends.get(str(data["chat_id"]), 0) + 1
     if endpoint in _EDIT_ENDPOINTS and data.get("message_id"):
         if len(_message_edits) > _MESSAGE_EDITS_MAX:
             _message_edits.clear()  # ponytail: грубая очистка, счётчик нужен только на секунды нажатия
+            _content_edits.clear()
         key = (str(data.get("chat_id")), int(data["message_id"]))
         _message_edits[key] = _message_edits.get(key, 0) + 1
+        if endpoint in _CONTENT_ENDPOINTS:
+            _content_edits[key] = _content_edits.get(key, 0) + 1
 
 
 class MenuCleanupBot(ExtBot):

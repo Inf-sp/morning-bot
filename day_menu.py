@@ -23,6 +23,7 @@ MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
 _NAME_MAX = 60
 _NOTE_MAX = 100
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
+_CUISINE_HISTORY_MAX = 60  # блюда одной кухни: давно показанное возвращается первым
 
 # Вступление о кухне дня: характер и за что её любят.
 CUISINE_INTRO = {
@@ -107,31 +108,6 @@ def _today(now=None):
     return (now or datetime.now(config.TZ)).date()
 
 
-_FRIDGE_RECENT = 3  # «Из моих продуктов»: последние кухни не повторяются
-
-
-def next_fridge_cuisine(cid) -> str:
-    """Следующая кухня по кругу из выбранных в Настройках (без них — из всех), без последних трёх."""
-    pool = _settings().cuisines(cid) or [key for key, _label in _settings().CUISINE_OPTIONS]
-    history = [key for key in (store.get_profile(cid) or {}).get("fridge_cuisine_history") or [] if key in pool]
-    recent = history[-min(_FRIDGE_RECENT, len(pool) - 1):] if len(pool) > 1 else []
-    start = pool.index(history[-1]) + 1 if history else 0
-    ordered = pool[start:] + pool[:start]
-    return next((key for key in ordered if key not in recent), ordered[0])
-
-
-def remember_fridge_cuisine(cid, cuisine) -> None:
-    if not cuisine:
-        return
-
-    def change(profile):
-        history = [*(profile.get("fridge_cuisine_history") or []), cuisine][-10:]
-        profile["fridge_cuisine_history"] = history
-        return profile, None
-
-    store.mutate_profile(cid, change)
-
-
 def get_cached_day_menu(cid, now=None) -> dict | None:
     """Меню текущего дня из профиля или None — без AI и побочных эффектов."""
     menu = (store.get_profile(cid) or {}).get("cooking_day_menu")
@@ -148,8 +124,15 @@ def _history(profile, now) -> list[str]:
     return list(entry.get("names") or []) if entry.get("month") == month else []
 
 
-def _fallback_dish(cuisine, meal, day, avoided, restrictions=()):
-    """Типичное блюдо из встроенного списка: по кругу, сначала подходящие и не показанные.
+def _cuisine_history(profile, cuisine) -> list[str]:
+    """Блюда этой кухни, уже показанные в меню (по порядку, без срока): для «не повторяй» и
+    выбора давно не показанного блюда."""
+    return list(((profile.get("cooking_day_menu_history") or {}).get("by_cuisine") or {}).get(cuisine) or [])
+
+
+def _fallback_dish(cuisine, meal, day, avoided, restrictions=(), shown=()):
+    """Типичное блюдо из встроенного списка: по кругу, сначала подходящие и не показанные;
+    все показаны — то, что показывалось давнее всех (shown — порядок показа).
 
     Если в этом приёме пищи нет блюда под ограничения — берём подходящее блюдо этой же
     кухни из другого приёма пищи, а не нарушаем ограничение.
@@ -162,8 +145,13 @@ def _fallback_dish(cuisine, meal, day, avoided, restrictions=()):
 
     other_meals = [item for key, items in by_meal.items() if key != meal for item in items]
     allowed = fitting(options) or fitting(other_meals) or list(options)
-    fresh = [item for item in allowed if item[0].casefold() not in avoided] or allowed
-    name, note = fresh[day.toordinal() % len(fresh)]
+    fresh = [item for item in allowed if item[0].casefold() not in avoided]
+    if fresh:
+        name, note = fresh[day.toordinal() % len(fresh)]
+        return {"name": name, "note": note}
+    last_seen = {str(value).casefold(): index for index, value in enumerate(shown)}
+    fresh = [item for item in allowed if item[0].casefold() not in avoided - set(last_seen)] or allowed
+    name, note = min(fresh, key=lambda item: last_seen.get(item[0].casefold(), -1))
     return {"name": name, "note": note}
 
 
@@ -245,7 +233,9 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     day = _today(now)
     cuisine = cuisine or day_cuisine(cid, day)
     profile = store.get_profile(cid) or {}
-    avoided_names = list(dict.fromkeys([*_history(profile, now), *avoid]))
+    shown = _cuisine_history(profile, cuisine)
+    # В «Не повторяй» для AI — сначала блюда этой кухни, затем недавние остальные.
+    avoided_names = list(dict.fromkeys([*_history(profile, now), *shown[-40:], *avoid]))
     avoided = {name.casefold() for name in avoided_names}
     available = []  # меню дня — популярные блюда из любых продуктов; из холодильника — «Из моих продуктов»
     meals = _settings().food_meals(cid)
@@ -266,7 +256,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
         name, note = _clean(raw.get("name"), _NAME_MAX), _clean(raw.get("note"), _NOTE_MAX)
         if (not name or is_repeat(name, avoided_names) or name.casefold() in used
                 or not fits_restrictions({"name": name, "note": note}, restrictions)):
-            dish = _fallback_dish(cuisine, meal, day, avoided | used, restrictions)
+            dish = _fallback_dish(cuisine, meal, day, avoided | used, restrictions, shown)
         else:
             dish = {"name": name, "note": note}
         used.add(dish["name"].casefold())
@@ -288,9 +278,13 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
 
     def save(profile):
         history = _history(profile, now)
-        names = [*history, *(dish["name"] for dish in menu["dishes"].values())]
+        new_names = [dish["name"] for dish in menu["dishes"].values()]
+        names = [*history, *new_names]
+        by_cuisine = dict((profile.get("cooking_day_menu_history") or {}).get("by_cuisine") or {})
+        by_cuisine[menu["cuisine"]] = [*by_cuisine.get(menu["cuisine"], []), *new_names][-_CUISINE_HISTORY_MAX:]
         profile["cooking_day_menu"] = menu
-        profile["cooking_day_menu_history"] = {"month": month, "names": names[-_HISTORY_MAX:]}
+        profile["cooking_day_menu_history"] = {"month": month, "names": names[-_HISTORY_MAX:],
+                                               "by_cuisine": by_cuisine}
         return profile, None
 
     store.mutate_profile(cid, save)

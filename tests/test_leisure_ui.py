@@ -1287,7 +1287,8 @@ def test_picker_swaps_card_buttons_and_choice_clears_old_card(monkeypatch):
     assert picker.inline_keyboard[0][0].text == "🆕 Новинка"
     assert picker.inline_keyboard[1][0].text == "Комедия"
     assert click("movie_card_3")[0].inline_keyboard[1][0].callback_data == "movie_pick_3"
-    assert click("movie_g_35") == [None] and shown == ["35"]
+    # Прежнюю карточку удаляет роутер, когда пришла новая (_replaced); без новой — её не трогаем.
+    assert click("movie_g_35") == [] and shown == ["35"]
 
 
 class _NoStatus:

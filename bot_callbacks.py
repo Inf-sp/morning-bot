@@ -373,18 +373,37 @@ def _swap_kb(make_kb):
     return run
 
 
-def _picked(handler):
-    """Выбор жанра: новая карточка приходит отдельно, у прежней снимаются кнопки.
-
-    Снимаем после handler: inline-статус на время подбора сам восстанавливает кнопки.
-    """
+def _replaced(handler):
+    """«Другой… / Не нравится / Новый… / выбор жанра или кухни»: новая карточка заменяет прежнюю —
+    в чате остаётся одна актуальная. Обработчик правил сообщение сам — ничего не делаем; прислал новую
+    карточку — прежнее сообщение удаляется; ошибка или ничего не пришло — прежнее остаётся.
+    Открытые рецепты и детали — другие сообщения, их это не касается."""
     async def run(c):
-        await handler(c)
+        import telegram_runtime
+        message = getattr(c.q, "message", None)
+        if message is None:
+            await handler(c)
+            return
+        chat_id, message_id = message.chat_id, message.message_id
+        content, sends = (telegram_runtime.message_content_edits(chat_id, message_id),
+                          telegram_runtime.chat_sends(chat_id))
+        marks = []
+        token = verify.errors_in_action.set(marks)
         try:
-            await c.q.message.edit_reply_markup(reply_markup=None)
+            await handler(c)
+        finally:
+            verify.errors_in_action.reset(token)
+        if (marks or telegram_runtime.message_content_edits(chat_id, message_id) != content
+                or telegram_runtime.chat_sends(chat_id) == sends):
+            return
+        try:
+            await message.delete()
         except Exception:
-            _log.debug("_picked: keyboard not cleared data=%s", c.data, exc_info=True)
+            _log.debug("_replaced: old card not deleted data=%s", c.data, exc_info=True)
     return run
+
+
+_picked = _replaced  # выбор жанра/кухни/стиля — та же замена карточки
 
 
 def _page(c):
@@ -417,8 +436,8 @@ ROUTES = (
     R("as_*", lambda c: personal_collections.handle_collection_callback(
         c.bot, c.cid, c.q, c.data), sub="personal_collections"),
     # Гардероб: инлайн-кабинет.
-    R("w_look", lambda c: c.status(
-        lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)), sub="wardrobe"),
+    R("w_look", _replaced(lambda c: c.status(
+        lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status))), sub="wardrobe"),
     # «Новый образ»: выбор направления под образом, затем новый образ в этом стиле.
     R("w_pick", _swap_kb(lambda c: wardrobe.style_picker_kb())),
     R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard())),
@@ -436,8 +455,8 @@ ROUTES = (
     R("m_close", _close),
     R("m_settings", lambda c: settings.send_home(c.bot, c.cid, q=c.q)),
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
-    R("m_food_next", lambda c: c.status(
-        lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
+    R("m_food_next", _replaced(lambda c: c.status(
+        lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True)))),
     # «Другое меню на сегодня» (m_food_next) — новые блюда той же кухни; «Другая кухня» (food_pick):
     # кухня → новое меню на день (предпочтения не меняются). food_meal_* — кнопки старых сообщений.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
@@ -474,6 +493,7 @@ ROUTES = (
     R("game_again", lambda c: c.status(lambda status: learning_game.send_game(c.bot, c.cid, status=status))),
     R("game_hint", lambda c: learning_game.game_hint(c.bot, c.cid, c.q)),
     R("game_reveal", lambda c: learning_game.game_reveal(c.bot, c.cid, c.q)),
+    R("game_opt_*", lambda c: learning_game.game_option(c.bot, c.cid, c.q, _tail_int(c))),
     # Старые кнопки общего экрана «Досуг» ведут в соответствующую категорию.
     R("leisure_prefs_movie", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
     R("leisure_prefs_books", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
@@ -492,8 +512,8 @@ ROUTES = (
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
-    R("food_mine_new", lambda c: c.status(
-        lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status, refresh=True))),
+    R("food_mine_new", _replaced(lambda c: c.status(
+        lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status, refresh=True)))),
     # Книги.
     R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
     R("book_next", _picked(lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid)))),
@@ -571,16 +591,17 @@ ROUTES = (
     R("nov_pick_*", _swap_kb(lambda c: leisure_novelty.genre_picker(
         c.cid, c.data[len("nov_pick_"):], back=f"nov_card_{c.data[len('nov_pick_'):]}"))),
     R("nov_card_*", _swap_kb(lambda c: leisure_novelty.card_keyboard(c.data[len("nov_card_"):]))),
-    R("nov_no_*", lambda c: c.status(lambda status: leisure_novelty.dislike_novelty(
-        c.bot, c.cid, c.data[len("nov_no_"):], status=status))),
+    R("nov_no_*", _replaced(lambda c: c.status(lambda status: leisure_novelty.dislike_novelty(
+        c.bot, c.cid, c.data[len("nov_no_"):], status=status)))),
     R("nov_*", _picked(lambda c: c.status(lambda status: leisure_novelty.send_novelty(
         c.bot, c.cid, c.data[len("nov_"):], status=status)))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
     # «Не нравится» заменяет карточку артиста на месте: статус правит то же сообщение.
     R("listen_no", lambda c: c.status(
         lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
-    R("movie_no_*", lambda c: c.status(lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c)))),
-    R("book_no_*", lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c)))),
+    R("movie_no_*", _replaced(lambda c: c.status(
+        lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c))))),
+    R("book_no_*", _replaced(lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c))))),
     # «Продолжить / ещё раз» и «Короче / Глубже» для последнего ответа.
     R("chat_retry", lambda c: c.status(
         lambda status: retry_flow.retry_last_response(c.bot, c.cid, status=status))),

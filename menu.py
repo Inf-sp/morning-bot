@@ -121,10 +121,11 @@ async def send_mine_recipe(bot, cid, status=None, refresh=False):
     async def build(status):
         import day_menu
         meal = recipe_generation._home_meal_for_hour(datetime.now(config.TZ).hour)
-        hint = day_menu.next_fridge_cuisine(cid)  # каждый новый рецепт — другая кухня из выбранных
-        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, None, None, hint)
-        if refresh or str(idea.get("cuisine") or "").lower() == hint:
-            day_menu.remember_fridge_cuisine(cid, hint)  # новый рецепт — круг кухонь сдвигается
+        # Кухня — как у меню дня на главном экране Готовки (кухня страны отпуска — без строгого выбора).
+        menu_cuisine = (day_menu.get_cached_day_menu(cid) or {}).get("cuisine") or \
+            day_menu.day_cuisine(cid, day_menu._today())
+        cuisine = None if str(menu_cuisine).startswith(day_menu.LOCAL_PREFIX) else menu_cuisine
+        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, cuisine)
         msg = menu_ui.food_menu(idea, meal=meal, from_fridge=True)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 

@@ -196,15 +196,16 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
 
     text = bot.messages[0]["text"]
     assert text.startswith("🕵️ Raad het personage\n\nCategorie: dier\n\n")
-    assert text.endswith("Schrijf je antwoord in het volgende bericht — elke taal is goed.")
+    assert "volgende bericht" not in text  # ответ — кнопками
     assert not any("а" <= char <= "я" for char in text.casefold())
     assert "Wie ben ik?" not in bot.messages[0]["text"]
     assert "Verdachte:" not in bot.messages[0]["text"]
     assert "• " not in bot.messages[0]["text"]
     labels = [button.text for row in bot.messages[0]["reply_markup"].inline_keyboard for button in row]
-    assert labels == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
-    assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 2]
-    hint, reveal = (row[0] for row in bot.messages[0]["reply_markup"].inline_keyboard[:2])
+    # Три варианта ответа по-русски, затем «Подсказка», «Сдаюсь» и навигация.
+    assert labels[3:] == ["💡 Подсказка", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"] and "De kat" in labels[:3]
+    assert [len(row) for row in bot.messages[0]["reply_markup"].inline_keyboard] == [1, 1, 1, 1, 1, 2]
+    hint, reveal = (row[0] for row in bot.messages[0]["reply_markup"].inline_keyboard[3:5])
     assert (dict(hint.api_kwargs or {}), reveal.api_kwargs) == ({}, {"style": "danger"})
 
 
@@ -215,7 +216,6 @@ def test_detective_card_is_fully_in_the_study_language():
 
     assert message.text == (
         "🕵️ Guess the character\n\nCategory: animal\n\nI have whiskers and I like warm places."
-        "\n\nWrite your answer in the next message — any language works."
     )
     assert learning_ui.game_card(learning_game.GAME_UI["русский"], "Я кот.", category="животное").text \
         .startswith("🕵️ Угадай персонажа · Русский\n\nКатегория: животное")
@@ -443,7 +443,7 @@ def test_second_wrong_answer_uses_common_round_completion(monkeypatch):
         learning_game.store, "game_state",
         {"42": {
             "answer": "De kat", "aliases": ["cat"], "tries": 1,
-            "hint_used": False,
+            "hint_used": False, "options": ["Кошка", "Собака", "Кролик"], "correct": 0, "wrong_picked": [2],
         }},
     )
     monkeypatch.setattr(
@@ -451,7 +451,11 @@ def test_second_wrong_answer_uses_common_round_completion(monkeypatch):
         {"42": {"lang": "нидерландский"}},
     )
 
-    asyncio.run(learning_game.game_answer(object(), "42", "wronganswer"))
+    class Message:
+        async def edit_reply_markup(self, **_k):
+            return None
+
+    asyncio.run(learning_game.game_option(object(), "42", type("Q", (), {"message": Message()})(), 1))
 
     assert len(calls) == 1
     assert calls[0][2]["tries"] == 2
@@ -529,14 +533,18 @@ def test_detective_photo_search_returns_first_horizontal_result(monkeypatch):
     assert photo["id"] == "first"
 
 
-def test_detective_card_and_hint_end_with_italic_answer_instruction():
+def test_detective_card_offers_three_answer_buttons_instead_of_typing():
     from ui import learning as learning_ui
     ui = learning_game.GAME_UI["нидерландский"]
-    for msg in (learning_ui.game_card(ui, "Ik heb snorharen."), learning_ui.game_hint(ui, "Ik jaag op muizen.")):
-        italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
-                  for e in msg.entities if e.type == "italic"]
-        assert msg.text.rstrip().endswith(ui["reply_next"]) and italic[-1] == ui["reply_next"]
+    card = {"answer": "de kat", "aliases": ["кошка", "cat"], "category": "animal", "wrong": ["лиса", "Кошка"]}
+    options, correct = learning_game._game_options(card)
 
+    assert len(options) == 3 and options[correct] == "Кошка" and "Лиса" in options  # дубль ответа не берётся
+    kb = learning_game._game_play_kb(ui, hint_available=True, options=options, hidden=[(correct + 1) % 3])
+    datas = [b.callback_data for row in kb.inline_keyboard for b in row]
+    assert f"game_opt_{correct}" in datas and f"game_opt_{(correct + 1) % 3}" not in datas
+    msg = learning_ui.game_card(ui, "Ik heb snorharen.")
+    assert "volgende bericht" not in msg.text and msg.text.endswith("Ik heb snorharen.")
 
 def test_game_in_vacation_uses_country_language(monkeypatch):
     import vacation

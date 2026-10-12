@@ -8,7 +8,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
 import store
-import trainer_grading
 import verify
 from ui import learning as learning_ui
 
@@ -42,7 +41,6 @@ def _flag(language):
 GAME_UI = {
     "русский": {
         "title": "Угадай персонажа · Русский",
-        "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
         "reveal": "😞 Сдаюсь",
@@ -56,7 +54,6 @@ GAME_UI = {
     },
     "английский": {
         "title": "Guess the character",
-        "reply_next": "Write your answer in the next message — any language works.",
         "category": "Category",
         "categories": {"животное": "animal", "еда": "food", "предмет": "object", "профессия": "job",
                        "транспорт": "transport", "место": "place", "герой": "character", "другое": "other"},
@@ -74,7 +71,6 @@ GAME_UI = {
     },
     "нидерландский": {
         "title": "Raad het personage",
-        "reply_next": "Schrijf je antwoord in het volgende bericht — elke taal is goed.",
         "category": "Categorie",
         "categories": {"животное": "dier", "еда": "eten", "предмет": "voorwerp", "профессия": "beroep",
                        "транспорт": "vervoer", "место": "plek", "герой": "personage", "другое": "overig"},
@@ -517,7 +513,8 @@ Attempt: {attempt + 1}. Return exactly these fields, one per line, without markd
 DESCRIPTION: 3-4 connected sentences in {clue_lang}, 25-45 words
 ANSWER: answer in {clue_lang}
 CATEGORY: exactly {expected_category}
-ALIASES: accepted Russian, English and Dutch names separated by |
+ALIASES: accepted Russian, English and Dutch names separated by | (Russian first)
+WRONG: two other familiar {expected_category} names in Russian, plausible but wrong for this description, separated by |
 ENGLISH: English name in 1-4 words
 HINT: one strong hint in {clue_lang}
 EXPLAIN: 1-2 short sentences in {clue_lang}
@@ -535,10 +532,11 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
     for key, field in (("DESCRIPTION", "description"), ("ANSWER", "answer"), ("CATEGORY", "category"),
                        ("ALIASES", "aliases"),
                        ("ENGLISH", "answer_en"),
-                       ("HINT", "hint"), ("EXPLAIN", "explain"), ("WORDS", "words_raw")):
+                       ("HINT", "hint"), ("EXPLAIN", "explain"), ("WORDS", "words_raw"), ("WRONG", "wrong")):
         m = re.search(rf"{key}:\s*(.+?)(?=\n[A-Z]+\d*:\s|\Z)", raw, re.S)
         out[field] = m.group(1).strip() if m else ""
     out["aliases"] = [x.strip() for x in out.get("aliases", "").split("|") if x.strip()]
+    out["wrong"] = [x.strip() for x in out.get("wrong", "").split("|") if x.strip()][:2]
     out["category"] = _game_category_key(out.get("category"))
     source_text = " ".join((out.get("description", ""), out.get("hint", ""), out.get("explain", "")))
     out["description"] = " ".join(str(out.get("description") or "").split())
@@ -552,8 +550,10 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
 _RED = {"style": "danger"}
 
 
-def _game_play_kb(ui, *, hint_available):
-    rows = []
+def _game_play_kb(ui, *, hint_available, options=(), hidden=()):
+    """Варианты ответа (по одному в строке, неверно выбранные убраны), «Подсказка», «Сдаюсь», навигация."""
+    rows = [[InlineKeyboardButton(option, callback_data=f"game_opt_{index}")]
+            for index, option in enumerate(options) if index not in hidden]
     if hint_available:
         rows.append([InlineKeyboardButton(ui["hint"], callback_data="game_hint")])
     rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs=_RED)])
@@ -627,8 +627,10 @@ async def send_game(bot, cid, status=None):
                                   "hint_used": False,
                                   "explain": _dot(d.get("explain", "")),
                                   "words": d.get("words", []), "tries": 0}
+    options, correct = _game_options(d)
+    store.game_state[str(cid)].update(options=options, correct=correct, wrong_picked=[])
     msg = learning_ui.game_card(ui, d.get("description", ""), category=category)
-    kb = _game_play_kb(ui, hint_available=True)
+    kb = _game_play_kb(ui, hint_available=True, options=options)
     if status is not None:
         await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
     else:
@@ -708,41 +710,42 @@ async def _finish_game_round(bot, cid, st, ui):
     await _send_game_result(bot, cid, st, ui, _game_result_kb(ui))
 
 
-_GAME_ARTICLES = {"de", "het", "een", "the", "a", "an"}
+def _russian_name(data) -> str:
+    """Подпись варианта по-русски: первый русский синоним (контракт генератора), иначе ответ."""
+    for value in [*(data.get("aliases") or []), data.get("answer")]:
+        value = " ".join(str(value or "").split())
+        if re.search(r"[а-яё]", value, re.I):
+            return value[:1].upper() + value[1:]
+    return str(data.get("answer") or "").strip()
 
 
-def _game_guess_correct(text, names):
-    """Ответ засчитывается по названию или отдельному слову, но не по артиклю.
-
-    Порог опечаток берётся из тренажёра: прежний ``_fuzzy`` принимал любые
-    два трёхбуквенных слова (dog/cat) и любую догадку с подстрокой «de».
-    """
-    def parts(value):
-        value = str(value or "").lower().strip()
-        return [value] + [token for token in value.split() if token not in _GAME_ARTICLES]
-
-    guesses = [part for part in parts(text) if part]
-    pool = [part for name in names for part in parts(name) if part]
-    return any(trainer_grading.fuzzy_match(guess, target) for guess in guesses for target in pool)
+def _category_names(category) -> list:
+    """Русские названия загадок этой категории из локального каталога — запасные неверные варианты."""
+    names = [alias for cards in _LOCAL_GAME_CARDS.values() for card in cards
+             if category in (None, card.get("category")) for alias in card.get("aliases") or []]
+    names += [russian for cat, _en, _nl, russian, *_rest in _EXTRA_LOCAL_SUBJECTS if category in (None, cat)]
+    names = [name for name in names if re.search(r"[а-яё]", str(name), re.I)]
+    return list(dict.fromkeys(name[:1].upper() + name[1:] for name in names))
 
 
-async def game_answer(bot, cid, text):
-    st = store.game_state.get(str(cid))
-    if not st:
-        return False
-    cfg = store.game_config.get(str(cid), {"lang": "русский"})
-    ui = _game_ui(cfg["lang"])
-    correct = _game_guess_correct(text, [st["answer"]] + st.get("aliases", []))
-    if correct:
-        await _finish_game_round(bot, cid, st, ui)
-        return True
-    st["tries"] = st.get("tries", 0) + 1
-    if st["tries"] >= 2:
-        await _finish_game_round(bot, cid, st, ui)
-    else:
-        kb = _game_play_kb(ui, hint_available=not st.get("hint_used"))
-        await bot.send_message(chat_id=cid, text=f"{ui['wrong']}\n\n{ui['retry']}", reply_markup=kb)
-    return True
+def _game_options(data):
+    """Три варианта ответа кнопками: верный и два правдоподобных той же категории, в случайном порядке."""
+    import random
+    correct = _russian_name(data)
+    taken = {correct.casefold()}
+    wrong = []
+    same, anything = _category_names(data.get("category")), _category_names(None)
+    for name in [*(data.get("wrong") or []), *random.sample(same, len(same)), *random.sample(anything, len(anything))]:
+        name = " ".join(str(name or "").split())
+        name = name[:1].upper() + name[1:]
+        if name and re.search(r"[а-яё]", name, re.I) and name.casefold() not in taken and len(name) <= 30:
+            taken.add(name.casefold())
+            wrong.append(name)
+        if len(wrong) == 2:
+            break
+    options = [correct, *wrong]
+    random.shuffle(options)
+    return options, options.index(correct)
 
 
 async def game_hint(bot, cid, q):
@@ -750,7 +753,8 @@ async def game_hint(bot, cid, q):
     ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
     if st and not st.get("hint_used") and st.get("hint"):
         st["hint_used"] = True
-        kb = _game_play_kb(ui, hint_available=False)
+        kb = _game_play_kb(ui, hint_available=False, options=st.get("options") or (),
+                           hidden=st.get("wrong_picked") or ())
         try:
             await q.message.edit_reply_markup(reply_markup=kb)
         except Exception:
@@ -759,6 +763,32 @@ async def game_hint(bot, cid, q):
         await q.message.reply_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
     else:
         await q.message.reply_text(ui["hint_title"])
+
+
+async def game_option(bot, cid, q, index):
+    """Выбран вариант ответа: верный — разгадка; неверный — вариант убирается, вторая ошибка — разгадка.
+    Загадка остаётся в чате, результат приходит под ней."""
+    st = store.game_state.get(str(cid))
+    ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
+    if not st or not 0 <= index < len(st.get("options") or ()):
+        return
+    if index != st.get("correct"):
+        st["tries"] = st.get("tries", 0) + 1
+        st["wrong_picked"] = [*(st.get("wrong_picked") or []), index]
+        if st["tries"] < 2:
+            kb = _game_play_kb(ui, hint_available=not st.get("hint_used"), options=st["options"],
+                               hidden=st["wrong_picked"])
+            try:
+                await q.message.edit_reply_markup(reply_markup=kb)
+            except Exception:
+                _log.debug("game_option: ignored error", exc_info=True)
+            await q.message.reply_text(f"{ui['wrong']}\n\n{ui['retry']}")
+            return
+    try:
+        await q.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        _log.debug("game_option: ignored error", exc_info=True)
+    await _finish_game_round(bot, cid, st, ui)
 
 
 async def game_reveal(bot, cid, q):

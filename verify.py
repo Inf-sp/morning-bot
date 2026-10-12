@@ -8,6 +8,7 @@
 Верхний уровень импортирует только stdlib, чтобы чистые грейдеры тестировались
 без telegram/env. util/config/traceback импортируются лениво внутри функций.
 """
+import contextvars
 import logging
 import re
 
@@ -109,8 +110,16 @@ def _origin_module(exc) -> str:
     return ""
 
 
+# Список текущего нажатия кнопки: safe_error отмечает в нём ошибку, и «Другой…» тогда не удаляет
+# прежнюю карточку (bot_callbacks._replaced).
+errors_in_action = contextvars.ContextVar("errors_in_action", default=None)
+
+
 async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
     """Полную ошибку - в логи, пользователю - нейтральный текст. Никогда не показываем str(exc)."""
+    marks = errors_in_action.get()
+    if marks is not None:
+        marks.append(type(exc).__name__)
     msg = str(exc)
     expected_ai_outage = msg == "Сейчас не удалось подготовить ответ. Попробуй ещё раз чуть позже."
     if not expected_ai_outage:

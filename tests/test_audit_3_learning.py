@@ -95,18 +95,6 @@ def test_failed_queued_dictionary_add_does_not_block_the_rest_of_the_queue(monke
     assert [item["term"] for item in queue] == ["первое", "второе"]
 
 
-def test_game_guess_rejects_articles_and_unrelated_short_words():
-    import learning_game
-
-    names = ["de kat", "кошка", "cat", "kat", "poes"]
-    assert learning_game._game_guess_correct("kat", names)
-    assert learning_game._game_guess_correct("it is a cat", names)
-    assert learning_game._game_guess_correct("De Kat", names)
-    assert not learning_game._game_guess_correct("dog", names)
-    assert not learning_game._game_guess_correct("de", names)
-    assert not learning_game._game_guess_correct("paarden", names)
-
-
 def test_dutch_review_ignores_non_dict_ai_payload(monkeypatch):
     import trainer
 

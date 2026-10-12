@@ -162,11 +162,7 @@ def game_card(ui, description, category=""):
     if category:
         b.line(f"{ui.get('category', 'Категория')}: {category}")
         b.spacer()
-    b.line(description)
-    b.spacer()
-    # Финальная подсказка экрана — курсивом.
-    b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
-    b.newline()
+    b.line(description)  # ответ — кнопками-вариантами под загадкой
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -210,9 +206,7 @@ def game_hint(ui, hint):
     b = MessageBuilder()
     b.section(ui.get("hint_title", ui["hint"]))
     b.spacer()
-    b.bold(hint)
-    b.spacer()
-    b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
+    b.bold(hint)  # варианты ответа — кнопками под загадкой
     b.newline()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs={"style": "danger"})],

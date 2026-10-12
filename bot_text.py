@@ -7,7 +7,6 @@ import assistant
 import fridge
 import learning_dictionary as dictionary
 import dictionary_import
-import learning_game
 import onboard
 import personal_collections
 import secure
@@ -52,10 +51,7 @@ async def handle(update, context, remove_reply_keyboard):
         store.challenge_state.pop(cid, None)
         return
 
-    # Игра и перевод проверяем перед обычным pending-вводом.
-    if cid in store.game_state:
-        if await learning_game.game_answer(bot, cid, text):
-            return
+    # Игра отвечается только кнопками-вариантами: текст в чате загадка не перехватывает.
 
     pending_kind = store.pending_input.get(cid)
     if pending_kind is None:
