@@ -241,7 +241,9 @@ ACTIONS = (
        "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
        "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"),
       _find_concerts(lambda c: c.data[2:].split("_")[1])),
-    R("listen_no", lambda c: c.status(lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status))),
+    # «Не нравится» заменяет карточку артиста на месте: статус правит то же сообщение.
+    R("listen_no", lambda c: c.status(
+        lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
     R(("food_breakfast", "recipe_breakfast"), _food_menu("breakfast")),
     R(("food_lunch", "recipe_lunch"), _food_menu("lunch")),
     R(("food_dinner", "recipe_dinner"), _food_menu("dinner")),

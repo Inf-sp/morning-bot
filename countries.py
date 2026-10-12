@@ -5,6 +5,7 @@
 нет данных — нет строки, а фильм с неизвестной страной фильтр регионов не отсеивает.
 """
 import logging
+import re
 import threading
 import time
 
@@ -158,17 +159,38 @@ def _musicbrainz_country(name):
         params={"query": f'artist:"{name}"', "fmt": "json", "limit": 3},
         headers={"User-Agent": "morning-bot/1.0 ( https://github.com/ )"}, timeout=_TIMEOUT,
     ).json()
+    wanted = _artist_key(name)
     for artist in data.get("artists") or []:
-        # Только точное совпадение имени с высокой оценкой — иначе страну не показываем.
-        if (int(artist.get("score") or 0) >= 95
-                and str(artist.get("name") or "").casefold() == str(name).casefold() and artist.get("country")):
-            return str(artist["country"]).upper()
+        # Совпадение имени (без регистра, «the», знаков и диакритики) с высокой оценкой — иначе не угадываем.
+        names = [artist.get("name"), artist.get("sort-name"), *[a.get("name") for a in artist.get("aliases") or []]]
+        if int(artist.get("score") or 0) < 90 or wanted not in {_artist_key(value) for value in names if value}:
+            continue
+        codes = (artist.get("area") or {}).get("iso-3166-1-codes") or []
+        country = artist.get("country") or (codes[0] if len(codes) == 1 else "")
+        if country:
+            return str(country).upper()
     return ""
 
 
+_FEATURING_RE = re.compile(r"\s+(?:&|and|x|feat\.?|ft\.?|featuring|with)\s+|,\s*", re.IGNORECASE)
+
+
+def _artist_key(name) -> str:
+    """«The Weeknd» ≈ «Weeknd», «Beyoncé» ≈ «Beyonce»: регистр, «the», знаки и диакритика не важны."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode().casefold()
+    text = re.sub(r"^the\s+|,\s*the$", "", text.strip())
+    return re.sub(r"[^a-z0-9а-яё]+", "", text)
+
+
+def main_artist(name) -> str:
+    """Первый артист совместного релиза: «Doja Cat & SZA» → «Doja Cat»."""
+    return _FEATURING_RE.split(str(name or "").strip(), maxsplit=1)[0].strip()
+
+
 def artist_label(name, fetch=True) -> str:
-    """«🇬🇧 Великобритания» для артиста или ""."""
-    return label(_person_cache(config.ARTIST_COUNTRY_KEY, name, _musicbrainz_country, fetch))
+    """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
+    return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _musicbrainz_country, fetch))
 
 
 def author_label(name, fetch=True) -> str:

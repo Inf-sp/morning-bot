@@ -107,3 +107,24 @@ def test_country_cache_never_keeps_failures_and_rechecks_empty_on_warm(monkeypat
     monkeypatch.setattr(countries.store, "mutate_kv", lambda _key, change: people.update(change(dict(people))[0]))
     assert countries._person_cache("k", "X", lambda _n: "GB", fetch=False) == ""  # экран — только кэш
     assert countries._person_cache("k", "X", lambda _n: "GB", fetch=True) == "GB"  # прогрев перепроверил
+
+
+def test_musicbrainz_match_ignores_case_the_and_diacritics_and_uses_area(monkeypatch):
+    class Response:
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            return self.data
+
+    rows = {"artists": [
+        {"name": "Other Band", "score": 100, "country": "US"},
+        {"name": "Weeknd", "sort-name": "Weeknd, The", "score": 92,
+         "area": {"iso-3166-1-codes": ["CA"]}},
+    ]}
+    monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response(rows))
+    monkeypatch.setattr(countries, "_MUSICBRAINZ_GAP", 0)
+
+    assert countries._musicbrainz_country("The Weeknd") == "CA"  # страна — из area, имя без «The»
+    assert countries.main_artist("Doja Cat & SZA") == "Doja Cat"
+    assert countries.main_artist("Alex Warren feat. Jelly Roll") == "Alex Warren"
