@@ -49,8 +49,8 @@ GAME_UI = {
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
         "choose": "Выбери верный ответ.",
-        "reveal": "😞 Сдаюсь",
         "found": "✅ Дело раскрыто!",
+        "answer_was": "💡 Верный ответ",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -67,8 +67,8 @@ GAME_UI = {
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "choose": "Choose the right answer.",
-        "reveal": "😞 Сдаюсь",
         "found": "✅ Case solved!",
+        "answer_was": "💡 The right answer",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -85,8 +85,8 @@ GAME_UI = {
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
         "choose": "Kies het juiste antwoord.",
-        "reveal": "😞 Сдаюсь",
         "found": "✅ Zaak opgelost!",
+        "answer_was": "💡 Het juiste antwoord",
         "again": "✨ Ещё загадка",
         "back": "⬅️ Назад",
         "home": "#️⃣ Главная",
@@ -646,8 +646,6 @@ WORDS: word|Russian translation; word|Russian translation; word|Russian translat
     return out
 
 
-# «Подсказка» — стандартного цвета, «Сдаюсь» — красная (цвет задан явно, не по подписи).
-_RED = {"style": "danger"}
 
 
 def _game_play_kb(ui, *, hint_available):
@@ -661,10 +659,9 @@ def _game_play_kb(ui, *, hint_available):
 
 
 def _game_hint_kb(ui, options, hidden=()):
-    """Под подсказкой: три варианта на языке загадки (неверно выбранные убраны), «Сдаюсь», навигация."""
+    """Варианты кнопками — для сообщений до викторины (старые подсказки в истории чата), без «Сдаюсь»."""
     rows = [[InlineKeyboardButton(option, callback_data=f"game_opt_{index}")]
             for index, option in enumerate(options) if index not in hidden]
-    rows.append([InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs=_RED)])
     rows.append([
         InlineKeyboardButton(ui["back"], callback_data="m_learn"),
         InlineKeyboardButton(ui["home"], callback_data="m_menu"),
@@ -803,7 +800,7 @@ def _answer_fact(answer, english, lang) -> str:
     return fact
 
 
-async def _send_game_result(bot, cid, st, ui, kb):
+async def _send_game_result(bot, cid, st, ui, kb, solved=True):
     import travel_photos
     fact = "" if st.get("local") else st.get("explain", "")
     if not fact:
@@ -813,7 +810,8 @@ async def _send_game_result(bot, cid, st, ui, kb):
                 _answer_fact, st.get("answer", ""), st.get("answer_en", ""), lang), 8)
         except Exception:
             fact = ""
-    msg = learning_ui.game_found(ui, st.get("answer", ""), fact)
+    msg = learning_ui.game_found(ui, st.get("answer", ""), fact,
+                                 title=ui["found"] if solved else ui.get("answer_was", ui["found"]))
     query = _get_english_query(st)
     photo = None
     if query:
@@ -846,11 +844,11 @@ def _is_landscape_photo(photo):
         return False
 
 
-async def _finish_game_round(bot, cid, st, ui):
-    """Единое завершение для правильного ответа, сдачи и второй ошибки."""
+async def _finish_game_round(bot, cid, st, ui, solved=True):
+    """Единое завершение раунда; solved=False — заголовок «💡 Het juiste antwoord» вместо «✅ Zaak opgelost!»."""
     store.game_state.pop(str(cid), None)
     _remember_game_answer(cid, st)
-    await _send_game_result(bot, cid, st, ui, _game_result_kb(ui))
+    await _send_game_result(bot, cid, st, ui, _game_result_kb(ui), solved=solved)
 
 
 def _local_answers(lang, category=None) -> list:
@@ -922,15 +920,43 @@ async def game_hint(bot, cid, q):
     ui = _game_ui(store.game_config.get(str(cid), {}).get("lang", "русский"))
     if st and not st.get("hint_used") and st.get("hint"):
         st["hint_used"] = True
-        try:  # у загадки остаётся только навигация; варианты и «Сдаюсь» — под подсказкой
+        try:  # у загадки остаётся только навигация; варианты — в викторине под подсказкой
             await q.message.edit_reply_markup(reply_markup=_game_play_kb(ui, hint_available=False))
         except Exception:
             _log.debug("game_hint: ignored error", exc_info=True)
-        msg = learning_ui.game_hint(ui, st["hint"])
-        await q.message.reply_text(msg.text, entities=msg.entities,
-                                   reply_markup=_game_hint_kb(ui, st.get("options") or (), st.get("wrong_picked") or ()))
+        # Подсказка — викториной Telegram: одна попытка, верный вариант Telegram отмечает сам,
+        # следом бот присылает разгадку (game_poll_answer).
+        message = await bot.send_poll(
+            chat_id=cid,
+            question=f"{ui['hint_title']}\n\n{st['hint']}\n\n{ui.get('choose', '')}".strip()[:300],
+            options=[str(option)[:100] for option in st.get("options") or ()],
+            type="quiz", correct_option_id=int(st.get("correct") or 0), is_anonymous=False,
+            reply_markup=_game_play_kb(ui, hint_available=False),
+        )
+        if getattr(message, "poll", None):
+            _GAME_POLLS[str(message.poll.id)] = str(cid)
     else:
         await q.message.reply_text(ui["hint_title"])
+
+
+_GAME_POLLS: dict = {}  # id викторины-подсказки → чат; после перезапуска старая викторина просто молчит
+
+
+async def game_poll_answer(bot, poll_answer) -> bool:
+    """Ответ в викторине подсказки: раунд завершён — верно («✅ Zaak opgelost!») или нет (верный ответ).
+
+    False — это не викторина игры (её ждёт тренажёр).
+    """
+    cid = _GAME_POLLS.pop(str(getattr(poll_answer, "poll_id", "")), None)
+    if cid is None:
+        return False
+    st = store.game_state.get(cid)
+    option_ids = list(getattr(poll_answer, "option_ids", None) or [])
+    if not st or not option_ids:
+        return True
+    ui = _game_ui(store.game_config.get(cid, {}).get("lang", "русский"))
+    await _finish_game_round(bot, cid, st, ui, solved=int(option_ids[0]) == st.get("correct"))
+    return True
 
 
 async def game_option(bot, cid, q, index):

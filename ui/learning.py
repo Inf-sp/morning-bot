@@ -1,4 +1,3 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from dictionary_model import study_card_is_complete
 from .builder import MessageBuilder
@@ -186,10 +185,10 @@ def game_no_new_round(ui):
     return msg
 
 
-def game_found(ui, answer, body=""):
-    """«✅ Zaak opgelost!», ответ жирным и курсивом — интересный факт об ответе на языке загадки."""
+def game_found(ui, answer, body="", title=""):
+    """«✅ Zaak opgelost!» (или «💡 Het juiste antwoord» после ошибки), ответ жирным и курсивом — факт об ответе."""
     b = MessageBuilder()
-    b.section(ui["found"])
+    b.section(title or ui["found"])
     b.spacer()
     b.bold(answer)
     b.newline()
@@ -201,25 +200,6 @@ def game_found(ui, answer, body=""):
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
-
-
-def game_hint(ui, hint):
-    b = MessageBuilder()
-    b.section(ui.get("hint_title", ui["hint"]))
-    b.spacer()
-    b.quote(" ".join(str(hint or "").split()))  # подсказка — цитатой, ниже варианты кнопками
-    b.newline()
-    b.spacer()
-    b.italic(ui.get("choose", "Выбери верный ответ."))
-    b.newline()
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs={"style": "danger"})],
-        [
-            InlineKeyboardButton(ui["back"], callback_data="m_learn"),
-            InlineKeyboardButton(ui["home"], callback_data="m_menu"),
-        ],
-    ])
-    return b.build(reply_markup=kb)
 
 
 def learning_settings(active_language, active_level=""):

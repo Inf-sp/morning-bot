@@ -35,53 +35,49 @@ def test_dutch_detective_result_shows_fact_without_word_list_or_russian_labels()
     assert "Waarom:" not in message.text
 
 
-def test_dutch_hint_message_is_translated_but_button_is_russian():
-    message = learning_ui.game_hint(learning_game.GAME_UI["нидерландский"], "Hij miauwt.")
-
-    assert message.text.startswith("💡 Hint")
-    labels = [button.text for row in message.reply_markup.inline_keyboard for button in row]
-    assert labels == ["😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
-
-
-def test_hint_is_one_time_and_disappears_from_original_card(monkeypatch):
+def test_hint_comes_as_quiz_and_answer_reveals_the_riddle(monkeypatch):
     class Message:
-        def __init__(self):
-            self.edited_markup = None
-            self.replies = []
+        edited_markup = None
 
         async def edit_reply_markup(self, **kwargs):
             self.edited_markup = kwargs["reply_markup"]
 
-        async def reply_text(self, *_args, **kwargs):
-            self.replies.append(kwargs)
+    class Bot:
+        def __init__(self):
+            self.polls, self.sent = [], []
 
-    message = Message()
-    monkeypatch.setattr(
-        learning_game.store, "game_state",
-        {"42": {"answer": "De kat", "hint": "Ik heb snorharen.", "hint_used": False,
-                "options": ["de hond", "De kat", "het konijn"], "correct": 1}},
-    )
-    monkeypatch.setattr(
-        learning_game.store, "game_config",
-        {"42": {"lang": "нидерландский"}},
-    )
+        async def send_poll(self, **kwargs):
+            self.polls.append(kwargs)
+            return type("Sent", (), {"poll": type("Poll", (), {"id": "p1"})()})()
 
-    asyncio.run(learning_game.game_hint(object(), "42", type("Q", (), {"message": message})()))
+    finished = []
 
-    original_labels = [
-        button.text
-        for row in message.edited_markup.inline_keyboard
-        for button in row
-    ]
-    reply_labels = [
-        button.text
-        for row in message.replies[0]["reply_markup"].inline_keyboard
-        for button in row
-    ]
-    assert learning_game.store.game_state["42"]["hint_used"] is True
-    # У загадки — только навигация; под подсказкой — варианты на языке загадки и «Сдаюсь».
-    assert original_labels == ["⬅️ Назад", "#️⃣ Главная"]
-    assert reply_labels == ["de hond", "De kat", "het konijn", "😞 Сдаюсь", "⬅️ Назад", "#️⃣ Главная"]
+    async def finish(_bot, cid, state, ui, solved=True):
+        finished.append((cid, state["answer"], solved))
+
+    monkeypatch.setattr(learning_game.store, "game_state", {"42": {
+        "answer": "de kat", "hint": "Ik heb snorharen.", "hint_used": False,
+        "options": ["de hond", "de kat", "het konijn"], "correct": 1}})
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "нидерландский"}})
+    monkeypatch.setattr(learning_game, "_finish_game_round", finish)
+    message, bot = Message(), Bot()
+
+    asyncio.run(learning_game.game_hint(bot, "42", type("Q", (), {"message": message})()))
+
+    poll = bot.polls[0]
+    assert poll["type"] == "quiz" and poll["options"] == ["de hond", "de kat", "het konijn"]
+    assert poll["correct_option_id"] == 1 and "Ik heb snorharen." in poll["question"]
+    assert poll["question"].endswith("Kies het juiste antwoord.")
+    labels = [b.text for row in poll["reply_markup"].inline_keyboard for b in row]
+    assert labels == ["⬅️ Назад", "#️⃣ Главная"]  # без «Сдаюсь»
+    assert [b.text for row in message.edited_markup.inline_keyboard for b in row] == ["⬅️ Назад", "#️⃣ Главная"]
+
+    # Неверный вариант — следом разгадка с верным ответом (не «Zaak opgelost»).
+    answer = type("Answer", (), {"poll_id": "p1", "option_ids": [0]})()
+    assert asyncio.run(learning_game.game_poll_answer(bot, answer)) is True
+    assert finished == [("42", "de kat", False)]
+    # Чужая викторина (тренажёр) — не игра.
+    assert asyncio.run(learning_game.game_poll_answer(bot, type("A", (), {"poll_id": "x", "option_ids": [0]})())) is False
 
 
 def test_detective_starts_easy_riddle_without_difficulty_prompt(monkeypatch):
@@ -544,7 +540,7 @@ def test_hint_offers_three_options_in_the_riddle_language():
     assert all(not any("а" <= ch <= "я" for ch in option.casefold()) for option in options)
     kb = learning_game._game_hint_kb(ui, options, hidden=[(correct + 1) % 3])
     datas = [b.callback_data for row in kb.inline_keyboard for b in row]
-    assert f"game_opt_{correct}" in datas and f"game_opt_{(correct + 1) % 3}" not in datas and "game_reveal" in datas
+    assert f"game_opt_{correct}" in datas and f"game_opt_{(correct + 1) % 3}" not in datas and "game_reveal" not in datas
 
 
 def test_leaving_the_game_stops_waiting_for_a_text_answer(monkeypatch):
@@ -583,13 +579,12 @@ def test_riddle_and_hint_are_quotes_and_fact_closes_the_answer():
 
     card = learning_ui.game_card(ui, "Ik ben rond en mensen maken vaak sap van mij.")
     assert styled(card, "blockquote") == ["Ik ben rond en mensen maken vaak sap van mij."]
-    hint = learning_ui.game_hint(ui, "Ik ben groen van buiten en rood van binnen.")
-    assert styled(hint, "blockquote") == ["Ik ben groen van buiten en rood van binnen."]
-    assert styled(hint, "italic") == ["Kies het juiste antwoord."]
     found = learning_ui.game_found(ui, "de watermeloen", "Een watermeloen bestaat voor 92% uit water.")
     assert found.text.startswith("✅ Zaak opgelost!\n\nde watermeloen")
     assert found.text.endswith("Een watermeloen bestaat voor 92% uit water.")
     assert styled(found, "italic")[-1] == "Een watermeloen bestaat voor 92% uit water."
+    missed = learning_ui.game_found(ui, "de watermeloen", "", title=ui["answer_was"])
+    assert missed.text.startswith("💡 Het juiste antwoord\n\nde watermeloen")
 
 
 def test_fallback_card_gets_ai_fact_instead_of_generic_line(monkeypatch):
