@@ -312,12 +312,12 @@ def learning_line(cid) -> str:
 
 async def send_home(bot, cid, q=None):
     rows = [
-        # Один столбец; язык обучения меняется в «Предпочтения → Обучение».
-        [InlineKeyboardButton("📍 Город", callback_data="set_city")],
+        # Один столбец: Предпочтения, Город, отпуск, Уведомления, Экспорт; язык обучения — в «Предпочтения → Обучение».
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
+        [InlineKeyboardButton("📍 Город", callback_data="set_city")],
+        [vacation_button(cid)],
         [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
-        [vacation_button(cid)],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
     data = store.get_settings(cid) or {}

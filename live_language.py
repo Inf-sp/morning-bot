@@ -9,8 +9,9 @@ import config
 import store
 
 _TOPICS_FILE = Path(__file__).with_name("grammar_topics.json")
-# Порядок уровней: «Простой» — с основ, «Сложный» — сначала B1/B2, потом повторение основ.
-_LEVEL_ORDER = {"simple": ("A1", "A2", "B1", "B2"), "hard": ("B1", "B2", "A2", "A1")}
+# Темы уровня из настроек обучения: «Простой» — A1–A2, «Сложный» — B1–B2.
+_LEVEL_TOPICS = {"simple": ("A1", "A2"), "hard": ("B1", "B2")}
+_LANGUAGE_NAMES = {"nl": "нидерландский", "en": "английский"}  # уровень хранится под названием языка
 
 
 @functools.lru_cache(maxsize=None)
@@ -26,27 +27,32 @@ def grammar_topics(language) -> tuple:
 def grammar_of_day(cid, language="nl") -> dict:
     """Тема грамматики на сегодня: держится до завтра, на следующий день — следующая ещё не показанная.
 
-    Сначала темы уровня из настроек; когда показаны все — круг заново. Прогресс — в профиле по языку.
+    Только темы уровня из настроек («Простой» — A1–A2, «Сложный» — B1–B2); сменили уровень — тема дня
+    подбирается заново. Когда показаны все темы уровня — круг заново. Прогресс — в профиле по языку.
     """
     topics = grammar_topics(language) or grammar_topics("nl")
     if not topics:
         return {}
     today = datetime.now(config.TZ).date().isoformat()
     progress = dict(((store.get_profile(cid) or {}).get("grammar_progress") or {}).get(language) or {})
+    level = store.get_level(cid, _LANGUAGE_NAMES.get(language, language))
+    allowed = _LEVEL_TOPICS.get(level, _LEVEL_TOPICS["simple"])
     by_id = {topic["id"]: topic for topic in topics}
-    if progress.get("date") == today and progress.get("id") in by_id:
+    if (progress.get("date") == today and progress.get("id") in by_id
+            and by_id[progress["id"]]["level"] in allowed):
         return _as_card(by_id[progress["id"]])
-    order = _LEVEL_ORDER.get(store.get_level(cid, language), _LEVEL_ORDER["simple"])
-    ranked = sorted(topics, key=lambda topic: order.index(topic["level"]) if topic["level"] in order else 9)
+    ranked = sorted((topic for topic in topics if topic["level"] in allowed),
+                    key=lambda topic: allowed.index(topic["level"])) or list(topics)
     seen = set(progress.get("seen") or [])
     fresh = [topic for topic in ranked if topic["id"] not in seen]
-    if not fresh:  # пройдены все — новый круг
-        seen, fresh = set(), ranked
+    if not fresh:  # пройдены все темы уровня — новый круг по этому уровню
+        seen -= {topic["id"] for topic in ranked}
+        fresh = ranked
     chosen = fresh[0]
 
     def save(profile):
         all_progress = dict(profile.get("grammar_progress") or {})
-        all_progress[language] = {"date": today, "id": chosen["id"], "seen": [*seen, chosen["id"]]}
+        all_progress[language] = {"date": today, "id": chosen["id"], "seen": [*sorted(seen), chosen["id"]]}
         return {**profile, "grammar_progress": all_progress}, None
 
     store.mutate_profile(cid, save)

@@ -75,6 +75,8 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     rows = []
     rows.append([InlineKeyboardButton("✅ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")])
+    # Язык и уровень обучения (по уровню подбирается и грамматика дня) — зелёная, сразу под «Добавить».
+    rows.append([InlineKeyboardButton("📝 Выбрать язык", callback_data="set_learning_dict")])
     for category in _DICT_VISIBLE_CATEGORY_ORDER:
         index = _DICT_CATEGORY_ORDER.index(category)
         count = sum(1 for item in entries if _dictionary_category(item) == category)

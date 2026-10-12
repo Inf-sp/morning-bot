@@ -60,4 +60,18 @@ def test_after_all_topics_the_cycle_starts_again(monkeypatch):
     profile["grammar_progress"] = {"en": {"date": "2026-10-01", "id": every[-1], "seen": every}}
     _on_day(monkeypatch, 2)
     card = live_language.grammar_of_day("42", "en")
-    assert card["topic"] and profile["grammar_progress"]["en"]["seen"] == [profile["grammar_progress"]["en"]["id"]]
+    simple = {t["id"] for t in live_language.grammar_topics("en") if t["level"] in ("A1", "A2")}
+    seen = set(profile["grammar_progress"]["en"]["seen"])
+    # Круг уровня «Простой» начат заново, история тем B1–B2 сохранена.
+    assert card["level"] in ("A1", "A2") and seen & simple == {profile["grammar_progress"]["en"]["id"]}
+
+
+def test_level_from_settings_decides_topics_and_change_repicks_today(monkeypatch):
+    profile = _profile(monkeypatch)
+    levels = {"нидерландский": "hard"}
+    monkeypatch.setattr(live_language.store, "get_level", lambda _cid, name: levels.get(name, "simple"))
+    _on_day(monkeypatch, 3)
+    assert live_language.grammar_of_day("42", "nl")["level"] in ("B1", "B2")  # уровень — по названию языка
+    levels["нидерландский"] = "simple"  # сменили уровень в тот же день
+    assert live_language.grammar_of_day("42", "nl")["level"] in ("A1", "A2")
+    assert profile["grammar_progress"]["nl"]["date"]

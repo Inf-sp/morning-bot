@@ -155,6 +155,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     assert "📝 Выбрать предпочтения" not in [label for row in rows for label in row]
     assert rows == [
         ["✅ Добавить своё слово"],
+        ["📝 Выбрать язык"],  # язык и уровень обучения — сразу под «Добавить»
         ["✨ Сгенерировать набор слов"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -178,7 +179,8 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить своё слово"]
-    assert rows[1:7] == [
+    assert rows[1] == ["📝 Выбрать язык"]
+    assert rows[2:8] == [
         [f"{category} · 1"]
         for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER[:6]
     ]
@@ -607,3 +609,16 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     assert "Пример:" not in text
     assert all(item.get("topic") and item.get("meaning") and item.get("explain")
                for items in live_language._DAILY_PHRASES.values() for item in items)
+
+
+def test_choose_language_button_is_green_right_under_add():
+    import telegram_runtime
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Добавить своё слово", callback_data="a_dictadd_smart_nl")],
+        [InlineKeyboardButton("📝 Выбрать язык", callback_data="set_learning_dict")],
+        [InlineKeyboardButton("Глаголы · 3", callback_data="a_dictcat_nl_0_0")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="m_learn"), InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+    rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
+    assert rows[1][0]["text"] == "Выбрать язык" and rows[1][0].get("style") == "success"
