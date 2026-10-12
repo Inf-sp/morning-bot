@@ -132,8 +132,7 @@ def build_learning_home(cid):
         return {"has_material": False, "disabled": True, "lang_code": ""}
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
-    variant = int((store.get_profile(cid) or {}).get("learning_home_variant") or 0)
-    phrase = live_language.daily_phrase(lang_code, variant=variant)
+    phrase = live_language.grammar_of_day(cid, lang_code)  # грамматика дня — без повторов, по уровню
     if not entry:
         return {
             "has_material": False,

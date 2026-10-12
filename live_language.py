@@ -1,8 +1,62 @@
-"""Ежедневная разговорная фраза для главной карточки обучения."""
+"""Фраза дня («Мой день») и грамматика дня для экрана «Обучение» (grammar_topics.json)."""
 
+import functools
+import json
 from datetime import datetime
+from pathlib import Path
 
 import config
+import store
+
+_TOPICS_FILE = Path(__file__).with_name("grammar_topics.json")
+# Порядок уровней: «Простой» — с основ, «Сложный» — сначала B1/B2, потом повторение основ.
+_LEVEL_ORDER = {"simple": ("A1", "A2", "B1", "B2"), "hard": ("B1", "B2", "A2", "A1")}
+
+
+@functools.lru_cache(maxsize=None)
+def grammar_topics(language) -> tuple:
+    """Темы грамматики языка (300+ на nl и en): {id, level, topic, meaning, explain, example, translation}."""
+    try:
+        data = json.loads(_TOPICS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    return tuple(data.get(language) or ())
+
+
+def grammar_of_day(cid, language="nl") -> dict:
+    """Тема грамматики на сегодня: держится до завтра, на следующий день — следующая ещё не показанная.
+
+    Сначала темы уровня из настроек; когда показаны все — круг заново. Прогресс — в профиле по языку.
+    """
+    topics = grammar_topics(language) or grammar_topics("nl")
+    if not topics:
+        return {}
+    today = datetime.now(config.TZ).date().isoformat()
+    progress = dict(((store.get_profile(cid) or {}).get("grammar_progress") or {}).get(language) or {})
+    by_id = {topic["id"]: topic for topic in topics}
+    if progress.get("date") == today and progress.get("id") in by_id:
+        return _as_card(by_id[progress["id"]])
+    order = _LEVEL_ORDER.get(store.get_level(cid, language), _LEVEL_ORDER["simple"])
+    ranked = sorted(topics, key=lambda topic: order.index(topic["level"]) if topic["level"] in order else 9)
+    seen = set(progress.get("seen") or [])
+    fresh = [topic for topic in ranked if topic["id"] not in seen]
+    if not fresh:  # пройдены все — новый круг
+        seen, fresh = set(), ranked
+    chosen = fresh[0]
+
+    def save(profile):
+        all_progress = dict(profile.get("grammar_progress") or {})
+        all_progress[language] = {"date": today, "id": chosen["id"], "seen": [*seen, chosen["id"]]}
+        return {**profile, "grammar_progress": all_progress}, None
+
+    store.mutate_profile(cid, save)
+    return _as_card(chosen)
+
+
+def _as_card(topic) -> dict:
+    """Поля карточки «Обучения»: тема → значение, объяснение (цитатой), пример → перевод (курсивом)."""
+    return {"topic": topic["topic"], "meaning": topic["meaning"], "explain": topic["explain"],
+            "more": topic["example"], "more_translation": topic["translation"], "level": topic["level"]}
 
 
 _DAILY_PHRASES = {

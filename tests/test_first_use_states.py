@@ -105,17 +105,18 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
         "Грамматика: Zodra",
-        "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
         "Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-    ]  # фраза дня — в «Моём дне», здесь грамматика: тема → пример → объяснение курсивом
+        "Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
+    ]  # фраза дня — в «Моём дне», здесь: тема → объяснение цитатой → пример курсивом
 
     def marked(kind):
         raw = message.text.encode("utf-16-le")
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("bold")[1:] == ["Грамматика:", "Пример:"]
-    assert marked("italic") == ["Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
+    assert marked("bold")[1:] == ["Грамматика:"]  # «Пример:» больше нет
+    assert marked("blockquote") == ["Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
+    assert marked("italic") == ["Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу."]
     assert marked("spoiler") == []
 
 
@@ -139,7 +140,8 @@ def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary
     after = learning.refresh_learning_home("42")
 
     assert before["term"] == after["term"] == "Morgen"
-    assert before["live_language"] != after["live_language"]
+    # Грамматика — одна тема на день, обновление экрана её не меняет.
+    assert before["live_language"] == after["live_language"] and before["live_language"]["topic"]
 
 
 def test_dictionary_contains_only_dictionary_actions(monkeypatch):
@@ -598,9 +600,10 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
 
     assert text.split("\n\n")[1:] == [
         "Грамматика: Hoeven … te → не нужно что-то делать",
-        "Пример: Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
         "Обычно используется с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце: "
         "We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
+        "Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
     ]
+    assert "Пример:" not in text
     assert all(item.get("topic") and item.get("meaning") and item.get("explain")
                for items in live_language._DAILY_PHRASES.values() for item in items)

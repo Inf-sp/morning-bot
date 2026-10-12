@@ -160,7 +160,9 @@ def game_card(ui, description, category=""):
     b = MessageBuilder()
     b.section(f"🕵️ {ui['title']}")
     if category:
-        b.line(f"{ui.get('category', 'Категория')}: {category}")
+        b.bold(f"{ui.get('category', 'Категория')}:")  # «Categorie:» — жирным
+        b.text_line(f" {category}")
+        b.newline()
         b.spacer()
     b.quote(" ".join(str(description or "").split()))  # загадка — цитатой
     b.newline()

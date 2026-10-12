@@ -1,0 +1,5721 @@
+{
+"nl": [
+{
+"id": "nl-001",
+"level": "A1",
+"topic": "De en het",
+"meaning": "определённый артикль",
+"explain": "У слов два артикля: de (общий род и все множественные) и het (средний род). Артикль надо учить вместе со словом.",
+"example": "De man leest het boek.",
+"translation": "Мужчина читает книгу."
+},
+{
+"id": "nl-002",
+"level": "A1",
+"topic": "Een",
+"meaning": "неопределённый артикль",
+"explain": "Een ставится перед одним неизвестным предметом любого рода. Во множественном числе артикля нет.",
+"example": "Ik heb een fiets en twee auto's.",
+"translation": "У меня есть велосипед и две машины."
+},
+{
+"id": "nl-003",
+"level": "A1",
+"topic": "Meervoud op -en",
+"meaning": "множественное число на -en",
+"explain": "Большинство существительных получают -en. Гласная может удвоиться или согласная поменяться: boom → bomen, huis → huizen.",
+"example": "In de straat staan veel bomen.",
+"translation": "На улице растёт много деревьев."
+},
+{
+"id": "nl-004",
+"level": "A1",
+"topic": "Meervoud op -s",
+"meaning": "множественное число на -s",
+"explain": "Слова на -el, -em, -en, -er, -je и многие заимствования получают -s: tafel → tafels, auto → auto's.",
+"example": "Mijn kinderen hebben veel spelletjes.",
+"translation": "У моих детей много игр."
+},
+{
+"id": "nl-005",
+"level": "A1",
+"topic": "Ik, jij, hij, zij",
+"meaning": "личные местоимения",
+"explain": "Подлежащее: ik, jij/je, u, hij, zij/ze, het, wij/we, jullie, zij/ze. Короткие формы je, ze, we — разговорные.",
+"example": "Zij woont in Utrecht en hij in Delft.",
+"translation": "Она живёт в Утрехте, а он — в Делфте."
+},
+{
+"id": "nl-006",
+"level": "A1",
+"topic": "Zijn",
+"meaning": "быть",
+"explain": "Неправильный глагол: ik ben, jij bent, hij is, wij/jullie/zij zijn. В вопросе с jij — ben jij.",
+"example": "Wij zijn vandaag erg moe.",
+"translation": "Мы сегодня очень устали."
+},
+{
+"id": "nl-007",
+"level": "A1",
+"topic": "Hebben",
+"meaning": "иметь",
+"explain": "Неправильный глагол: ik heb, jij hebt, hij heeft, wij hebben. В вопросе с jij — heb jij.",
+"example": "Heeft zij een hond of een kat?",
+"translation": "У неё собака или кошка?"
+},
+{
+"id": "nl-008",
+"level": "A1",
+"topic": "Presens: stam + t",
+"meaning": "настоящее время",
+"explain": "Основа глагола — ik, основа + t — jij, hij, zij; во множественном — инфинитив: ik werk, hij werkt, wij werken.",
+"example": "Hij werkt elke dag in Amsterdam.",
+"translation": "Он работает каждый день в Амстердаме."
+},
+{
+"id": "nl-009",
+"level": "A1",
+"topic": "Jij na het werkwoord",
+"meaning": "jij после глагола",
+"explain": "Если jij стоит после глагола, окончание -t пропадает: jij loopt, но loop jij?",
+"example": "Woon jij al lang in Nederland?",
+"translation": "Ты давно живёшь в Нидерландах?"
+},
+{
+"id": "nl-010",
+"level": "A1",
+"topic": "Wie, wat, waar",
+"meaning": "кто, что, где",
+"explain": "Вопросительное слово стоит первым, сразу за ним глагол, потом подлежащее.",
+"example": "Waar woon je en wat doe je?",
+"translation": "Где ты живёшь и чем занимаешься?"
+},
+{
+"id": "nl-011",
+"level": "A1",
+"topic": "Hoe, wanneer, waarom",
+"meaning": "как, когда, почему",
+"explain": "Как и другие вопросительные слова, стоят в начале, глагол — сразу за ними.",
+"example": "Waarom kom je pas morgen?",
+"translation": "Почему ты приходишь только завтра?"
+},
+{
+"id": "nl-012",
+"level": "A1",
+"topic": "Ja/nee-vraag",
+"meaning": "вопрос «да или нет»",
+"explain": "Глагол встаёт на первое место, подлежащее — на второе. Вопросительное слово не нужно.",
+"example": "Spreek je Nederlands?",
+"translation": "Ты говоришь по-нидерландски?"
+},
+{
+"id": "nl-013",
+"level": "A1",
+"topic": "Niet",
+"meaning": "не",
+"explain": "Niet отрицает глагол, прилагательное или всё предложение. Обычно стоит в конце или перед прилагательным.",
+"example": "Het eten is niet warm.",
+"translation": "Еда не горячая."
+},
+{
+"id": "nl-014",
+"level": "A1",
+"topic": "Geen",
+"meaning": "нет, ни одного",
+"explain": "Geen отрицает существительное без артикля или с een: een auto → geen auto.",
+"example": "Ik heb geen tijd en geen geld.",
+"translation": "У меня нет ни времени, ни денег."
+},
+{
+"id": "nl-015",
+"level": "A1",
+"topic": "Mijn, jouw, zijn, haar",
+"meaning": "притяжательные местоимения",
+"explain": "Mijn — мой, jouw/je — твой, uw — ваш, zijn — его, haar — её. Они не меняются по роду.",
+"example": "Is dit jouw jas of haar jas?",
+"translation": "Это твоя куртка или её?"
+},
+{
+"id": "nl-016",
+"level": "A1",
+"topic": "Ons en onze",
+"meaning": "наш",
+"explain": "Ons — перед het-словом в единственном числе, onze — перед de-словами и во множественном.",
+"example": "Ons huis is klein, maar onze tuin is groot.",
+"translation": "Наш дом маленький, но наш сад большой."
+},
+{
+"id": "nl-017",
+"level": "A1",
+"topic": "Getallen tot twintig",
+"meaning": "числа до двадцати",
+"explain": "Числа 13–19 строятся как «три-надцать»: dertien, veertien, vijftien. Twaalf и elf надо запомнить.",
+"example": "Mijn dochter wordt volgende week vijftien.",
+"translation": "Моей дочери на следующей неделе исполнится пятнадцать."
+},
+{
+"id": "nl-018",
+"level": "A1",
+"topic": "Eenentwintig",
+"meaning": "числа больше двадцати",
+"explain": "Сначала единицы, потом en, потом десятки, всё одним словом: eenentwintig, vierendertig.",
+"example": "Mijn broer is vierendertig jaar.",
+"translation": "Моему брату тридцать четыре года."
+},
+{
+"id": "nl-019",
+"level": "A1",
+"topic": "Half drie",
+"meaning": "половина третьего",
+"explain": "Half считается до следующего часа: half drie = 2:30. Не путай с английским half past.",
+"example": "De film begint om half negen.",
+"translation": "Фильм начинается в половине девятого."
+},
+{
+"id": "nl-020",
+"level": "A1",
+"topic": "Kwart over, kwart voor",
+"meaning": "четверть после, без четверти",
+"explain": "Kwart over drie — 3:15, kwart voor vier — 3:45. Минуты около половины считают от half: vijf voor half vier — 3:25.",
+"example": "Ik sta om kwart voor zeven op.",
+"translation": "Я встаю без четверти семь."
+},
+{
+"id": "nl-021",
+"level": "A1",
+"topic": "Op + dag",
+"meaning": "в какой-то день",
+"explain": "С днями недели используется op, дни пишутся с маленькой буквы: op maandag. Регулярно — op maandag of 's maandags.",
+"example": "Op zaterdag ga ik naar de markt.",
+"translation": "В субботу я иду на рынок."
+},
+{
+"id": "nl-022",
+"level": "A1",
+"topic": "Er is, er zijn",
+"meaning": "есть, имеется",
+"explain": "Er is — для одного предмета, er zijn — для нескольких. Er стоит в начале как формальное подлежащее.",
+"example": "Er zijn veel toeristen in de stad.",
+"translation": "В городе много туристов."
+},
+{
+"id": "nl-023",
+"level": "A1",
+"topic": "Deze, die, dit, dat",
+"meaning": "этот, тот",
+"explain": "Для de-слов и множественного: deze (этот), die (тот). Для het-слов: dit (этот), dat (тот).",
+"example": "Dit boek is leuker dan dat boek.",
+"translation": "Эта книга интереснее той."
+},
+{
+"id": "nl-024",
+"level": "A1",
+"topic": "Bijvoeglijk naamwoord + -e",
+"meaning": "окончание прилагательного",
+"explain": "Перед существительным прилагательное получает -e: de oude man. Без -e только с het-словом после een или без артикля: een oud huis.",
+"example": "Ik koop een nieuwe fiets en een groot brood.",
+"translation": "Я покупаю новый велосипед и большой хлеб."
+},
+{
+"id": "nl-025",
+"level": "A1",
+"topic": "Verkleinwoord -je",
+"meaning": "уменьшительная форма",
+"explain": "Уменьшительные слова получают -je и всегда стоят с het: het huis → het huisje.",
+"example": "We drinken een kopje koffie.",
+"translation": "Мы пьём чашечку кофе."
+},
+{
+"id": "nl-026",
+"level": "A1",
+"topic": "-tje, -pje, -etje",
+"meaning": "варианты уменьшительного суффикса",
+"explain": "После гласной и l, n, r — -tje (stoeltje), после m — -pje (boompje), после краткой гласной + l, m, n, r — -etje (balletje).",
+"example": "Mag ik een ijsje en een broodje?",
+"translation": "Можно мне мороженое и булочку?"
+},
+{
+"id": "nl-027",
+"level": "A1",
+"topic": "Kunnen",
+"meaning": "мочь, уметь",
+"explain": "Ik kan, jij kunt/kan, hij kan, wij kunnen. Второй глагол — инфинитив в конце предложения.",
+"example": "Kun je me morgen helpen?",
+"translation": "Можешь помочь мне завтра?"
+},
+{
+"id": "nl-028",
+"level": "A1",
+"topic": "Willen",
+"meaning": "хотеть",
+"explain": "Ik wil, jij wilt/wil, hij wil, wij willen. Инфинитив — в конце предложения.",
+"example": "Ik wil vanavond pizza eten.",
+"translation": "Я хочу сегодня вечером съесть пиццу."
+},
+{
+"id": "nl-029",
+"level": "A1",
+"topic": "Moeten",
+"meaning": "должен, надо",
+"explain": "Ik moet, jij moet, hij moet, wij moeten. Инфинитив — в конце предложения.",
+"example": "We moeten de trein van acht uur halen.",
+"translation": "Нам надо успеть на поезд в восемь."
+},
+{
+"id": "nl-030",
+"level": "A1",
+"topic": "Mogen",
+"meaning": "можно, разрешено",
+"explain": "Ik mag, jij mag, wij mogen. Mag ik…? — вежливая просьба разрешения.",
+"example": "Mag ik hier parkeren?",
+"translation": "Можно мне здесь припарковаться?"
+},
+{
+"id": "nl-031",
+"level": "A1",
+"topic": "Gaan + infinitief",
+"meaning": "собираться, будущее",
+"explain": "Gaan + инфинитив в конце — самый частый способ говорить о планах на будущее.",
+"example": "Morgen gaan we naar het strand.",
+"translation": "Завтра мы поедем на пляж."
+},
+{
+"id": "nl-032",
+"level": "A1",
+"topic": "Gebiedende wijs",
+"meaning": "повелительное наклонение",
+"explain": "Просьба или команда — просто основа глагола в начале: Kom! Luister! Вежливее с even или maar.",
+"example": "Doe de deur even dicht.",
+"translation": "Закрой, пожалуйста, дверь."
+},
+{
+"id": "nl-033",
+"level": "A1",
+"topic": "Graag",
+"meaning": "охотно, с удовольствием",
+"explain": "Graag после глагола значит «любить делать»: ik zwem graag. Также вежливая просьба: Een koffie, graag.",
+"example": "Ik fiets graag naar mijn werk.",
+"translation": "Я люблю ездить на работу на велосипеде."
+},
+{
+"id": "nl-034",
+"level": "A1",
+"topic": "Liever, het liefst",
+"meaning": "лучше, больше всего",
+"explain": "Сравнительная и превосходная форма graag: graag → liever → het liefst.",
+"example": "Ik drink liever thee, maar het liefst water.",
+"translation": "Я лучше выпью чай, а больше всего люблю воду."
+},
+{
+"id": "nl-035",
+"level": "A1",
+"topic": "Ook",
+"meaning": "тоже, также",
+"explain": "Ook стоит после глагола или перед словом, к которому относится. В отрицании — ook niet.",
+"example": "Mijn zus komt ook naar het feest.",
+"translation": "Моя сестра тоже придёт на праздник."
+},
+{
+"id": "nl-036",
+"level": "A1",
+"topic": "Te + bijvoeglijk naamwoord",
+"meaning": "слишком",
+"explain": "Te перед прилагательным значит «слишком»: te duur, te laat.",
+"example": "Deze schoenen zijn te klein voor mij.",
+"translation": "Эти туфли мне слишком малы."
+},
+{
+"id": "nl-037",
+"level": "A1",
+"topic": "Heel en erg",
+"meaning": "очень",
+"explain": "Heel и erg усиливают прилагательное и почти взаимозаменяемы: heel mooi, erg koud.",
+"example": "Het is vandaag erg druk in de winkel.",
+"translation": "Сегодня в магазине очень много народу."
+},
+{
+"id": "nl-038",
+"level": "A1",
+"topic": "Veel en weinig",
+"meaning": "много и мало",
+"explain": "Veel и weinig стоят перед существительным без артикля: veel mensen, weinig tijd.",
+"example": "Er is weinig verkeer op zondag.",
+"translation": "В воскресенье мало машин."
+},
+{
+"id": "nl-039",
+"level": "A1",
+"topic": "Een beetje",
+"meaning": "немного",
+"explain": "Een beetje перед существительным или прилагательным смягчает: een beetje melk, een beetje moe.",
+"example": "Ik spreek een beetje Nederlands.",
+"translation": "Я немного говорю по-нидерландски."
+},
+{
+"id": "nl-040",
+"level": "A1",
+"topic": "Iets en niets",
+"meaning": "что-то и ничего",
+"explain": "Iets — что-то, niets (разг. niks) — ничего. С прилагательным добавляется -s: iets leuks.",
+"example": "Ik heb niets gehoord.",
+"translation": "Я ничего не слышал."
+},
+{
+"id": "nl-041",
+"level": "A1",
+"topic": "Iemand en niemand",
+"meaning": "кто-то и никто",
+"explain": "Iemand — кто-то, niemand — никто. Глагол после них в единственном числе.",
+"example": "Is er iemand thuis?",
+"translation": "Есть кто-нибудь дома?"
+},
+{
+"id": "nl-042",
+"level": "A1",
+"topic": "Overal en nergens",
+"meaning": "везде и нигде",
+"explain": "Overal — везде, ergens — где-то, nergens — нигде. Отрицание уже внутри слова nergens.",
+"example": "Ik kan mijn sleutels nergens vinden.",
+"translation": "Я нигде не могу найти ключи."
+},
+{
+"id": "nl-043",
+"level": "A1",
+"topic": "Altijd en nooit",
+"meaning": "всегда и никогда",
+"explain": "Наречия частоты стоят после глагола: ik ben altijd op tijd. Nooit уже содержит отрицание.",
+"example": "Hij drinkt nooit koffie na acht uur.",
+"translation": "Он никогда не пьёт кофе после восьми."
+},
+{
+"id": "nl-044",
+"level": "A1",
+"topic": "Vaak en soms",
+"meaning": "часто и иногда",
+"explain": "Vaak — часто, soms — иногда, af en toe — время от времени. Стоят после глагола.",
+"example": "We eten soms bij mijn ouders.",
+"translation": "Мы иногда едим у моих родителей."
+},
+{
+"id": "nl-045",
+"level": "A1",
+"topic": "Werkwoord op plaats 2",
+"meaning": "глагол на втором месте",
+"explain": "В главном предложении спрягаемый глагол всегда стоит на втором месте, что бы ни было на первом.",
+"example": "Vandaag werk ik thuis.",
+"translation": "Сегодня я работаю дома."
+},
+{
+"id": "nl-046",
+"level": "A1",
+"topic": "Inversie",
+"meaning": "обратный порядок слов",
+"explain": "Если предложение начинается не с подлежащего, глагол остаётся вторым, а подлежащее встаёт после него.",
+"example": "Morgen bezoek ik mijn oma.",
+"translation": "Завтра я навещу бабушку."
+},
+{
+"id": "nl-047",
+"level": "A1",
+"topic": "En, maar, of",
+"meaning": "и, но, или",
+"explain": "Эти союзы соединяют два главных предложения и не меняют порядок слов.",
+"example": "Ik wil komen, maar ik heb geen tijd.",
+"translation": "Я хочу прийти, но у меня нет времени."
+},
+{
+"id": "nl-048",
+"level": "A1",
+"topic": "In, op, onder",
+"meaning": "в, на, под",
+"explain": "In — внутри, op — на поверхности, onder — под. С городами и странами — in.",
+"example": "De kat ligt onder de tafel.",
+"translation": "Кошка лежит под столом."
+},
+{
+"id": "nl-049",
+"level": "A1",
+"topic": "Naast, tussen, achter",
+"meaning": "рядом, между, за",
+"explain": "Naast — рядом, tussen — между двумя, achter — за, voor — перед.",
+"example": "De bakker zit tussen de bank en de apotheek.",
+"translation": "Пекарня находится между банком и аптекой."
+},
+{
+"id": "nl-050",
+"level": "A1",
+"topic": "Naar",
+"meaning": "в, к (направление)",
+"explain": "Naar показывает, куда идёшь: naar huis, naar Amsterdam. In — где находишься.",
+"example": "Ik ga met de trein naar Rotterdam.",
+"translation": "Я еду на поезде в Роттердам."
+},
+{
+"id": "nl-051",
+"level": "A1",
+"topic": "Om + tijd",
+"meaning": "в (о времени)",
+"explain": "Точное время — с om: om acht uur, om half tien.",
+"example": "De winkel gaat om negen uur open.",
+"translation": "Магазин открывается в девять."
+},
+{
+"id": "nl-052",
+"level": "A1",
+"topic": "In + maand of jaar",
+"meaning": "в (месяце, году)",
+"explain": "С месяцами, годами и временами года — in: in mei, in 2025, in de zomer.",
+"example": "In de zomer gaan we naar Spanje.",
+"translation": "Летом мы едем в Испанию."
+},
+{
+"id": "nl-053",
+"level": "A1",
+"topic": "Met",
+"meaning": "с",
+"explain": "Met — вместе с кем-то или с помощью чего-то: met mijn vriend, met de fiets.",
+"example": "Ik ga met de bus naar school.",
+"translation": "Я еду в школу на автобусе."
+},
+{
+"id": "nl-054",
+"level": "A1",
+"topic": "Van",
+"meaning": "из, от, принадлежность",
+"explain": "Van показывает владельца или происхождение: de fiets van Anna, ik kom van mijn werk.",
+"example": "Dit is de auto van mijn vader.",
+"translation": "Это машина моего отца."
+},
+{
+"id": "nl-055",
+"level": "A1",
+"topic": "Bij",
+"meaning": "у, возле",
+"explain": "Bij — у кого-то дома или рядом: bij mijn ouders, bij het station.",
+"example": "Ik slaap vannacht bij mijn zus.",
+"translation": "Сегодня ночью я сплю у сестры."
+},
+{
+"id": "nl-056",
+"level": "A1",
+"topic": "Het regent",
+"meaning": "безличные предложения о погоде",
+"explain": "О погоде говорят с безличным het: het regent, het sneeuwt, het waait.",
+"example": "Het waait vandaag heel hard.",
+"translation": "Сегодня очень сильный ветер."
+},
+{
+"id": "nl-057",
+"level": "A1",
+"topic": "Hoeveel en hoe laat",
+"meaning": "сколько и который час",
+"explain": "Hoeveel — сколько, hoe laat — во сколько, который час. Глагол сразу после вопроса.",
+"example": "Hoe laat vertrekt de trein?",
+"translation": "Во сколько отправляется поезд?"
+},
+{
+"id": "nl-058",
+"level": "A1",
+"topic": "Ik ben dertig",
+"meaning": "возраст",
+"explain": "Возраст — с глаголом zijn: ik ben dertig (jaar). Вопрос: Hoe oud ben je?",
+"example": "Mijn dochter is vijf jaar oud.",
+"translation": "Моей дочери пять лет."
+},
+{
+"id": "nl-059",
+"level": "A1",
+"topic": "Ik heet",
+"meaning": "меня зовут",
+"explain": "Имя называют глаголом heten: ik heet Anna. Вопрос: Hoe heet je?",
+"example": "Hoe heet jouw nieuwe collega?",
+"translation": "Как зовут твоего нового коллегу?"
+},
+{
+"id": "nl-060",
+"level": "A1",
+"topic": "U",
+"meaning": "вежливое «вы»",
+"explain": "U — вежливое обращение к одному или нескольким людям. Глагол как с hij: u bent, u heeft; в вопросе — heeft u.",
+"example": "Kunt u mij helpen, alstublieft?",
+"translation": "Не могли бы вы мне помочь?"
+},
+{
+"id": "nl-061",
+"level": "A1",
+"topic": "Jullie",
+"meaning": "вы (несколько)",
+"explain": "Jullie — неформальное «вы» для нескольких людей. Глагол во множественном: jullie wonen.",
+"example": "Waar wonen jullie nu?",
+"translation": "Где вы сейчас живёте?"
+},
+{
+"id": "nl-062",
+"level": "A1",
+"topic": "Wonen in, wonen op",
+"meaning": "жить в, на",
+"explain": "В городе и стране — wonen in, на улице, острове, этаже — wonen op.",
+"example": "Ik woon op de derde verdieping.",
+"translation": "Я живу на четвёртом этаже."
+},
+{
+"id": "nl-063",
+"level": "A1",
+"topic": "Al en nog",
+"meaning": "уже и ещё",
+"explain": "Al — уже, nog — ещё. Nog niet — ещё не, al lang — уже давно.",
+"example": "Ben je al klaar? Nee, nog niet.",
+"translation": "Ты уже готов? Нет, ещё нет."
+},
+{
+"id": "nl-064",
+"level": "A1",
+"topic": "Niet meer, geen … meer",
+"meaning": "больше не",
+"explain": "Niet meer — больше не делать что-то, geen … meer — больше нет чего-то.",
+"example": "Er is geen melk meer.",
+"translation": "Молока больше нет."
+},
+{
+"id": "nl-065",
+"level": "A1",
+"topic": "Alle en allemaal",
+"meaning": "все",
+"explain": "Alle стоит перед существительным: alle kinderen. Allemaal — после глагола: ze zijn allemaal moe.",
+"example": "We gaan allemaal naar het concert.",
+"translation": "Мы все идём на концерт."
+},
+{
+"id": "nl-066",
+"level": "A1",
+"topic": "Eerste, tweede",
+"meaning": "порядковые числительные",
+"explain": "Обычно -de или -ste: tweede, vierde, achtste. Особые: eerste, derde.",
+"example": "Het is mijn eerste keer in Groningen.",
+"translation": "Я впервые в Гронингене."
+},
+{
+"id": "nl-067",
+"level": "A1",
+"topic": "Op + datum",
+"meaning": "дата",
+"explain": "Дату говорят с op и порядковым числом или простым: op vijf mei, op de vijfde mei.",
+"example": "Mijn verjaardag is op twaalf maart.",
+"translation": "Мой день рождения двенадцатого марта."
+},
+{
+"id": "nl-068",
+"level": "A1",
+"topic": "Wat voor (een)",
+"meaning": "какой (тип)",
+"explain": "Wat voor спрашивает о типе или виде: wat voor auto, wat voor een film.",
+"example": "Wat voor muziek luister je graag?",
+"translation": "Какую музыку ты любишь слушать?"
+},
+{
+"id": "nl-069",
+"level": "A1",
+"topic": "Welk en welke",
+"meaning": "который, какой (из)",
+"explain": "Welk — перед het-словом в единственном, welke — перед de-словами и во множественном.",
+"example": "Welke bus gaat naar het centrum?",
+"translation": "Какой автобус идёт в центр?"
+},
+{
+"id": "nl-070",
+"level": "A2",
+"topic": "Perfectum met hebben",
+"meaning": "прошедшее время с hebben",
+"explain": "Большинство глаголов: hebben + причастие в конце предложения. Так рассказывают о прошлом в разговоре.",
+"example": "Ik heb gisteren mijn moeder gebeld.",
+"translation": "Вчера я позвонил маме."
+},
+{
+"id": "nl-071",
+"level": "A2",
+"topic": "Perfectum met zijn",
+"meaning": "прошедшее время с zijn",
+"explain": "Глаголы движения к цели и изменения состояния берут zijn: ik ben gegaan, hij is gegroeid.",
+"example": "We zijn gisteren naar Utrecht gefietst.",
+"translation": "Вчера мы съездили на велосипедах в Утрехт."
+},
+{
+"id": "nl-072",
+"level": "A2",
+"topic": "'t kofschip",
+"meaning": "причастие на -t или -d",
+"explain": "Если основа кончается на t, k, f, s, ch, p (слово 't kofschip), причастие на -t: gewerkt. Иначе на -d: gewoond.",
+"example": "Ik heb de hele dag gewerkt en daarna gekookt.",
+"translation": "Я весь день работал, а потом готовил."
+},
+{
+"id": "nl-073",
+"level": "A2",
+"topic": "Onregelmatig deelwoord",
+"meaning": "неправильные причастия",
+"explain": "Сильные глаголы меняют гласную и кончаются на -en: eten → gegeten, drinken → gedronken. Их надо учить.",
+"example": "Heb je al gegeten?",
+"translation": "Ты уже поел?"
+},
+{
+"id": "nl-074",
+"level": "A2",
+"topic": "Scheidbare werkwoorden",
+"meaning": "глаголы с отделяемой приставкой",
+"explain": "Приставка уходит в конец главного предложения: opbellen → ik bel je op. В инфинитиве пишется слитно.",
+"example": "Ik sta elke dag om zeven uur op.",
+"translation": "Я встаю каждый день в семь."
+},
+{
+"id": "nl-075",
+"level": "A2",
+"topic": "Opgebeld",
+"meaning": "причастие отделяемых глаголов",
+"explain": "Ge- встаёт между приставкой и основой: opbellen → opgebeld, meenemen → meegenomen.",
+"example": "Heb je je paraplu meegenomen?",
+"translation": "Ты взял с собой зонт?"
+},
+{
+"id": "nl-076",
+"level": "A2",
+"topic": "Imperfectum -te en -de",
+"meaning": "простое прошедшее слабых глаголов",
+"explain": "К основе добавляют -te или -de по правилу 't kofschip: werkte, woonde. Во множественном -ten/-den.",
+"example": "Vroeger woonde ik in een klein dorp.",
+"translation": "Раньше я жил в маленькой деревне."
+},
+{
+"id": "nl-077",
+"level": "A2",
+"topic": "Imperfectum sterke werkwoorden",
+"meaning": "простое прошедшее сильных глаголов",
+"explain": "Сильные глаголы меняют гласную: gaan → ging, komen → kwam, zien → zag. Во множественном -en: gingen.",
+"example": "Gisteren kwam hij te laat op zijn werk.",
+"translation": "Вчера он опоздал на работу."
+},
+{
+"id": "nl-078",
+"level": "A2",
+"topic": "Wel",
+"meaning": "всё-таки, же (утверждение)",
+"explain": "Wel подчёркивает утверждение в противовес отрицанию: Ik kom niet? Ik kom wel!",
+"example": "Ik heb geen auto, maar wel een fiets.",
+"translation": "У меня нет машины, но зато есть велосипед."
+},
+{
+"id": "nl-079",
+"level": "A2",
+"topic": "Toch",
+"meaning": "всё же, ведь",
+"explain": "Toch значит «несмотря на это» или ищет согласия: Je komt toch? — Ты ведь придёшь?",
+"example": "Het regende, maar we zijn toch gaan wandelen.",
+"translation": "Шёл дождь, но мы всё же пошли гулять."
+},
+{
+"id": "nl-080",
+"level": "A2",
+"topic": "Even",
+"meaning": "ненадолго, на минутку",
+"explain": "Even смягчает просьбу и показывает краткость действия: Wacht even. Kun je even helpen?",
+"example": "Kun je even naar de winkel gaan?",
+"translation": "Можешь сходить в магазин на минутку?"
+},
+{
+"id": "nl-081",
+"level": "A2",
+"topic": "Maar in een verzoek",
+"meaning": "смягчение «давай»",
+"explain": "Maar в просьбе или разрешении делает её дружелюбнее: Kom maar binnen. Ga maar zitten.",
+"example": "Zeg het maar, ik luister.",
+"translation": "Говори, я слушаю."
+},
+{
+"id": "nl-082",
+"level": "A2",
+"topic": "Eens",
+"meaning": "разок, попробуй",
+"explain": "Eens в просьбе значит «попробуй разок»: Probeer het eens. Kijk eens!",
+"example": "Proef deze soep eens.",
+"translation": "Попробуй-ка этот суп."
+},
+{
+"id": "nl-083",
+"level": "A2",
+"topic": "Er als plaats",
+"meaning": "там, туда",
+"explain": "Er заменяет уже упомянутое место и не стоит в начале предложения: Ben je in Gent geweest? Ja, ik ben er geweest.",
+"example": "Ken je Maastricht? Ik woon er al jaren.",
+"translation": "Знаешь Маастрихт? Я там живу уже много лет."
+},
+{
+"id": "nl-084",
+"level": "A2",
+"topic": "Er + aantal",
+"meaning": "их (с числом)",
+"explain": "С числом или словом количества нужно er: Hoeveel kinderen heb je? Ik heb er twee.",
+"example": "Ik wilde appels kopen, maar er waren er maar drie.",
+"translation": "Я хотел купить яблоки, но их было только три."
+},
+{
+"id": "nl-085",
+"level": "A2",
+"topic": "Groter dan",
+"meaning": "сравнительная степень",
+"explain": "Прилагательное + -er, сравнение — через dan: groot → groter dan. Если кончается на r: duur → duurder.",
+"example": "Amsterdam is groter dan Leiden.",
+"translation": "Амстердам больше Лейдена."
+},
+{
+"id": "nl-086",
+"level": "A2",
+"topic": "Het grootst",
+"meaning": "превосходная степень",
+"explain": "Прилагательное + -st: groot → grootst. С существительным: de grootste stad. Сам по себе: het grootst.",
+"example": "Dit is het mooiste park van de stad.",
+"translation": "Это самый красивый парк города."
+},
+{
+"id": "nl-087",
+"level": "A2",
+"topic": "Beter, best",
+"meaning": "неправильное сравнение",
+"explain": "Goed → beter → best, veel → meer → meest, weinig → minder → minst.",
+"example": "Jouw plan is beter dan het mijne.",
+"translation": "Твой план лучше моего."
+},
+{
+"id": "nl-088",
+"level": "A2",
+"topic": "Even … als",
+"meaning": "такой же … как",
+"explain": "Even + прилагательное + als показывает равенство: even groot als, even duur als.",
+"example": "Mijn broer is even lang als mijn vader.",
+"translation": "Мой брат такого же роста, как отец."
+},
+{
+"id": "nl-089",
+"level": "A2",
+"topic": "Dat (bijzin)",
+"meaning": "что (придаточное)",
+"explain": "Dat открывает придаточное, и спрягаемый глагол уходит в конец: Ik denk dat hij komt.",
+"example": "Ik weet dat je het druk hebt.",
+"translation": "Я знаю, что ты занят."
+},
+{
+"id": "nl-090",
+"level": "A2",
+"topic": "Omdat",
+"meaning": "потому что (придаточное)",
+"explain": "После omdat глагол в конце предложения: …omdat ik ziek ben.",
+"example": "Ik blijf thuis, omdat ik ziek ben.",
+"translation": "Я остаюсь дома, потому что болею."
+},
+{
+"id": "nl-091",
+"level": "A2",
+"topic": "Als",
+"meaning": "если",
+"explain": "Als открывает условие, глагол в конце. Если придаточное стоит первым, главное начинается с глагола.",
+"example": "Als het mooi weer is, gaan we fietsen.",
+"translation": "Если будет хорошая погода, мы поедем кататься на велосипеде."
+},
+{
+"id": "nl-092",
+"level": "A2",
+"topic": "Wanneer in een bijzin",
+"meaning": "когда (регулярно, в будущем)",
+"explain": "Wanneer — когда о будущем или повторяющемся, глагол в конце: wanneer ik tijd heb.",
+"example": "Ik bel je wanneer ik in Den Haag ben.",
+"translation": "Я позвоню тебе, когда буду в Гааге."
+},
+{
+"id": "nl-093",
+"level": "A2",
+"topic": "Toen",
+"meaning": "когда (один раз в прошлом)",
+"explain": "Toen — о конкретном случае в прошлом, глагол в конце: toen ik klein was.",
+"example": "Toen ik in Rome was, regende het elke dag.",
+"translation": "Когда я был в Риме, каждый день шёл дождь."
+},
+{
+"id": "nl-094",
+"level": "A2",
+"topic": "Terwijl",
+"meaning": "пока, в то время как",
+"explain": "Terwijl — два действия одновременно или противопоставление. Глагол в конце придаточного.",
+"example": "Ik luister naar muziek terwijl ik kook.",
+"translation": "Я слушаю музыку, пока готовлю."
+},
+{
+"id": "nl-095",
+"level": "A2",
+"topic": "Voordat",
+"meaning": "перед тем как",
+"explain": "Voordat (или voor) — действие в придаточном будет позже. Глагол в конце.",
+"example": "Was je handen voordat je gaat eten.",
+"translation": "Помой руки перед едой."
+},
+{
+"id": "nl-096",
+"level": "A2",
+"topic": "Nadat",
+"meaning": "после того как",
+"explain": "Nadat — действие в придаточном было раньше. Часто с перфектом: nadat ik gegeten had.",
+"example": "Nadat we gegeten hadden, gingen we wandelen.",
+"translation": "После того как мы поели, мы пошли гулять."
+},
+{
+"id": "nl-097",
+"level": "A2",
+"topic": "Totdat",
+"meaning": "пока не, до тех пор пока",
+"explain": "Totdat (или tot) — до момента, когда что-то случится. Глагол в конце.",
+"example": "Wacht hier totdat ik terug ben.",
+"translation": "Жди здесь, пока я не вернусь."
+},
+{
+"id": "nl-098",
+"level": "A2",
+"topic": "Hoewel",
+"meaning": "хотя",
+"explain": "Hoewel вводит уступку, глагол в конце придаточного.",
+"example": "Hoewel het koud is, zit hij buiten.",
+"translation": "Хотя холодно, он сидит на улице."
+},
+{
+"id": "nl-099",
+"level": "A2",
+"topic": "Sinds",
+"meaning": "с тех пор как",
+"explain": "Sinds — начало периода: sinds maandag, sinds ik hier woon. Действие длится до сих пор, поэтому часто презенс.",
+"example": "Sinds ik hier woon, fiets ik elke dag.",
+"translation": "С тех пор как я здесь живу, езжу на велосипеде каждый день."
+},
+{
+"id": "nl-100",
+"level": "A2",
+"topic": "Zodat",
+"meaning": "так что, чтобы",
+"explain": "Zodat — следствие или цель. Это придаточное, глагол в конце.",
+"example": "Ik vertrek vroeg, zodat ik op tijd ben.",
+"translation": "Я выхожу рано, чтобы успеть вовремя."
+},
+{
+"id": "nl-101",
+"level": "A2",
+"topic": "Weet jij waar…?",
+"meaning": "косвенный вопрос",
+"explain": "После вопросительного слова в придаточном глагол уходит в конец: Weet jij waar het station is?",
+"example": "Weet u hoe laat de winkel dichtgaat?",
+"translation": "Вы не знаете, во сколько закрывается магазин?"
+},
+{
+"id": "nl-102",
+"level": "A2",
+"topic": "Die en dat (betrekkelijk)",
+"meaning": "который",
+"explain": "Die — для de-слов и множественного, dat — для het-слов. Глагол в придаточном в конце.",
+"example": "Het boek dat ik lees, is erg spannend.",
+"translation": "Книга, которую я читаю, очень захватывающая."
+},
+{
+"id": "nl-103",
+"level": "A2",
+"topic": "Alles wat",
+"meaning": "всё, что",
+"explain": "После alles, iets, niets и всего предложения используется wat: alles wat je wilt.",
+"example": "Je mag alles nemen wat je lekker vindt.",
+"translation": "Можешь взять всё, что тебе нравится."
+},
+{
+"id": "nl-104",
+"level": "A2",
+"topic": "Zich wassen",
+"meaning": "возвратные глаголы",
+"explain": "Возвратное местоимение меняется: ik was me, jij wast je, hij wast zich, wij wassen ons.",
+"example": "Hij scheert zich elke ochtend.",
+"translation": "Он бреется каждое утро."
+},
+{
+"id": "nl-105",
+"level": "A2",
+"topic": "Zich herinneren",
+"meaning": "вспоминать, помнить",
+"explain": "Возвратный глагол: ik herinner me, je herinnert je. Чаще с het или iets.",
+"example": "Herinner je je onze eerste vakantie?",
+"translation": "Ты помнишь наш первый отпуск?"
+},
+{
+"id": "nl-106",
+"level": "A2",
+"topic": "Zich vergissen",
+"meaning": "ошибаться",
+"explain": "Возвратный глагол, ошибку указывают через in: ik vergis me in de datum.",
+"example": "Sorry, ik heb me vergist in het nummer.",
+"translation": "Извините, я ошибся номером."
+},
+{
+"id": "nl-107",
+"level": "A2",
+"topic": "Zich voelen",
+"meaning": "чувствовать себя",
+"explain": "Ik voel me goed, hoe voel je je? Местоимение обязательно.",
+"example": "Ik voel me vandaag niet zo lekker.",
+"translation": "Я сегодня неважно себя чувствую."
+},
+{
+"id": "nl-108",
+"level": "A2",
+"topic": "Elkaar",
+"meaning": "друг друга",
+"explain": "Elkaar — взаимное действие, не меняется: we zien elkaar morgen.",
+"example": "Ze kennen elkaar al twintig jaar.",
+"translation": "Они знают друг друга уже двадцать лет."
+},
+{
+"id": "nl-109",
+"level": "A2",
+"topic": "Om … te",
+"meaning": "чтобы",
+"explain": "Om … te + инфинитив в конце выражает цель: Ik ga naar de winkel om brood te kopen.",
+"example": "Ik leer Nederlands om met mijn buren te praten.",
+"translation": "Я учу нидерландский, чтобы разговаривать с соседями."
+},
+{
+"id": "nl-110",
+"level": "A2",
+"topic": "Proberen te",
+"meaning": "пытаться что-то сделать",
+"explain": "Proberen, beginnen, vergeten и некоторые другие требуют te + инфинитив.",
+"example": "Ik probeer elke dag tien woorden te leren.",
+"translation": "Я стараюсь учить десять слов каждый день."
+},
+{
+"id": "nl-111",
+"level": "A2",
+"topic": "Zitten te",
+"meaning": "длительное действие",
+"explain": "Zitten, staan, liggen, lopen + te + инфинитив показывают, что действие идёт сейчас и в какой позе.",
+"example": "Hij zit al een uur te lezen.",
+"translation": "Он уже час сидит и читает."
+},
+{
+"id": "nl-112",
+"level": "A2",
+"topic": "Aan het + infinitief",
+"meaning": "в процессе",
+"explain": "Zijn aan het + инфинитив — действие происходит прямо сейчас, как английское -ing.",
+"example": "Ik ben aan het koken, bel me later.",
+"translation": "Я сейчас готовлю, позвони мне позже."
+},
+{
+"id": "nl-113",
+"level": "A2",
+"topic": "Zullen",
+"meaning": "будущее, обещание",
+"explain": "Zullen + инфинитив — обещание или формальное будущее: Ik zal je helpen.",
+"example": "Ik zal het morgen voor je regelen.",
+"translation": "Я завтра всё для тебя устрою."
+},
+{
+"id": "nl-114",
+"level": "A2",
+"topic": "Zullen we?",
+"meaning": "давай?",
+"explain": "Вопрос с zullen we — предложение что-то сделать вместе.",
+"example": "Zullen we vanavond uit eten gaan?",
+"translation": "Давай сегодня вечером сходим поесть?"
+},
+{
+"id": "nl-115",
+"level": "A2",
+"topic": "Laten we",
+"meaning": "давайте",
+"explain": "Laten we + инфинитив — призыв сделать что-то вместе.",
+"example": "Laten we de trein van negen uur nemen.",
+"translation": "Давайте поедем на поезде в девять."
+},
+{
+"id": "nl-116",
+"level": "A2",
+"topic": "Laten + infinitief",
+"meaning": "поручить сделать",
+"explain": "Laten + инфинитив значит «заставить или попросить кого-то сделать»: Ik laat mijn fiets repareren.",
+"example": "We laten de keuken volgende week schilderen.",
+"translation": "Нам покрасят кухню на следующей неделе."
+},
+{
+"id": "nl-117",
+"level": "A2",
+"topic": "Kennen en weten",
+"meaning": "знать (кого-то / факт)",
+"explain": "Kennen — знать человека, место, язык. Weten — знать факт или информацию.",
+"example": "Ik ken hem goed, maar ik weet niet waar hij woont.",
+"translation": "Я хорошо его знаю, но не знаю, где он живёт."
+},
+{
+"id": "nl-118",
+"level": "A2",
+"topic": "Liggen en leggen",
+"meaning": "лежать и класть",
+"explain": "Liggen — лежать (состояние), leggen — класть (действие). Leggen требует дополнения.",
+"example": "Ik leg het boek op tafel, nu ligt het daar.",
+"translation": "Я кладу книгу на стол, теперь она там лежит."
+},
+{
+"id": "nl-119",
+"level": "A2",
+"topic": "Zitten en zetten",
+"meaning": "сидеть и ставить",
+"explain": "Zitten — сидеть или находиться, zetten — ставить что-то. Также koffie zetten — сварить кофе.",
+"example": "Zet de vaas op de kast.",
+"translation": "Поставь вазу на шкаф."
+},
+{
+"id": "nl-120",
+"level": "A2",
+"topic": "Krijgen",
+"meaning": "получать",
+"explain": "Krijgen — получать, а не брать: ik krijg een cadeau. Также для болезней: griep krijgen.",
+"example": "Ik krijg morgen mijn nieuwe telefoon.",
+"translation": "Завтра я получу новый телефон."
+},
+{
+"id": "nl-121",
+"level": "A2",
+"topic": "Houten, gouden",
+"meaning": "прилагательные материала",
+"explain": "Из материала: hout → houten, goud → gouden, wol → wollen. Окончание -en не меняется.",
+"example": "We hebben een houten tafel gekocht.",
+"translation": "Мы купили деревянный стол."
+},
+{
+"id": "nl-122",
+"level": "A2",
+"topic": "Iets leuks",
+"meaning": "что-то + прилагательное",
+"explain": "После iets, niets, veel, weinig прилагательное получает -s: iets lekkers, niets nieuws.",
+"example": "Heb je iets leuks gedaan dit weekend?",
+"translation": "Ты сделал что-нибудь интересное в эти выходные?"
+},
+{
+"id": "nl-123",
+"level": "A2",
+"topic": "Heel en hele",
+"meaning": "весь, целый",
+"explain": "Heel/hele перед существительным значит «весь»: de hele dag, het hele jaar. С het-словом после het — hele.",
+"example": "Ik heb de hele dag geslapen.",
+"translation": "Я проспал весь день."
+},
+{
+"id": "nl-124",
+"level": "A2",
+"topic": "Zelf",
+"meaning": "сам",
+"explain": "Zelf подчёркивает, что действие делает сам человек: ik doe het zelf. Не меняется.",
+"example": "Heb je deze taart zelf gebakken?",
+"translation": "Ты сама испекла этот торт?"
+},
+{
+"id": "nl-125",
+"level": "A2",
+"topic": "Elke en ieder",
+"meaning": "каждый",
+"explain": "Elke/iedere — перед de-словами, elk/ieder — перед het-словами: elke dag, elk jaar.",
+"example": "Elk jaar gaan we naar Texel.",
+"translation": "Каждый год мы ездим на Тексел."
+},
+{
+"id": "nl-126",
+"level": "A2",
+"topic": "Beide",
+"meaning": "оба",
+"explain": "Beide перед существительным, allebei или beiden — сами по себе: beide kinderen, ze komen allebei.",
+"example": "Mijn ouders werken allebei in het ziekenhuis.",
+"translation": "Мои родители оба работают в больнице."
+},
+{
+"id": "nl-127",
+"level": "A2",
+"topic": "Sommige",
+"meaning": "некоторые",
+"explain": "Sommige — некоторые из группы: sommige mensen. С het-словами в единственном — sommig.",
+"example": "Sommige winkels zijn op zondag open.",
+"translation": "Некоторые магазины открыты в воскресенье."
+},
+{
+"id": "nl-128",
+"level": "A2",
+"topic": "Een paar",
+"meaning": "несколько, пара",
+"explain": "Een paar — несколько: een paar dagen. Een paar schoenen — пара обуви.",
+"example": "Ik blijf een paar dagen in Gent.",
+"translation": "Я побуду несколько дней в Генте."
+},
+{
+"id": "nl-129",
+"level": "A2",
+"topic": "Genoeg",
+"meaning": "достаточно",
+"explain": "Genoeg может стоять до или после существительного: genoeg tijd, tijd genoeg. После прилагательного: groot genoeg.",
+"example": "Is deze kamer groot genoeg voor jullie?",
+"translation": "Эта комната достаточно большая для вас?"
+},
+{
+"id": "nl-130",
+"level": "A2",
+"topic": "Nog een",
+"meaning": "ещё один",
+"explain": "Nog een — ещё один такой же: nog een koffie. Nog meer — ещё больше.",
+"example": "Mag ik nog een stukje taart?",
+"translation": "Можно мне ещё кусочек торта?"
+},
+{
+"id": "nl-131",
+"level": "A2",
+"topic": "Ander en andere",
+"meaning": "другой",
+"explain": "Andere — перед de-словами и с de/het, ander — после een с het-словом: een ander huis.",
+"example": "Ik wil een andere kleur.",
+"translation": "Я хочу другой цвет."
+},
+{
+"id": "nl-132",
+"level": "A2",
+"topic": "Zo'n",
+"meaning": "такой (один)",
+"explain": "Zo'n = zo een, с исчисляемым в единственном: zo'n mooie dag. Во множественном — zulke.",
+"example": "Ik wil ook zo'n fiets.",
+"translation": "Я тоже хочу такой велосипед."
+},
+{
+"id": "nl-133",
+"level": "A2",
+"topic": "Zulke",
+"meaning": "такие",
+"explain": "Zulke — во множественном и с de-словами без een: zulke mensen, zulk weer (с het-словом).",
+"example": "Zulke vragen stel je niet aan je baas.",
+"translation": "Такие вопросы начальнику не задают."
+},
+{
+"id": "nl-134",
+"level": "A2",
+"topic": "Al + tijd + presens",
+"meaning": "уже (с какого-то времени)",
+"explain": "Если действие длится до сих пор, нидерландский берёт презенс с al: Ik woon hier al twee jaar.",
+"example": "We wachten al een half uur op de bus.",
+"translation": "Мы уже полчаса ждём автобус."
+},
+{
+"id": "nl-135",
+"level": "A2",
+"topic": "Geleden",
+"meaning": "назад",
+"explain": "Geleden стоит после отрезка времени: twee jaar geleden. Обычно с прошедшим временем.",
+"example": "Ik ben drie jaar geleden naar Nederland verhuisd.",
+"translation": "Я переехал в Нидерланды три года назад."
+},
+{
+"id": "nl-136",
+"level": "A2",
+"topic": "Over + tijd",
+"meaning": "через (о будущем)",
+"explain": "Over + отрезок времени — через сколько-то: over een uur, over twee weken.",
+"example": "De trein vertrekt over tien minuten.",
+"translation": "Поезд отправляется через десять минут."
+},
+{
+"id": "nl-137",
+"level": "A2",
+"topic": "Voor + periode",
+"meaning": "на (срок)",
+"explain": "Voor + отрезок — на какое-то время: voor een week, voor twee jaar.",
+"example": "Ik ga voor een maand naar Portugal.",
+"translation": "Я еду в Португалию на месяц."
+},
+{
+"id": "nl-138",
+"level": "A2",
+"topic": "Tijdens",
+"meaning": "во время",
+"explain": "Tijdens + существительное: tijdens de les, tijdens de vakantie.",
+"example": "Tijdens de vergadering stond mijn telefoon uit.",
+"translation": "Во время совещания мой телефон был выключен."
+},
+{
+"id": "nl-139",
+"level": "A2",
+"topic": "Door",
+"meaning": "через, из-за",
+"explain": "Door — движение сквозь (door het park) или причина (door de regen). В пассиве — «кем».",
+"example": "We liepen door het bos naar huis.",
+"translation": "Мы шли домой через лес."
+},
+{
+"id": "nl-140",
+"level": "A2",
+"topic": "Langs",
+"meaning": "вдоль, мимо",
+"explain": "Langs — вдоль или мимо: langs de rivier. Langskomen — заглянуть в гости.",
+"example": "Ik kom morgen even bij je langs.",
+"translation": "Я загляну к тебе завтра."
+},
+{
+"id": "nl-141",
+"level": "A2",
+"topic": "Tegen",
+"meaning": "против, к, около",
+"explain": "Tegen — против (tegen de wind), сказать кому-то (zeggen tegen) или около времени (tegen vijf uur).",
+"example": "Wat zei je tegen haar?",
+"translation": "Что ты ей сказал?"
+},
+{
+"id": "nl-142",
+"level": "A2",
+"topic": "Zonder",
+"meaning": "без",
+"explain": "Zonder + существительное: zonder suiker. Zonder te + инфинитив — не делая чего-то.",
+"example": "Ik drink mijn koffie zonder melk.",
+"translation": "Я пью кофе без молока."
+},
+{
+"id": "nl-143",
+"level": "A2",
+"topic": "Behalve",
+"meaning": "кроме",
+"explain": "Behalve — исключение: iedereen behalve Jan, elke dag behalve zondag.",
+"example": "De winkel is elke dag open behalve maandag.",
+"translation": "Магазин открыт каждый день, кроме понедельника."
+},
+{
+"id": "nl-144",
+"level": "A2",
+"topic": "Hoe lang en hoe vaak",
+"meaning": "как долго и как часто",
+"explain": "Hoe lang — продолжительность, hoe vaak — частота. Глагол сразу после вопроса.",
+"example": "Hoe vaak ga je naar de sportschool?",
+"translation": "Как часто ты ходишь в спортзал?"
+},
+{
+"id": "nl-145",
+"level": "A2",
+"topic": "Op tijd en te laat",
+"meaning": "вовремя и поздно",
+"explain": "Op tijd — вовремя, te laat — опоздав, te vroeg — слишком рано.",
+"example": "Als je niet opschiet, kom je te laat.",
+"translation": "Если не поторопишься, опоздаешь."
+},
+{
+"id": "nl-146",
+"level": "A2",
+"topic": "Hun en hen",
+"meaning": "им и их (после предлога)",
+"explain": "По правилу hun — косвенный объект (им), hen — после предлога и прямой объект. В речи часто ze.",
+"example": "Ik heb hun een cadeau gegeven.",
+"translation": "Я подарил им подарок."
+},
+{
+"id": "nl-147",
+"level": "A2",
+"topic": "Bijwoord van tijd vooraan",
+"meaning": "время в начале фразы",
+"explain": "Обстоятельство времени часто ставят первым, тогда подлежащее идёт после глагола: Vanavond kook ik.",
+"example": "Volgende week begin ik met mijn nieuwe baan.",
+"translation": "На следующей неделе я начинаю новую работу."
+},
+{
+"id": "nl-148",
+"level": "A2",
+"topic": "Gaan in perfectum",
+"meaning": "«сходил сделать»",
+"explain": "Ik ben gaan zwemmen — сходил поплавать. Gaan стоит в инфинитиве, а не в причастии.",
+"example": "Zaterdag zijn we gaan winkelen.",
+"translation": "В субботу мы ходили по магазинам."
+},
+{
+"id": "nl-149",
+"level": "A2",
+"topic": "Komen + infinitief",
+"meaning": "прийти сделать",
+"explain": "Komen + инфинитив без te: Kom je eten? — Придёшь поесть?",
+"example": "Mijn ouders komen zondag koffie drinken.",
+"translation": "Мои родители придут в воскресенье на кофе."
+},
+{
+"id": "nl-150",
+"level": "A2",
+"topic": "Willen dat",
+"meaning": "хотеть, чтобы",
+"explain": "Если хочешь, чтобы действовал другой человек, нужно придаточное: Ik wil dat je komt.",
+"example": "Ik wil dat je eerlijk tegen me bent.",
+"translation": "Я хочу, чтобы ты был со мной честен."
+},
+{
+"id": "nl-151",
+"level": "A2",
+"topic": "Hopen dat",
+"meaning": "надеяться, что",
+"explain": "Hopen dat + придаточное с глаголом в конце. Коротко: Ik hoop het — надеюсь.",
+"example": "Ik hoop dat het morgen droog blijft.",
+"translation": "Надеюсь, завтра не будет дождя."
+},
+{
+"id": "nl-152",
+"level": "A2",
+"topic": "Hoe … hoe",
+"meaning": "чем … тем",
+"explain": "Hoe + сравнительная степень, hoe + сравнительная: hoe eerder, hoe beter. Во второй части глагол сразу.",
+"example": "Hoe meer je oefent, hoe beter je wordt.",
+"translation": "Чем больше практикуешься, тем лучше становишься."
+},
+{
+"id": "nl-153",
+"level": "A2",
+"topic": "Nou",
+"meaning": "ну",
+"explain": "Nou начинает ответ, выражает сомнение или нетерпение: Nou, ik weet het niet. Nou en? — Ну и что?",
+"example": "Nou, dat valt best mee.",
+"translation": "Ну, всё не так уж плохо."
+},
+{
+"id": "nl-154",
+"level": "A2",
+"topic": "Hoor",
+"meaning": "частица уверенности",
+"explain": "Hoor в конце фразы успокаивает или подтверждает: Het is goed, hoor.",
+"example": "Maak je geen zorgen, het komt goed hoor.",
+"translation": "Не волнуйся, всё будет хорошо."
+},
+{
+"id": "nl-155",
+"level": "A2",
+"topic": "Hè",
+"meaning": "да? не так ли?",
+"explain": "Hè в конце ищет согласия собеседника: Mooi weer, hè?",
+"example": "Het is lekker rustig vandaag, hè?",
+"translation": "Сегодня приятно спокойно, правда?"
+},
+{
+"id": "nl-156",
+"level": "A2",
+"topic": "Gewoon",
+"meaning": "просто, обычно",
+"explain": "Gewoon значит «обычный» или «просто, без лишнего»: Doe gewoon. Ik neem gewoon de trein.",
+"example": "Ik neem gewoon een broodje kaas.",
+"translation": "Я просто возьму бутерброд с сыром."
+},
+{
+"id": "nl-157",
+"level": "A2",
+"topic": "Lekker",
+"meaning": "вкусный, приятный",
+"explain": "Lekker — не только о еде: lekker weer, lekker slapen, lekker rustig.",
+"example": "Ik heb vannacht lekker geslapen.",
+"translation": "Я прекрасно выспался этой ночью."
+},
+{
+"id": "nl-158",
+"level": "A2",
+"topic": "Het spijt me",
+"meaning": "мне жаль",
+"explain": "Het spijt me — извинение или сожаление. С придаточным: Het spijt me dat ik te laat ben.",
+"example": "Het spijt me dat ik je niet heb teruggebeld.",
+"translation": "Извини, что я тебе не перезвонил."
+},
+{
+"id": "nl-159",
+"level": "A2",
+"topic": "Het lukt me",
+"meaning": "у меня получается",
+"explain": "Het lukt (me) — получилось, удалось. Отрицание: het lukt niet.",
+"example": "Het is me gelukt om een kaartje te kopen.",
+"translation": "Мне удалось купить билет."
+},
+{
+"id": "nl-160",
+"level": "A2",
+"topic": "Het koud hebben",
+"meaning": "мёрзнуть",
+"explain": "Ощущения через hebben: het koud hebben, het warm hebben, het druk hebben.",
+"example": "Heb je het koud? Doe je jas aan.",
+"translation": "Тебе холодно? Надень куртку."
+},
+{
+"id": "nl-161",
+"level": "A2",
+"topic": "Pas",
+"meaning": "только (не раньше)",
+"explain": "Pas — позже, чем ожидалось: hij komt pas om tien uur. Противоположно al.",
+"example": "Ik ben pas om middernacht thuisgekomen.",
+"translation": "Я пришёл домой только в полночь."
+},
+{
+"id": "nl-162",
+"level": "A2",
+"topic": "Nog steeds",
+"meaning": "всё ещё",
+"explain": "Nog steeds — действие продолжается дольше, чем ожидалось.",
+"example": "Het regent nog steeds.",
+"translation": "Всё ещё идёт дождь."
+},
+{
+"id": "nl-163",
+"level": "A2",
+"topic": "Wel eens",
+"meaning": "когда-нибудь, бывает",
+"explain": "Wel eens — иногда или хоть раз: Ben je wel eens in Japan geweest?",
+"example": "Ik vergeet wel eens mijn sleutels.",
+"translation": "Бывает, что я забываю ключи."
+},
+{
+"id": "nl-164",
+"level": "A2",
+"topic": "Zelfs",
+"meaning": "даже",
+"explain": "Zelfs стоит перед словом, которое подчёркивает: zelfs in de winter.",
+"example": "Hij zwemt zelfs in november in de zee.",
+"translation": "Он купается в море даже в ноябре."
+},
+{
+"id": "nl-165",
+"level": "A2",
+"topic": "Alleen en maar",
+"meaning": "только",
+"explain": "Alleen и maar оба значат «только»: ik heb maar vijf euro, alleen vandaag.",
+"example": "Ik heb maar een uurtje tijd.",
+"translation": "У меня есть всего часик."
+},
+{
+"id": "nl-166",
+"level": "B1",
+"topic": "Plusquamperfectum",
+"meaning": "предпрошедшее время",
+"explain": "Had/was + причастие — действие раньше другого действия в прошлом.",
+"example": "Toen ik aankwam, was de film al begonnen.",
+"translation": "Когда я пришёл, фильм уже начался."
+},
+{
+"id": "nl-167",
+"level": "B1",
+"topic": "Zou willen",
+"meaning": "хотел бы",
+"explain": "Zou willen — вежливое желание: Ik zou graag een kamer willen reserveren.",
+"example": "Ik zou graag met de manager willen spreken.",
+"translation": "Я хотел бы поговорить с менеджером."
+},
+{
+"id": "nl-168",
+"level": "B1",
+"topic": "Zou kunnen",
+"meaning": "мог бы",
+"explain": "Zou kunnen — вежливая просьба или возможность: Zou je me kunnen helpen?",
+"example": "Zou je het raam kunnen openen?",
+"translation": "Не мог бы ты открыть окно?"
+},
+{
+"id": "nl-169",
+"level": "B1",
+"topic": "Als ik rijk was",
+"meaning": "если бы (нереальное)",
+"explain": "Нереальное условие о настоящем: als + имперфектум, в главной части zou + инфинитив.",
+"example": "Als ik meer tijd had, zou ik vaker sporten.",
+"translation": "Если бы у меня было больше времени, я бы чаще занимался спортом."
+},
+{
+"id": "nl-170",
+"level": "B1",
+"topic": "Had kunnen",
+"meaning": "мог бы (в прошлом)",
+"explain": "Had + инфинитив + kunnen — упущенная возможность: Ik had het kunnen weten.",
+"example": "Je had me kunnen bellen.",
+"translation": "Ты мог бы мне позвонить."
+},
+{
+"id": "nl-171",
+"level": "B1",
+"topic": "Passief met worden",
+"meaning": "страдательный залог",
+"explain": "Worden + причастие в конце: Het huis wordt gebouwd. Исполнитель — через door.",
+"example": "De brief wordt morgen verstuurd.",
+"translation": "Письмо отправят завтра."
+},
+{
+"id": "nl-172",
+"level": "B1",
+"topic": "Passief perfectum",
+"meaning": "пассив в прошедшем",
+"explain": "В перфекте пассива — zijn + причастие, worden исчезает: Het huis is gebouwd.",
+"example": "Deze kerk is in 1500 gebouwd.",
+"translation": "Эта церковь была построена в 1500 году."
+},
+{
+"id": "nl-173",
+"level": "B1",
+"topic": "Er wordt gedanst",
+"meaning": "безличный пассив",
+"explain": "Er + worden + причастие — действие без конкретного исполнителя: Er wordt veel gelachen.",
+"example": "Op het feest werd tot laat gedanst.",
+"translation": "На празднике танцевали допоздна."
+},
+{
+"id": "nl-174",
+"level": "B1",
+"topic": "Heb moeten werken",
+"meaning": "модальный глагол в перфекте",
+"explain": "В перфекте модальный глагол стоит в инфинитиве в конце: ik heb moeten werken, а не gemoeten.",
+"example": "Ik heb gisteren lang moeten wachten.",
+"translation": "Вчера мне пришлось долго ждать."
+},
+{
+"id": "nl-175",
+"level": "B1",
+"topic": "Ervan, erop, ermee",
+"meaning": "er + предлог",
+"explain": "Er + предлог заменяет «предлог + это»: ik denk aan het werk → ik denk eraan.",
+"example": "Heb je de film gezien? Ik heb ervan genoten.",
+"translation": "Ты видел фильм? Я получил от него удовольствие."
+},
+{
+"id": "nl-176",
+"level": "B1",
+"topic": "Daarom, daarvoor",
+"meaning": "daar + предлог",
+"explain": "Daar + предлог подчёркивает «именно это»: daarom — поэтому, daarvoor — для этого.",
+"example": "Daar heb ik geen tijd voor.",
+"translation": "На это у меня нет времени."
+},
+{
+"id": "nl-177",
+"level": "B1",
+"topic": "Waarover, waarmee",
+"meaning": "о чём, с чем",
+"explain": "В вопросе вместо «предлог + wat» — waar + предлог: waarover praat je?",
+"example": "Waarmee kan ik u helpen?",
+"translation": "Чем могу вам помочь?"
+},
+{
+"id": "nl-178",
+"level": "B1",
+"topic": "Hiermee, hierover",
+"meaning": "этим, об этом",
+"explain": "Hier + предлог — «с этим (здесь)»: hiermee, hiervoor, hierover.",
+"example": "Hiermee kun je de deur openen.",
+"translation": "Этим можно открыть дверь."
+},
+{
+"id": "nl-179",
+"level": "B1",
+"topic": "Wachten op",
+"meaning": "ждать кого-то",
+"explain": "Wachten всегда с op: ik wacht op de bus. О чём-то — erop.",
+"example": "Ik wacht al een week op een antwoord.",
+"translation": "Я уже неделю жду ответа."
+},
+{
+"id": "nl-180",
+"level": "B1",
+"topic": "Denken aan",
+"meaning": "думать о",
+"explain": "Denken aan — думать о ком-то, помнить о чём-то. Denken over — обдумывать.",
+"example": "Denk je aan de verjaardag van oma?",
+"translation": "Ты помнишь о дне рождения бабушки?"
+},
+{
+"id": "nl-181",
+"level": "B1",
+"topic": "Houden van",
+"meaning": "любить",
+"explain": "Houden van — любить кого-то или что-то: ik hou van jou, ik hou van koken.",
+"example": "Ik hou van lange wandelingen langs het strand.",
+"translation": "Я люблю долгие прогулки вдоль пляжа."
+},
+{
+"id": "nl-182",
+"level": "B1",
+"topic": "Zorgen voor",
+"meaning": "заботиться о, обеспечивать",
+"explain": "Zorgen voor — заботиться о ком-то или обеспечить что-то: zorgen voor de kinderen, zorgen voor eten.",
+"example": "Wie zorgt er voor de hond als we weg zijn?",
+"translation": "Кто позаботится о собаке, пока нас не будет?"
+},
+{
+"id": "nl-183",
+"level": "B1",
+"topic": "Kijken naar",
+"meaning": "смотреть на",
+"explain": "Kijken naar — смотреть на что-то: kijken naar de tv. Uitkijken naar — ждать с нетерпением.",
+"example": "Ik kijk uit naar de vakantie.",
+"translation": "Я с нетерпением жду отпуска."
+},
+{
+"id": "nl-184",
+"level": "B1",
+"topic": "Luisteren naar",
+"meaning": "слушать",
+"explain": "Luisteren всегда с naar: luisteren naar muziek, naar iemand luisteren.",
+"example": "Je luistert nooit naar wat ik zeg.",
+"translation": "Ты никогда не слушаешь, что я говорю."
+},
+{
+"id": "nl-185",
+"level": "B1",
+"topic": "Praten over",
+"meaning": "говорить о",
+"explain": "Praten over — говорить на тему: praten over het weer. Praten met — разговаривать с кем-то.",
+"example": "We moeten eens praten over de vakantie.",
+"translation": "Нам надо поговорить об отпуске."
+},
+{
+"id": "nl-186",
+"level": "B1",
+"topic": "Afhangen van",
+"meaning": "зависеть от",
+"explain": "Het hangt ervan af — это зависит. Предлог van, приставка af отделяется.",
+"example": "Of we gaan, hangt af van het weer.",
+"translation": "Поедем ли мы, зависит от погоды."
+},
+{
+"id": "nl-187",
+"level": "B1",
+"topic": "Bang zijn voor",
+"meaning": "бояться",
+"explain": "Bang zijn voor + существительное, bang zijn dat + придаточное.",
+"example": "Mijn zoon is bang voor honden.",
+"translation": "Мой сын боится собак."
+},
+{
+"id": "nl-188",
+"level": "B1",
+"topic": "Trots zijn op",
+"meaning": "гордиться",
+"explain": "Trots zijn op — гордиться кем-то или чем-то: trots op je werk.",
+"example": "Ik ben trots op wat we bereikt hebben.",
+"translation": "Я горжусь тем, чего мы достигли."
+},
+{
+"id": "nl-189",
+"level": "B1",
+"topic": "Geïnteresseerd in",
+"meaning": "интересоваться",
+"explain": "Geïnteresseerd zijn in — интересоваться чем-то. Также: interesse hebben in.",
+"example": "Ben je geïnteresseerd in geschiedenis?",
+"translation": "Тебе интересна история?"
+},
+{
+"id": "nl-190",
+"level": "B1",
+"topic": "Zich ergeren aan",
+"meaning": "раздражаться из-за",
+"explain": "Возвратный глагол с aan: ik erger me aan het lawaai.",
+"example": "Ik erger me aan mensen die voordringen.",
+"translation": "Меня раздражают люди, которые лезут без очереди."
+},
+{
+"id": "nl-191",
+"level": "B1",
+"topic": "Rekening houden met",
+"meaning": "учитывать",
+"explain": "Rekening houden met — принимать во внимание: rekening houden met het weer.",
+"example": "Houd rekening met files op de snelweg.",
+"translation": "Учитывай пробки на шоссе."
+},
+{
+"id": "nl-192",
+"level": "B1",
+"topic": "Zich bezighouden met",
+"meaning": "заниматься чем-то",
+"explain": "Zich bezighouden met — быть занятым чем-то, заниматься темой.",
+"example": "Ik houd me vooral bezig met marketing.",
+"translation": "Я в основном занимаюсь маркетингом."
+},
+{
+"id": "nl-193",
+"level": "B1",
+"topic": "Niet alleen … maar ook",
+"meaning": "не только … но и",
+"explain": "Связывает два элемента с усилением второго. Порядок слов не меняется.",
+"example": "Ze spreekt niet alleen Engels, maar ook Chinees.",
+"translation": "Она говорит не только по-английски, но и по-китайски."
+},
+{
+"id": "nl-194",
+"level": "B1",
+"topic": "Zowel … als",
+"meaning": "как … так и",
+"explain": "Zowel A als B — и A, и B: zowel kinderen als volwassenen.",
+"example": "Het museum is leuk voor zowel kinderen als volwassenen.",
+"translation": "Музей интересен как детям, так и взрослым."
+},
+{
+"id": "nl-195",
+"level": "B1",
+"topic": "Noch … noch",
+"meaning": "ни … ни",
+"explain": "Noch A noch B — ни A, ни B; отрицание уже внутри, niet не нужно.",
+"example": "Ik heb noch tijd noch zin om te koken.",
+"translation": "У меня нет ни времени, ни желания готовить."
+},
+{
+"id": "nl-196",
+"level": "B1",
+"topic": "Of … of",
+"meaning": "либо … либо",
+"explain": "Of A of B — выбор из двух: of je komt nu, of je blijft thuis.",
+"example": "We gaan of naar de film of naar het theater.",
+"translation": "Мы пойдём либо в кино, либо в театр."
+},
+{
+"id": "nl-197",
+"level": "B1",
+"topic": "Daarom",
+"meaning": "поэтому",
+"explain": "Daarom в начале второго предложения вызывает инверсию: глагол сразу после daarom.",
+"example": "Ik was moe, daarom ben ik vroeg gaan slapen.",
+"translation": "Я устал, поэтому рано лёг спать."
+},
+{
+"id": "nl-198",
+"level": "B1",
+"topic": "Dus",
+"meaning": "значит, итак",
+"explain": "Dus может стоять в начале без инверсии или с ней: Dus je komt niet? / Dus kom je niet?",
+"example": "Het regent, dus we blijven binnen.",
+"translation": "Идёт дождь, так что мы остаёмся дома."
+},
+{
+"id": "nl-199",
+"level": "B1",
+"topic": "Bovendien",
+"meaning": "кроме того",
+"explain": "Bovendien добавляет аргумент. В начале — инверсия: Bovendien is het te duur.",
+"example": "Het hotel is ver weg, bovendien is het duur.",
+"translation": "Отель далеко, к тому же он дорогой."
+},
+{
+"id": "nl-200",
+"level": "B1",
+"topic": "Echter",
+"meaning": "однако",
+"explain": "Echter — формальное «однако», обычно стоит после глагола: Dat is echter niet waar.",
+"example": "Het plan is goed, het is echter te duur.",
+"translation": "План хороший, однако он слишком дорогой."
+},
+{
+"id": "nl-201",
+"level": "B1",
+"topic": "Trouwens",
+"meaning": "кстати, впрочем",
+"explain": "Trouwens вводит новую мысль или уточнение: Trouwens, heb je Anna gezien?",
+"example": "Hoe is het trouwens met je moeder?",
+"translation": "Кстати, как там твоя мама?"
+},
+{
+"id": "nl-202",
+"level": "B1",
+"topic": "Eigenlijk",
+"meaning": "на самом деле, вообще-то",
+"explain": "Eigenlijk смягчает или уточняет: Eigenlijk heb ik geen zin. Wat doe je eigenlijk?",
+"example": "Eigenlijk wilde ik vandaag thuisblijven.",
+"translation": "Вообще-то я хотел сегодня остаться дома."
+},
+{
+"id": "nl-203",
+"level": "B1",
+"topic": "Juist",
+"meaning": "именно, как раз",
+"explain": "Juist подчёркивает противоположность ожиданию: Juist nu! Также «правильный»: het juiste antwoord.",
+"example": "Ik vind het juist leuk als het regent.",
+"translation": "А мне как раз нравится, когда идёт дождь."
+},
+{
+"id": "nl-204",
+"level": "B1",
+"topic": "Steeds + vergrotende trap",
+"meaning": "всё более",
+"explain": "Steeds + сравнительная степень — постепенное изменение: steeds beter, steeds drukker.",
+"example": "Het wordt steeds kouder.",
+"translation": "Становится всё холоднее."
+},
+{
+"id": "nl-205",
+"level": "B1",
+"topic": "Ooit",
+"meaning": "когда-либо, однажды",
+"explain": "Ooit — когда-нибудь в прошлом или будущем: Ben je ooit in Japan geweest?",
+"example": "Ik wil ooit naar IJsland.",
+"translation": "Я хочу когда-нибудь поехать в Исландию."
+},
+{
+"id": "nl-206",
+"level": "B1",
+"topic": "Met wie, over wie",
+"meaning": "с кем, о ком (относительное)",
+"explain": "Для людей после предлога — предлог + wie: de man met wie ik praat.",
+"example": "Dat is de collega met wie ik samenwerk.",
+"translation": "Это коллега, с которым я работаю."
+},
+{
+"id": "nl-207",
+"level": "B1",
+"topic": "Waarin, waarvan",
+"meaning": "в котором, о котором",
+"explain": "Для предметов после предлога — waar + предлог: het huis waarin ik woon.",
+"example": "Dat is de film waarover ik je vertelde.",
+"translation": "Это фильм, о котором я тебе рассказывал."
+},
+{
+"id": "nl-208",
+"level": "B1",
+"topic": "Het is leuk om…",
+"meaning": "формальное het",
+"explain": "Het стоит вместо подлежащего, а смысл — в части с om … te: Het is moeilijk om dat te zeggen.",
+"example": "Het is leuk om nieuwe mensen te ontmoeten.",
+"translation": "Приятно знакомиться с новыми людьми."
+},
+{
+"id": "nl-209",
+"level": "B1",
+"topic": "Het zijn mijn ouders",
+"meaning": "это (мн. число)",
+"explain": "С het в значении «это» глагол согласуется со множественным: Het zijn mijn kinderen.",
+"example": "Wie zijn dat? Het zijn mijn buren.",
+"translation": "Кто это? Это мои соседи."
+},
+{
+"id": "nl-210",
+"level": "B1",
+"topic": "Men",
+"meaning": "обобщённое «люди»",
+"explain": "Men — формальное «говорят, считают», глагол в единственном. В речи чаще je или ze.",
+"example": "Men zegt dat het morgen gaat sneeuwen.",
+"translation": "Говорят, что завтра пойдёт снег."
+},
+{
+"id": "nl-211",
+"level": "B1",
+"topic": "Je als iedereen",
+"meaning": "ты = любой человек",
+"explain": "Je часто значит «любой человек»: Hier kun je goed eten — Здесь можно хорошо поесть.",
+"example": "In Nederland moet je je fiets altijd op slot zetten.",
+"translation": "В Нидерландах велосипед всегда надо запирать."
+},
+{
+"id": "nl-212",
+"level": "B1",
+"topic": "Er + onbepaald onderwerp",
+"meaning": "er с неопределённым подлежащим",
+"explain": "Если подлежащее неопределённое, в начале ставят er: Er staat een man voor de deur.",
+"example": "Er loopt een kat in de tuin.",
+"translation": "По саду бегает кошка."
+},
+{
+"id": "nl-213",
+"level": "B1",
+"topic": "Plaats van niet",
+"meaning": "место niet в предложении",
+"explain": "Niet стоит в конце, но перед прилагательным, предлогом, инфинитивом и отделяемой приставкой.",
+"example": "Ik bel je vanavond niet op.",
+"translation": "Я не позвоню тебе сегодня вечером."
+},
+{
+"id": "nl-214",
+"level": "B1",
+"topic": "Tijd, manier, plaats",
+"meaning": "порядок обстоятельств",
+"explain": "Обычный порядок: время → образ действия → место: Ik ga morgen met de trein naar Gent.",
+"example": "We gaan zaterdag met de auto naar Zeeland.",
+"translation": "В субботу мы едем на машине в Зеландию."
+},
+{
+"id": "nl-215",
+"level": "B1",
+"topic": "Bijzin vooraan",
+"meaning": "придаточное в начале",
+"explain": "Если придаточное стоит первым, главное начинается сразу с глагола: Als het regent, blijf ik thuis.",
+"example": "Omdat de trein vertraging had, kwam ik te laat.",
+"translation": "Из-за опоздания поезда я пришёл поздно."
+},
+{
+"id": "nl-216",
+"level": "B1",
+"topic": "Werkwoorden in de bijzin",
+"meaning": "глаголы в конце придаточного",
+"explain": "Несколько глаголов в конце придаточного: спрягаемый обычно перед инфинитивами: dat ik heb kunnen komen.",
+"example": "Ik weet niet of ik morgen kan komen.",
+"translation": "Я не знаю, смогу ли прийти завтра."
+},
+{
+"id": "nl-217",
+"level": "B1",
+"topic": "Zonder te",
+"meaning": "не делая",
+"explain": "Zonder te + инфинитив — действие без другого действия: Hij ging weg zonder te groeten.",
+"example": "Ze vertrok zonder iets te zeggen.",
+"translation": "Она ушла, ничего не сказав."
+},
+{
+"id": "nl-218",
+"level": "B1",
+"topic": "In plaats van te",
+"meaning": "вместо того чтобы",
+"explain": "In plaats van te + инфинитив — замена одного действия другим.",
+"example": "In plaats van te klagen, kun je beter helpen.",
+"translation": "Вместо того чтобы жаловаться, лучше помоги."
+},
+{
+"id": "nl-219",
+"level": "B1",
+"topic": "Door te",
+"meaning": "тем, что; благодаря",
+"explain": "Door te + инфинитив — способ: Je leert een taal door veel te praten.",
+"example": "Door elke dag te lezen, leer je veel nieuwe woorden.",
+"translation": "Читая каждый день, ты учишь много новых слов."
+},
+{
+"id": "nl-220",
+"level": "B1",
+"topic": "Lijken te",
+"meaning": "казаться",
+"explain": "Lijken + te + инфинитив: Hij lijkt moe te zijn. Также Het lijkt erop dat… — похоже, что…",
+"example": "Het lijkt te gaan regenen.",
+"translation": "Кажется, собирается дождь."
+},
+{
+"id": "nl-221",
+"level": "B1",
+"topic": "Schijnen",
+"meaning": "говорят, вроде бы",
+"explain": "Schijnen + te — информация с чужих слов: Het schijnt een goede film te zijn.",
+"example": "Er schijnt morgen een staking te zijn.",
+"translation": "Говорят, завтра будет забастовка."
+},
+{
+"id": "nl-222",
+"level": "B1",
+"topic": "Blijken",
+"meaning": "оказаться",
+"explain": "Blijken — выясниться: Het bleek een vergissing te zijn. Het blijkt dat… — выясняется, что…",
+"example": "Het bleek dat niemand de sleutel had.",
+"translation": "Оказалось, что ни у кого нет ключа."
+},
+{
+"id": "nl-223",
+"level": "B1",
+"topic": "Blijven + infinitief",
+"meaning": "продолжать, оставаться",
+"explain": "Blijven + инфинитив без te: blijven zitten, blijven werken. Продолжать делать.",
+"example": "Je moet blijven oefenen.",
+"translation": "Тебе надо продолжать тренироваться."
+},
+{
+"id": "nl-224",
+"level": "B1",
+"topic": "Horen en zien + infinitief",
+"meaning": "слышать, видеть, как",
+"explain": "После zien и horen инфинитив без te: Ik hoor hem zingen. Ik zag haar lopen.",
+"example": "Ik zag hem gisteren in de supermarkt staan.",
+"translation": "Я видел, как он вчера стоял в супермаркете."
+},
+{
+"id": "nl-225",
+"level": "B1",
+"topic": "Gekookte eieren",
+"meaning": "причастие как прилагательное",
+"explain": "Причастие может быть прилагательным и получает -e: gekookt → gekookte eieren.",
+"example": "Ik eet graag gebakken aardappelen.",
+"translation": "Я люблю жареную картошку."
+},
+{
+"id": "nl-226",
+"level": "B1",
+"topic": "Lachend",
+"meaning": "деепричастие на -end",
+"explain": "Инфинитив + d даёт форму «делая»: lachen → lachend. Используется как прилагательное или наречие.",
+"example": "Lachend liep ze de kamer uit.",
+"translation": "Смеясь, она вышла из комнаты."
+},
+{
+"id": "nl-227",
+"level": "B1",
+"topic": "Peters fiets",
+"meaning": "притяжательное -s",
+"explain": "С именами можно добавить -s: Peters fiets. Чаще говорят de fiets van Peter.",
+"example": "Anna's moeder werkt als arts.",
+"translation": "Мама Анны работает врачом."
+},
+{
+"id": "nl-228",
+"level": "B1",
+"topic": "Z'n en d'r",
+"meaning": "разговорные «его» и «её»",
+"explain": "В речи zijn → z'n, haar → d'r, mijn → m'n. В официальном письме — полные формы.",
+"example": "Hij is z'n telefoon weer kwijt.",
+"translation": "Он снова потерял свой телефон."
+},
+{
+"id": "nl-229",
+"level": "B1",
+"topic": "Geen … maar",
+"meaning": "не … а",
+"explain": "Geen A maar B — исправление: Het is geen kat maar een vos.",
+"example": "Dat is geen thee maar koffie.",
+"translation": "Это не чай, а кофе."
+},
+{
+"id": "nl-230",
+"level": "B1",
+"topic": "Samenstellingen",
+"meaning": "сложные слова",
+"explain": "Слова соединяются в одно, главное — последнее: fiets + pad → fietspad. Артикль — по последнему слову.",
+"example": "Het fietspad loopt langs het kanaal.",
+"translation": "Велодорожка идёт вдоль канала."
+},
+{
+"id": "nl-231",
+"level": "B1",
+"topic": "Tussen-s",
+"meaning": "соединительная -s-",
+"explain": "Иногда между частями ставят -s-: stadhuis без неё, но dorpsplein, verjaardagsfeest с ней.",
+"example": "We vieren zijn verjaardagsfeest in een café.",
+"translation": "Мы празднуем его день рождения в кафе."
+},
+{
+"id": "nl-232",
+"level": "B1",
+"topic": "-heid",
+"meaning": "существительное из прилагательного",
+"explain": "Суффикс -heid делает из прилагательного существительное, всегда с de: vrij → de vrijheid.",
+"example": "Gezondheid is belangrijker dan geld.",
+"translation": "Здоровье важнее денег."
+},
+{
+"id": "nl-233",
+"level": "B1",
+"topic": "-ing",
+"meaning": "существительное из глагола",
+"explain": "Основа + -ing даёт процесс или результат, всегда de: verwarmen → de verwarming.",
+"example": "De verwarming staat te hoog.",
+"translation": "Отопление включено слишком сильно."
+},
+{
+"id": "nl-234",
+"level": "B1",
+"topic": "-baar",
+"meaning": "возможно сделать",
+"explain": "Основа + -baar — «можно сделать»: eten → eetbaar, bereiken → bereikbaar.",
+"example": "Het kantoor is goed bereikbaar met de trein.",
+"translation": "До офиса легко добраться на поезде."
+},
+{
+"id": "nl-235",
+"level": "B1",
+"topic": "-loos",
+"meaning": "без чего-то",
+"explain": "Существительное + -loos — «без»: werk → werkloos, zorg → zorgeloos.",
+"example": "Het was een zorgeloze zomer.",
+"translation": "Это было беззаботное лето."
+},
+{
+"id": "nl-236",
+"level": "B1",
+"topic": "On-",
+"meaning": "не-",
+"explain": "On- перед прилагательным даёт противоположность: mogelijk → onmogelijk, duidelijk → onduidelijk.",
+"example": "Het is onmogelijk om alles op één dag te doen.",
+"translation": "Невозможно сделать всё за один день."
+},
+{
+"id": "nl-237",
+"level": "B1",
+"topic": "Her-",
+"meaning": "снова, пере-",
+"explain": "Неотделяемая приставка her- значит «снова»: herhalen, herstarten. Ge- в причастии нет: herhaald.",
+"example": "Kunt u de vraag herhalen?",
+"translation": "Можете повторить вопрос?"
+},
+{
+"id": "nl-238",
+"level": "B1",
+"topic": "Ver-",
+"meaning": "неотделяемая приставка",
+"explain": "Ver- меняет значение и не отделяется: kopen → verkopen, huizen → verhuizen. Причастие без ge-: verkocht.",
+"example": "We hebben ons huis vorige maand verkocht.",
+"translation": "В прошлом месяце мы продали дом."
+},
+{
+"id": "nl-239",
+"level": "B1",
+"topic": "Be-",
+"meaning": "неотделяемая приставка",
+"explain": "Be- делает глагол переходным: spreken over → bespreken iets. Причастие без ge-: besproken.",
+"example": "Laten we het plan morgen bespreken.",
+"translation": "Давайте обсудим план завтра."
+},
+{
+"id": "nl-240",
+"level": "B1",
+"topic": "Ont-",
+"meaning": "раз-, от-",
+"explain": "Ont- часто значит удаление или начало: ontbijten, ontvangen, ontmoeten. Причастие без ge-.",
+"example": "Ik heb je e-mail gisteren ontvangen.",
+"translation": "Я вчера получил твоё письмо."
+},
+{
+"id": "nl-241",
+"level": "B1",
+"topic": "Eerst … toen",
+"meaning": "сначала … потом",
+"explain": "Рассказ о прошлом по шагам: eerst — первое действие, toen — следующее. После toen в начале глагол встаёт перед подлежащим.",
+"example": "Eerst regende het, toen ging de zon schijnen.",
+"translation": "Сначала шёл дождь, потом выглянуло солнце."
+},
+{
+"id": "nl-242",
+"level": "A2",
+"topic": "Zodra",
+"meaning": "как только",
+"explain": "Второе действие начинается сразу после первого. Zodra открывает придаточное, поэтому глагол уходит в конец.",
+"example": "Ik bel je terug zodra ik klaar ben.",
+"translation": "Я перезвоню тебе, как только закончу."
+},
+{
+"id": "nl-243",
+"level": "B1",
+"topic": "Zich zorgen maken",
+"meaning": "волноваться",
+"explain": "Возвратный глагол: местоимение меняется по лицу — ik maak me, jij maakt je, zij maakt zich zorgen. Повод — через om или over.",
+"example": "Ze maakt zich zorgen om haar examen.",
+"translation": "Она волнуется из-за экзамена."
+},
+{
+"id": "nl-244",
+"level": "A2",
+"topic": "Hoeven … te",
+"meaning": "не нужно что-то делать",
+"explain": "Обычно с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце.",
+"example": "Je hoeft niet te koken, we eten buiten.",
+"translation": "Тебе не нужно готовить, мы едим вне дома."
+},
+{
+"id": "nl-245",
+"level": "A2",
+"topic": "Of",
+"meaning": "ли",
+"explain": "Of вводит косвенный вопрос «да или нет». Это придаточное: глагол в конце, разделяемый глагол пишется слитно.",
+"example": "Ik weet niet of hij vanavond meekomt.",
+"translation": "Я не знаю, пойдёт ли он с нами сегодня вечером."
+},
+{
+"id": "nl-246",
+"level": "B1",
+"topic": "Had … moeten",
+"meaning": "надо было",
+"explain": "Сожаление о прошлом: had + инфинитив, а moeten — в самом конце.",
+"example": "Ik had eerder moeten vertrekken.",
+"translation": "Мне надо было выйти раньше."
+},
+{
+"id": "nl-247",
+"level": "B1",
+"topic": "Zou + infinitief",
+"meaning": "будущее в прошлом",
+"explain": "Ожидание, которое было в прошлом: zou + инфинитив в конце. Часто после dacht dat или wist dat.",
+"example": "Ik dacht dat de toets moeilijk zou zijn, maar het viel mee.",
+"translation": "Я думал, что тест будет трудным, но всё оказалось не так плохо."
+},
+{
+"id": "nl-248",
+"level": "B1",
+"topic": "Er … mee",
+"meaning": "с этим",
+"explain": "Er заменяет «met + это», а mee уходит в конец. Так же работают er … aan, er … over.",
+"example": "Mijn nieuwe fiets? Ik ben er heel blij mee.",
+"translation": "Мой новый велосипед? Я им очень доволен."
+},
+{
+"id": "nl-249",
+"level": "A2",
+"topic": "Want",
+"meaning": "потому что",
+"explain": "После want обычный порядок слов, глагол на втором месте, в отличие от omdat.",
+"example": "Ik neem de trein, want dan kan ik lezen.",
+"translation": "Я поеду на поезде, потому что тогда смогу почитать."
+},
+{
+"id": "nl-250",
+"level": "B1",
+"topic": "Zin hebben in",
+"meaning": "хотеть, быть в настроении",
+"explain": "Zin hebben in iets — хотеть чего-то. С daar daar встаёт в начало, а in — в конец.",
+"example": "Heb je zin in koffie? Daar heb ik wel zin in!",
+"translation": "Хочешь кофе? А вот этого мне хочется!"
+},
+{
+"id": "nl-251",
+"level": "B1",
+"topic": "Omdat of want",
+"meaning": "разница omdat и want",
+"explain": "Omdat — придаточное, глагол в конце. Want — сочинительный союз, порядок слов обычный.",
+"example": "Ik blijf thuis, want ik ben moe.",
+"translation": "Я остаюсь дома, потому что устал."
+},
+{
+"id": "nl-252",
+"level": "B1",
+"topic": "Toch met inversie",
+"meaning": "всё-таки в начале",
+"explain": "Если toch стоит в начале, глагол идёт сразу за ним: Toch ga ik niet.",
+"example": "Het was duur, toch heb ik het gekocht.",
+"translation": "Это было дорого, но я всё-таки купил."
+},
+{
+"id": "nl-253",
+"level": "B1",
+"topic": "Het eens zijn met",
+"meaning": "соглашаться",
+"explain": "Het eens zijn met iemand — соглашаться с кем-то. Het oneens zijn — не соглашаться.",
+"example": "Ik ben het helemaal met je eens.",
+"translation": "Я полностью с тобой согласен."
+},
+{
+"id": "nl-254",
+"level": "B1",
+"topic": "Het hebben over",
+"meaning": "говорить о",
+"explain": "Het hebben over — говорить о чём-то, обсуждать тему: Waar hebben jullie het over?",
+"example": "We hadden het net over jou.",
+"translation": "Мы как раз говорили о тебе."
+},
+{
+"id": "nl-255",
+"level": "B1",
+"topic": "Ervan uitgaan dat",
+"meaning": "исходить из того, что",
+"explain": "Ervan uitgaan dat — предполагать: Ik ga ervan uit dat je komt.",
+"example": "Ik ga ervan uit dat de vergadering doorgaat.",
+"translation": "Я исхожу из того, что совещание состоится."
+},
+{
+"id": "nl-256",
+"level": "B1",
+"topic": "Iemand iets kwalijk nemen",
+"meaning": "обижаться на кого-то за что-то",
+"explain": "Kwalijk nemen — винить, обижаться: Neem het me niet kwalijk — не обижайся.",
+"example": "Ik neem het je niet kwalijk dat je het vergeten bent.",
+"translation": "Я не обижаюсь на тебя за то, что ты забыл."
+},
+{
+"id": "nl-257",
+"level": "B1",
+"topic": "Zich voorstellen",
+"meaning": "представить себе / представиться",
+"explain": "Zich voorstellen — представиться. Zich iets voorstellen — вообразить: Stel je voor!",
+"example": "Kun je je voorstellen hoe druk het was?",
+"translation": "Можешь себе представить, сколько было народу?"
+},
+{
+"id": "nl-258",
+"level": "B1",
+"topic": "Afspreken",
+"meaning": "договариваться о встрече",
+"explain": "Afspreken met iemand — договориться о встрече. Een afspraak maken — назначить встречу.",
+"example": "Ik heb met Lisa afgesproken om acht uur.",
+"translation": "Я договорился с Лизой на восемь."
+},
+{
+"id": "nl-259",
+"level": "B1",
+"topic": "Meevallen en tegenvallen",
+"meaning": "оказаться лучше / хуже",
+"explain": "Meevallen — оказаться лучше ожиданий, tegenvallen — хуже. Het valt mee — не так плохо.",
+"example": "Het examen viel me erg tegen.",
+"translation": "Экзамен оказался намного сложнее, чем я думал."
+},
+{
+"id": "nl-260",
+"level": "B1",
+"topic": "Opvallen",
+"meaning": "бросаться в глаза",
+"explain": "Opvallen — быть заметным. Het valt me op dat… — я замечаю, что…",
+"example": "Het valt me op dat je veel beter Nederlands spreekt.",
+"translation": "Я замечаю, что ты говоришь по-нидерландски намного лучше."
+},
+{
+"id": "nl-261",
+"level": "B1",
+"topic": "Bevallen",
+"meaning": "нравиться (о новом)",
+"explain": "Bevallen — понравиться, о впечатлении от нового: Hoe bevalt je nieuwe baan?",
+"example": "Hoe bevalt het nieuwe huis?",
+"translation": "Как тебе нравится новый дом?"
+},
+{
+"id": "nl-262",
+"level": "B1",
+"topic": "Vinden",
+"meaning": "считать, находить",
+"explain": "Vinden — не только «находить», но и «считать»: Ik vind het leuk. Wat vind jij ervan?",
+"example": "Wat vind jij van zijn nieuwe kapsel?",
+"translation": "Что ты думаешь о его новой стрижке?"
+},
+{
+"id": "nl-263",
+"level": "B1",
+"topic": "Durven",
+"meaning": "осмеливаться",
+"explain": "Durven + (te) + инфинитив — решиться: Ik durf niet te springen.",
+"example": "Ik durf hem niet te vertellen wat er gebeurd is.",
+"translation": "Я не решаюсь рассказать ему, что случилось."
+},
+{
+"id": "nl-264",
+"level": "B1",
+"topic": "Hoeven in het perfectum",
+"meaning": "не пришлось",
+"explain": "Ik heb niet hoeven werken — мне не пришлось работать. Hoeven — в инфинитиве в конце.",
+"example": "Ik heb gelukkig niet lang hoeven wachten.",
+"translation": "К счастью, мне не пришлось долго ждать."
+},
+{
+"id": "nl-265",
+"level": "B1",
+"topic": "Willen in het perfectum",
+"meaning": "хотел сделать",
+"explain": "Ik heb altijd naar Japan willen gaan — двойной инфинитив, willen в конце.",
+"example": "Ik heb altijd piano willen leren spelen.",
+"translation": "Я всегда хотел научиться играть на пианино."
+},
+{
+"id": "nl-266",
+"level": "B1",
+"topic": "Gaan + infinitief in de bijzin",
+"meaning": "порядок с gaan в придаточном",
+"explain": "В придаточном спрягаемый глагол gaan стоит перед инфинитивом: …omdat we gaan verhuizen.",
+"example": "Ik vertel het je als ik ga verhuizen.",
+"translation": "Я скажу тебе, когда буду переезжать."
+},
+{
+"id": "nl-267",
+"level": "B1",
+"topic": "Zich afvragen",
+"meaning": "задаваться вопросом",
+"explain": "Ik vraag me af of… — интересно, … ли. Возвратный глагол с отделяемой приставкой af.",
+"example": "Ik vraag me af of de winkel nog open is.",
+"translation": "Интересно, открыт ли ещё магазин."
+},
+{
+"id": "nl-268",
+"level": "B1",
+"topic": "Zich aanmelden",
+"meaning": "записаться, зарегистрироваться",
+"explain": "Zich aanmelden voor — записаться на курс или мероприятие.",
+"example": "Ik heb me aangemeld voor een cursus Nederlands.",
+"translation": "Я записался на курс нидерландского."
+},
+{
+"id": "nl-269",
+"level": "B1",
+"topic": "Aan de beurt zijn",
+"meaning": "быть на очереди",
+"explain": "Wie is er aan de beurt? — Чья очередь? Ik ben aan de beurt — моя очередь.",
+"example": "Sorry, ik denk dat ik nu aan de beurt ben.",
+"translation": "Извините, кажется, сейчас моя очередь."
+},
+{
+"id": "nl-270",
+"level": "B1",
+"topic": "Het zou kunnen dat",
+"meaning": "может быть, что",
+"explain": "Het zou kunnen dat… — осторожное предположение, дальше придаточное с глаголом в конце.",
+"example": "Het zou kunnen dat de trein vertraging heeft.",
+"translation": "Возможно, поезд опаздывает."
+},
+{
+"id": "nl-271",
+"level": "B1",
+"topic": "Misschien",
+"meaning": "может быть",
+"explain": "Misschien — наречие, в начале вызывает инверсию: Misschien kom ik later.",
+"example": "Misschien gaan we volgend jaar naar Italië.",
+"translation": "Может быть, в следующем году мы поедем в Италию."
+},
+{
+"id": "nl-272",
+"level": "B1",
+"topic": "Waarschijnlijk",
+"meaning": "вероятно",
+"explain": "Waarschijnlijk — высокая вероятность. Стоит после глагола или в начале с инверсией.",
+"example": "Hij is waarschijnlijk nog op zijn werk.",
+"translation": "Он, вероятно, ещё на работе."
+},
+{
+"id": "nl-273",
+"level": "B1",
+"topic": "Het kan zijn",
+"meaning": "возможно",
+"explain": "Het kan zijn dat… — возможно, что… Разговорный вариант het zou kunnen.",
+"example": "Het kan zijn dat ik iets later kom.",
+"translation": "Возможно, я приду немного позже."
+},
+{
+"id": "nl-274",
+"level": "B1",
+"topic": "Moeten in de betekenis van vermoeden",
+"meaning": "должно быть (предположение)",
+"explain": "Moeten может выражать уверенное предположение: Dat moet hij zijn — это, должно быть, он.",
+"example": "Je moet wel moe zijn na zo'n reis.",
+"translation": "Ты, должно быть, устал после такой поездки."
+},
+{
+"id": "nl-275",
+"level": "B1",
+"topic": "Kunnen als mogelijkheid",
+"meaning": "может (вероятность)",
+"explain": "Kunnen — не только умение, но и возможность: Het kan morgen gaan regenen.",
+"example": "Dat kan best kloppen.",
+"translation": "Это вполне может быть правдой."
+},
+{
+"id": "nl-276",
+"level": "B1",
+"topic": "Mocht",
+"meaning": "если вдруг",
+"explain": "Mocht в начале условия значит «если вдруг», глагол перед подлежащим: Mocht je vragen hebben, bel me.",
+"example": "Mocht het regenen, dan gaan we naar het museum.",
+"translation": "Если вдруг пойдёт дождь, мы пойдём в музей."
+},
+{
+"id": "nl-277",
+"level": "B2",
+"topic": "Zou hebben + deelwoord",
+"meaning": "сделал бы (в прошлом)",
+"explain": "Нереальное прошлое в главной части: zou + hebben/zijn + причастие или had + причастие.",
+"example": "Ik zou het anders hebben gedaan.",
+"translation": "Я бы сделал это иначе."
+},
+{
+"id": "nl-278",
+"level": "B2",
+"topic": "Als ik dat had geweten",
+"meaning": "если бы я знал",
+"explain": "Нереальное условие в прошлом: als + had/was + причастие, в главной — had/zou hebben + причастие.",
+"example": "Als ik dat had geweten, was ik eerder gekomen.",
+"translation": "Если бы я это знал, пришёл бы раньше."
+},
+{
+"id": "nl-279",
+"level": "B2",
+"topic": "Had ik het geweten",
+"meaning": "условие без als",
+"explain": "В книжной речи als опускают, и глагол встаёт первым: Had ik het geweten, dan…",
+"example": "Had ik het geweten, dan had ik je geholpen.",
+"translation": "Знал бы я, я бы тебе помог."
+},
+{
+"id": "nl-280",
+"level": "B2",
+"topic": "Passief met zijn",
+"meaning": "состояние в пассиве",
+"explain": "Zijn + причастие описывает результат или состояние: De winkel is gesloten.",
+"example": "Het museum is op maandag gesloten.",
+"translation": "По понедельникам музей закрыт."
+},
+{
+"id": "nl-281",
+"level": "B2",
+"topic": "Er wordt gezegd dat",
+"meaning": "говорят, что",
+"explain": "Безличный пассив с придаточным — формальный способ передать слух или мнение.",
+"example": "Er wordt gezegd dat de prijzen volgend jaar stijgen.",
+"translation": "Говорят, что в следующем году цены вырастут."
+},
+{
+"id": "nl-282",
+"level": "B2",
+"topic": "Het lezen",
+"meaning": "инфинитив как существительное",
+"explain": "Инфинитив с het становится существительным: het lezen, het zwemmen. Часто с van: het lezen van boeken.",
+"example": "Het leren van een taal kost tijd.",
+"translation": "Изучение языка требует времени."
+},
+{
+"id": "nl-283",
+"level": "B2",
+"topic": "Al is het",
+"meaning": "хотя бы и, даже если",
+"explain": "Al в начале придаточного с инверсией значит «даже если»: Al is het duur, ik koop het.",
+"example": "Al regent het, we gaan toch.",
+"translation": "Даже если будет дождь, мы всё равно пойдём."
+},
+{
+"id": "nl-284",
+"level": "B2",
+"topic": "Ook al",
+"meaning": "даже если, хотя",
+"explain": "Ook al — сильное «хотя»: Ook al ben ik moe, ik ga mee. Глагол в конце придаточного.",
+"example": "Ook al heb ik weinig tijd, ik help je graag.",
+"translation": "Хотя у меня мало времени, я охотно тебе помогу."
+},
+{
+"id": "nl-285",
+"level": "B2",
+"topic": "Tenzij",
+"meaning": "если только не",
+"explain": "Tenzij — исключение из правила: We gaan, tenzij het regent.",
+"example": "Ik kom morgen, tenzij ik moet werken.",
+"translation": "Я приду завтра, если только мне не придётся работать."
+},
+{
+"id": "nl-286",
+"level": "B2",
+"topic": "Mits",
+"meaning": "при условии, что",
+"explain": "Mits — строгое условие: Je mag gaan, mits je op tijd thuis bent.",
+"example": "Je mag de auto lenen, mits je hem voltankt.",
+"translation": "Можешь взять машину при условии, что заправишь её."
+},
+{
+"id": "nl-287",
+"level": "B2",
+"topic": "Opdat",
+"meaning": "для того чтобы",
+"explain": "Opdat — книжное «чтобы», в речи чаще zodat. Глагол в конце.",
+"example": "Spreek duidelijk, opdat iedereen je verstaat.",
+"translation": "Говори чётко, чтобы все тебя поняли."
+},
+{
+"id": "nl-288",
+"level": "B2",
+"topic": "Doordat",
+"meaning": "из-за того что",
+"explain": "Doordat — причина без намерения, факт: Doordat de trein laat was, miste ik de bus.",
+"example": "Doordat het hard sneeuwde, waren de wegen dicht.",
+"translation": "Из-за сильного снегопада дороги были закрыты."
+},
+{
+"id": "nl-289",
+"level": "B2",
+"topic": "Aangezien",
+"meaning": "поскольку",
+"explain": "Aangezien — формальное «поскольку, так как», глагол в конце придаточного.",
+"example": "Aangezien niemand reageerde, heb ik het zelf gedaan.",
+"translation": "Поскольку никто не ответил, я сделал это сам."
+},
+{
+"id": "nl-290",
+"level": "B2",
+"topic": "Zolang",
+"meaning": "пока, до тех пор пока",
+"explain": "Zolang — условие на время: Zolang je hier woont, betaal je huur.",
+"example": "Zolang het niet regent, kunnen we buiten eten.",
+"translation": "Пока нет дождя, мы можем есть на улице."
+},
+{
+"id": "nl-291",
+"level": "B2",
+"topic": "Naarmate",
+"meaning": "по мере того как",
+"explain": "Naarmate + сравнительная степень — постепенная зависимость: naarmate je ouder wordt…",
+"example": "Naarmate de avond vorderde, werd het rustiger.",
+"translation": "По мере того как вечер продолжался, становилось спокойнее."
+},
+{
+"id": "nl-292",
+"level": "B2",
+"topic": "Alsof",
+"meaning": "как будто",
+"explain": "Alsof — сравнение с нереальным, часто с прошедшим временем: Hij doet alsof hij slaapt.",
+"example": "Het voelt alsof ik hier al jaren woon.",
+"translation": "Такое чувство, будто я живу здесь уже много лет."
+},
+{
+"id": "nl-293",
+"level": "B2",
+"topic": "Zoals en als",
+"meaning": "как (сравнение)",
+"explain": "Zoals — «так, как» перед придаточным или примером, als — «в качестве» и в сравнении even … als.",
+"example": "Doe het zoals ik het je heb uitgelegd.",
+"translation": "Сделай так, как я тебе объяснил."
+},
+{
+"id": "nl-294",
+"level": "B2",
+"topic": "Desondanks",
+"meaning": "несмотря на это",
+"explain": "Desondanks в начале вызывает инверсию: Het was koud, desondanks gingen we zwemmen.",
+"example": "Hij was ziek, desondanks ging hij naar zijn werk.",
+"translation": "Он был болен, несмотря на это он пошёл на работу."
+},
+{
+"id": "nl-295",
+"level": "B2",
+"topic": "Daarentegen",
+"meaning": "напротив, зато",
+"explain": "Daarentegen противопоставляет: Mijn broer is lang, ik daarentegen ben klein.",
+"example": "De zomer was droog, de herfst daarentegen erg nat.",
+"translation": "Лето было сухим, а осень, напротив, очень дождливой."
+},
+{
+"id": "nl-296",
+"level": "B2",
+"topic": "Enerzijds … anderzijds",
+"meaning": "с одной стороны … с другой",
+"explain": "Связывает два противоположных аргумента. После enerzijds в начале — инверсия.",
+"example": "Enerzijds wil ik verhuizen, anderzijds woon ik hier fijn.",
+"translation": "С одной стороны, я хочу переехать, с другой — мне здесь хорошо."
+},
+{
+"id": "nl-297",
+"level": "B2",
+"topic": "Weliswaar … maar",
+"meaning": "правда … но",
+"explain": "Weliswaar признаёт факт, а maar вводит главное: Het is weliswaar duur, maar het is goed.",
+"example": "Het hotel is weliswaar klein, maar wel gezellig.",
+"translation": "Отель, правда, маленький, но уютный."
+},
+{
+"id": "nl-298",
+"level": "B2",
+"topic": "Niettemin",
+"meaning": "тем не менее",
+"explain": "Niettemin — книжное «тем не менее», в начале с инверсией.",
+"example": "Het plan was riskant; niettemin werd het uitgevoerd.",
+"translation": "План был рискованным; тем не менее его осуществили."
+},
+{
+"id": "nl-299",
+"level": "B2",
+"topic": "Dankzij",
+"meaning": "благодаря",
+"explain": "Dankzij — положительная причина: dankzij jouw hulp. Для отрицательной — door of vanwege.",
+"example": "Dankzij het mooie weer was het feest een succes.",
+"translation": "Благодаря хорошей погоде праздник удался."
+},
+{
+"id": "nl-300",
+"level": "B2",
+"topic": "Vanwege en wegens",
+"meaning": "из-за",
+"explain": "Vanwege и wegens + существительное — причина, wegens — официальнее: wegens ziekte gesloten.",
+"example": "De wedstrijd is afgelast vanwege de storm.",
+"translation": "Матч отменили из-за шторма."
+},
+{
+"id": "nl-301",
+"level": "B2",
+"topic": "Ondanks",
+"meaning": "несмотря на",
+"explain": "Ondanks + существительное: ondanks de regen. С придаточным — ondanks dat или hoewel.",
+"example": "Ondanks de drukte was het personeel vriendelijk.",
+"translation": "Несмотря на наплыв людей, персонал был приветлив."
+},
+{
+"id": "nl-302",
+"level": "B2",
+"topic": "Volgens",
+"meaning": "по мнению, согласно",
+"explain": "Volgens — источник информации: volgens mij (по-моему), volgens het weerbericht.",
+"example": "Volgens het weerbericht wordt het morgen zonnig.",
+"translation": "Согласно прогнозу, завтра будет солнечно."
+},
+{
+"id": "nl-303",
+"level": "B2",
+"topic": "Wat betreft",
+"meaning": "что касается",
+"explain": "Wat … betreft / wat betreft — «что касается»: wat mij betreft (по мне).",
+"example": "Wat mij betreft mogen we nu gaan.",
+"translation": "Что касается меня, мы можем идти."
+},
+{
+"id": "nl-304",
+"level": "B2",
+"topic": "Gezien",
+"meaning": "учитывая",
+"explain": "Gezien + существительное — с учётом: gezien de omstandigheden.",
+"example": "Gezien de prijs is de kwaliteit prima.",
+"translation": "Учитывая цену, качество отличное."
+},
+{
+"id": "nl-305",
+"level": "B2",
+"topic": "Ten gevolge van",
+"meaning": "вследствие",
+"explain": "Книжное «вследствие», часто в новостях: ten gevolge van het ongeluk.",
+"example": "Ten gevolge van een storing rijden er minder treinen.",
+"translation": "Вследствие неисправности поездов ходит меньше."
+},
+{
+"id": "nl-306",
+"level": "B2",
+"topic": "In het kader van",
+"meaning": "в рамках",
+"explain": "Официальное выражение: in het kader van het project, in het kader van de wet.",
+"example": "In het kader van de renovatie is de ingang verplaatst.",
+"translation": "В рамках ремонта вход перенесён."
+},
+{
+"id": "nl-307",
+"level": "B2",
+"topic": "Naar aanleiding van",
+"meaning": "в связи с, по поводу",
+"explain": "Официальное «по поводу» в письмах: naar aanleiding van uw e-mail.",
+"example": "Naar aanleiding van uw vraag stuur ik u de informatie.",
+"translation": "В связи с вашим вопросом отправляю вам информацию."
+},
+{
+"id": "nl-308",
+"level": "B2",
+"topic": "Met betrekking tot",
+"meaning": "относительно",
+"explain": "Met betrekking tot (m.b.t.) — формальное «относительно» в документах.",
+"example": "Met betrekking tot uw aanvraag hebben we nog vragen.",
+"translation": "Относительно вашей заявки у нас есть вопросы."
+},
+{
+"id": "nl-309",
+"level": "B2",
+"topic": "Dat wil zeggen",
+"meaning": "то есть",
+"explain": "Dat wil zeggen (d.w.z.) уточняет сказанное.",
+"example": "Ik werk parttime, dat wil zeggen drie dagen per week.",
+"translation": "Я работаю неполный день, то есть три дня в неделю."
+},
+{
+"id": "nl-310",
+"level": "B2",
+"topic": "Hetzelfde en dezelfde",
+"meaning": "тот же самый",
+"explain": "Hetzelfde — с het-словами, dezelfde — с de-словами и во множественном.",
+"example": "We hebben dezelfde smaak, maar niet hetzelfde budget.",
+"translation": "У нас одинаковый вкус, но не одинаковый бюджет."
+},
+{
+"id": "nl-311",
+"level": "B2",
+"topic": "Wiens en wier",
+"meaning": "чей (книжное)",
+"explain": "Wiens — чей (о мужчине), wier — чья (о женщине или мн.). В речи заменяют на van wie.",
+"example": "De schrijver, wiens boek ik las, komt naar Leiden.",
+"translation": "Писатель, чью книгу я читал, приезжает в Лейден."
+},
+{
+"id": "nl-312",
+"level": "B2",
+"topic": "Hetgeen",
+"meaning": "то, что (книжное)",
+"explain": "Hetgeen — книжное «что», относится ко всему предложению. В речи — wat.",
+"example": "Hij kwam te laat, hetgeen niemand verbaasde.",
+"translation": "Он опоздал, что никого не удивило."
+},
+{
+"id": "nl-313",
+"level": "B2",
+"topic": "Bijzin zonder dat",
+"meaning": "без того чтобы",
+"explain": "Zonder dat + придаточное — когда исполнители разные: Hij vertrok zonder dat iemand het merkte.",
+"example": "Ze verliet het feest zonder dat iemand het zag.",
+"translation": "Она ушла с праздника так, что никто не заметил."
+},
+{
+"id": "nl-314",
+"level": "B2",
+"topic": "Er + wordt in de bijzin",
+"meaning": "пассив в придаточном",
+"explain": "В придаточном порядок: er … причастие + wordt или wordt + причастие: …dat er veel gebouwd wordt.",
+"example": "Ik hoor dat er in de stad veel gebouwd wordt.",
+"translation": "Я слышал, что в городе много строят."
+},
+{
+"id": "nl-315",
+"level": "B2",
+"topic": "Uitdrukkingen met er",
+"meaning": "выражения с er",
+"explain": "Устойчивые выражения: er slecht uitzien (плохо выглядеть), ervandoor gaan (уйти), erop staan (настаивать).",
+"example": "Je ziet er moe uit, gaat het wel?",
+"translation": "Ты выглядишь усталым, всё в порядке?"
+},
+{
+"id": "nl-316",
+"level": "B2",
+"topic": "Erop staan",
+"meaning": "настаивать",
+"explain": "Erop staan dat… — настаивать: Ik sta erop dat je blijft.",
+"example": "Mijn moeder staat erop dat we blijven eten.",
+"translation": "Мама настаивает, чтобы мы остались на ужин."
+},
+{
+"id": "nl-317",
+"level": "B2",
+"topic": "Er niets aan kunnen doen",
+"meaning": "ничего не поделать",
+"explain": "Ik kan er niets aan doen — я ничего не могу с этим поделать, это не моя вина.",
+"example": "Sorry voor de vertraging, ik kon er niets aan doen.",
+"translation": "Извини за опоздание, я ничего не мог поделать."
+},
+{
+"id": "nl-318",
+"level": "B2",
+"topic": "Iets voor elkaar krijgen",
+"meaning": "добиться чего-то",
+"explain": "Voor elkaar krijgen — сделать, добиться результата: Hoe heb je dat voor elkaar gekregen?",
+"example": "Het is ons gelukt om alles op tijd voor elkaar te krijgen.",
+"translation": "Нам удалось всё сделать вовремя."
+},
+{
+"id": "nl-319",
+"level": "B2",
+"topic": "Aan de slag gaan",
+"meaning": "приступать к делу",
+"explain": "Aan de slag gaan — начать работать. Aan de slag! — За дело!",
+"example": "Na de koffie gaan we meteen aan de slag.",
+"translation": "После кофе сразу приступаем к делу."
+},
+{
+"id": "nl-320",
+"level": "B2",
+"topic": "Ermee ophouden",
+"meaning": "прекратить",
+"explain": "Ophouden met — прекращать что-то: Hou ermee op! — Хватит!",
+"example": "Ik ben vorig jaar gestopt met roken en heb er geen spijt van.",
+"translation": "Я бросил курить в прошлом году и не жалею."
+},
+{
+"id": "nl-321",
+"level": "B2",
+"topic": "Spijt hebben van",
+"meaning": "сожалеть о",
+"explain": "Spijt hebben van iets — сожалеть: Ik heb er spijt van — я об этом жалею.",
+"example": "Ik heb spijt van wat ik gisteren zei.",
+"translation": "Я жалею о том, что сказал вчера."
+}
+],
+"en": [
+{
+"id": "en-001",
+"level": "A1",
+"topic": "To be",
+"meaning": "быть",
+"explain": "I am, you are, he/she/it is, we/they are. В речи часто сокращают: I'm, you're, it's.",
+"example": "We're from Amsterdam, but she's from Utrecht.",
+"translation": "Мы из Амстердама, а она из Утрехта."
+},
+{
+"id": "en-002",
+"level": "A1",
+"topic": "Have got",
+"meaning": "иметь (брит.)",
+"explain": "I have got / I've got — у меня есть. Для he/she/it — has got. Вопрос: Have you got…?",
+"example": "I've got two brothers and a sister.",
+"translation": "У меня два брата и сестра."
+},
+{
+"id": "en-003",
+"level": "A1",
+"topic": "Present Simple",
+"meaning": "настоящее простое",
+"explain": "Регулярные действия и факты. Для he/she/it добавляется -s: I work, she works.",
+"example": "She works in a hospital.",
+"translation": "Она работает в больнице."
+},
+{
+"id": "en-004",
+"level": "A1",
+"topic": "Do и does в вопросах",
+"meaning": "вопросы в Present Simple",
+"explain": "Вопрос строится с do (с he/she/it — does), основной глагол без -s: Does she live here?",
+"example": "Do you like spicy food?",
+"translation": "Ты любишь острую еду?"
+},
+{
+"id": "en-005",
+"level": "A1",
+"topic": "Don't и doesn't",
+"meaning": "отрицание в Present Simple",
+"explain": "Отрицание: don't или doesn't + глагол без -s: He doesn't drink coffee.",
+"example": "I don't watch TV in the morning.",
+"translation": "Я не смотрю телевизор по утрам."
+},
+{
+"id": "en-006",
+"level": "A1",
+"topic": "Present Continuous",
+"meaning": "действие сейчас",
+"explain": "Am/is/are + глагол с -ing — то, что происходит прямо сейчас.",
+"example": "I'm cooking dinner right now.",
+"translation": "Я сейчас готовлю ужин."
+},
+{
+"id": "en-007",
+"level": "A1",
+"topic": "Can",
+"meaning": "мочь, уметь",
+"explain": "Can + глагол без to, одинаково для всех лиц. Отрицание — can't, вопрос — Can you…?",
+"example": "Can you speak Spanish?",
+"translation": "Ты умеешь говорить по-испански?"
+},
+{
+"id": "en-008",
+"level": "A1",
+"topic": "There is и there are",
+"meaning": "есть, находится",
+"explain": "There is — для одного предмета, there are — для нескольких. Сообщает, что что-то где-то есть.",
+"example": "There are three cafés on this street.",
+"translation": "На этой улице три кафе."
+},
+{
+"id": "en-009",
+"level": "A1",
+"topic": "A и an",
+"meaning": "неопределённый артикль",
+"explain": "A — перед согласным звуком, an — перед гласным звуком: a car, an apple, an hour.",
+"example": "I need an umbrella and a coat.",
+"translation": "Мне нужен зонт и пальто."
+},
+{
+"id": "en-010",
+"level": "A1",
+"topic": "The",
+"meaning": "определённый артикль",
+"explain": "The — когда понятно, о чём речь, или предмет единственный: the sun, the door of my house.",
+"example": "Can you close the window, please?",
+"translation": "Закрой, пожалуйста, окно."
+},
+{
+"id": "en-011",
+"level": "A1",
+"topic": "Без артикля",
+"meaning": "нулевой артикль",
+"explain": "Артикля нет у обобщений во множественном и неисчисляемых: I like dogs. Water is important.",
+"example": "Cats sleep a lot during the day.",
+"translation": "Кошки много спят днём."
+},
+{
+"id": "en-012",
+"level": "A1",
+"topic": "Неправильные множественные",
+"meaning": "irregular plurals",
+"explain": "Некоторые слова меняются особо: man → men, child → children, foot → feet, mouse → mice.",
+"example": "The children are playing with their feet in the water.",
+"translation": "Дети играют ногами в воде."
+},
+{
+"id": "en-013",
+"level": "A1",
+"topic": "Possessive 's",
+"meaning": "притяжательный падеж",
+"explain": "'s показывает владельца: Anna's bike. Во множественном на -s — только апостроф: my parents' house.",
+"example": "This is my sister's car.",
+"translation": "Это машина моей сестры."
+},
+{
+"id": "en-014",
+"level": "A1",
+"topic": "My, your, his, her",
+"meaning": "притяжательные местоимения",
+"explain": "My, your, his, her, its, our, their стоят перед существительным и не меняются.",
+"example": "Their house is next to our school.",
+"translation": "Их дом рядом с нашей школой."
+},
+{
+"id": "en-015",
+"level": "A1",
+"topic": "This, that, these, those",
+"meaning": "этот, тот",
+"explain": "This/these — близко, that/those — далеко. These и those — для множественного.",
+"example": "These shoes are nicer than those boots.",
+"translation": "Эти туфли красивее тех сапог."
+},
+{
+"id": "en-016",
+"level": "A1",
+"topic": "Me, him, her, them",
+"meaning": "объектные местоимения",
+"explain": "После глагола или предлога: me, you, him, her, it, us, them.",
+"example": "Can you call me later?",
+"translation": "Можешь позвонить мне позже?"
+},
+{
+"id": "en-017",
+"level": "A1",
+"topic": "Imperative",
+"meaning": "повелительное наклонение",
+"explain": "Просьба или команда — глагол без подлежащего: Open the door. Отрицание — Don't…",
+"example": "Don't forget your keys!",
+"translation": "Не забудь ключи!"
+},
+{
+"id": "en-018",
+"level": "A1",
+"topic": "Let's",
+"meaning": "давай",
+"explain": "Let's + глагол без to — предложение сделать что-то вместе.",
+"example": "Let's take a taxi.",
+"translation": "Давай возьмём такси."
+},
+{
+"id": "en-019",
+"level": "A1",
+"topic": "At, on, in (время)",
+"meaning": "предлоги времени",
+"explain": "At — точное время (at 5 pm), on — дни и даты (on Monday), in — месяцы, годы, части дня (in May).",
+"example": "The meeting is on Friday at ten.",
+"translation": "Встреча в пятницу в десять."
+},
+{
+"id": "en-020",
+"level": "A1",
+"topic": "In, on, at (место)",
+"meaning": "предлоги места",
+"explain": "In — внутри (in the box), on — на поверхности (on the table), at — в точке (at the station).",
+"example": "I'll wait for you at the bus stop.",
+"translation": "Я подожду тебя на остановке."
+},
+{
+"id": "en-021",
+"level": "A1",
+"topic": "Some и any",
+"meaning": "немного, какие-нибудь",
+"explain": "Some — в утверждениях, any — в вопросах и отрицаниях. В вежливых просьбах тоже some.",
+"example": "Do we have any milk? I want some coffee.",
+"translation": "У нас есть молоко? Я хочу кофе."
+},
+{
+"id": "en-022",
+"level": "A1",
+"topic": "Much и many",
+"meaning": "много",
+"explain": "Many — с исчисляемыми (many cars), much — с неисчисляемыми (much time), чаще в вопросах и отрицаниях.",
+"example": "I don't have much time today.",
+"translation": "Сегодня у меня мало времени."
+},
+{
+"id": "en-023",
+"level": "A1",
+"topic": "A lot of",
+"meaning": "много",
+"explain": "A lot of подходит для любых существительных и в утверждениях звучит естественнее, чем much.",
+"example": "There were a lot of people at the concert.",
+"translation": "На концерте было много людей."
+},
+{
+"id": "en-024",
+"level": "A1",
+"topic": "How much и how many",
+"meaning": "сколько",
+"explain": "How many — для исчисляемых, how much — для неисчисляемых и цены: How much is it?",
+"example": "How many languages do you speak?",
+"translation": "На скольких языках ты говоришь?"
+},
+{
+"id": "en-025",
+"level": "A1",
+"topic": "Like + -ing",
+"meaning": "любить делать",
+"explain": "После like, love, hate, enjoy глагол часто с -ing: I like swimming.",
+"example": "I love walking in the rain.",
+"translation": "Я люблю гулять под дождём."
+},
+{
+"id": "en-026",
+"level": "A1",
+"topic": "Would like",
+"meaning": "хотел бы",
+"explain": "Would like ('d like) — вежливое желание: I'd like a coffee. С глаголом — to: I'd like to go.",
+"example": "I'd like to book a table for two.",
+"translation": "Я хотел бы забронировать столик на двоих."
+},
+{
+"id": "en-027",
+"level": "A1",
+"topic": "Always, usually, never",
+"meaning": "наречия частоты",
+"explain": "Стоят перед основным глаголом, но после to be: I always walk. She is never late.",
+"example": "We usually have dinner at seven.",
+"translation": "Мы обычно ужинаем в семь."
+},
+{
+"id": "en-028",
+"level": "A1",
+"topic": "Was и were",
+"meaning": "прошедшее от to be",
+"explain": "I/he/she/it was, you/we/they were. Отрицание: wasn't, weren't.",
+"example": "The film was great, but the seats were uncomfortable.",
+"translation": "Фильм был отличный, но кресла были неудобные."
+},
+{
+"id": "en-029",
+"level": "A1",
+"topic": "Past Simple: -ed",
+"meaning": "прошедшее правильных глаголов",
+"explain": "К правильным глаголам добавляется -ed: work → worked, live → lived, stop → stopped.",
+"example": "We visited my grandparents last weekend.",
+"translation": "В прошлые выходные мы навестили бабушку и дедушку."
+},
+{
+"id": "en-030",
+"level": "A1",
+"topic": "Неправильные глаголы",
+"meaning": "irregular past",
+"explain": "Многие частые глаголы имеют особую форму прошедшего: go → went, see → saw, buy → bought.",
+"example": "I went to the market and bought some fruit.",
+"translation": "Я сходил на рынок и купил фрукты."
+},
+{
+"id": "en-031",
+"level": "A1",
+"topic": "Did в вопросах",
+"meaning": "вопросы в Past Simple",
+"explain": "Вопрос и отрицание с did, основной глагол в начальной форме: Did you see it? I didn't go.",
+"example": "Did you sleep well?",
+"translation": "Ты хорошо спал?"
+},
+{
+"id": "en-032",
+"level": "A1",
+"topic": "Going to",
+"meaning": "собираться",
+"explain": "Am/is/are going to + глагол — план или намерение: I'm going to learn Dutch.",
+"example": "We're going to paint the kitchen this weekend.",
+"translation": "В эти выходные мы собираемся покрасить кухню."
+},
+{
+"id": "en-033",
+"level": "A1",
+"topic": "Will (решение)",
+"meaning": "решение в момент речи",
+"explain": "Will + глагол — когда решаешь прямо сейчас: I'll have the soup. I'll help you.",
+"example": "It's cold. I'll close the window.",
+"translation": "Холодно. Я закрою окно."
+},
+{
+"id": "en-034",
+"level": "A1",
+"topic": "Сравнительная степень",
+"meaning": "comparatives",
+"explain": "Короткие прилагательные + -er (bigger), длинные — more (more expensive). Сравнение — через than.",
+"example": "The train is faster than the bus.",
+"translation": "Поезд быстрее автобуса."
+},
+{
+"id": "en-035",
+"level": "A1",
+"topic": "Превосходная степень",
+"meaning": "superlatives",
+"explain": "The + прилагательное + -est (the biggest) или the most (the most beautiful).",
+"example": "This is the most beautiful beach I've seen.",
+"translation": "Это самый красивый пляж, который я видел."
+},
+{
+"id": "en-036",
+"level": "A1",
+"topic": "Good, better, best",
+"meaning": "неправильное сравнение",
+"explain": "Good → better → the best, bad → worse → the worst, far → further → the furthest.",
+"example": "Today the weather is worse than yesterday.",
+"translation": "Сегодня погода хуже, чем вчера."
+},
+{
+"id": "en-037",
+"level": "A1",
+"topic": "Too и enough",
+"meaning": "слишком и достаточно",
+"explain": "Too стоит перед прилагательным (too hot), enough — после (big enough) и перед существительным (enough money).",
+"example": "This bag is too heavy for me.",
+"translation": "Эта сумка для меня слишком тяжёлая."
+},
+{
+"id": "en-038",
+"level": "A1",
+"topic": "Who, what, where",
+"meaning": "вопросительные слова",
+"explain": "Вопросительное слово + вспомогательный глагол + подлежащее: Where do you live?",
+"example": "What time does the shop open?",
+"translation": "Во сколько открывается магазин?"
+},
+{
+"id": "en-039",
+"level": "A1",
+"topic": "Why и because",
+"meaning": "почему и потому что",
+"explain": "Why — вопрос о причине, because — ответ: Why are you late? Because the bus was late.",
+"example": "I'm tired because I worked late.",
+"translation": "Я устал, потому что поздно работал."
+},
+{
+"id": "en-040",
+"level": "A1",
+"topic": "And, but, so",
+"meaning": "и, но, поэтому",
+"explain": "And соединяет, but противопоставляет, so показывает следствие.",
+"example": "It was raining, so we stayed at home.",
+"translation": "Шёл дождь, поэтому мы остались дома."
+},
+{
+"id": "en-041",
+"level": "A1",
+"topic": "Also, too, either",
+"meaning": "тоже",
+"explain": "Also — перед глаголом, too — в конце фразы, either — в конце отрицательной фразы.",
+"example": "I don't like it either.",
+"translation": "Мне тоже не нравится."
+},
+{
+"id": "en-042",
+"level": "A1",
+"topic": "Исчисляемые и неисчисляемые",
+"meaning": "countable / uncountable",
+"explain": "Неисчисляемые (water, information, advice) не имеют множественного и не используются с a/an.",
+"example": "Can you give me some advice?",
+"translation": "Можешь дать мне совет?"
+},
+{
+"id": "en-043",
+"level": "A1",
+"topic": "A few и a little",
+"meaning": "несколько и немного",
+"explain": "A few — с исчисляемыми (a few friends), a little — с неисчисляемыми (a little sugar).",
+"example": "I'll be back in a few minutes.",
+"translation": "Я вернусь через несколько минут."
+},
+{
+"id": "en-044",
+"level": "A1",
+"topic": "One и ones",
+"meaning": "замена существительного",
+"explain": "One/ones заменяют уже названное существительное: I don't like the red one.",
+"example": "These cups are dirty, can I use the clean ones?",
+"translation": "Эти чашки грязные, можно мне чистые?"
+},
+{
+"id": "en-045",
+"level": "A1",
+"topic": "How old, how far",
+"meaning": "how + прилагательное",
+"explain": "How + прилагательное спрашивает о степени: how old, how far, how long.",
+"example": "How far is the station from here?",
+"translation": "Как далеко отсюда вокзал?"
+},
+{
+"id": "en-046",
+"level": "A1",
+"topic": "Whose",
+"meaning": "чей",
+"explain": "Whose спрашивает о владельце: Whose phone is this? Ответ — с 's или mine/yours.",
+"example": "Whose jacket is on the chair?",
+"translation": "Чья куртка на стуле?"
+},
+{
+"id": "en-047",
+"level": "A1",
+"topic": "Mine, yours, hers",
+"meaning": "абсолютные местоимения",
+"explain": "Mine, yours, his, hers, ours, theirs заменяют существительное: The book is mine.",
+"example": "Is this umbrella yours or mine?",
+"translation": "Этот зонт твой или мой?"
+},
+{
+"id": "en-048",
+"level": "A1",
+"topic": "Myself, yourself",
+"meaning": "возвратные местоимения",
+"explain": "Myself, yourself, himself… — действие на себя или «сам»: I did it myself.",
+"example": "Help yourself to some cake.",
+"translation": "Угощайся тортом."
+},
+{
+"id": "en-049",
+"level": "A1",
+"topic": "Числительные порядковые",
+"meaning": "first, second, third",
+"explain": "Обычно + -th (fourth, tenth), особые: first, second, third. В датах: on the 5th of May.",
+"example": "My birthday is on the third of March.",
+"translation": "Мой день рождения третьего марта."
+},
+{
+"id": "en-050",
+"level": "A1",
+"topic": "Время по часам",
+"meaning": "telling the time",
+"explain": "Past — после часа, to — до часа: half past two (2:30), quarter to five (4:45).",
+"example": "The train leaves at quarter past eight.",
+"translation": "Поезд отправляется в четверть девятого."
+},
+{
+"id": "en-051",
+"level": "A1",
+"topic": "It's + погода",
+"meaning": "безличное it",
+"explain": "О погоде, времени и расстоянии говорят через it: It's raining. It's five o'clock.",
+"example": "It's sunny but quite windy today.",
+"translation": "Сегодня солнечно, но довольно ветрено."
+},
+{
+"id": "en-052",
+"level": "A1",
+"topic": "Have to",
+"meaning": "приходится, надо",
+"explain": "Have to + глагол — необходимость из-за обстоятельств. Has to для he/she/it.",
+"example": "I have to get up early tomorrow.",
+"translation": "Завтра мне надо рано вставать."
+},
+{
+"id": "en-053",
+"level": "A1",
+"topic": "Don't have to",
+"meaning": "не обязательно",
+"explain": "Don't have to значит «не нужно», а не «нельзя»: You don't have to come.",
+"example": "You don't have to pay, it's free.",
+"translation": "Платить не нужно, это бесплатно."
+},
+{
+"id": "en-054",
+"level": "A1",
+"topic": "Must и mustn't",
+"meaning": "должен и нельзя",
+"explain": "Must — сильная необходимость, mustn't — запрет: You mustn't smoke here.",
+"example": "You mustn't park in front of the gate.",
+"translation": "Нельзя парковаться перед воротами."
+},
+{
+"id": "en-055",
+"level": "A1",
+"topic": "Could (просьба)",
+"meaning": "вежливая просьба",
+"explain": "Could you…? вежливее, чем Can you…? Глагол без to.",
+"example": "Could you repeat that, please?",
+"translation": "Не могли бы вы повторить?"
+},
+{
+"id": "en-056",
+"level": "A1",
+"topic": "May I",
+"meaning": "разрешите",
+"explain": "May I…? — очень вежливая просьба разрешения, чуть формальнее, чем Can I…?",
+"example": "May I sit here?",
+"translation": "Можно мне здесь сесть?"
+},
+{
+"id": "en-057",
+"level": "A1",
+"topic": "Порядок слов",
+"meaning": "word order",
+"explain": "Обычный порядок: подлежащее — глагол — дополнение — место — время: I met Anna in town yesterday.",
+"example": "We bought a new sofa in Ikea last week.",
+"translation": "На прошлой неделе мы купили в Икее новый диван."
+},
+{
+"id": "en-058",
+"level": "A1",
+"topic": "Every и each",
+"meaning": "каждый",
+"explain": "Every — все без исключения как группа, each — каждый по отдельности. Оба с единственным числом.",
+"example": "Every room has a view of the sea.",
+"translation": "Из каждого номера видно море."
+},
+{
+"id": "en-059",
+"level": "A1",
+"topic": "Somebody, nobody",
+"meaning": "кто-то, никто",
+"explain": "Somebody/someone — кто-то, nobody — никто, anybody — кто-нибудь (в вопросах). Глагол в единственном.",
+"example": "Is anybody home?",
+"translation": "Есть кто-нибудь дома?"
+},
+{
+"id": "en-060",
+"level": "A1",
+"topic": "Something, nothing",
+"meaning": "что-то, ничего",
+"explain": "Something — что-то, nothing — ничего, anything — что-нибудь (в вопросах и отрицаниях).",
+"example": "I didn't buy anything.",
+"translation": "Я ничего не купил."
+},
+{
+"id": "en-061",
+"level": "A1",
+"topic": "Go + -ing",
+"meaning": "ходить заниматься",
+"explain": "Go + -ing для занятий: go swimming, go shopping, go running.",
+"example": "Let's go cycling on Sunday.",
+"translation": "Давай поедем кататься на велосипеде в воскресенье."
+},
+{
+"id": "en-062",
+"level": "A1",
+"topic": "Like и would like",
+"meaning": "любить и хотеть",
+"explain": "Like — нравится вообще, would like — хочется сейчас: I like tea. I'd like a tea.",
+"example": "I like jazz, but I'd like to hear something new.",
+"translation": "Я люблю джаз, но хотел бы послушать что-то новое."
+},
+{
+"id": "en-063",
+"level": "A1",
+"topic": "Verb + to",
+"meaning": "want to, need to",
+"explain": "После want, need, decide, hope, plan глагол идёт с to: I want to sleep.",
+"example": "I need to buy a new phone.",
+"translation": "Мне нужно купить новый телефон."
+},
+{
+"id": "en-064",
+"level": "A1",
+"topic": "Before и after",
+"meaning": "до и после",
+"explain": "Before/after + существительное, -ing или предложение: after work, before leaving.",
+"example": "Wash your hands before eating.",
+"translation": "Мой руки перед едой."
+},
+{
+"id": "en-065",
+"level": "A1",
+"topic": "Ago",
+"meaning": "назад",
+"explain": "Ago стоит после отрезка времени и требует Past Simple: two years ago.",
+"example": "I moved here three years ago.",
+"translation": "Я переехал сюда три года назад."
+},
+{
+"id": "en-066",
+"level": "A1",
+"topic": "Next и last",
+"meaning": "следующий и прошлый",
+"explain": "Next/last + week, month, year без предлога: next Monday, last summer.",
+"example": "We're flying to Rome next week.",
+"translation": "На следующей неделе мы летим в Рим."
+},
+{
+"id": "en-067",
+"level": "A1",
+"topic": "Want somebody to",
+"meaning": "хотеть, чтобы кто-то",
+"explain": "Want + объект + to + глагол: I want you to help me. Без придаточного that.",
+"example": "My boss wants me to finish it today.",
+"translation": "Начальник хочет, чтобы я закончил это сегодня."
+},
+{
+"id": "en-068",
+"level": "A2",
+"topic": "Past Continuous",
+"meaning": "длительное прошедшее",
+"explain": "Was/were + -ing — действие шло в момент в прошлом. Часто прерывается Past Simple.",
+"example": "I was cooking when you called.",
+"translation": "Я готовил, когда ты позвонил."
+},
+{
+"id": "en-069",
+"level": "A2",
+"topic": "Present Perfect",
+"meaning": "результат к настоящему",
+"explain": "Have/has + третья форма — опыт или результат без точного времени: I've seen it.",
+"example": "Have you ever been to Japan?",
+"translation": "Ты когда-нибудь был в Японии?"
+},
+{
+"id": "en-070",
+"level": "A2",
+"topic": "Present Perfect или Past Simple",
+"meaning": "разница",
+"explain": "С точным временем в прошлом (yesterday, in 2020) — только Past Simple. Без него — Present Perfect.",
+"example": "I've lost my keys. I lost them yesterday.",
+"translation": "Я потерял ключи. Я потерял их вчера."
+},
+{
+"id": "en-071",
+"level": "A2",
+"topic": "Already, just, yet",
+"meaning": "уже, только что, ещё",
+"explain": "Already и just — в утверждениях Present Perfect, yet — в вопросах и отрицаниях в конце.",
+"example": "Have you finished yet? I've just started.",
+"translation": "Ты уже закончил? Я только начал."
+},
+{
+"id": "en-072",
+"level": "A2",
+"topic": "For и since",
+"meaning": "в течение и с",
+"explain": "For + отрезок (for two years), since + начальная точка (since 2020). Обычно с Present Perfect.",
+"example": "I've lived here since March.",
+"translation": "Я живу здесь с марта."
+},
+{
+"id": "en-073",
+"level": "A2",
+"topic": "Ever и never",
+"meaning": "когда-либо и никогда",
+"explain": "Ever — в вопросах об опыте, never — «ни разу». С Present Perfect.",
+"example": "I've never eaten sushi.",
+"translation": "Я никогда не ел суши."
+},
+{
+"id": "en-074",
+"level": "A2",
+"topic": "Will (прогноз)",
+"meaning": "предсказание",
+"explain": "Will + глагол — мнение о будущем: I think it will rain. Часто с think, probably.",
+"example": "I think you'll like this film.",
+"translation": "Думаю, тебе понравится этот фильм."
+},
+{
+"id": "en-075",
+"level": "A2",
+"topic": "Present Continuous о будущем",
+"meaning": "договорённые планы",
+"explain": "Be + -ing о будущем — когда план уже договорён: время, люди, билеты.",
+"example": "We're meeting Anna for lunch tomorrow.",
+"translation": "Завтра мы обедаем с Анной."
+},
+{
+"id": "en-076",
+"level": "A2",
+"topic": "First conditional",
+"meaning": "реальное условие",
+"explain": "If + Present Simple, в главной части will + глагол. Will после if не ставят.",
+"example": "If it rains, we'll stay home.",
+"translation": "Если пойдёт дождь, мы останемся дома."
+},
+{
+"id": "en-077",
+"level": "A2",
+"topic": "Zero conditional",
+"meaning": "общее правило",
+"explain": "If + Present Simple, Present Simple — то, что всегда верно: If you heat ice, it melts.",
+"example": "If I drink coffee late, I can't sleep.",
+"translation": "Если я пью кофе поздно, я не могу уснуть."
+},
+{
+"id": "en-078",
+"level": "A2",
+"topic": "When в будущем",
+"meaning": "когда (о будущем)",
+"explain": "После when, as soon as, before, after о будущем — Present Simple, не will.",
+"example": "I'll call you when I get home.",
+"translation": "Я позвоню тебе, когда приду домой."
+},
+{
+"id": "en-079",
+"level": "A2",
+"topic": "As soon as",
+"meaning": "как только",
+"explain": "О будущем после as soon as — Present Simple, will только в главной части.",
+"example": "I'll text you as soon as the meeting ends.",
+"translation": "Я напишу тебе, как только закончится встреча."
+},
+{
+"id": "en-080",
+"level": "A2",
+"topic": "Should",
+"meaning": "следует, стоит",
+"explain": "Should + глагол без to — совет или мнение: You should see a doctor.",
+"example": "You should try the local cheese.",
+"translation": "Тебе стоит попробовать местный сыр."
+},
+{
+"id": "en-081",
+"level": "A2",
+"topic": "Might и may",
+"meaning": "возможно",
+"explain": "Might/may + глагол — возможность, около 50%: It might rain later.",
+"example": "I might be a bit late tonight.",
+"translation": "Я, возможно, немного опоздаю сегодня вечером."
+},
+{
+"id": "en-082",
+"level": "A2",
+"topic": "Used to",
+"meaning": "раньше (было)",
+"explain": "Used to + глагол — привычка или состояние в прошлом, которых больше нет.",
+"example": "I used to live in a small village.",
+"translation": "Раньше я жил в маленькой деревне."
+},
+{
+"id": "en-083",
+"level": "A2",
+"topic": "Be able to",
+"meaning": "быть в состоянии",
+"explain": "Be able to заменяет can в других временах: I'll be able to come. I haven't been able to sleep.",
+"example": "I wasn't able to finish the report on time.",
+"translation": "Я не смог закончить отчёт вовремя."
+},
+{
+"id": "en-084",
+"level": "A2",
+"topic": "Could (умение в прошлом)",
+"meaning": "мог, умел",
+"explain": "Could — общее умение в прошлом: I could swim when I was five.",
+"example": "When I was a child, I could run very fast.",
+"translation": "В детстве я очень быстро бегал."
+},
+{
+"id": "en-085",
+"level": "A2",
+"topic": "Relative: who, which",
+"meaning": "который",
+"explain": "Who — для людей, which — для предметов, that — для обоих в разговорной речи.",
+"example": "The woman who lives next door is a doctor.",
+"translation": "Женщина, которая живёт по соседству, — врач."
+},
+{
+"id": "en-086",
+"level": "A2",
+"topic": "Where и whose (relative)",
+"meaning": "где и чей",
+"explain": "Where — для мест (the café where we met), whose — для владения (the man whose car…).",
+"example": "That's the café where we first met.",
+"translation": "Это кафе, где мы впервые встретились."
+},
+{
+"id": "en-087",
+"level": "A2",
+"topic": "Gerund после предлога",
+"meaning": "-ing после предлога",
+"explain": "После предлога глагол всегда с -ing: interested in learning, good at cooking.",
+"example": "She's good at solving problems.",
+"translation": "Она хорошо решает проблемы."
+},
+{
+"id": "en-088",
+"level": "A2",
+"topic": "Enjoy, finish, mind + -ing",
+"meaning": "глаголы с -ing",
+"explain": "После enjoy, finish, mind, avoid, suggest глагол идёт с -ing.",
+"example": "Do you mind opening the window?",
+"translation": "Ты не против открыть окно?"
+},
+{
+"id": "en-089",
+"level": "A2",
+"topic": "To для цели",
+"meaning": "чтобы",
+"explain": "To + глагол выражает цель: I went to the shop to buy bread.",
+"example": "I'm learning Dutch to talk to my neighbours.",
+"translation": "Я учу нидерландский, чтобы разговаривать с соседями."
+},
+{
+"id": "en-090",
+"level": "A2",
+"topic": "So и such",
+"meaning": "такой",
+"explain": "So + прилагательное (so nice), such + (a) + прилагательное + существительное (such a nice day).",
+"example": "It was such a beautiful day.",
+"translation": "Это был такой прекрасный день."
+},
+{
+"id": "en-091",
+"level": "A2",
+"topic": "As … as",
+"meaning": "такой же … как",
+"explain": "As + прилагательное + as — равенство: as tall as. Not as … as — меньше.",
+"example": "This phone isn't as expensive as I thought.",
+"translation": "Этот телефон не такой дорогой, как я думал."
+},
+{
+"id": "en-092",
+"level": "A2",
+"topic": "Наречия на -ly",
+"meaning": "adverbs of manner",
+"explain": "Наречие образа действия: прилагательное + -ly (quick → quickly). Исключения: good → well, fast → fast.",
+"example": "She speaks English very well.",
+"translation": "Она очень хорошо говорит по-английски."
+},
+{
+"id": "en-093",
+"level": "A2",
+"topic": "-ed и -ing прилагательные",
+"meaning": "bored / boring",
+"explain": "-ed — что чувствует человек (bored), -ing — что вызывает чувство (boring).",
+"example": "The film was boring, so I was bored.",
+"translation": "Фильм был скучный, поэтому мне было скучно."
+},
+{
+"id": "en-094",
+"level": "A2",
+"topic": "Question tags",
+"meaning": "не так ли?",
+"explain": "Хвостик-вопрос в конце: положительная фраза — отрицательный хвостик: It's cold, isn't it?",
+"example": "You're coming tonight, aren't you?",
+"translation": "Ты ведь придёшь сегодня вечером?"
+},
+{
+"id": "en-095",
+"level": "A2",
+"topic": "So do I, neither do I",
+"meaning": "я тоже",
+"explain": "So + вспомогательный + I — согласие с утверждением, neither — с отрицанием.",
+"example": "I don't like horror films. — Neither do I.",
+"translation": "Я не люблю фильмы ужасов. — Я тоже."
+},
+{
+"id": "en-096",
+"level": "A2",
+"topic": "Subject questions",
+"meaning": "вопрос к подлежащему",
+"explain": "Если вопрос к подлежащему, do/did не нужен: Who called you? What happened?",
+"example": "Who broke the window?",
+"translation": "Кто разбил окно?"
+},
+{
+"id": "en-097",
+"level": "A2",
+"topic": "Indirect questions",
+"meaning": "косвенные вопросы",
+"explain": "После Can you tell me… порядок прямой, без do: Can you tell me where the station is?",
+"example": "Do you know what time it starts?",
+"translation": "Ты не знаешь, во сколько это начинается?"
+},
+{
+"id": "en-098",
+"level": "A2",
+"topic": "Passive: Present Simple",
+"meaning": "пассив в настоящем",
+"explain": "Am/is/are + третья форма — важно действие, а не исполнитель: English is spoken here.",
+"example": "Cheese is made from milk.",
+"translation": "Сыр делают из молока."
+},
+{
+"id": "en-099",
+"level": "A2",
+"topic": "Passive: Past Simple",
+"meaning": "пассив в прошедшем",
+"explain": "Was/were + третья форма: The bridge was built in 1900. Исполнитель — через by.",
+"example": "The house was built by my grandfather.",
+"translation": "Дом построил мой дедушка."
+},
+{
+"id": "en-100",
+"level": "A2",
+"topic": "Have something done",
+"meaning": "кто-то сделал для меня",
+"explain": "Have + предмет + третья форма — услугу выполнил другой: I had my hair cut.",
+"example": "We're having the kitchen painted next week.",
+"translation": "На следующей неделе нам покрасят кухню."
+},
+{
+"id": "en-101",
+"level": "A2",
+"topic": "Get + прилагательное",
+"meaning": "становиться",
+"explain": "Get показывает изменение состояния: get tired, get dark, get cold.",
+"example": "It's getting cold, take a jacket.",
+"translation": "Становится холодно, возьми куртку."
+},
+{
+"id": "en-102",
+"level": "A2",
+"topic": "Make и do",
+"meaning": "делать",
+"explain": "Make — создавать (make a cake, make a mistake), do — выполнять работу (do homework, do the dishes).",
+"example": "I made a mistake when I did the exercise.",
+"translation": "Я сделал ошибку, когда выполнял упражнение."
+},
+{
+"id": "en-103",
+"level": "A2",
+"topic": "Say и tell",
+"meaning": "сказать",
+"explain": "Tell + кому (tell me), say — без человека или с to: say something to someone.",
+"example": "She told me that she was tired.",
+"translation": "Она сказала мне, что устала."
+},
+{
+"id": "en-104",
+"level": "A2",
+"topic": "Look, look at, look for",
+"meaning": "look с предлогами",
+"explain": "Look — выглядеть, look at — смотреть на, look for — искать, look after — присматривать.",
+"example": "I'm looking for my glasses.",
+"translation": "Я ищу свои очки."
+},
+{
+"id": "en-105",
+"level": "A2",
+"topic": "Phrasal verbs: up",
+"meaning": "фразовые глаголы с up",
+"explain": "Up часто значит «до конца» или «вверх»: get up, wake up, give up, clean up.",
+"example": "I gave up sugar last month.",
+"translation": "В прошлом месяце я отказался от сахара."
+},
+{
+"id": "en-106",
+"level": "A2",
+"topic": "Phrasal verbs: off и on",
+"meaning": "фразовые с on и off",
+"explain": "Turn on/off — включить/выключить, put on — надеть, take off — снять или взлететь.",
+"example": "Take off your shoes, please.",
+"translation": "Сними, пожалуйста, обувь."
+},
+{
+"id": "en-107",
+"level": "A2",
+"topic": "By + транспорт",
+"meaning": "на (транспорте)",
+"explain": "By + транспорт без артикля: by bus, by train. Но пешком — on foot.",
+"example": "I usually go to work by bike.",
+"translation": "Обычно я езжу на работу на велосипеде."
+},
+{
+"id": "en-108",
+"level": "A2",
+"topic": "During и while",
+"meaning": "во время и пока",
+"explain": "During + существительное (during the film), while + предложение (while I was watching).",
+"example": "My phone rang during the meeting.",
+"translation": "Мой телефон зазвонил во время совещания."
+},
+{
+"id": "en-109",
+"level": "A2",
+"topic": "Until и by",
+"meaning": "до (когда)",
+"explain": "Until — действие длится до момента, by — не позже момента: I'll wait until six. Finish by six.",
+"example": "Please send it by Friday.",
+"translation": "Пожалуйста, пришли это до пятницы."
+},
+{
+"id": "en-110",
+"level": "A2",
+"topic": "Although",
+"meaning": "хотя",
+"explain": "Although вводит уступку: Although it was cold, we went out.",
+"example": "Although it was late, the shop was still open.",
+"translation": "Хотя было поздно, магазин ещё работал."
+},
+{
+"id": "en-111",
+"level": "A2",
+"topic": "Each other",
+"meaning": "друг друга",
+"explain": "Each other — взаимное действие: They help each other. Не меняется по лицам.",
+"example": "We've known each other since school.",
+"translation": "Мы знаем друг друга со школы."
+},
+{
+"id": "en-112",
+"level": "A2",
+"topic": "Still",
+"meaning": "всё ещё",
+"explain": "Still — действие продолжается: It's still raining. Стоит перед основным глаголом.",
+"example": "Are you still working at the bank?",
+"translation": "Ты всё ещё работаешь в банке?"
+},
+{
+"id": "en-113",
+"level": "A2",
+"topic": "Anymore",
+"meaning": "больше не",
+"explain": "Not … anymore — больше не: I don't smoke anymore. Стоит в конце фразы.",
+"example": "She doesn't live here anymore.",
+"translation": "Она здесь больше не живёт."
+},
+{
+"id": "en-114",
+"level": "A2",
+"topic": "Quite и rather",
+"meaning": "довольно",
+"explain": "Quite и rather смягчают прилагательное: quite good, rather cold. Rather чаще о неприятном.",
+"example": "The hotel was quite nice, but rather expensive.",
+"translation": "Отель был довольно неплохой, но довольно дорогой."
+},
+{
+"id": "en-115",
+"level": "A2",
+"topic": "Really и very",
+"meaning": "очень",
+"explain": "Very усиливает прилагательное, really — и прилагательное, и глагол: I really like it.",
+"example": "I really enjoyed the concert.",
+"translation": "Мне очень понравился концерт."
+},
+{
+"id": "en-116",
+"level": "A2",
+"topic": "Both, either, neither",
+"meaning": "оба, любой, ни один",
+"explain": "Both — оба, either — любой из двух, neither — ни один из двух.",
+"example": "Neither of my brothers lives in London.",
+"translation": "Ни один из моих братьев не живёт в Лондоне."
+},
+{
+"id": "en-117",
+"level": "A2",
+"topic": "All и whole",
+"meaning": "весь",
+"explain": "All the day / the whole day — весь день. Whole стоит после артикля.",
+"example": "I spent the whole weekend at home.",
+"translation": "Я провёл все выходные дома."
+},
+{
+"id": "en-118",
+"level": "A2",
+"topic": "Other, another, others",
+"meaning": "другой",
+"explain": "Another — ещё один или другой (единств.), other — перед мн. числом, others — без существительного.",
+"example": "Can I have another cup of tea?",
+"translation": "Можно мне ещё чашку чая?"
+},
+{
+"id": "en-119",
+"level": "A2",
+"topic": "Will be able to",
+"meaning": "смогу",
+"explain": "У can нет будущего, вместо него will be able to: I'll be able to help next week.",
+"example": "I'll be able to visit you in June.",
+"translation": "Я смогу навестить тебя в июне."
+},
+{
+"id": "en-120",
+"level": "A2",
+"topic": "Shall I, shall we",
+"meaning": "предложение",
+"explain": "Shall I/we…? — предложить помощь или идею: Shall I open the window?",
+"example": "Shall we meet at the station?",
+"translation": "Встретимся на вокзале?"
+},
+{
+"id": "en-121",
+"level": "A2",
+"topic": "Would you like…?",
+"meaning": "не хотите ли",
+"explain": "Would you like + существительное или to + глагол — вежливое предложение.",
+"example": "Would you like to join us for dinner?",
+"translation": "Не хотите поужинать с нами?"
+},
+{
+"id": "en-122",
+"level": "A2",
+"topic": "Prefer",
+"meaning": "предпочитать",
+"explain": "Prefer A to B, или prefer + -ing/to + глагол: I prefer tea to coffee.",
+"example": "I prefer walking to driving.",
+"translation": "Я предпочитаю ходить пешком, а не ездить."
+},
+{
+"id": "en-123",
+"level": "A2",
+"topic": "Would rather",
+"meaning": "предпочёл бы",
+"explain": "После would rather — инфинитив без to, сравнение — через than.",
+"example": "I'd rather walk than take the bus.",
+"translation": "Я лучше пройдусь пешком, чем поеду на автобусе."
+},
+{
+"id": "en-124",
+"level": "A2",
+"topic": "Had better",
+"meaning": "лучше бы",
+"explain": "Had better ('d better) + глагол без to — настойчивый совет: You'd better hurry.",
+"example": "We'd better leave now, or we'll miss the train.",
+"translation": "Нам лучше выйти сейчас, иначе опоздаем на поезд."
+},
+{
+"id": "en-125",
+"level": "A2",
+"topic": "Need to и needn't",
+"meaning": "нужно и не нужно",
+"explain": "Need to — нужно, don't need to / needn't — не нужно.",
+"example": "You don't need to bring anything.",
+"translation": "Тебе ничего не нужно приносить."
+},
+{
+"id": "en-126",
+"level": "A2",
+"topic": "Be going to (прогноз)",
+"meaning": "сейчас случится",
+"explain": "Going to для прогноза, когда видны признаки: Look at the clouds, it's going to rain.",
+"example": "Watch out, you're going to fall!",
+"translation": "Осторожно, ты сейчас упадёшь!"
+},
+{
+"id": "en-127",
+"level": "A2",
+"topic": "Present Simple о расписании",
+"meaning": "будущее по расписанию",
+"explain": "Для расписаний и графиков о будущем — Present Simple: The train leaves at six.",
+"example": "The film starts at eight tonight.",
+"translation": "Фильм начинается сегодня в восемь."
+},
+{
+"id": "en-128",
+"level": "A2",
+"topic": "Stative verbs",
+"meaning": "глаголы состояния",
+"explain": "Know, like, want, believe, own обычно не используются в Continuous: I know, а не I'm knowing.",
+"example": "I don't understand what you mean.",
+"translation": "Я не понимаю, что ты имеешь в виду."
+},
+{
+"id": "en-129",
+"level": "A2",
+"topic": "Seem",
+"meaning": "казаться",
+"explain": "Seem + прилагательное или to + глагол: She seems tired. He seems to know everything.",
+"example": "You seem a bit worried today.",
+"translation": "Ты сегодня кажешься немного обеспокоенным."
+},
+{
+"id": "en-130",
+"level": "A2",
+"topic": "Look like",
+"meaning": "быть похожим",
+"explain": "Look + прилагательное — выглядеть (look tired), look like + существительное — быть похожим.",
+"example": "You look like your father.",
+"translation": "Ты похож на отца."
+},
+{
+"id": "en-131",
+"level": "A2",
+"topic": "Feel like",
+"meaning": "хотеться",
+"explain": "Feel like + -ing или существительное — хотеть: I feel like going out.",
+"example": "I don't feel like cooking tonight.",
+"translation": "Мне не хочется сегодня готовить."
+},
+{
+"id": "en-132",
+"level": "A2",
+"topic": "Can't stand",
+"meaning": "терпеть не могу",
+"explain": "Can't stand + -ing или существительное — сильная неприязнь.",
+"example": "I can't stand waiting in queues.",
+"translation": "Терпеть не могу стоять в очередях."
+},
+{
+"id": "en-133",
+"level": "A2",
+"topic": "Look forward to",
+"meaning": "с нетерпением ждать",
+"explain": "После look forward to глагол идёт с -ing, потому что to здесь предлог.",
+"example": "I'm looking forward to seeing you.",
+"translation": "С нетерпением жду встречи с тобой."
+},
+{
+"id": "en-134",
+"level": "A2",
+"topic": "Be used to",
+"meaning": "привыкнуть",
+"explain": "Be used to + -ing или существительное — быть привычным: I'm used to cycling in the rain.",
+"example": "I'm not used to driving on the left.",
+"translation": "Я не привык ездить по левой стороне."
+},
+{
+"id": "en-135",
+"level": "A2",
+"topic": "Get used to",
+"meaning": "привыкать",
+"explain": "Get used to + -ing — процесс привыкания: You'll get used to it.",
+"example": "It took me a year to get used to the weather.",
+"translation": "Мне понадобился год, чтобы привыкнуть к погоде."
+},
+{
+"id": "en-136",
+"level": "A2",
+"topic": "It takes",
+"meaning": "занимает (время)",
+"explain": "It takes + время + to + глагол: It takes an hour to get there.",
+"example": "How long does it take to get to the airport?",
+"translation": "Сколько времени занимает дорога до аэропорта?"
+},
+{
+"id": "en-137",
+"level": "A2",
+"topic": "Spend time",
+"meaning": "проводить время",
+"explain": "Spend + время/деньги + on или -ing: I spend a lot of time reading.",
+"example": "I spent two hours looking for my keys.",
+"translation": "Я потратил два часа, ища ключи."
+},
+{
+"id": "en-138",
+"level": "A2",
+"topic": "Remind и remember",
+"meaning": "напомнить и помнить",
+"explain": "Remember — помнить самому, remind somebody — напомнить кому-то.",
+"example": "Can you remind me to call my mum?",
+"translation": "Можешь напомнить мне позвонить маме?"
+},
+{
+"id": "en-139",
+"level": "A2",
+"topic": "Borrow и lend",
+"meaning": "взять и дать взаймы",
+"explain": "Borrow from — брать у кого-то, lend to — давать кому-то.",
+"example": "Can I borrow your pen? — Sure, I'll lend it to you.",
+"translation": "Можно взять твою ручку? — Конечно, бери."
+},
+{
+"id": "en-140",
+"level": "A2",
+"topic": "Bring и take",
+"meaning": "принести и отнести",
+"explain": "Bring — сюда, к говорящему, take — туда, от говорящего.",
+"example": "Take an umbrella and bring it back tomorrow.",
+"translation": "Возьми зонт и верни его завтра."
+},
+{
+"id": "en-141",
+"level": "A2",
+"topic": "Arrive in, arrive at",
+"meaning": "прибыть в",
+"explain": "Arrive in — в город или страну, arrive at — в здание или точку. Не arrive to.",
+"example": "We arrived at the hotel late at night.",
+"translation": "Мы прибыли в отель поздно ночью."
+},
+{
+"id": "en-142",
+"level": "A2",
+"topic": "Listen to",
+"meaning": "слушать",
+"explain": "Listen всегда с to перед объектом: listen to music. Без объекта — просто listen.",
+"example": "I listen to podcasts on my way to work.",
+"translation": "Я слушаю подкасты по дороге на работу."
+},
+{
+"id": "en-143",
+"level": "A2",
+"topic": "Wait for",
+"meaning": "ждать",
+"explain": "Wait for somebody/something: wait for the bus. Не wait the bus.",
+"example": "I've been waiting for you for twenty minutes.",
+"translation": "Я жду тебя уже двадцать минут."
+},
+{
+"id": "en-144",
+"level": "A2",
+"topic": "Depend on",
+"meaning": "зависеть от",
+"explain": "Depend on — зависеть от. It depends — смотря как.",
+"example": "It depends on the weather.",
+"translation": "Это зависит от погоды."
+},
+{
+"id": "en-145",
+"level": "A2",
+"topic": "Afraid of",
+"meaning": "бояться",
+"explain": "Be afraid of + существительное или -ing: I'm afraid of flying.",
+"example": "My daughter is afraid of the dark.",
+"translation": "Моя дочь боится темноты."
+},
+{
+"id": "en-146",
+"level": "A2",
+"topic": "Interested in",
+"meaning": "интересоваться",
+"explain": "Be interested in + существительное или -ing.",
+"example": "Are you interested in history?",
+"translation": "Тебе интересна история?"
+},
+{
+"id": "en-147",
+"level": "A2",
+"topic": "Good at",
+"meaning": "хорошо уметь",
+"explain": "Be good/bad at + существительное или -ing: good at maths, bad at cooking.",
+"example": "I'm not very good at remembering names.",
+"translation": "Я не очень хорошо запоминаю имена."
+},
+{
+"id": "en-148",
+"level": "A2",
+"topic": "Each и every one",
+"meaning": "каждый из",
+"explain": "Each of / every one of + мн. число, глагол в единственном: Each of them has a key.",
+"example": "Each of the rooms has its own bathroom.",
+"translation": "В каждой из комнат своя ванная."
+},
+{
+"id": "en-149",
+"level": "A2",
+"topic": "Few и little",
+"meaning": "мало",
+"explain": "Few и little без a значат «мало, недостаточно»: few people came. A few/a little — «немного».",
+"example": "Very few people know about this place.",
+"translation": "Очень мало людей знают об этом месте."
+},
+{
+"id": "en-150",
+"level": "A2",
+"topic": "Most и most of",
+"meaning": "большинство",
+"explain": "Most + существительное — в целом (most people), most of the — из конкретной группы.",
+"example": "Most of my friends live abroad.",
+"translation": "Большинство моих друзей живут за границей."
+},
+{
+"id": "en-151",
+"level": "A2",
+"topic": "No и none",
+"meaning": "нет, ни одного",
+"explain": "No + существительное (no money), none — сам по себе или none of: None of them came.",
+"example": "None of the shops were open.",
+"translation": "Ни один магазин не был открыт."
+},
+{
+"id": "en-152",
+"level": "B1",
+"topic": "Present Perfect Continuous",
+"meaning": "действие идёт до сих пор",
+"explain": "Началось в прошлом и продолжается: have been + -ing, длительность — с for или since.",
+"example": "She's been learning Dutch for two years.",
+"translation": "Она учит нидерландский уже два года."
+},
+{
+"id": "en-153",
+"level": "B1",
+"topic": "Past Perfect",
+"meaning": "предпрошедшее",
+"explain": "Had + третья форма — действие раньше другого в прошлом: When I arrived, the film had started.",
+"example": "When we got to the station, the train had already left.",
+"translation": "Когда мы пришли на вокзал, поезд уже ушёл."
+},
+{
+"id": "en-154",
+"level": "B1",
+"topic": "Past Perfect Continuous",
+"meaning": "длилось до момента в прошлом",
+"explain": "Had been + -ing — действие длилось до другого момента в прошлом.",
+"example": "I was tired because I had been working all day.",
+"translation": "Я устал, потому что работал весь день."
+},
+{
+"id": "en-155",
+"level": "B1",
+"topic": "Future Continuous",
+"meaning": "будет в процессе",
+"explain": "Will be + -ing — действие будет идти в момент в будущем: This time tomorrow I'll be flying.",
+"example": "This time next week I'll be lying on the beach.",
+"translation": "В это время на следующей неделе я буду лежать на пляже."
+},
+{
+"id": "en-156",
+"level": "B1",
+"topic": "Future Perfect",
+"meaning": "будет сделано к",
+"explain": "Will have + третья форма — к моменту в будущем всё будет сделано.",
+"example": "By Friday I'll have finished the project.",
+"translation": "К пятнице я закончу проект."
+},
+{
+"id": "en-157",
+"level": "B1",
+"topic": "Second conditional",
+"meaning": "нереальное настоящее",
+"explain": "If + Past Simple, would + глагол — воображаемая ситуация: If I had more time, I'd travel.",
+"example": "If I won the lottery, I'd buy a house by the sea.",
+"translation": "Если бы я выиграл в лотерею, купил бы дом у моря."
+},
+{
+"id": "en-158",
+"level": "B1",
+"topic": "If I were you",
+"meaning": "на твоём месте",
+"explain": "В нереальном условии с to be часто were для всех лиц: If I were you, I'd go.",
+"example": "If I were you, I'd take the job.",
+"translation": "На твоём месте я бы согласился на эту работу."
+},
+{
+"id": "en-159",
+"level": "B1",
+"topic": "Third conditional",
+"meaning": "нереальное прошлое",
+"explain": "If + had + третья форма, would have + третья форма — об упущенном прошлом.",
+"example": "If I had checked the map, I wouldn't have got lost.",
+"translation": "Если бы я посмотрел карту, я бы не заблудился."
+},
+{
+"id": "en-160",
+"level": "B1",
+"topic": "Unless",
+"meaning": "если не",
+"explain": "Unless = if not: I won't go unless you come. После unless не ставят отрицание.",
+"example": "We'll miss the bus unless we hurry.",
+"translation": "Мы опоздаем на автобус, если не поторопимся."
+},
+{
+"id": "en-161",
+"level": "B1",
+"topic": "In case",
+"meaning": "на случай если",
+"explain": "In case — на всякий случай: Take an umbrella in case it rains.",
+"example": "Take some cash in case they don't accept cards.",
+"translation": "Возьми наличные на случай, если не принимают карты."
+},
+{
+"id": "en-162",
+"level": "B1",
+"topic": "I wish + Past Simple",
+"meaning": "жаль, что не",
+"explain": "Wish + Past Simple — сожаление о настоящем: I wish I lived closer.",
+"example": "I wish I spoke Dutch better.",
+"translation": "Жаль, что я не говорю по-нидерландски лучше."
+},
+{
+"id": "en-163",
+"level": "B1",
+"topic": "I wish + Past Perfect",
+"meaning": "жаль, что (в прошлом)",
+"explain": "Wish + had + третья форма — сожаление о прошлом: I wish I had studied more.",
+"example": "I wish I hadn't eaten so much.",
+"translation": "Жаль, что я столько съел."
+},
+{
+"id": "en-164",
+"level": "B1",
+"topic": "Should have",
+"meaning": "надо было",
+"explain": "Should have + третья форма — сожаление или упрёк о прошлом.",
+"example": "I should have charged my phone.",
+"translation": "Надо было зарядить телефон."
+},
+{
+"id": "en-165",
+"level": "B1",
+"topic": "Could have",
+"meaning": "мог бы (но не)",
+"explain": "Could have + третья форма — возможность в прошлом, которой не воспользовались.",
+"example": "You could have told me earlier!",
+"translation": "Ты мог бы сказать мне раньше!"
+},
+{
+"id": "en-166",
+"level": "B1",
+"topic": "Must have",
+"meaning": "должно быть (о прошлом)",
+"explain": "Must have + третья форма — уверенное предположение о прошлом: He must have forgotten.",
+"example": "You must have been tired after the trip.",
+"translation": "Ты, должно быть, устал после поездки."
+},
+{
+"id": "en-167",
+"level": "B1",
+"topic": "Can't have",
+"meaning": "не может быть (о прошлом)",
+"explain": "Can't have + третья форма — уверенность, что чего-то не было: She can't have seen us.",
+"example": "He can't have left already, his coat is here.",
+"translation": "Он не мог уже уйти, его пальто здесь."
+},
+{
+"id": "en-168",
+"level": "B1",
+"topic": "Might have",
+"meaning": "возможно (о прошлом)",
+"explain": "Might have + третья форма — возможность в прошлом: I might have left it at work.",
+"example": "I might have left my wallet in the taxi.",
+"translation": "Возможно, я оставил кошелёк в такси."
+},
+{
+"id": "en-169",
+"level": "B1",
+"topic": "Was supposed to",
+"meaning": "должен был, но не",
+"explain": "Was/were supposed to + глагол — планы и ожидания, которые не сбылись.",
+"example": "The parcel was supposed to arrive on Monday.",
+"translation": "Посылка должна была прийти в понедельник."
+},
+{
+"id": "en-170",
+"level": "B1",
+"topic": "Reported speech",
+"meaning": "косвенная речь",
+"explain": "В косвенной речи время сдвигается назад: 'I'm tired' → She said she was tired.",
+"example": "He said he would call me later.",
+"translation": "Он сказал, что позвонит мне позже."
+},
+{
+"id": "en-171",
+"level": "B1",
+"topic": "Reported questions",
+"meaning": "косвенные вопросы",
+"explain": "Asked if/whether + прямой порядок слов без do: She asked if I was ready.",
+"example": "She asked me where I had bought my coat.",
+"translation": "Она спросила, где я купил пальто."
+},
+{
+"id": "en-172",
+"level": "B1",
+"topic": "Ask и tell somebody to",
+"meaning": "просить, велеть",
+"explain": "Ask/tell + человек + to + глагол: He asked me to wait. Отрицание — not to.",
+"example": "The doctor told me not to run for a week.",
+"translation": "Врач велел мне не бегать неделю."
+},
+{
+"id": "en-173",
+"level": "B1",
+"topic": "Passive: Present Perfect",
+"meaning": "пассив в Present Perfect",
+"explain": "Have/has been + третья форма: The room has been cleaned.",
+"example": "My bike has been stolen!",
+"translation": "У меня украли велосипед!"
+},
+{
+"id": "en-174",
+"level": "B1",
+"topic": "Passive с модальными",
+"meaning": "пассив с can, must",
+"explain": "Модальный + be + третья форма: It can be done. It must be finished today.",
+"example": "Tickets can be bought online.",
+"translation": "Билеты можно купить онлайн."
+},
+{
+"id": "en-175",
+"level": "B1",
+"topic": "Passive: future",
+"meaning": "пассив в будущем",
+"explain": "Will be + третья форма: The results will be announced tomorrow.",
+"example": "The new station will be opened next year.",
+"translation": "Новую станцию откроют в следующем году."
+},
+{
+"id": "en-176",
+"level": "B1",
+"topic": "It is said that",
+"meaning": "говорят, что",
+"explain": "Безличный пассив с that или to: It is said that… / He is said to be rich.",
+"example": "It is said that the castle is haunted.",
+"translation": "Говорят, что в замке живут привидения."
+},
+{
+"id": "en-177",
+"level": "B1",
+"topic": "Defining relative clauses",
+"meaning": "определительные придаточные",
+"explain": "Нужны, чтобы понять, о ком речь, без запятых; who/that можно опустить, если это объект.",
+"example": "The book I'm reading is very exciting.",
+"translation": "Книга, которую я читаю, очень захватывающая."
+},
+{
+"id": "en-178",
+"level": "B1",
+"topic": "Non-defining relative clauses",
+"meaning": "поясняющие придаточные",
+"explain": "Добавочная информация в запятых, that нельзя: My brother, who lives in Paris, is a chef.",
+"example": "Amsterdam, which is the capital, is very busy.",
+"translation": "Амстердам, который является столицей, очень оживлённый."
+},
+{
+"id": "en-179",
+"level": "B1",
+"topic": "Verb + -ing или to",
+"meaning": "remember doing / to do",
+"explain": "Remember to do — не забыть сделать, remember doing — помнить, что сделал. Так же stop, forget, try.",
+"example": "I stopped to buy coffee, then I stopped drinking it.",
+"translation": "Я остановился купить кофе, а потом бросил его пить."
+},
+{
+"id": "en-180",
+"level": "B1",
+"topic": "Make и let",
+"meaning": "заставить и позволить",
+"explain": "Make + человек + глагол без to — заставить, let — позволить: Let me help.",
+"example": "My parents let me stay up late on Fridays.",
+"translation": "Родители разрешают мне не ложиться допоздна по пятницам."
+},
+{
+"id": "en-181",
+"level": "B1",
+"topic": "Get somebody to",
+"meaning": "уговорить сделать",
+"explain": "Get + человек + to + глагол — уговорить или добиться, чтобы кто-то сделал.",
+"example": "I finally got my son to clean his room.",
+"translation": "Я наконец уговорил сына убрать комнату."
+},
+{
+"id": "en-182",
+"level": "B1",
+"topic": "Too и enough + to",
+"meaning": "слишком / достаточно, чтобы",
+"explain": "Too + прил. + to — слишком, чтобы; прил. + enough + to — достаточно, чтобы.",
+"example": "He's old enough to travel alone.",
+"translation": "Он достаточно взрослый, чтобы путешествовать один."
+},
+{
+"id": "en-183",
+"level": "B1",
+"topic": "So … that",
+"meaning": "так … что",
+"explain": "So + прилагательное + that — следствие: It was so cold that we stayed in.",
+"example": "The soup was so hot that I burned my tongue.",
+"translation": "Суп был таким горячим, что я обжёг язык."
+},
+{
+"id": "en-184",
+"level": "B1",
+"topic": "In order to",
+"meaning": "для того чтобы",
+"explain": "In order to + глагол — формальная цель. So that + подлежащее + can/will.",
+"example": "I left early in order to avoid the traffic.",
+"translation": "Я выехал рано, чтобы избежать пробок."
+},
+{
+"id": "en-185",
+"level": "B1",
+"topic": "So that",
+"meaning": "чтобы (с подлежащим)",
+"explain": "So that + подлежащее + can/could/will: Speak slowly so that everyone can understand.",
+"example": "I wrote it down so that I wouldn't forget.",
+"translation": "Я записал это, чтобы не забыть."
+},
+{
+"id": "en-186",
+"level": "B1",
+"topic": "However",
+"meaning": "однако",
+"explain": "However начинает новое предложение с запятой: It's cheap. However, it's not very good.",
+"example": "The flat is small. However, the location is perfect.",
+"translation": "Квартира маленькая. Однако расположение идеальное."
+},
+{
+"id": "en-187",
+"level": "B1",
+"topic": "Despite и in spite of",
+"meaning": "несмотря на",
+"explain": "Despite / in spite of + существительное или -ing: despite the rain.",
+"example": "Despite the rain, we enjoyed the trip.",
+"translation": "Несмотря на дождь, нам понравилась поездка."
+},
+{
+"id": "en-188",
+"level": "B1",
+"topic": "Even though",
+"meaning": "хотя (даже)",
+"explain": "Even though — сильнее, чем although: Even though I was tired, I kept working.",
+"example": "Even though it was expensive, I bought it.",
+"translation": "Хотя это было дорого, я купил."
+},
+{
+"id": "en-189",
+"level": "B1",
+"topic": "Whereas и while",
+"meaning": "тогда как",
+"explain": "Whereas/while сравнивают две противоположности: I like tea, whereas my wife prefers coffee.",
+"example": "My brother is very tidy, whereas I'm quite messy.",
+"translation": "Мой брат очень аккуратный, а я довольно неряшливый."
+},
+{
+"id": "en-190",
+"level": "B1",
+"topic": "As long as",
+"meaning": "при условии, что",
+"explain": "As long as — условие: You can borrow it as long as you return it.",
+"example": "You can stay as long as you're quiet.",
+"translation": "Можешь остаться, если будешь вести себя тихо."
+},
+{
+"id": "en-191",
+"level": "B1",
+"topic": "Instead of",
+"meaning": "вместо",
+"explain": "Instead of + существительное или -ing: Instead of complaining, help me.",
+"example": "Let's walk instead of taking the bus.",
+"translation": "Давай пройдёмся пешком вместо автобуса."
+},
+{
+"id": "en-192",
+"level": "B1",
+"topic": "Apart from",
+"meaning": "кроме",
+"explain": "Apart from — кроме, помимо: Apart from the weather, the trip was great.",
+"example": "Apart from a few problems, everything went well.",
+"translation": "Кроме нескольких проблем, всё прошло хорошо."
+},
+{
+"id": "en-193",
+"level": "B1",
+"topic": "Due to и because of",
+"meaning": "из-за",
+"explain": "Because of + существительное, due to — то же, но формальнее: due to the strike.",
+"example": "The flight was cancelled due to bad weather.",
+"translation": "Рейс отменили из-за плохой погоды."
+},
+{
+"id": "en-194",
+"level": "B1",
+"topic": "Whether",
+"meaning": "ли",
+"explain": "Whether — «ли» в косвенных вопросах, особенно с or not: I don't know whether to go.",
+"example": "I can't decide whether to stay or leave.",
+"translation": "Не могу решить, остаться или уйти."
+},
+{
+"id": "en-195",
+"level": "B1",
+"topic": "Whatever, wherever",
+"meaning": "что бы ни, где бы ни",
+"explain": "-ever значит «любой»: Do whatever you want. Sit wherever you like.",
+"example": "Call me whenever you need help.",
+"translation": "Звони мне, когда бы ни понадобилась помощь."
+},
+{
+"id": "en-196",
+"level": "B1",
+"topic": "The … the",
+"meaning": "чем … тем",
+"explain": "The + сравнительная, the + сравнительная: The more you practise, the better you get.",
+"example": "The sooner we leave, the better.",
+"translation": "Чем раньше выйдем, тем лучше."
+},
+{
+"id": "en-197",
+"level": "B1",
+"topic": "Get + третья форма",
+"meaning": "get-пассив",
+"explain": "Get + третья форма — разговорный пассив, часто о неожиданном: get married, get lost, get stolen.",
+"example": "We got lost on our way to the hotel.",
+"translation": "Мы заблудились по дороге в отель."
+},
+{
+"id": "en-198",
+"level": "B1",
+"topic": "Gerund как подлежащее",
+"meaning": "-ing в начале фразы",
+"explain": "-ing форма может быть подлежащим: Swimming is good for you.",
+"example": "Learning a language takes time.",
+"translation": "Изучение языка требует времени."
+},
+{
+"id": "en-199",
+"level": "B1",
+"topic": "It's worth + -ing",
+"meaning": "стоит (делать)",
+"explain": "It's worth + -ing — это того стоит: The museum is worth visiting.",
+"example": "This film is definitely worth watching.",
+"translation": "Этот фильм определённо стоит посмотреть."
+},
+{
+"id": "en-200",
+"level": "B1",
+"topic": "There's no point in",
+"meaning": "нет смысла",
+"explain": "There's no point (in) + -ing — бесполезно: There's no point in waiting.",
+"example": "There's no point in arguing about it.",
+"translation": "Нет смысла спорить об этом."
+},
+{
+"id": "en-201",
+"level": "B1",
+"topic": "Would (привычка в прошлом)",
+"meaning": "бывало",
+"explain": "Would + глагол — повторяющееся действие в прошлом (не состояние): We would play outside every day.",
+"example": "Every summer we would go to the seaside.",
+"translation": "Каждое лето мы, бывало, ездили на море."
+},
+{
+"id": "en-202",
+"level": "B1",
+"topic": "Be about to",
+"meaning": "вот-вот",
+"explain": "Be about to + глагол — действие вот-вот произойдёт.",
+"example": "Hurry up, the film is about to start.",
+"translation": "Поторопись, фильм вот-вот начнётся."
+},
+{
+"id": "en-203",
+"level": "B1",
+"topic": "Phrasal verbs: out",
+"meaning": "фразовые с out",
+"explain": "Out часто значит «наружу» или «до конца»: find out (узнать), run out (закончиться), work out.",
+"example": "We've run out of milk.",
+"translation": "У нас закончилось молоко."
+},
+{
+"id": "en-204",
+"level": "B1",
+"topic": "Phrasal verbs: down",
+"meaning": "фразовые с down",
+"explain": "Down — уменьшение или отказ: turn down (отклонить, убавить), slow down, calm down.",
+"example": "Could you turn the music down, please?",
+"translation": "Не мог бы ты сделать музыку потише?"
+},
+{
+"id": "en-205",
+"level": "B1",
+"topic": "Phrasal verbs: put",
+"meaning": "фразовые с put",
+"explain": "Put off — откладывать, put up with — терпеть, put away — убирать на место.",
+"example": "Don't put off until tomorrow what you can do today.",
+"translation": "Не откладывай на завтра то, что можно сделать сегодня."
+},
+{
+"id": "en-206",
+"level": "B1",
+"topic": "Phrasal verbs: get",
+"meaning": "фразовые с get",
+"explain": "Get on — ладить, get over — оправиться, get by — справляться, get back — вернуться.",
+"example": "I get on really well with my colleagues.",
+"translation": "Я очень хорошо лажу с коллегами."
+},
+{
+"id": "en-207",
+"level": "B1",
+"topic": "Phrasal verbs: take",
+"meaning": "фразовые с take",
+"explain": "Take up — начать заниматься, take after — быть похожим, take over — взять на себя.",
+"example": "I've taken up yoga this year.",
+"translation": "В этом году я начал заниматься йогой."
+},
+{
+"id": "en-208",
+"level": "B1",
+"topic": "Phrasal verbs: come",
+"meaning": "фразовые с come",
+"explain": "Come across — случайно найти, come up with — придумать, come back — вернуться.",
+"example": "She came up with a brilliant idea.",
+"translation": "Она придумала блестящую идею."
+},
+{
+"id": "en-209",
+"level": "B1",
+"topic": "Порядок прилагательных",
+"meaning": "adjective order",
+"explain": "Мнение — размер — возраст — форма — цвет — происхождение — материал: a nice little old red Italian car.",
+"example": "She bought a beautiful old wooden table.",
+"translation": "Она купила красивый старый деревянный стол."
+},
+{
+"id": "en-210",
+"level": "B1",
+"topic": "Quantifiers: plenty of",
+"meaning": "полно, достаточно",
+"explain": "Plenty of — много, больше чем достаточно, с любыми существительными.",
+"example": "Don't worry, we have plenty of time.",
+"translation": "Не волнуйся, у нас полно времени."
+},
+{
+"id": "en-211",
+"level": "B1",
+"topic": "Hardly",
+"meaning": "едва, почти не",
+"explain": "Hardly — почти не, само содержит отрицание: I can hardly hear you.",
+"example": "I hardly slept last night.",
+"translation": "Я почти не спал прошлой ночью."
+},
+{
+"id": "en-212",
+"level": "B1",
+"topic": "Hard и hardly",
+"meaning": "усердно и едва",
+"explain": "Hard — наречие «усердно» (work hard), hardly — «едва». Это разные слова.",
+"example": "She works hard, but she hardly ever complains.",
+"translation": "Она много работает, но почти никогда не жалуется."
+},
+{
+"id": "en-213",
+"level": "B1",
+"topic": "Like и as",
+"meaning": "как и в качестве",
+"explain": "Like — похожий на (like a child), as — в роли (as a teacher) или перед предложением.",
+"example": "She works as a nurse in a big hospital.",
+"translation": "Она работает медсестрой в большой больнице."
+},
+{
+"id": "en-214",
+"level": "B1",
+"topic": "Already, just, almost + Present Perfect",
+"meaning": "результат к этому моменту",
+"explain": "Важен результат сейчас, а не когда это случилось: have/has + третья форма.",
+"example": "I've just made some tea.",
+"translation": "Я только что заварил чай."
+},
+{
+"id": "en-215",
+"level": "B1",
+"topic": "Mixed conditional",
+"meaning": "смешанное условие",
+"explain": "Прошлое условие — настоящий результат: If I had studied medicine, I would be a doctor now.",
+"example": "If I had taken the job, I would live in London now.",
+"translation": "Если бы я согласился на ту работу, я бы сейчас жил в Лондоне."
+},
+{
+"id": "en-216",
+"level": "B1",
+"topic": "Need + -ing",
+"meaning": "нуждаться в (пассивно)",
+"explain": "Need + -ing — что-то требует действия: The car needs washing.",
+"example": "My hair needs cutting.",
+"translation": "Мне пора подстричься."
+},
+{
+"id": "en-217",
+"level": "B1",
+"topic": "Used to, be used to, get used to",
+"meaning": "три значения",
+"explain": "Used to do — раньше делал, be used to doing — привык, get used to doing — привыкаю.",
+"example": "I used to hate coffee, but now I'm used to it.",
+"translation": "Раньше я терпеть не мог кофе, а теперь привык."
+},
+{
+"id": "en-218",
+"level": "B1",
+"topic": "Some time и sometimes",
+"meaning": "когда-нибудь и иногда",
+"explain": "Sometimes — иногда, some time — некоторое время или когда-нибудь: Let's meet some time.",
+"example": "Let's have lunch together some time.",
+"translation": "Давай как-нибудь пообедаем вместе."
+},
+{
+"id": "en-219",
+"level": "B1",
+"topic": "Lie и lay",
+"meaning": "лежать и класть",
+"explain": "Lie (lay, lain) — лежать, lay (laid, laid) — класть. Формы легко спутать.",
+"example": "Lay the baby on the bed and let her lie there.",
+"translation": "Положи малышку на кровать, пусть она там полежит."
+},
+{
+"id": "en-220",
+"level": "B1",
+"topic": "Rise и raise",
+"meaning": "подниматься и поднимать",
+"explain": "Rise — подниматься самому (prices rise), raise — поднимать что-то (raise your hand).",
+"example": "If you have a question, raise your hand.",
+"translation": "Если у вас вопрос, поднимите руку."
+},
+{
+"id": "en-221",
+"level": "B1",
+"topic": "Fun и funny",
+"meaning": "весёлый и смешной",
+"explain": "Fun — приятный, весёлый (a fun party), funny — смешной (a funny joke).",
+"example": "The party was fun, and his jokes were funny.",
+"translation": "Вечеринка была весёлой, а его шутки смешными."
+},
+{
+"id": "en-222",
+"level": "B1",
+"topic": "Remember и remind",
+"meaning": "помнить и напоминать",
+"explain": "Remind somebody of something — напоминать (быть похожим): You remind me of my sister.",
+"example": "This song reminds me of our holiday.",
+"translation": "Эта песня напоминает мне о нашем отпуске."
+},
+{
+"id": "en-223",
+"level": "B1",
+"topic": "Wish и hope",
+"meaning": "желать и надеяться",
+"explain": "Hope — о реальном (I hope you're well), wish — о нереальном (I wish it were summer).",
+"example": "I hope you feel better soon.",
+"translation": "Надеюсь, тебе скоро станет лучше."
+},
+{
+"id": "en-224",
+"level": "B1",
+"topic": "Suggest",
+"meaning": "предлагать",
+"explain": "Suggest + -ing или suggest that + подлежащее + глагол. Не suggest somebody to.",
+"example": "I suggest taking a taxi.",
+"translation": "Предлагаю взять такси."
+},
+{
+"id": "en-225",
+"level": "B1",
+"topic": "Recommend",
+"meaning": "рекомендовать",
+"explain": "Recommend + -ing или that-предложение; recommend something to somebody.",
+"example": "I'd recommend booking a table in advance.",
+"translation": "Я бы посоветовал забронировать столик заранее."
+},
+{
+"id": "en-226",
+"level": "B1",
+"topic": "Agree with, agree to",
+"meaning": "соглашаться",
+"explain": "Agree with somebody — соглашаться с мнением, agree to something — давать согласие на предложение.",
+"example": "I agree with you, but my boss won't agree to the plan.",
+"translation": "Я с тобой согласен, но начальник не одобрит план."
+},
+{
+"id": "en-227",
+"level": "B1",
+"topic": "Apologise for",
+"meaning": "извиняться за",
+"explain": "Apologise to somebody for + -ing или существительное.",
+"example": "He apologised for being late.",
+"translation": "Он извинился за опоздание."
+},
+{
+"id": "en-228",
+"level": "B1",
+"topic": "Succeed in",
+"meaning": "преуспеть в",
+"explain": "Succeed in + -ing: She succeeded in passing the exam.",
+"example": "We finally succeeded in finding a flat.",
+"translation": "Нам наконец удалось найти квартиру."
+},
+{
+"id": "en-229",
+"level": "B1",
+"topic": "Manage to",
+"meaning": "суметь",
+"explain": "Manage to + глагол — справиться, несмотря на трудности.",
+"example": "I managed to catch the last train.",
+"translation": "Мне удалось успеть на последний поезд."
+},
+{
+"id": "en-230",
+"level": "B1",
+"topic": "Be supposed to",
+"meaning": "полагается, должен",
+"explain": "Be supposed to — так положено или ожидается: You're supposed to wear a helmet.",
+"example": "You're not supposed to park here.",
+"translation": "Здесь не положено парковаться."
+},
+{
+"id": "en-231",
+"level": "B1",
+"topic": "Be likely to",
+"meaning": "вероятно",
+"explain": "Be likely to + глагол — скорее всего: It's likely to rain.",
+"example": "Prices are likely to rise next year.",
+"translation": "Цены, скорее всего, вырастут в следующем году."
+},
+{
+"id": "en-232",
+"level": "B1",
+"topic": "Be bound to",
+"meaning": "обязательно",
+"explain": "Be bound to + глагол — уверенность, что точно случится.",
+"example": "Don't worry, you're bound to find a job.",
+"translation": "Не волнуйся, ты обязательно найдёшь работу."
+},
+{
+"id": "en-233",
+"level": "B1",
+"topic": "Would you mind if",
+"meaning": "не возражаете, если",
+"explain": "Would you mind if I + Past Simple — очень вежливая просьба разрешения.",
+"example": "Would you mind if I opened the window?",
+"translation": "Вы не возражаете, если я открою окно?"
+},
+{
+"id": "en-234",
+"level": "B1",
+"topic": "Whose (relative)",
+"meaning": "чей (относительное)",
+"explain": "Whose связывает владельца: the woman whose bag was stolen.",
+"example": "I met a man whose brother works with you.",
+"translation": "Я встретил человека, чей брат работает с тобой."
+},
+{
+"id": "en-235",
+"level": "B1",
+"topic": "What как «то, что»",
+"meaning": "what в начале",
+"explain": "What = the thing that: What I need is a holiday.",
+"example": "What I like most about Utrecht is the canals.",
+"translation": "Больше всего в Утрехте мне нравятся каналы."
+},
+{
+"id": "en-236",
+"level": "B1",
+"topic": "Such as и like (примеры)",
+"meaning": "такие как",
+"explain": "Such as и like вводят примеры: fruit such as apples and pears.",
+"example": "I like outdoor sports such as hiking and cycling.",
+"translation": "Я люблю уличные виды спорта, такие как походы и велосипед."
+},
+{
+"id": "en-237",
+"level": "B1",
+"topic": "Otherwise",
+"meaning": "иначе",
+"explain": "Otherwise — в противном случае: Hurry up, otherwise we'll be late.",
+"example": "Write it down, otherwise you'll forget.",
+"translation": "Запиши, иначе забудешь."
+},
+{
+"id": "en-238",
+"level": "B1",
+"topic": "Therefore",
+"meaning": "поэтому (формально)",
+"explain": "Therefore — формальное «поэтому», часто в начале предложения с запятой.",
+"example": "The bridge is closed; therefore, we need another route.",
+"translation": "Мост закрыт, поэтому нам нужен другой маршрут."
+},
+{
+"id": "en-239",
+"level": "B1",
+"topic": "As (причина)",
+"meaning": "так как",
+"explain": "As в начале предложения значит «так как»: As it was late, we took a taxi.",
+"example": "As it was raining, we stayed inside.",
+"translation": "Так как шёл дождь, мы остались внутри."
+},
+{
+"id": "en-240",
+"level": "B1",
+"topic": "Since (причина)",
+"meaning": "поскольку",
+"explain": "Since может значить не только «с», но и «поскольку»: Since you're here, help me.",
+"example": "Since you're going to the shop, can you buy bread?",
+"translation": "Раз ты идёшь в магазин, купи хлеб."
+},
+{
+"id": "en-241",
+"level": "B1",
+"topic": "As if и as though",
+"meaning": "как будто",
+"explain": "As if/as though — сравнение с воображаемым: He talks as if he knew everything.",
+"example": "You look as if you haven't slept.",
+"translation": "Ты выглядишь так, будто не спал."
+},
+{
+"id": "en-242",
+"level": "B1",
+"topic": "At first и first",
+"meaning": "сначала",
+"explain": "At first — вначале (потом всё изменилось), first — первым делом.",
+"example": "At first I didn't like it, but now I love it.",
+"translation": "Сначала мне не понравилось, а теперь я в восторге."
+},
+{
+"id": "en-243",
+"level": "B1",
+"topic": "In the end и at the end",
+"meaning": "в итоге и в конце",
+"explain": "In the end — в конце концов, at the end of — в конце чего-то.",
+"example": "In the end, we decided to stay home.",
+"translation": "В итоге мы решили остаться дома."
+},
+{
+"id": "en-244",
+"level": "B1",
+"topic": "On time и in time",
+"meaning": "вовремя и успеть",
+"explain": "On time — точно по расписанию, in time — успеть до нужного момента.",
+"example": "We got there just in time for dinner.",
+"translation": "Мы приехали как раз к ужину."
+},
+{
+"id": "en-245",
+"level": "B1",
+"topic": "Few, a few, quite a few",
+"meaning": "оттенки количества",
+"explain": "Few — мало, a few — несколько, quite a few — довольно много.",
+"example": "Quite a few people came to the meeting.",
+"translation": "На собрание пришло довольно много людей."
+},
+{
+"id": "en-246",
+"level": "B1",
+"topic": "Each other и one another",
+"meaning": "друг друга",
+"explain": "Each other и one another почти одинаковы; one another чуть формальнее.",
+"example": "The neighbours help one another.",
+"translation": "Соседи помогают друг другу."
+},
+{
+"id": "en-247",
+"level": "B1",
+"topic": "Emphatic do",
+"meaning": "усилительное do",
+"explain": "Do/does/did перед глаголом усиливает утверждение: I do like it! She did call.",
+"example": "I do remember locking the door.",
+"translation": "Я точно помню, что запер дверь."
+},
+{
+"id": "en-248",
+"level": "B1",
+"topic": "Shall для предложения",
+"meaning": "shall в предложениях",
+"explain": "Shall we…? / Let's…, shall we? — дружеское предложение что-то сделать.",
+"example": "Let's go for a walk, shall we?",
+"translation": "Давай прогуляемся, хорошо?"
+},
+{
+"id": "en-249",
+"level": "B1",
+"topic": "Get + прилагательное в прошлом",
+"meaning": "стал (каким-то)",
+"explain": "Got + прилагательное — изменение в прошлом: got angry, got bored.",
+"example": "He got really angry when he saw the bill.",
+"translation": "Он очень разозлился, когда увидел счёт."
+},
+{
+"id": "en-250",
+"level": "B2",
+"topic": "Inversion после never",
+"meaning": "инверсия после отрицания",
+"explain": "После Never, Rarely, Seldom в начале — вопросительный порядок: Never have I seen…",
+"example": "Never have I seen such a beautiful sunset.",
+"translation": "Никогда я не видел такого красивого заката."
+},
+{
+"id": "en-251",
+"level": "B2",
+"topic": "Not only … but also",
+"meaning": "не только … но и",
+"explain": "В начале фразы not only вызывает инверсию: Not only is it cheap, but it's also good.",
+"example": "Not only did she win, but she also broke the record.",
+"translation": "Она не только победила, но и побила рекорд."
+},
+{
+"id": "en-252",
+"level": "B2",
+"topic": "Hardly … when",
+"meaning": "едва … как",
+"explain": "Hardly/Scarcely had + подлежащее + третья форма … when: Hardly had I arrived when it started.",
+"example": "Hardly had we sat down when the phone rang.",
+"translation": "Едва мы сели, как зазвонил телефон."
+},
+{
+"id": "en-253",
+"level": "B2",
+"topic": "No sooner … than",
+"meaning": "не успел … как",
+"explain": "No sooner had + подлежащее + третья форма … than — одно сразу за другим.",
+"example": "No sooner had I left than it started raining.",
+"translation": "Не успел я выйти, как пошёл дождь."
+},
+{
+"id": "en-254",
+"level": "B2",
+"topic": "Cleft sentences: It was … that",
+"meaning": "именно … (выделение)",
+"explain": "It is/was + выделяемое + that — подчёркивание: It was John who called.",
+"example": "It was my sister who told me the news.",
+"translation": "Именно моя сестра рассказала мне новость."
+},
+{
+"id": "en-255",
+"level": "B2",
+"topic": "What … is",
+"meaning": "выделение через what",
+"explain": "What + предложение + is/was — акцент: What I need is a good sleep.",
+"example": "What surprised me was how friendly everyone was.",
+"translation": "Меня удивило, насколько все были дружелюбны."
+},
+{
+"id": "en-256",
+"level": "B2",
+"topic": "Should в условии",
+"meaning": "если вдруг",
+"explain": "Should + подлежащее в начале условия = если вдруг: Should you need help, call me.",
+"example": "Should you have any questions, please contact us.",
+"translation": "Если у вас вдруг возникнут вопросы, свяжитесь с нами."
+},
+{
+"id": "en-257",
+"level": "B2",
+"topic": "Had I known",
+"meaning": "условие без if",
+"explain": "Had + подлежащее + третья форма = If I had known: Had I known, I'd have come.",
+"example": "Had I known about the party, I would have come.",
+"translation": "Знай я о вечеринке, я бы пришёл."
+},
+{
+"id": "en-258",
+"level": "B2",
+"topic": "Were it not for",
+"meaning": "если бы не",
+"explain": "Were it not for / But for + существительное — если бы не: Were it not for you, I'd be lost.",
+"example": "Were it not for his help, we would have failed.",
+"translation": "Если бы не его помощь, мы бы провалились."
+},
+{
+"id": "en-259",
+"level": "B2",
+"topic": "It's time + Past Simple",
+"meaning": "давно пора",
+"explain": "It's (high) time + подлежащее + Past Simple — пора что-то сделать: It's time we left.",
+"example": "It's high time you got a new phone.",
+"translation": "Тебе давно пора купить новый телефон."
+},
+{
+"id": "en-260",
+"level": "B2",
+"topic": "Would rather + Past Simple",
+"meaning": "предпочёл бы, чтобы ты",
+"explain": "Would rather + другой человек + Past Simple: I'd rather you didn't smoke here.",
+"example": "I'd rather you told me the truth.",
+"translation": "Я бы предпочёл, чтобы ты сказал мне правду."
+},
+{
+"id": "en-261",
+"level": "B2",
+"topic": "If only",
+"meaning": "если бы только",
+"explain": "If only + Past Simple/Perfect — сильное сожаление: If only I had more time!",
+"example": "If only I had listened to your advice!",
+"translation": "Если бы только я послушал твой совет!"
+},
+{
+"id": "en-262",
+"level": "B2",
+"topic": "Participle clauses",
+"meaning": "причастные обороты",
+"explain": "-ing или третья форма вместо придаточного: Walking home, I met Anna. Built in 1900, the house…",
+"example": "Feeling tired, I went to bed early.",
+"translation": "Чувствуя усталость, я рано лёг спать."
+},
+{
+"id": "en-263",
+"level": "B2",
+"topic": "Having + третья форма",
+"meaning": "совершив",
+"explain": "Having + третья форма — действие завершилось раньше: Having finished, he left.",
+"example": "Having lived in Spain, she speaks Spanish fluently.",
+"translation": "Пожив в Испании, она свободно говорит по-испански."
+},
+{
+"id": "en-264",
+"level": "B2",
+"topic": "Modal + have been + -ing",
+"meaning": "возможно, делал",
+"explain": "Must/might/could have been + -ing — предположение о процессе в прошлом.",
+"example": "You must have been waiting for ages.",
+"translation": "Ты, должно быть, ждал целую вечность."
+},
+{
+"id": "en-265",
+"level": "B2",
+"topic": "Needn't have",
+"meaning": "зря сделал",
+"explain": "Needn't have + третья форма — сделал, хотя было не нужно.",
+"example": "You needn't have brought a present.",
+"translation": "Не стоило приносить подарок."
+},
+{
+"id": "en-266",
+"level": "B2",
+"topic": "Didn't need to",
+"meaning": "не пришлось",
+"explain": "Didn't need to — не нужно было, и поэтому не делал.",
+"example": "I didn't need to wait, the bus came at once.",
+"translation": "Мне не пришлось ждать, автобус пришёл сразу."
+},
+{
+"id": "en-267",
+"level": "B2",
+"topic": "Be to",
+"meaning": "предстоит, должен",
+"explain": "Be to + глагол — официальный план или указание: The president is to visit Paris.",
+"example": "All visitors are to report to reception.",
+"translation": "Все посетители должны обратиться на ресепшен."
+},
+{
+"id": "en-268",
+"level": "B2",
+"topic": "Causative get",
+"meaning": "get something done",
+"explain": "Get + предмет + третья форма — как have something done, но разговорнее.",
+"example": "I need to get my car repaired.",
+"translation": "Мне нужно починить машину."
+},
+{
+"id": "en-269",
+"level": "B2",
+"topic": "Passive с двумя дополнениями",
+"meaning": "I was given",
+"explain": "Подлежащим в пассиве часто становится человек: I was given a prize.",
+"example": "We were told to wait outside.",
+"translation": "Нам сказали подождать снаружи."
+},
+{
+"id": "en-270",
+"level": "B2",
+"topic": "Passive reporting: be thought to",
+"meaning": "считается, что",
+"explain": "Be thought/believed/said to + глагол: He is thought to be the best.",
+"example": "The painting is believed to be worth millions.",
+"translation": "Считается, что картина стоит миллионы."
+},
+{
+"id": "en-271",
+"level": "B2",
+"topic": "Future in the past",
+"meaning": "будущее в прошлом",
+"explain": "Was going to / would — ожидание из прошлого: I knew it would rain.",
+"example": "I was going to call you, but I forgot.",
+"translation": "Я собирался тебе позвонить, но забыл."
+},
+{
+"id": "en-272",
+"level": "B2",
+"topic": "Whoever, whatever (начало)",
+"meaning": "кто бы ни",
+"explain": "-ever в начале фразы — «независимо от»: Whatever happens, stay calm.",
+"example": "Whatever you decide, I'll support you.",
+"translation": "Что бы ты ни решил, я тебя поддержу."
+},
+{
+"id": "en-273",
+"level": "B2",
+"topic": "Linking: furthermore",
+"meaning": "кроме того",
+"explain": "Furthermore, moreover, in addition — формальные «кроме того» в начале предложения.",
+"example": "The plan is cheap. Furthermore, it's easy to carry out.",
+"translation": "План дешёвый. Кроме того, его легко выполнить."
+},
+{
+"id": "en-274",
+"level": "B2",
+"topic": "Nevertheless",
+"meaning": "тем не менее",
+"explain": "Nevertheless/nonetheless — формальное «тем не менее».",
+"example": "It was a difficult year. Nevertheless, we grew.",
+"translation": "Год был трудным. Тем не менее мы выросли."
+},
+{
+"id": "en-275",
+"level": "B2",
+"topic": "On the other hand",
+"meaning": "с другой стороны",
+"explain": "On the one hand … on the other hand — сравнение двух сторон.",
+"example": "The city is exciting; on the other hand, it's expensive.",
+"translation": "Город интересный; с другой стороны, он дорогой."
+},
+{
+"id": "en-276",
+"level": "B2",
+"topic": "As far as … is concerned",
+"meaning": "что касается",
+"explain": "As far as + подлежащее + is concerned — что касается: As far as I'm concerned, it's fine.",
+"example": "As far as I'm concerned, we can start now.",
+"translation": "Что касается меня, мы можем начинать."
+},
+{
+"id": "en-277",
+"level": "B2",
+"topic": "Regarding",
+"meaning": "относительно",
+"explain": "Regarding / with regard to / concerning — формальное «относительно» в письмах.",
+"example": "I'm writing regarding your application.",
+"translation": "Я пишу относительно вашей заявки."
+},
+{
+"id": "en-278",
+"level": "B2",
+"topic": "Provided that",
+"meaning": "при условии, что",
+"explain": "Provided/providing (that) — условие, близко к as long as.",
+"example": "You can go, provided that you're back by ten.",
+"translation": "Можешь пойти при условии, что вернёшься к десяти."
+},
+{
+"id": "en-279",
+"level": "B2",
+"topic": "Supposing",
+"meaning": "предположим",
+"explain": "Supposing/suppose + условие — представь, что: Supposing you won, what would you do?",
+"example": "Supposing it rains, what's plan B?",
+"translation": "Предположим, пойдёт дождь — какой запасной план?"
+},
+{
+"id": "en-280",
+"level": "B2",
+"topic": "Otherwise и or else",
+"meaning": "иначе",
+"explain": "Or else — разговорное «а то»: Hurry, or else we'll be late.",
+"example": "Take a coat, or else you'll get cold.",
+"translation": "Возьми пальто, а то замёрзнешь."
+},
+{
+"id": "en-281",
+"level": "B2",
+"topic": "Compound adjectives",
+"meaning": "сложные прилагательные",
+"explain": "Число + существительное в единственном через дефис: a five-minute walk, a two-week holiday.",
+"example": "It's a ten-minute walk from the station.",
+"translation": "Это в десяти минутах ходьбы от вокзала."
+},
+{
+"id": "en-282",
+"level": "B2",
+"topic": "Collocations: make a decision",
+"meaning": "устойчивые сочетания",
+"explain": "Глаголы с существительными сочетаются устойчиво: make a decision, take a break, pay attention.",
+"example": "Let's take a short break and then make a decision.",
+"translation": "Давай сделаем короткий перерыв, а потом примем решение."
+},
+{
+"id": "en-283",
+"level": "B2",
+"topic": "Do you mind и would you mind",
+"meaning": "вежливые просьбы",
+"explain": "Do/Would you mind + -ing — просьба; ответ «нет» значит согласие: No, not at all.",
+"example": "Would you mind waiting a moment?",
+"translation": "Вы не могли бы подождать минутку?"
+},
+{
+"id": "en-284",
+"level": "B2",
+"topic": "Can't help + -ing",
+"meaning": "не могу не",
+"explain": "Can't help + -ing — не удержаться: I can't help laughing.",
+"example": "I couldn't help smiling when I saw the photo.",
+"translation": "Я не мог не улыбнуться, когда увидел фото."
+},
+{
+"id": "en-285",
+"level": "B2",
+"topic": "Be used to vs used to",
+"meaning": "привычка и прошлое",
+"explain": "I'm used to the noise (привык) против I used to live there (раньше жил).",
+"example": "I'm used to working at night now.",
+"translation": "Теперь я привык работать по ночам."
+},
+{
+"id": "en-286",
+"level": "B2",
+"topic": "Would have liked",
+"meaning": "хотел бы (но не вышло)",
+"explain": "Would have liked to + глагол — желание в прошлом, которое не исполнилось.",
+"example": "I would have liked to stay longer.",
+"translation": "Я бы хотел остаться подольше."
+},
+{
+"id": "en-287",
+"level": "B2",
+"topic": "Not until",
+"meaning": "только когда",
+"explain": "It wasn't until … that — только тогда: It wasn't until midnight that he arrived.",
+"example": "It wasn't until I got home that I noticed the mistake.",
+"translation": "Только придя домой, я заметил ошибку."
+},
+{
+"id": "en-288",
+"level": "B2",
+"topic": "So и neither с инверсией",
+"meaning": "и я тоже (разные времена)",
+"explain": "So/neither + вспомогательный того же времени: I've finished. — So have I.",
+"example": "I couldn't sleep. — Neither could I.",
+"translation": "Я не мог уснуть. — Я тоже."
+},
+{
+"id": "en-289",
+"level": "B2",
+"topic": "Ellipsis",
+"meaning": "опущение",
+"explain": "Повторяющиеся слова опускают, оставляя вспомогательный: I can't swim, but she can.",
+"example": "I wanted to go, but I couldn't.",
+"translation": "Я хотел пойти, но не смог."
+},
+{
+"id": "en-290",
+"level": "B2",
+"topic": "Substitution: so и not",
+"meaning": "думаю, что да / нет",
+"explain": "So и not заменяют целое предложение: I think so. I hope not.",
+"example": "Will it rain? — I hope not.",
+"translation": "Будет дождь? — Надеюсь, нет."
+},
+{
+"id": "en-291",
+"level": "B2",
+"topic": "Articles with places",
+"meaning": "артикли с географией",
+"explain": "Без артикля — большинство стран и городов, с the — реки, моря, горные цепи и the Netherlands.",
+"example": "The Rhine flows through the Netherlands.",
+"translation": "Рейн протекает через Нидерланды."
+},
+{
+"id": "en-292",
+"level": "B2",
+"topic": "Uncountable: news, advice",
+"meaning": "особые неисчисляемые",
+"explain": "News, advice, information, furniture, luggage — без a и множественного; глагол в единственном.",
+"example": "The news is good: our luggage has arrived.",
+"translation": "Новости хорошие: наш багаж прибыл."
+},
+{
+"id": "en-293",
+"level": "B2",
+"topic": "Collective nouns",
+"meaning": "собирательные",
+"explain": "Team, family, government могут быть с глаголом в ед. или мн. числе (в брит. английском).",
+"example": "My family are all coming for dinner.",
+"translation": "Вся моя семья придёт на ужин."
+},
+{
+"id": "en-294",
+"level": "B2",
+"topic": "Hedging: tend to",
+"meaning": "обычно, как правило",
+"explain": "Tend to + глагол — смягчённое обобщение: People tend to eat late in Spain.",
+"example": "I tend to work better in the morning.",
+"translation": "Обычно мне лучше работается утром."
+},
+{
+"id": "en-295",
+"level": "B2",
+"topic": "Hedging: it seems that",
+"meaning": "похоже, что",
+"explain": "It seems/appears that — осторожное утверждение: It seems that we're lost.",
+"example": "It appears that the meeting has been cancelled.",
+"translation": "Похоже, совещание отменили."
+},
+{
+"id": "en-296",
+"level": "B2",
+"topic": "Word formation: -ness",
+"meaning": "существительное из прилагательного",
+"explain": "Прилагательное + -ness: happy → happiness, kind → kindness.",
+"example": "Thank you for your kindness.",
+"translation": "Спасибо за вашу доброту."
+},
+{
+"id": "en-297",
+"level": "B2",
+"topic": "Word formation: un-, dis-",
+"meaning": "отрицательные приставки",
+"explain": "Un-, dis-, in-, im- дают противоположность: unhappy, dislike, impossible.",
+"example": "It's impossible to please everyone.",
+"translation": "Невозможно угодить всем."
+},
+{
+"id": "en-298",
+"level": "B2",
+"topic": "Word formation: -able",
+"meaning": "можно сделать",
+"explain": "Глагол + -able — «можно сделать»: wash → washable, rely → reliable.",
+"example": "Is this jacket washable?",
+"translation": "Эту куртку можно стирать?"
+},
+{
+"id": "en-299",
+"level": "B2",
+"topic": "Word formation: -ful и -less",
+"meaning": "с и без",
+"explain": "-ful — полный чего-то (useful), -less — без (useless).",
+"example": "The app is useful, but the old one was useless.",
+"translation": "Приложение полезное, а старое было бесполезным."
+},
+{
+"id": "en-300",
+"level": "B2",
+"topic": "Phrasal verbs: three-part",
+"meaning": "фразовые из трёх частей",
+"explain": "Глагол + наречие + предлог: put up with (терпеть), look forward to, run out of.",
+"example": "I can't put up with this noise any longer.",
+"translation": "Я больше не могу терпеть этот шум."
+},
+{
+"id": "en-301",
+"level": "B2",
+"topic": "Separable phrasal verbs",
+"meaning": "разделяемые фразовые",
+"explain": "Местоимение ставят между глаголом и частицей: turn it off, а не turn off it.",
+"example": "These shoes are new, try them on.",
+"translation": "Это новые туфли, примерь их."
+},
+{
+"id": "en-302",
+"level": "B2",
+"topic": "Get + -ing",
+"meaning": "начать делать",
+"explain": "Get + -ing в разговоре — начать: Let's get going. We'd better get moving.",
+"example": "It's late, we should get going.",
+"translation": "Уже поздно, нам пора идти."
+},
+{
+"id": "en-303",
+"level": "B2",
+"topic": "Keep + -ing",
+"meaning": "продолжать, постоянно",
+"explain": "Keep (on) + -ing — продолжать или делать снова и снова.",
+"example": "My phone keeps switching off.",
+"translation": "Мой телефон постоянно выключается."
+},
+{
+"id": "en-304",
+"level": "B2",
+"topic": "Go on + -ing / to",
+"meaning": "продолжать / перейти к",
+"explain": "Go on + -ing — продолжать то же, go on to + глагол — перейти к другому.",
+"example": "After the intro, she went on to explain the plan.",
+"translation": "После вступления она перешла к объяснению плана."
+},
+{
+"id": "en-305",
+"level": "B2",
+"topic": "Mean + -ing / to",
+"meaning": "означать / намереваться",
+"explain": "Mean + -ing — означать (it means waiting), mean to — собираться (I meant to call).",
+"example": "I meant to call you, but I forgot.",
+"translation": "Я собирался тебе позвонить, но забыл."
+},
+{
+"id": "en-306",
+"level": "B2",
+"topic": "Regret + -ing / to",
+"meaning": "сожалеть",
+"explain": "Regret + -ing — жалеть о сделанном, regret to say — с сожалением сообщить.",
+"example": "I regret not learning Dutch earlier.",
+"translation": "Жалею, что не начал учить нидерландский раньше."
+},
+{
+"id": "en-307",
+"level": "B2",
+"topic": "Would rather vs prefer",
+"meaning": "оттенки предпочтения",
+"explain": "Prefer + to/-ing — общее предпочтение, would rather — конкретный случай.",
+"example": "I prefer tea, but tonight I'd rather have wine.",
+"translation": "Я предпочитаю чай, но сегодня вечером лучше выпью вина."
+},
+{
+"id": "en-308",
+"level": "B2",
+"topic": "Present Simple для истории",
+"meaning": "настоящее в рассказе",
+"explain": "В живом рассказе и пересказе фильмов используют Present Simple: So he walks in and says…",
+"example": "In the film, a man wakes up and finds he can fly.",
+"translation": "В фильме мужчина просыпается и обнаруживает, что умеет летать."
+},
+{
+"id": "en-309",
+"level": "B2",
+"topic": "Will для привычек",
+"meaning": "характерное поведение",
+"explain": "Will описывает типичное поведение: He'll sit there for hours reading.",
+"example": "My cat will sleep anywhere warm.",
+"translation": "Моя кошка уснёт где угодно, лишь бы было тепло."
+},
+{
+"id": "en-310",
+"level": "B2",
+"topic": "Be + adjective + to",
+"meaning": "легко/трудно сделать",
+"explain": "Easy/hard/nice + to + глагол: This book is easy to read.",
+"example": "This question is difficult to answer.",
+"translation": "На этот вопрос трудно ответить."
+},
+{
+"id": "en-311",
+"level": "B2",
+"topic": "Determiners: whole vs all",
+"meaning": "весь и все",
+"explain": "The whole + единственное (the whole city), all (of) the + множественное (all the cities).",
+"example": "The whole team worked on it all week.",
+"translation": "Вся команда работала над этим всю неделю."
+},
+{
+"id": "en-312",
+"level": "B2",
+"topic": "Emphasis: the very",
+"meaning": "тот самый",
+"explain": "The very + существительное — «тот самый, именно»: This is the very place we met.",
+"example": "That's the very book I was looking for.",
+"translation": "Это та самая книга, которую я искал."
+},
+{
+"id": "en-313",
+"level": "B2",
+"topic": "Intensifiers: absolutely",
+"meaning": "усиление сильных прилагательных",
+"explain": "С сильными прилагательными (amazing, freezing) — absolutely, а не very.",
+"example": "The view was absolutely amazing.",
+"translation": "Вид был просто потрясающий."
+},
+{
+"id": "en-314",
+"level": "B2",
+"topic": "Get the hang of",
+"meaning": "освоиться",
+"explain": "Get the hang of something — разобраться, научиться: You'll get the hang of it.",
+"example": "I'm finally getting the hang of Dutch word order.",
+"translation": "Я наконец осваиваю нидерландский порядок слов."
+}
+]
+}

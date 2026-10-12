@@ -168,27 +168,27 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Грамматика: тема → Пример → объяснение курсивом (фраза дня — в «Моём дне», строка «Тренажер»).
+    # Грамматика: тема → значение, объяснение цитатой, пример → перевод курсивом последней строкой
+    # (фраза дня — в «Моём дне», строка «Тренажер»).
     phrase = home.get("live_language") or {}
     if phrase.get("topic") and phrase.get("explain"):
         topic, explanation = phrase["topic"], _with_period(phrase["explain"])
         if phrase.get("meaning"):
             topic += f" → {phrase['meaning']}"
-    else:  # прежний краткий формат правила
+    else:  # прежний краткий формат правила (уроки страны отпуска)
         topic, explanation = _grammar_parts(phrase.get("rule"))
     if topic:
         b.spacer()
         b.bold("Грамматика:")
         b.text_line(f" {topic}")
         b.newline()
-    if phrase.get("more") and phrase.get("more_translation"):
-        b.spacer()
-        b.bold("Пример:")
-        b.text_line(f" {_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
-        b.newline()
     if explanation:
         b.spacer()
-        b.italic(explanation)  # финальная подсказка экрана — курсивом
+        b.quote(explanation)
+        b.newline()
+    if phrase.get("more") and phrase.get("more_translation"):
+        b.spacer()
+        b.italic(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
         b.newline()
 
     if home.get("vacation"):
