@@ -54,7 +54,17 @@ def test_alert_card_is_russian_with_section_cause_and_time():
                                              "extra": "до 30 минут дольше в пути"}).text
 
     assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal: меньше поездов\n"
-                    "Причина: неисправный поезд\nОжидается до 18:30 · до 30 минут дольше в пути")
+                    "Причина: неисправный поезд\n\nОжидается до 18:30 · до 30 минут дольше в пути")
+
+
+def test_alert_card_skips_section_and_cause_already_in_the_text():
+    text = transport_ui.ns_alert("Alkmaar", {
+        "title": "Alkmaar - Hoorn", "until": "2026-10-12T16:00:00+0200",
+        "situation": "Из-за повреждённого железнодорожного моста между Alkmaar и Heerhugowaard возникло нарушение.",
+        "cause": "повреждённый железнодорожный мост"}).text
+
+    assert text == ("🚆 Сбой NS · Alkmaar\n\nИз-за повреждённого железнодорожного моста между Alkmaar и "
+                    "Heerhugowaard возникло нарушение.\n\nОжидается до 16:00")
 
 
 def _user(monkeypatch, cc="NL"):
@@ -198,7 +208,8 @@ def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
 
     asyncio.run(ns_alerts.check_user(bot, "42"))
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 1 and "Amsterdam - Alkmaar" in bot.sent[0]["text"]
+    # Станция уже есть в тексте NS («tussen Zaandam en Alkmaar») — участок в начале не повторяется.
+    assert len(bot.sent) == 1 and bot.sent[0]["text"].split("\n")[2].startswith("tussen Zaandam")
 
     feed["items"] = [second]  # один маршрут уже восстановлен, инцидент ещё идёт
     asyncio.run(ns_alerts.check_user(bot, "42"))

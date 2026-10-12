@@ -593,9 +593,11 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      style=None, anchor_id=None):
     result_kb = kb or _wardrobe_home_kb()
     cached = None if previous_item_ids or anchor_id else _get_cached_look(cid)
+    weather_now = (None, None)
     if cached:
         # Погода поменялась (дождь, ветер, холод) или образ собран без неё — пересобираем.
-        current = weather_signature(*await asyncio.to_thread(_wear_weather, store.get_settings(cid)))
+        weather_now = await asyncio.to_thread(_wear_weather, store.get_settings(cid))
+        current = weather_signature(*weather_now)
         saved = (cached.get("look_data") or {}).get("weather")
         if current is not None and current != saved:
             cached = None
@@ -608,6 +610,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
         look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
+        if not look_data.get("weather_reason") and weather_now[1] is not None:
+            # Образ собран раньше, чем строка о погоде стала обязательной: дописываем её сверху.
+            reason = wardrobe_rules.weather_reason(weather_now[0], look_data.get("items") or [])
+            look_data = {**look_data, "weather_reason": reason} if reason else look_data
         text, entities = _build_look_message(look_data)
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:

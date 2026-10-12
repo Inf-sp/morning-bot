@@ -463,9 +463,15 @@ _OPEN_METEO_CURRENT = ("temperature_2m", "apparent_temperature", "weathercode", 
                        "winddirection_10m", "uv_index", "cloudcover")
 
 
+_OWM_PAUSE_SECONDS = 30 * 60  # после сбоя OpenWeather полчаса сразу берём Open-Meteo, не ждём таймаутов
+_owm_down_until = [0.0]
+_OPEN_METEO_MIN_TIMEOUT = 5.0  # резерв получает своё время, даже если OpenWeather съел бюджет действия
+
+
 def _fetch_open_meteo(lat, lon):
     """Резерв без ключа: Open-Meteo в том же формате (WMO-коды, м/с, время Амстердама); без алертов."""
-    response = requests.get(_OPEN_METEO_URL, timeout=tracking.bounded_timeout(10), params={
+    timeout = max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(10))
+    response = requests.get(_OPEN_METEO_URL, timeout=timeout, params={
         "latitude": lat, "longitude": lon, "timezone": str(TZ), "forecast_days": 9, "wind_speed_unit": "ms",
         "hourly": ",".join(_OPEN_METEO_HOURLY), "daily": ",".join(_OPEN_METEO_DAILY),
         "current": ",".join(_OPEN_METEO_CURRENT),
@@ -510,6 +516,11 @@ def fetch_weather(lat, lon, days=2):
         return cached
     if not config.WEATHER_API_KEY:
         return _fallback_weather(key, cache_key, lat, lon, Exception("no weather api key"))
+    if time.time() < _owm_down_until[0]:
+        try:
+            return _fallback_weather(key, cache_key, lat, lon, Exception("openweather paused after failure"))
+        except Exception:
+            _log.info("weather: fallback failed during OpenWeather pause, retrying OpenWeather")
 
     try:
         with ThreadPoolExecutor(max_workers=3) as pool:
@@ -533,6 +544,8 @@ def fetch_weather(lat, lon, days=2):
         _persistent_cache_save(cache_key, data)
         return data
     except Exception as error:
+        _owm_down_until[0] = time.time() + _OWM_PAUSE_SECONDS
+        _log.warning("weather: OpenWeather failed (%r), pausing it for %s min", error, _OWM_PAUSE_SECONDS // 60)
         return _fallback_weather(key, cache_key, lat, lon, error)
 
 

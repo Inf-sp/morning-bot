@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from .builder import MessageBuilder, MessageSpec
@@ -11,21 +12,36 @@ def _time_label(value):
         return ""
 
 
+def _mentions(text, phrase, *, min_len) -> bool:
+    """Упомянуто ли phrase в text: все значимые слова (по началу, чтобы падежи совпадали)."""
+    text = str(text or "").casefold()
+    words = [word for word in re.findall(r"\w+", str(phrase or "").casefold()) if len(word) >= min_len]
+    return bool(words) and all(word[:min_len] in text for word in words)
+
+
 def ns_alert(city, disruption) -> MessageSpec:
-    """Предупреждение о сбое NS: заголовок, участок, причина, ожидание."""
+    """Предупреждение о сбое NS: что случилось, пустая строка, «Ожидается до …».
+
+    Участок («Alkmaar - Hoorn:») и «Причина:» не повторяются, если текст NS их уже называет.
+    """
     title = "Авария NS" if disruption.get("type") == "CALAMITY" else "Сбой NS"
     b = MessageBuilder()
     b.section(f"🚆 {title} · {city}")
     b.spacer()
     title_line, situation = disruption.get("title") or "", disruption.get("situation") or ""
-    b.line(f"{title_line}: {situation}" if title_line and situation else title_line or situation)
-    if disruption.get("cause"):
-        b.line(f"Причина: {disruption['cause']}")
+    stations = [part.strip() for part in re.split(r"\s+[-–—]\s+", title_line) if part.strip()]
+    if situation and title_line and not any(station.casefold() in situation.casefold() for station in stations):
+        situation = f"{title_line}: {situation}"
+    b.line(situation or title_line)
+    cause = disruption.get("cause") or ""
+    if cause and not _mentions(situation, cause, min_len=5):
+        b.line(f"Причина: {cause}")
     tail = [part for part in (
         f"ожидается до {_time_label(disruption.get('until'))}" if _time_label(disruption.get("until")) else "",
         disruption.get("extra") or "",
     ) if part]
     if tail:
+        b.spacer()
         joined = " · ".join(tail)
         b.line(joined[:1].upper() + joined[1:])
     return b.build_stripped()
