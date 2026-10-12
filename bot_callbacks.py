@@ -94,7 +94,7 @@ def _status_stages(data):
     if data in ("m_learn",) or topic == "learning":
         return progress("🧠 Открываю урок...", "📖 Выбираю тему дня...", "✍️ Пишу пример...", "✨ Почти готово...")
     if data in ("a_plany", "m_myday", "weather_myday"):
-        return progress("☀️ Смотрю на погоду...", "👕 Подбираю образ...", "🦉 Ищу лайфхак...", "📝 Собираю мой день...")
+        return progress("☀️ Смотрю на погоду...", "👕 Подбираю образ...", "💭 Ищу цитату...", "📝 Собираю мой день...")
     if data in ("a_w_full", "a_w_week") or data.startswith("weather"):
         return progress("🌦️ Смотрю прогноз...", "🌡️ Сверяю температуру...", "💨 Проверяю ветер...",
                         "📝 Готовлю прогноз...")
@@ -297,9 +297,6 @@ ACTIONS = (
        "concerts_es", "concerts_it", "concerts_at", "concerts_ch",
        "concerts_pl", "concerts_se", "concerts_dk", "concerts_pt"),
       _find_concerts(lambda c: c.data[2:].split("_")[1])),
-    # «Не нравится» заменяет карточку артиста на месте: статус правит то же сообщение.
-    R("listen_no", lambda c: c.status(
-        lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
     R(("food_breakfast", "recipe_breakfast"), _food_menu("breakfast")),
     R(("food_lunch", "recipe_lunch"), _food_menu("lunch")),
     R(("food_dinner", "recipe_dinner"), _food_menu("dinner")),
@@ -578,6 +575,9 @@ ROUTES = (
     R("nov_*", _picked(lambda c: c.status(lambda status: leisure_novelty.send_novelty(
         c.bot, c.cid, c.data[len("nov_"):], status=status)))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
+    # «Не нравится» заменяет карточку артиста на месте: статус правит то же сообщение.
+    R("listen_no", lambda c: c.status(
+        lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
     R("movie_no_*", lambda c: c.status(lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c)))),
     R("book_no_*", lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c)))),
     # «Продолжить / ещё раз» и «Короче / Глубже» для последнего ответа.

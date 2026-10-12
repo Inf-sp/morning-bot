@@ -429,9 +429,6 @@ def test_dictionary_clarification_survives_the_add_command_route(monkeypatch):
     async def fake_clarification(_bot, routed_cid, text, lang):
         clarifications.append((routed_cid, text, lang))
 
-    async def no_lifehack(*_args, **_kwargs):
-        return False
-
     async def fallback_chat(_bot, _cid, text):
         assistant_replies.append(text)
 
@@ -440,8 +437,6 @@ def test_dictionary_clarification_survives_the_add_command_route(monkeypatch):
 
     monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
-    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_lifehack)
-    monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_lifehack)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", fake_dict_add)
     monkeypatch.setattr(bot_text.dictionary_import, "add_dict_clarification", fake_clarification)
     monkeypatch.setattr(bot_text.assistant, "chat_reply", fallback_chat)

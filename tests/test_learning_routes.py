@@ -110,3 +110,21 @@ def test_cooking_and_learning_menu_callbacks_are_routable():
     }
 
     assert missing == {section: [] for section in callbacks}
+
+
+def test_every_literal_button_has_a_route():
+    """Кнопка с callback_data-литералом должна доходить до обработчика (как «Не нравится» в музыке)."""
+    import re
+    from pathlib import Path
+
+    literal = re.compile(r'(?<![\w])callback_data="([^"{}]+)"')
+    unrouted = set()
+    for path in Path(__file__).resolve().parent.parent.glob("**/*.py"):
+        if "tests" in path.parts or ".venv" in path.parts:
+            continue
+        for data in literal.findall(path.read_text(encoding="utf-8")):
+            if data == "noop":
+                continue
+            if bot_callbacks._first(bot_callbacks.ROUTES, data) is None:
+                unrouted.add(data)
+    assert not unrouted, sorted(unrouted)

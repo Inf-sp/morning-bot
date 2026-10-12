@@ -115,7 +115,7 @@ _NOTIF_TITLES = {
 MYDAY_BLOCKS = [
     ("weather", "Погода"), ("golden", "Золотой час"), ("outfit", "Образ дня"),
     ("word", "Слово дня"), ("rail", "Работы на ЖД"), ("holidays", "Праздники"),
-    ("lifehack", "Лайфхак"), ("quote", "Цитата"),
+    ("quote", "Цитата"),
 ]
 
 
@@ -124,16 +124,9 @@ def myday_block_on(cid, key) -> bool:
 
 
 async def send_myday_blocks(bot, cid, q=None):
-    import myday
     rows = [[InlineKeyboardButton(("✅ " if myday_block_on(cid, key) else "□ ") + label,
                                   callback_data=f"set_mydaytgl_{key}")]
             for key, label in MYDAY_BLOCKS]
-    if myday_block_on(cid, "lifehack"):
-        # Темы лайфхаков — по одной в строке; выключенная тема не показывается.
-        on = myday.lifehack_topics_on(cid)
-        rows.extend([[InlineKeyboardButton(("✅ " if key in on else "□ ") + label.split(" ", 1)[-1],
-                                           callback_data=f"set_lhtopic_{key}")]
-                     for key, label in myday.LIFEHACK_TOPICS])
     rows.append(nav_row("m_myday"))  # вход — «Настроить» под «Моим днём»
     await rich_delivery.show(bot, cid, settings_ui.myday_blocks(), reply_markup=InlineKeyboardMarkup(rows), query=q)
 
@@ -397,135 +390,6 @@ async def send_preferences(bot, cid, q=None):
             _log.debug("send_preferences: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
-
-
-async def send_lifehacks(bot, cid, q=None):
-    import myday
-
-    records = myday.lifehack_records(include_disabled=False)
-    page = 0
-    total_pages = max(1, (len(records) + 4) // 5)
-    chunk = records[page * 5:page * 5 + 5]
-    msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
-    rows = [
-        [InlineKeyboardButton("✅ Добавить лайфхак", callback_data="set_lh_add")],
-        [InlineKeyboardButton("❌ Удалить", callback_data="set_lh_delete")],
-    ]
-    if total_pages > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"set_lh_page_{total_pages - 1}"),
-            InlineKeyboardButton("▶️", callback_data="set_lh_page_1"),
-        ])
-    rows.extend([
-        nav_row("set_home"),
-    ])
-    markup = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
-            return
-        except Exception:
-            _log.debug("send_lifehacks: ignored error", exc_info=True)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=markup, transient=True)
-
-
-async def send_lifehack_page(bot, cid, page, q=None):
-    import myday
-
-    records = myday.lifehack_records(include_disabled=False)
-    total_pages = max(1, (len(records) + 4) // 5)
-    page = max(0, min(int(page), total_pages - 1))
-    chunk = records[page * 5:page * 5 + 5]
-    msg = settings_ui.lifehacks_home(len(records), chunk, page, total_pages)
-    rows = [
-        [InlineKeyboardButton("✅ Добавить лайфхак", callback_data="set_lh_add")],
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"set_lh_delete_page_{page}")],
-    ]
-    if total_pages > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"set_lh_page_{(page - 1) % total_pages}"),
-            InlineKeyboardButton("▶️", callback_data=f"set_lh_page_{(page + 1) % total_pages}"),
-        ])
-    rows.append(nav_row("set_home"))
-    markup = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=markup)
-            return
-        except Exception:
-            _log.debug("send_lifehack_page: ignored error", exc_info=True)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=markup, transient=True)
-
-
-def _lifehack_selection_rows(records, prefix, page=0, total_pages=1, action="delete"):
-    rows = []
-    for item in records[:50]:
-        record_id = str(item.get("id") or "")
-        if not record_id:
-            continue
-        text = " ".join(str(item.get("text") or "").split())
-        label = text[:42] + ("…" if len(text) > 42 else "")
-        rows.append([InlineKeyboardButton(label, callback_data=f"{prefix}{record_id}")])
-    if total_pages > 1:
-        callback_prefix = "set_lh_edit_page_" if action == "edit" else "set_lh_delete_page_"
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"{callback_prefix}{(page - 1) % total_pages}"),
-            InlineKeyboardButton("▶️", callback_data=f"{callback_prefix}{(page + 1) % total_pages}"),
-        ])
-    rows.append(nav_row("set_lifehacks"))
-    return rows
-
-
-async def send_lifehack_edit_list(bot, cid, q=None, page=0):
-    import myday
-
-    records = myday.lifehack_records(include_disabled=False)
-    total_pages = max(1, (len(records) + 4) // 5)
-    page = max(0, min(int(page), total_pages - 1))
-    chunk = records[page * 5:page * 5 + 5]
-    msg = settings_ui.lifehacks_list("✏️ Изменить", chunk, page, total_pages)
-    markup = InlineKeyboardMarkup(_lifehack_selection_rows(chunk, "set_lh_edit_", page, total_pages, "edit"))
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=markup, transient=True)
-
-
-async def send_lifehack_delete_list(bot, cid, q=None, page=0):
-    import myday
-
-    records = myday.lifehack_records(include_disabled=False)
-    total_pages = max(1, (len(records) + 4) // 5)
-    page = max(0, min(int(page), total_pages - 1))
-    chunk = records[page * 5:page * 5 + 5]
-    msg = settings_ui.lifehacks_list("❌ Удалить", chunk, page, total_pages)
-    markup = InlineKeyboardMarkup(_lifehack_selection_rows(chunk, "set_lh_delete_", page, total_pages, "delete"))
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=markup, transient=True)
-
-
-async def start_lifehack_add(bot, cid):
-    store.pending_input[str(cid)] = "lifehack_add"
-    await bot.send_message(chat_id=cid, text="Напиши текст лайфхака одним сообщением.")
-
-
-async def start_lifehack_edit(bot, cid, record_id):
-    import myday
-
-    record = next((item for item in myday.lifehack_records() if item.get("id") == record_id), None)
-    if record is None:
-        await send_lifehacks(bot, cid)
-        return
-    store.pending_input[str(cid)] = f"lifehack_edit_{record_id}"
-    msg = settings_ui.lifehack_edit_input(record.get("text", ""))
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-
-
-async def delete_lifehack(bot, cid, record_id):
-    import myday
-
-    myday.delete_lifehack(record_id)
-    await send_lifehacks(bot, cid)
 
 
 class _NoKbBot:
@@ -1188,26 +1052,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_pref_games" or data.startswith("set_game_"):
         # Раздела игр больше нет: старые кнопки настроек игр ведут к предпочтениям.
         await send_preferences(bot, cid, q)
-    elif data == "set_lifehacks":
-        await send_lifehacks(bot, cid, q)
-    elif data.startswith("set_lh_page_"):
-        await send_lifehack_page(bot, cid, data[len("set_lh_page_"):], q)
-    elif data == "set_lh_add":
-        await start_lifehack_add(bot, cid)
-    elif data == "set_lh_edit":
-        await send_lifehack_edit_list(bot, cid, q)
-    elif data.startswith("set_lh_edit_page_"):
-        await send_lifehack_edit_list(bot, cid, q, data[len("set_lh_edit_page_"):])
-    elif data == "set_lh_delete":
-        await send_lifehack_delete_list(bot, cid, q)
-    elif data.startswith("set_lh_delete_page_"):
-        await send_lifehack_delete_list(bot, cid, q, data[len("set_lh_delete_page_"):])
-    elif data.startswith("set_lh_edit_"):
-        await start_lifehack_edit(bot, cid, data[len("set_lh_edit_"):])
-    elif data.startswith("set_lh_delete_yes_"):
-        await delete_lifehack(bot, cid, data[len("set_lh_delete_yes_"):])
-    elif data.startswith("set_lh_delete_"):
-        await delete_lifehack(bot, cid, data[len("set_lh_delete_"):])  # сразу, без подтверждения
+    elif data == "set_lifehacks" or data.startswith(("set_lh_", "set_lhtopic_")):
+        # Лайфхаков больше нет: кнопки из старых сообщений ведут к блокам «Моего дня».
+        await send_myday_blocks(bot, cid, q)
     elif data in {"set_mydata_leisure", "set_mydata_leisure_p", "set_mydata_cinema", "set_mydata_books", "set_mydata_music"}:
         # Кнопки из старых сообщений: общая страница «Досуг» больше не существует.
         await send_home(bot, cid)
@@ -1292,14 +1139,6 @@ async def handle_callback(bot, cid, data, q=None):
         await send_myday_blocks(bot, cid, q)
     elif data == "set_myday_new":  # «Настроить» под «Моим днём»: новым сообщением, сводка остаётся
         await send_myday_blocks(bot, cid)
-    elif data.startswith("set_lhtopic_"):
-        import myday
-        key = data[len("set_lhtopic_"):]
-        if key in dict(myday.LIFEHACK_TOPICS):
-            off = [item for item in (get(cid, "lifehack_topics_off", []) or []) if item in dict(myday.LIFEHACK_TOPICS)]
-            set_(cid, "lifehack_topics_off", [item for item in off if item != key] if key in off else [*off, key])
-            myday.reset_day_cache(cid)
-        await send_myday_blocks(bot, cid, q)
     elif data.startswith("set_mydaytgl_"):
         await toggle_myday_block(bot, cid, data[len("set_mydaytgl_"):], q)
     elif data.startswith("set_notifopen_"):

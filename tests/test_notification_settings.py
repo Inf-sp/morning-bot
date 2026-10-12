@@ -108,10 +108,9 @@ def test_myday_skips_disabled_blocks_without_preparing_them(monkeypatch):
     import myday
     import weather
 
-    monkeypatch.setattr(settings, "myday_block_on", lambda _cid, key: key not in ("weather", "lifehack", "quote"))
+    monkeypatch.setattr(settings, "myday_block_on", lambda _cid, key: key not in ("weather", "quote"))
     monkeypatch.setattr(myday.store, "get_settings", lambda _cid: {"city": "Alkmaar", "lat": 1, "lon": 2})
     monkeypatch.setattr(weather, "fetch_weather", lambda *_a: (_ for _ in ()).throw(AssertionError("weather off")))
-    monkeypatch.setattr(myday, "daily_lifehack", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("off")))
     monkeypatch.setattr(myday, "_daily_literary_quote", lambda _cid: (_ for _ in ()).throw(AssertionError("off")))
     monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: False)
     monkeypatch.setattr(myday, "_movie_rebus_of_day", lambda _day: {})
@@ -122,4 +121,4 @@ def test_myday_skips_disabled_blocks_without_preparing_them(monkeypatch):
 
     text, _entities = myday._build_day_text("42")
 
-    assert "Погода" not in text and "Лайфхак" not in text and "©" not in text
+    assert "Погода" not in text and "©" not in text

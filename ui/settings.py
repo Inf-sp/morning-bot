@@ -92,49 +92,6 @@ def preferences_home(summary=()):
     return b.build_stripped()
 
 
-def lifehacks_home(total, records=None, page=0, total_pages=1):
-    b = MessageBuilder()
-    b.section("🦉 Лайфхаки")
-    b.line(f"Всего: {total}")
-    if records:
-        b.spacer()
-        for item in records:
-            category = str(item.get("category") or "разное").capitalize()
-            text = " ".join(str(item.get("text") or "").split())
-            b.labeled_line(category, text[:180], lowercase=False)
-    elif not total:
-        b.spacer()
-        b.line("Записей пока нет.")
-    if total_pages > 1:
-        b.spacer()
-        b.line(f"Страница {page + 1} из {total_pages}")
-    return b.build_stripped()
-
-
-def lifehacks_list(title, records, page=0, total_pages=1):
-    b = MessageBuilder()
-    b.section(title)
-    if not records:
-        b.line("Записей пока нет.")
-    else:
-        for item in records:
-            category = str(item.get("category") or "разное").capitalize()
-            text = " ".join(str(item.get("text") or "").split())
-            b.labeled_line(category, text[:180], lowercase=False)
-    if total_pages > 1:
-        b.spacer()
-        b.line(f"Страница {page + 1} из {total_pages}")
-    return b.build_stripped()
-
-
-def lifehack_edit_input(text):
-    b = MessageBuilder()
-    b.section("✏️ Изменить лайфхак")
-    b.labeled_line("Сейчас", text, lowercase=False)
-    b.line("Напиши новую формулировку одним сообщением.")
-    return b.build_stripped()
-
-
 def mydata_section(title, hint=""):
     b = MessageBuilder().section(title)
     if hint:

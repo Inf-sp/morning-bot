@@ -40,12 +40,6 @@ def test_wardrobe_card_uses_current_outfit_labels():
     assert "Главный акцент" not in message.text
 
 
-def test_day_summary_lifehack_keeps_capital_letter_after_label():
-    message = day_summary("Пн, 20 июля", "Алкмар", lifehack="проверь расписание утром")
-
-    assert "🦉Лайфхак: Проверь расписание утром" in message.text
-
-
 def test_day_summary_header_shows_country_and_flag():
     message = day_summary("Вт, 4 августа", "Лилль", country="FR", flag="🇫🇷")
 
@@ -83,10 +77,8 @@ def test_day_summary_has_no_restaurant_line():
     message = day_summary(
         "Вт, 1 сентября", "Алкмар",
         outfit_items=["Белая футболка", "Чёрные брюки"], outfit_emoji="👕",
-        lifehack="возьми зонт",
     )
 
-    assert message.text.index("👕 Образ:") < message.text.index("🦉Лайфхак:")
     assert "Куда сходить" not in message.text
 
 

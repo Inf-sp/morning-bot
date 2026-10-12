@@ -528,13 +528,14 @@ _PER_USER_KEYS = {
     config.THOUGHTS_KEY,
     config.MOVIE_SEEN_KEY, config.BOOK_SEEN_KEY, config.MUSIC_SEEN_KEY,
     config.RECOMMENDATION_STOPLIST_KEY,
-    config.DICT_KEY, config.DIARY_KEY, config.LIFEHACK_KEY,
+    config.DICT_KEY, config.DIARY_KEY,
     config.FRIDGE_KEY, config.LEFTOVER_RECIPES_SEEN_KEY, config.QUOTE_AUTHORS_KEY,
     config.CONCERTS_CACHE_KEY, config.CONCERT_ARTIST_CHECKS_KEY,
     # Удалённые сценарии: чистим старые физические ключи только при удалении
     # аккаунта, но обычный код их больше не читает и не записывает.
     "content_records.json", "notes.json", "language_review.json", "thought_reviews.json",
     "data_refresh_backups.json", "lagom.json", "motiv_lagom_seen.json",
+    "lifehacks_seen.json", "myday_lifehack_pool.json",
     # Старые главные экраны Кино/Музыки (заменены хабом «Досуг»).
     "movie_now_playing_cache.json", "local_cinema_cache.json", "music_home_cache.json",
 }

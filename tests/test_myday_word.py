@@ -39,7 +39,7 @@ def test_myday_rebuilds_cached_summary_when_ready_sections_are_missing(monkeypat
             self.replaced = (text, kwargs)
 
     stale = {
-        "text": "Мой день\n\n🦉Лайфхак: Старая сводка.",
+        "text": "Мой день\n\n💭 Старая сводка.",
         "entities": [],
     }
     rebuilt = ("Мой день\n\n🧥 Образ: Серая рубашка.", [])
@@ -138,6 +138,7 @@ def test_yesterdays_day_cache_never_hides_todays_summary(monkeypatch):
 
 def test_daily_literary_quote_is_cached_as_a_book_quote(monkeypatch):
     saved = []
+    monkeypatch.setattr(myday.store, "get_settings", lambda _cid: {"cc": "XX"})  # страны нет в списке
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
     monkeypatch.setattr(myday.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(
@@ -177,3 +178,19 @@ def test_unseen_quote_from_favorite_book_has_priority(monkeypatch):
     assert quote["id"] == "атомные привычки"
 
 
+
+
+def test_quote_comes_from_author_of_selected_country_without_repeats(monkeypatch):
+    saved = []
+    monkeypatch.setattr(myday.store, "get_settings", lambda _cid: {"cc": "za"})  # в отпуске — ЮАР
+    monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {"myday_quote_history": ["маленький принц", "ZA:0"]})
+    monkeypatch.setattr(myday.store, "mutate_profile", lambda _cid, change: saved.append(change({})[0]))
+
+    quote = myday._daily_literary_quote("42")
+
+    assert quote["src"] == "Нельсон Мандела" and quote["id"] == "ZA:1"  # ZA:0 уже был
+    assert saved[0]["myday_quote_cache"]["cc"] == "ZA"
+    assert saved[0]["myday_quote_history"] == ["маленький принц", "ZA:0", "ZA:1"]
+    # Все цитаты страны показаны — круг начинается заново.
+    again, history = myday._country_quote("ZA", ["ZA:0", "ZA:1"])
+    assert again["id"] in ("ZA:0", "ZA:1") and history == []

@@ -444,8 +444,6 @@ def _prepare_pending_text_router(monkeypatch):
 
     monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
-    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_async_match)
-    monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_async_match)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_async_match)
 
 

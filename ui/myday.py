@@ -54,7 +54,6 @@ def day_summary(
     movie_rebus=None,
     outfit_items=None,
     outfit_emoji="🧶",
-    lifehack="",
     quote_text="",
     quote_author="",
     rail_works=None,
@@ -73,12 +72,6 @@ def day_summary(
     b.bold(f"Мой день · {header} · {place}".rstrip(" ·"))
     b.newline()
     vacation = vacation or {}
-    if vacation:
-        trip = " · ".join(part for part in (
-            "✈️ В отпуске " + (vacation.get("until") or "").strip(),
-            f"дома {vacation['home']}" if vacation.get("home") else "",
-        ) if part.strip())
-        b.line(trip.replace("отпуске ·", "отпуске ·").strip())
     b.spacer()
 
     if weather_line:
@@ -136,10 +129,6 @@ def day_summary(
     if outfit:
         b.text_line(f"{str(outfit_emoji or '👕').strip()} ")
         b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
-        b.spacer()
-
-    if lifehack:
-        b.labeled_line("🦉Лайфхак", cap_sentence(finish_dot(lifehack)), lowercase=False)
         b.spacer()
 
     quote_text = str(quote_text or "").strip().strip("«»\"")

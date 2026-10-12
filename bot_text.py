@@ -42,13 +42,6 @@ async def handle(update, context, remove_reply_keyboard):
         await wardrobe.ingest(bot, cid, text)
         return
 
-    # Команда добавления лайфхака должна быть раньше словаря: в тексте могут
-    # встречаться «de», «het», «слово» и «перевод», но это всё ещё один лайфхак.
-    if await assistant.try_add_lifehack_from_chat(bot, cid, text):
-        return
-    if await assistant.try_edit_lifehack_from_chat(bot, cid, text):
-        return
-
     # Сбрасываем только прежний pending: обработчик словаря может открыть новый
     # шаг уточнения перевода.
     previous_kind = store.pending_input.get(cid)

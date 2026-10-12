@@ -307,8 +307,6 @@ def test_free_text_after_screen_one_gets_personal_answer(monkeypatch):
     monkeypatch.setattr(wardrobe_management, "recommend_purchase", recommend)
     monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
-    monkeypatch.setattr(bot_text.assistant, "try_add_lifehack_from_chat", no_match)
-    monkeypatch.setattr(bot_text.assistant, "try_edit_lifehack_from_chat", no_match)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", no_match)
     bot = RecordingBot()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))

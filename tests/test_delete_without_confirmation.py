@@ -40,11 +40,3 @@ def test_dictionary_and_trainer_delete_at_once(monkeypatch):
 
     assert deleted[0][0][2] == "w1"
     assert removed[0][1]["task_id"] == "task1"
-
-
-def test_lifehack_delete_at_once(monkeypatch):
-    removed = _route("lh", monkeypatch, settings, "delete_lifehack")
-
-    asyncio.run(settings.handle_callback(None, "42", "set_lh_delete_r1"))
-
-    assert removed[0][0][2] == "r1"
