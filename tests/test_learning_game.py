@@ -572,3 +572,22 @@ def test_game_in_vacation_uses_country_language(monkeypatch):
 
     monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: False)
     assert learning_game._game_lang("42") in ("английский", "нидерландский")
+
+
+def test_riddle_and_hint_are_quotes_and_fact_closes_the_answer():
+    from ui import learning as learning_ui
+    ui = learning_game.GAME_UI["нидерландский"]
+
+    def styled(msg, kind):
+        raw = msg.text.encode("utf-16-le")
+        return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le") for e in msg.entities if e.type == kind]
+
+    card = learning_ui.game_card(ui, "Ik ben rond en mensen maken vaak sap van mij.")
+    assert styled(card, "blockquote") == ["Ik ben rond en mensen maken vaak sap van mij."]
+    hint = learning_ui.game_hint(ui, "Ik ben groen van buiten en rood van binnen.")
+    assert styled(hint, "blockquote") == ["Ik ben groen van buiten en rood van binnen."]
+    assert styled(hint, "italic") == ["Kies het juiste antwoord."]
+    found = learning_ui.game_found(ui, "de watermeloen", "Een watermeloen bestaat voor 92% uit water.")
+    assert found.text.startswith("✅ Zaak opgelost!\n\nde watermeloen")
+    assert found.text.endswith("Een watermeloen bestaat voor 92% uit water.")
+    assert styled(found, "italic")[-1] == "Een watermeloen bestaat voor 92% uit water."

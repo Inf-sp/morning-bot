@@ -44,6 +44,7 @@ GAME_UI = {
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
+        "choose": "Выбери верный ответ.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Дело раскрыто!",
         "remember": "Запомни:",
@@ -62,6 +63,7 @@ GAME_UI = {
         "no_new": "No new riddle right now. Try again later.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
+        "choose": "Choose the right answer.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Case solved!",
         "remember": "Remember:",
@@ -80,6 +82,7 @@ GAME_UI = {
         "no_new": "Er is nu geen nieuw raadsel. Probeer het later nog eens.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
+        "choose": "Kies het juiste antwoord.",
         "reveal": "😞 Сдаюсь",
         "found": "✅ Zaak opgelost!",
         "remember": "Onthoud:",
@@ -512,7 +515,7 @@ Make guessing possible without making the answer immediately obvious. Never incl
 Avoid metaphors, vague statements, trivia, specialist knowledge and factual errors.
 HINT must be one strong short sentence in the target language. It should make the answer almost obvious
 without saying the answer; use a distinctive characteristic, not a generic fact.
-EXPLAIN must be 1-2 short natural sentences in the target language.
+EXPLAIN must be one interesting, true and well-known fact about the answer: 1-2 short sentences in the target language.
 WORDS must contain at most 3 useful words from DESCRIPTION, HINT or EXPLAIN, with Russian translations.
 Do not choose function words such as ik, I, zijn, be, een, a, the.
 Attempt: {attempt + 1}. Return exactly these fields, one per line, without markdown:
@@ -523,7 +526,7 @@ ALIASES: accepted Russian, English and Dutch names separated by | (Russian first
 WRONG: two other familiar {expected_category} names in {clue_lang} (same form as ANSWER), plausible but wrong, separated by |
 ENGLISH: English name in 1-4 words
 HINT: one strong hint in {clue_lang}
-EXPLAIN: 1-2 short sentences in {clue_lang}
+EXPLAIN: one interesting fact about the answer, 1-2 short sentences in {clue_lang}
 WORDS: word|Russian translation; word|Russian translation; word|Russian translation"""
     try:
         raw = ai.llm(

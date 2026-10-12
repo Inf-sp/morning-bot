@@ -100,12 +100,13 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
 
-    # Одной строкой: «• «Название» · метаданные · описание», без дат.
+    # Блок одной строкой сразу после подписи: «Новинка в кино: «Название» · метаданные · описание», без дат.
     assert msg.text.startswith(
-        "🍿 Досуг\n\nПремьеры кино:\n• «Дюна» · Пол Атрейдес отправляется на Арракис.\n\nНовые книги:")
-    assert msg.text.endswith("Новая музыка:\n• «Blue Rev» — Alvvays · Инди")
+        "🍿 Досуг\n\nНовинка в кино: «Дюна» · Пол Атрейдес отправляется на Арракис. Дальше спойлеры."
+        "\n\nНовая книга: «Книга»")
+    assert msg.text.endswith("Новая музыка: «Blue Rev» — Alvvays · Инди")
     assert "Концерты" not in msg.text
-    for title in ("Премьеры кино:", "Новые книги:", "«Дюна»", "«Книга»"):
+    for title in ("Новинка в кино:", "Новая книга:", "«Дюна»", "«Книга»"):
         assert title in msg.text
     assert "игр" not in msg.text
     assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_FEATURED == 1
@@ -166,8 +167,8 @@ def test_hub_hides_empty_blocks():
     only_books = leisure_ui.leisure_hub_screen([], [{"title": "Книга"}], [])
     empty = leisure_ui.leisure_hub_screen([], [], [])
 
-    assert "Новые книги:" in only_books.text
-    for title in ("Новая музыка:", "Премьеры кино:"):
+    assert "Новая книга:" in only_books.text
+    for title in ("Новая музыка:", "Новинка в кино:", "Новый сериал:"):
         assert title not in only_books.text
         assert title not in empty.text
     assert empty.text.startswith("🍿 Досуг\n\n")
@@ -390,9 +391,9 @@ def test_hub_shows_film_then_series_and_album_with_description():
           "about": "Мечтательный инди-поп с шумными гитарами."}],
     )
 
-    assert "Премьеры кино:\n• «Дюна» · Пол едет на Арракис.\n• «Одни из нас» · 2-й сезон · " \
+    assert "Новинка в кино: «Дюна» · Пол едет на Арракис.\n\nНовый сериал: «Одни из нас» · 2-й сезон · " \
            "Элли и Джоэл снова в пути." in msg.text
-    assert msg.text.endswith("• «Blue Rev» — Alvvays · Инди · Мечтательный инди-поп с шумными гитарами.")
+    assert msg.text.endswith("Новая музыка: «Blue Rev» — Alvvays · Инди · Мечтательный инди-поп с шумными гитарами.")
 
 
 def test_album_descriptions_are_stored_once(monkeypatch):
@@ -426,7 +427,18 @@ def test_hub_rows_show_country_and_series_network_from_cache():
           "overview": "Дочь рабочего подвергается насилию."}],
         [], [],
     )
-    lines = msg.text.split("Премьеры кино:\n", 1)[1].splitlines()
-    assert lines[0] == "• «Диггер» · комедия · драма · 🇺🇸 USA · Самый могущественный человек отправляется на миссию."
-    assert lines[1] == "• «Суд» · новый сериал · 🇺🇸 USA · HBO · Дочь рабочего подвергается насилию."
+    lines = [line for line in msg.text.splitlines() if line]
+    assert lines[1] == ("Новинка в кино: «Диггер» · комедия · драма · 🇺🇸 USA · "
+                        "Самый могущественный человек отправляется на миссию.")
+    assert lines[2] == "Новый сериал: «Суд» · 🇺🇸 USA · HBO · Дочь рабочего подвергается насилию."
     assert "октября" not in msg.text and "сентября" not in msg.text
+
+
+def test_hub_shows_most_popular_on_monday_then_next_each_day():
+    import leisure_hub
+    from datetime import date
+    movies = [{"title": f"Фильм {i}", "popularity": i} for i in range(10)]
+    monday = date(2026, 10, 12)
+    picks = [leisure_hub._daily(movies, date.fromordinal(monday.toordinal() + d), 1, leisure_hub._popularity)[0]["title"]
+             for d in range(7)]
+    assert picks == [f"Фильм {i}" for i in (9, 8, 7, 6, 5, 4, 3)]  # топ-7 недели по популярности

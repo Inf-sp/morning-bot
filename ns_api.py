@@ -72,7 +72,7 @@ def _label(value):
 
 
 def parse_disruption(raw):
-    """Нормализованный сбой: {id, type, title, cause, situation, until, extra} или None."""
+    """Нормализованный сбой: {id, type, title, cause, situation, start, until, extra} или None."""
     if not isinstance(raw, dict) or raw.get("type") not in ALERT_TYPES or raw.get("isActive") is False:
         return None
     timespan = next((span for span in raw.get("timespans") or [] if isinstance(span, dict)), {})
@@ -83,6 +83,7 @@ def parse_disruption(raw):
         "title": _title(raw),
         "cause": _label(timespan.get("cause")),
         "situation": _label(timespan.get("situation")) or str(raw.get("description") or "").strip(),
+        "start": str(timespan.get("start") or raw.get("start") or ""),
         "until": str(expected.get("endTime") or timespan.get("end") or ""),
         "extra": _label(raw.get("summaryAdditionalTravelTime")),
     }

@@ -162,7 +162,8 @@ def game_card(ui, description, category=""):
     if category:
         b.line(f"{ui.get('category', 'Категория')}: {category}")
         b.spacer()
-    b.line(description)
+    b.quote(" ".join(str(description or "").split()))  # загадка — цитатой
+    b.newline()
     b.spacer()
     # Финальная подсказка экрана — курсивом: ответ пишется в чат; варианты кнопками — после «Подсказки».
     b.italic(ui.get("reply_next", "Напиши ответ следующим сообщением — можно на любом языке."))
@@ -188,9 +189,7 @@ def game_found(ui, answer, body="", words=None):
     b.section(ui["found"])
     b.spacer()
     b.bold(answer)
-    if body:
-        b.spacer()
-        b.line(str(body).strip())
+    b.newline()
     valid_words = [
         item for item in (words or [])
         if isinstance(item, dict) and item.get("word") and item.get("translation")
@@ -201,6 +200,11 @@ def game_found(ui, answer, body="", words=None):
         b.newline()
         for item in valid_words:
             b.bullet(f"{item['word']} → {item['translation']}")
+    body = " ".join(str(body or "").split())
+    if body:
+        b.spacer()
+        b.italic(body)  # интересный факт об ответе на языке загадки — последней строкой
+        b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg
@@ -210,7 +214,10 @@ def game_hint(ui, hint):
     b = MessageBuilder()
     b.section(ui.get("hint_title", ui["hint"]))
     b.spacer()
-    b.bold(hint)  # варианты ответа — кнопками под загадкой
+    b.quote(" ".join(str(hint or "").split()))  # подсказка — цитатой, ниже варианты кнопками
+    b.newline()
+    b.spacer()
+    b.italic(ui.get("choose", "Выбери верный ответ."))
     b.newline()
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(ui["reveal"], callback_data="game_reveal", api_kwargs={"style": "danger"})],

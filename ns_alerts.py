@@ -88,7 +88,13 @@ async def check_user(bot, cid):
         disruption_id: value if isinstance(value, dict) else {"title": str(value), "sig": disruption_id}
         for disruption_id, value in ((store.get_profile(cid).get(_STATE_KEY) or {}).get("active") or {}).items()
     }
-    active = {item["id"]: {"title": item["title"], "sig": incident_signature(item)} for item in current}
+    from datetime import datetime
+    now = datetime.now(config.TZ).strftime("%Y-%m-%dT%H:%M")
+    # Для сообщения «восстановлено»: с какого времени шёл сбой и его причина (по-русски — из предупреждения).
+    active = {item["id"]: {"title": item["title"], "sig": incident_signature(item),
+                           "cause": (previous.get(item["id"]) or {}).get("cause") or item.get("cause") or "",
+                           "since": (previous.get(item["id"]) or {}).get("since") or item.get("start") or now}
+              for item in current}
     # NS заводит одну неисправность отдельной записью на каждый маршрут (Amsterdam - Alkmaar,
     # Haarlem - Alkmaar) — сообщаем об инциденте один раз.
     known = {value["sig"] for value in previous.values()}
@@ -97,16 +103,19 @@ async def check_user(bot, cid):
         if item["id"] in previous or sig in known:
             continue
         known.add(sig)
-        msg = transport_ui.ns_alert(city, await asyncio.to_thread(_translate, item))
+        translated = await asyncio.to_thread(_translate, item)
+        active[item["id"]]["cause"] = translated.get("cause") or active[item["id"]]["cause"]
+        msg = transport_ui.ns_alert(city, translated)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
     still_active = {value["sig"] for value in active.values()}
     restored = {}
     for disruption_id, value in previous.items():
         if disruption_id not in active and value["sig"] not in still_active:
-            restored.setdefault(value["sig"], value["title"])
-    for title in restored.values():
-        msg = transport_ui.ns_restored(title)
-        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+            restored.setdefault(value["sig"], value)
+    for value in restored.values():
+        msg = transport_ui.ns_restored(value.get("title"), since=value.get("since"), until=now,
+                                       cause=value.get("cause"))
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
 
     if active != previous:
         def save(profile):

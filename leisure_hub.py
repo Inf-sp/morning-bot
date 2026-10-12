@@ -47,13 +47,27 @@ def new_music(cid, cc, today) -> list[dict]:
     return items
 
 
-def _daily(items, today, count):
-    """count пунктов недельного списка на сегодня: каждый день — следующие, по кругу."""
+_WEEK_TOP = 7  # топ недели: по одному на каждый день
+
+
+def _daily(items, today, count=1, popularity=None):
+    """Самые популярные за неделю по очереди: в понедельник — первый, дальше каждый день следующий.
+
+    popularity — оценка популярности элемента (TMDb popularity, число оценок книги); без неё — порядок
+    источника (у музыки это чарт). count — сколько показать в день.
+    """
     items = list(items or [])
+    if popularity is not None:
+        items = sorted(items, key=lambda item: -float(popularity(item) or 0))
+    items = items[:_WEEK_TOP]
     if len(items) <= count:
         return items
-    start = today.toordinal() * count
+    start = today.weekday() * count
     return [items[(start + index) % len(items)] for index in range(count)]
+
+
+def _popularity(item):
+    return item.get("popularity") or item.get("ratings_count") or 0
 
 
 _SERIES_TTL_DAYS = 7
@@ -164,10 +178,10 @@ def hub_data(cid, day=None, fetch=False) -> dict:
     notes = _album_notes()
     album = [{**item, "about": notes.get(_album_key(item), "")}
              for item in _daily(new_music(cid, cc, today), today, one)]
-    picked_movies = (_daily([m for m in movies if m.get("overview")] or movies, today, one)
-                     + _daily([s for s in series if s.get("overview")] or series, today, one))
+    picked_movies = (_daily([m for m in movies if m.get("overview")] or movies, today, one, _popularity)
+                     + _daily([s for s in series if s.get("overview")] or series, today, one, _popularity))
     picked_books = _daily([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)]
-                          or books, today, one)
+                          or books, today, one, _popularity)
     return {
         # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
         "movies": [{**item, **countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)}
@@ -214,6 +228,11 @@ async def send_concerts(bot, cid, q=None):
     from telegram import InlineKeyboardMarkup
     from ui.navigation import nav_row
     from dataclasses import replace
+    try:
+        # Афиши этой страны ещё нет (новая страна, отпуск, кэш устарел) — собираем сейчас, а не ждём ночи.
+        await asyncio.wait_for(_warm_concerts(cid), 25)
+    except Exception:
+        _log.warning("concerts screen: refresh failed cid=%s", cid, exc_info=True)
     msg = (await leisure_concerts.build_month_concerts_msg(cid)
            or leisure_ui.no_month_concerts(leisure_concerts.month_concerts_title(cid)))
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)

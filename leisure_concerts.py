@@ -698,40 +698,37 @@ def _concert_context(e):
     return "Сольный концерт"
 
 _CONCERTS_CACHE_TTL = 31 * 86400
-_CONCERTS_CACHE_VERSION = 6
+_CONCERTS_CACHE_VERSION = 7  # 7 — отдельный кэш на каждую страну (отпуск не стирает домашнюю афишу)
 _ARTIST_CONCERT_CHECKS_VERSION = 2
 _ARTIST_CONCERT_CHECK_INTERVAL = 31 * 86400
 
 
 def _concerts_cache_get(cid, cc):
-    """Месячный список концертов; прошедшая афиша не считается актуальной."""
+    """Месячный список концертов страны cc; прошедшие концерты просто не показываются.
+
+    У каждой страны свой кэш: афиша страны отпуска не стирает домашнюю.
+    """
     entry = store._load(config.CONCERTS_CACHE_KEY).get(str(cid))
-    if (
-        not entry
-        or entry.get("version") != _CONCERTS_CACHE_VERSION
-        or entry.get("cc") != cc
-    ):
+    if not isinstance(entry, dict) or entry.get("version") != _CONCERTS_CACHE_VERSION:
         return None
+    bucket = (entry.get("by_cc") or {}).get(str(cc or "").upper())
     import time
-    if time.time() - entry.get("ts", 0) > _CONCERTS_CACHE_TTL:
+    if not isinstance(bucket, dict) or time.time() - bucket.get("ts", 0) > _CONCERTS_CACHE_TTL:
         return None
     from datetime import datetime
     today = datetime.now(config.TZ).date().isoformat()
-    if any(str(event.get("dates", {}).get("start", {}).get("localDate") or "") < today
-           for event in entry.get("events", []) if isinstance(event, dict)):
-        return None
-    return filter_concert_events(entry.get("events", []), cc)
+    upcoming = [event for event in bucket.get("events", []) if isinstance(event, dict)
+                and str(event.get("dates", {}).get("start", {}).get("localDate") or today) >= today]
+    return filter_concert_events(upcoming, cc)
 
 
 def _concerts_cache_set(cid, cc, events):
     import time
     d = store._load(config.CONCERTS_CACHE_KEY)
-    d[str(cid)] = {
-        "version": _CONCERTS_CACHE_VERSION,
-        "ts": time.time(),
-        "cc": cc,
-        "events": filter_concert_events(events, cc),
-    }
+    entry = d.get(str(cid)) if isinstance(d.get(str(cid)), dict) else {}
+    by_cc = dict(entry.get("by_cc") or {}) if entry.get("version") == _CONCERTS_CACHE_VERSION else {}
+    by_cc[str(cc or "").upper()] = {"ts": time.time(), "events": filter_concert_events(events, cc)}
+    d[str(cid)] = {"version": _CONCERTS_CACHE_VERSION, "by_cc": by_cc}
     store._save(config.CONCERTS_CACHE_KEY, d)
 
 

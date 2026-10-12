@@ -911,40 +911,66 @@ def _about_line(b: MessageBuilder, text) -> None:
         b.line(about)
 
 
-def _hub_item(b: MessageBuilder, title, url="", meta=(), about="") -> None:
-    """Строка Досуга одним абзацем: «• «Название» · жанр · 🇺🇸 США · Короткое описание.» — без даты."""
-    about = _short_about(about)
-    if not re.search(r"[а-яё]", about, re.I):  # только русский текст
-        about = ""
-    _weekly_item(b, title, url, (*meta, about))
+_HUB_ABOUT_MAX = 260  # описание в хабе — до двух предложений
 
 
-def _series_event_row(b: MessageBuilder, item) -> None:
-    """«• «Суд» · новый сериал · 🇺🇸 США · HBO · Описание.»; новый сезон — «2-й сезон»."""
-    season = int(item.get("season_number") or 0)
-    label = f"{season}-й сезон" if season > 1 else "новый сериал"
-    _hub_item(b, f"«{item.get('name')}»", item.get("url") or "",
-              (label, item.get("country_label"), item.get("network")), item.get("overview"))
+def _hub_about(text) -> str:
+    """До двух первых предложений описания, только русский текст; иначе ""."""
+    text = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
+    if not re.search(r"[а-яё]", text, re.I):
+        return ""
+    sentences = re.split(r"(?<=[.!?…])\s+", text)
+    about = sentences[0]
+    if len(sentences) > 1 and len(about) + 1 + len(sentences[1]) <= _HUB_ABOUT_MAX:
+        about = f"{about} {sentences[1]}"
+    if len(about) > _HUB_ABOUT_MAX:
+        about = about[:_HUB_ABOUT_MAX].rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
+    return about
+
+
+def _hub_block(b: MessageBuilder, label, title, url="", meta=(), about="") -> None:
+    """Блок хаба одним абзацем сразу после подписи: «**Новинка в кино:** «Восставший» · история ·
+    🇩🇪 DE · 1381 год, Англия охвачена беспорядками. …»."""
+    title = " ".join(str(title or "").split())
+    if not title:
+        return
+    b.spacer()
+    b.bold(f"{label}:")
+    b.text_line(" ")
+    if str(url or "").strip():
+        b.link(title, str(url).strip())
+    else:
+        b.text_line(title)
+    values = [" ".join(str(value).split()) for value in (*meta, _hub_about(about)) if str(value or "").strip()]
+    if values:
+        b.text_line(f" · {' · '.join(values)}")
+    b.newline()
 
 
 def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """Фильм дня, под ним сериал дня (kind=tv) — своей строкой с номером сезона."""
-    series = [item for item in list(items or []) if item.get("kind") == "tv" and item.get("name")][:limit]
+    """«Новинка в кино:» — фильм дня (kind≠tv) одним абзацем."""
     rows = [item for item in list(items or []) if item.get("kind") != "tv"
             and _item_value(item, "title", "")][:limit]
-    if rows or series:
-        b.section(title)
     for item in rows:
         movie_id = _item_value(item, "id", "")
         url = str(_item_value(item, "trailer_url", "") or "").strip()
         if not url and movie_id:
             url = f"https://www.themoviedb.org/movie/{movie_id}"
         genres = _movie_genres_for_line(item).replace(", ", " · ")
-        _hub_item(b, f"«{_item_value(item, 'title', '')}»", url,
-                  (genres, item.get("country_label")), _item_value(item, "overview", ""))
-    for item in series:
-        _series_event_row(b, item)
-    return bool(rows or series)
+        _hub_block(b, title, f"«{_item_value(item, 'title', '')}»", url,
+                   (genres, item.get("country_label")), _item_value(item, "overview", ""))
+    return bool(rows)
+
+
+def _series_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    """«Новый сериал:» — сериал дня одним абзацем, как кино; новый сезон — «2-й сезон» в описании."""
+    rows = [item for item in list(items or []) if item.get("kind") == "tv" and item.get("name")][:limit]
+    for item in rows:
+        season = int(item.get("season_number") or 0)
+        _hub_block(b, title, f"«{item.get('name')}»", item.get("url") or "",
+                   (f"{season}-й сезон" if season > 1 else "", item.get("country_label"), item.get("network")),
+                   item.get("overview"))
+    return bool(rows)
 
 
 def _event_date_label(value) -> str:
@@ -954,13 +980,11 @@ def _event_date_label(value) -> str:
 
 
 def _music_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """«Album» — Artist · жанр · дата; название — ссылка на альбом."""
+    """«Новая музыка:» «Album» — Artist · жанр · страна · описание — одним абзацем."""
     rows = [item for item in list(items or []) if item.get("title") and item.get("artist")][:limit]
-    if rows:
-        b.section(title)
     for item in rows:
-        _hub_item(b, f"«{item['title']}» — {item['artist']}", item.get("url"),
-                  (item.get("genre_label"), item.get("country_label")), item.get("about"))
+        _hub_block(b, title, f"«{item['title']}» — {item['artist']}", item.get("url"),
+                   (item.get("genre_label"), item.get("country_label")), item.get("about"))
     return bool(rows)
 
 
@@ -974,15 +998,14 @@ def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
 
 
 def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
+    """«Новая книга:» — самая популярная книга недели на сегодня, одним абзацем."""
     rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
-    if rows:
-        b.section(title)
     for item in rows:
         rating = _weekly_rating(
             _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
         )
-        _hub_item(
-            b, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
+        _hub_block(
+            b, title, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
             (_book_premiere_genres(item), rating, item.get("country_label")), _item_value(item, "summary", ""),
         )
     return bool(rows)
@@ -1048,9 +1071,10 @@ def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city
         title += f" · {str(city).strip()}"
     b.title(title)
     if not _event_sections(b, (
-        ("Премьеры кино:", _movie_event_rows, movies, LEISURE_HUB_FEATURED),
-        ("Новые книги:", _book_event_rows, books, LEISURE_HUB_FEATURED),
-        ("Новая музыка:", _music_event_rows, music, LEISURE_HUB_FEATURED),
+        ("Новинка в кино", _movie_event_rows, movies, LEISURE_HUB_FEATURED),
+        ("Новый сериал", _series_event_rows, movies, LEISURE_HUB_FEATURED),
+        ("Новая книга", _book_event_rows, books, LEISURE_HUB_FEATURED),
+        ("Новая музыка", _music_event_rows, music, LEISURE_HUB_FEATURED),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
     return b.build_stripped(reply_markup=reply_markup)

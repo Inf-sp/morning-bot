@@ -47,9 +47,18 @@ def ns_alert(city, disruption) -> MessageSpec:
     return b.build_stripped()
 
 
-def ns_restored(title) -> MessageSpec:
+def ns_restored(title, *, since="", until="", cause="") -> MessageSpec:
+    """«✅ Движение восстановлено», участок, сколько длился сбой и его причина — каждое своей строкой."""
     b = MessageBuilder()
-    b.line(f"✅ Движение {title} восстановлено" if title else "✅ Движение восстановлено")
+    b.section("✅ Движение восстановлено")
+    b.spacer()
+    b.line(f"{title}: поезда снова ходят." if title else "Поезда снова ходят.")
+    start, end = _time_label(since), _time_label(until)
+    if start and end and start != end:
+        b.line(f"Сбой длился с {start} до {end}")
+    cause = str(cause or "").strip().rstrip(".")
+    if cause:
+        b.line(f"Причина: {cause}.")
     return b.build_stripped()
 
 

@@ -28,7 +28,7 @@ def test_parse_keeps_disruptions_and_calamities_but_not_maintenance():
     assert ns_api.parse_disruption(RAW) == {
         "id": "7001", "type": "DISRUPTION", "title": "Alkmaar – Amsterdam Centraal",
         "cause": "defecte trein", "situation": "minder treinen",
-        "until": "2026-10-08T18:30:00+0200", "extra": "tot 30 minuten extra reistijd",
+        "start": "", "until": "2026-10-08T18:30:00+0200", "extra": "tot 30 minuten extra reistijd",
     }
     calamity = ns_api.parse_disruption({"id": "c1", "type": "CALAMITY", "title": "Brand", "description": "Geen treinen"})
     assert calamity["situation"] == "Geen treinen"
@@ -96,7 +96,10 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert bot.sent[-1]["text"] == "✅ Движение Alkmaar – Amsterdam Centraal восстановлено"
+    assert bot.sent[-1]["text"].startswith(
+        "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal: поезда снова ходят.")
+    assert bot.sent[-1]["text"].endswith("Причина: defecte trein.")
+    assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить рассылку", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
 
 
@@ -217,7 +220,7 @@ def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 2 and bot.sent[-1]["text"].endswith("восстановлено")
+    assert len(bot.sent) == 2 and bot.sent[-1]["text"].startswith("✅ Движение восстановлено")
 
 
 def test_translation_without_cyrillic_is_rejected(monkeypatch):
@@ -232,3 +235,10 @@ def test_translation_without_cyrillic_is_rejected(monkeypatch):
     assert item["cause"] == "неисправный поезд"
     assert captured["validator"]({"cause": "неисправный поезд"})
     assert not captured["validator"]({"cause": "defecte trein"})
+
+
+def test_restored_card_shows_route_duration_and_cause_on_own_lines():
+    text = transport_ui.ns_restored("Alkmaar - Hoorn", since="2026-10-12T12:40:00+0200",
+                                    until="2026-10-12T16:05", cause="повреждённый железнодорожный мост").text
+    assert text == ("✅ Движение восстановлено\n\nAlkmaar - Hoorn: поезда снова ходят.\n"
+                    "Сбой длился с 12:40 до 16:05\nПричина: повреждённый железнодорожный мост.")

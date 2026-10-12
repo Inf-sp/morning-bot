@@ -406,3 +406,19 @@ def test_month_concerts_show_at_least_three_of_my_artists_and_country_title(monk
     assert text.startswith("🎫 Ближайшие концерты · Нидерланды")
     # Минимум пять своих: за 30 дней только Placebo — добираются более поздние (здесь всего четыре).
     assert [name for name in ("Placebo", "Muse", "Keane", "Blur") if name in text] == ["Placebo", "Muse", "Keane", "Blur"]
+
+
+def test_trip_country_cache_does_not_erase_home_concerts(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(leisure_concerts.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_concerts.store, "_save", lambda _key, value: saved.update(value))
+    monkeypatch.setattr(leisure_concerts, "filter_concert_events", lambda events, _cc: list(events))
+    future = {"_artist": "Wolf Alice", "dates": {"start": {"localDate": "2099-05-01"}}}
+    past = {"_artist": "Old", "dates": {"start": {"localDate": "2000-01-01"}}}
+
+    leisure_concerts._concerts_cache_set("42", "NL", [future, past])
+    leisure_concerts._concerts_cache_set("42", "ES", [])  # отпуск в Испании
+
+    # Домашняя афиша на месте; прошедший концерт просто не показывается, а не обнуляет кэш.
+    assert leisure_concerts._concerts_cache_get("42", "NL") == [future]
+    assert leisure_concerts._concerts_cache_get("42", "ES") == []
