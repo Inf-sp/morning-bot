@@ -84,6 +84,8 @@ def test_settings_summary_line(monkeypatch):
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
 
+    assert settings.settings_summary("42").startswith("включено 3 · следующая: ")  # + праздники по умолчанию
+    saved["notif_holidays"] = False
     assert settings.settings_summary("42").startswith("включено 2 · следующая: ")
 
 
@@ -115,10 +117,33 @@ def test_myday_skips_disabled_blocks_without_preparing_them(monkeypatch):
     monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: False)
     monkeypatch.setattr(myday, "_movie_rebus_of_day", lambda _day: {})
     monkeypatch.setattr(myday, "_rail_works", lambda _cid: [])
-    monkeypatch.setattr(myday, "_holidays", lambda _s: [])
+    monkeypatch.setattr(myday, "_holidays", lambda _s, _cid=None: [])
     import wardrobe
     monkeypatch.setattr(wardrobe, "get_cached_outfit_summary", lambda _cid: {"items": [], "emoji": ""})
 
     text, _entities = myday._build_day_text("42")
 
     assert "Погода" not in text and "©" not in text
+
+
+def test_holidays_eve_sends_tomorrow_holiday_and_local_events_only_when_any(monkeypatch):
+    import asyncio
+    import local_events
+    import public_holidays
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Амстердам", "cc": "NL"})
+    monkeypatch.setattr(public_holidays, "holiday_lines", lambda _cc, _day: ["Сегодня: A", "Завтра: Koningsdag — День короля"])
+    monkeypatch.setattr(local_events, "starting_on", lambda _cid, _day, fetch=True: ["Amsterdam Pride — прайд-фестиваль"])
+    asyncio.run(settings._send_holidays_eve(Bot(), "42"))
+    assert sent[0]["text"] == "🎉 Завтра · Амстердам\n\nKoningsdag — День короля\nAmsterdam Pride — прайд-фестиваль"
+
+    sent.clear()
+    monkeypatch.setattr(public_holidays, "holiday_lines", lambda *_a: [])
+    monkeypatch.setattr(local_events, "starting_on", lambda *_a, **_k: [])
+    asyncio.run(settings._send_holidays_eve(Bot(), "42"))
+    assert sent == []  # нечего сказать — без сообщения

@@ -33,6 +33,11 @@ def _env(monkeypatch, place=None):
     monkeypatch.setattr(vacation, "_reset_day_caches", lambda _cid: None)
     monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})  # без сети
     monkeypatch.setattr(vacation, "trip_holidays", lambda *_a: [])
+
+    async def no_warm(_cid):
+        return None
+
+    monkeypatch.setattr(vacation, "_warm_trip_leisure", no_warm)  # фоновый прогрев Досуга — без сети
     return saved, places
 
 
@@ -253,6 +258,7 @@ def test_holidays_of_the_trip_are_listed_with_russian_names(monkeypatch):
 
 def test_trip_changes_wardrobe_purchase_key_and_prompt_gets_trip_weather(monkeypatch):
     import weather
+    import wardrobe  # noqa: F401 — как в боте: wardrobe раньше wardrobe_management
     import wardrobe_management
     saved, _places = _env(monkeypatch, CAPE)
     wardrobe = {"_v": 3}
@@ -268,3 +274,49 @@ def test_trip_changes_wardrobe_purchase_key_and_prompt_gets_trip_weather(monkeyp
     # Только дни отпуска (до 14-го): 15-е с +30° и ливнем не считается.
     assert summary.endswith("днём от +17° до +24°, дождь в 1 из 3 дней, ветер до 9 м/с")
     assert summary.startswith("Кейптаун (ZA), до 14 октября")
+
+
+def test_vacation_puts_trip_country_first_in_leisure(monkeypatch):
+    import leisure_books
+    saved, _places = _env(monkeypatch, CAPE)
+    assert vacation.trip_priority_rule("42", "книги авторов") == ""  # дома — без правила
+    saved["vacation"] = {"home": HOME, "cc": "za", "until": ""}
+
+    rule = vacation.trip_priority_rule("42", "книги авторов")
+    assert "ЮАР (ZA)" in rule and "Сначала предлагай книги авторов" in rule
+    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
+    monkeypatch.setattr(leisure_books, "_book_matches_preferences", lambda *_a: True)
+    picked = leisure_books._pick_good_book([
+        {"title": "Popular", "rating": 4.8, "ratings_count": 900, "country_cc": "GB"},
+        {"title": "Disgrace", "rating": 3.9, "ratings_count": 40, "country_cc": "ZA"},
+    ], "42")
+    assert picked["title"] == "Disgrace"  # автор из страны поездки — первым, даже с оценкой ниже
+
+
+def test_new_books_of_trip_country_authors_come_first(monkeypatch):
+    import countries
+    import leisure_books
+    saved, _places = _env(monkeypatch, CAPE)
+    books = [{"title": "A", "author": "Sally Rooney"}, {"title": "B", "author": "Damon Galgut"}]
+    monkeypatch.setattr(countries, "author_cc", lambda name, fetch=False: "ZA" if "Galgut" in name else "IE")
+    assert leisure_books.trip_local_books("42", books) == []  # дома — обычный порядок
+    saved["vacation"] = {"home": HOME, "cc": "ZA"}
+    assert leisure_books.trip_local_books("42", books) == [books[1]]
+
+
+def test_concerts_in_trip_country_only_for_trip_dates(monkeypatch):
+    import leisure_concerts
+    saved, _places = _env(monkeypatch, CAPE)
+    assert leisure_concerts.trip_end("42", "ZA") is None  # дома — без ограничения
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "2026-10-20"}
+    assert leisure_concerts.trip_end("42", "za") == date(2026, 10, 20)
+    assert leisure_concerts.trip_end("42", "NL") is None  # другая страна — обычная афиша
+    saved["vacation"]["until"] = ""
+    monkeypatch.setattr(leisure_concerts, "_today", lambda: date(2026, 10, 12))
+    assert leisure_concerts.trip_end("42", "ZA") == date(2026, 11, 11)  # без даты — 30 дней
+
+    ends = []
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [])
+    monkeypatch.setattr(leisure_concerts, "concert_items_between", lambda _e, _s, end, _l: ends.append(end) or [])
+    leisure_concerts.cached_favorite_concerts("42", 3)
+    assert ends == [date(2026, 11, 11)]

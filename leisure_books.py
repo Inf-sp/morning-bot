@@ -1323,6 +1323,17 @@ JSON: {{"items":[{{"id":0,"summary_ru":""}}]}}
     return result
 
 
+def trip_local_books(cid, books, fetch=False) -> list:
+    """В отпуске — книги авторов страны поездки (страна автора из кэша Wikidata, fetch=True догружает
+    её — ночной прогрев хаба); дома — []."""
+    import countries
+    import vacation
+    trip = vacation.trip_cc(cid)
+    if not trip:
+        return []
+    return [item for item in books if countries.author_cc(item.get("author"), fetch) == trip]
+
+
 async def _book_premieres_with_covers():
     items = await get_book_premieres()
     if not items:
@@ -1797,7 +1808,10 @@ def _genre_fallback_book(cid, genre_key, extra_skip=()):
     return dict(pool[0]) if pool else None
 
 def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
-    """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей."""
+    """Выбирает неиспользованную книгу, предпочитая высокие оценки читателей; в отпуске — сначала
+    книги авторов страны поездки (`country_cc` из ответа AI)."""
+    import vacation
+    trip = vacation.trip_cc(cid)
     used = _book_used(cid) | {_title_key(x) for x in extra_skip}
     candidates = []
     for index, it in enumerate(items or []):
@@ -1813,7 +1827,8 @@ def _pick_good_book(items, cid, extra_skip=(), *, fallback=True):
                 ratings_count = int(it.get("ratings_count") or 0)
             except (TypeError, ValueError):
                 ratings_count = 0
-            candidates.append((rating > 0 and ratings_count > 0, rating, ratings_count, -index, it))
+            in_trip = bool(trip) and str(it.get("country_cc") or "").upper() == trip
+            candidates.append((in_trip, rating > 0 and ratings_count > 0, rating, ratings_count, -index, it))
     if candidates:
         candidates.sort(reverse=True, key=lambda row: row[:-1])
         return candidates[0][-1]

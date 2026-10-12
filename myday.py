@@ -465,14 +465,23 @@ def _day_wind_text(wind_ms):
     label = "Сильный ветер" if value > 10 else "Ветер"
     return f"{label} до {value:.0f} м/с"
 
-def _holidays(settings_data):
-    """Праздники страны из Настроек (Nager.Date); сбой — просто без строки."""
+def _holidays(settings_data, cid=None):
+    """Праздники страны из Настроек (Nager.Date) и местные события города в день события
+    (`local_events`, из недельного кэша, без сети); сбой — просто без строки."""
+    today = datetime.now(config.TZ).date()
+    lines = []
     try:
         import public_holidays
-        return public_holidays.holiday_lines(settings_data.get("cc"), datetime.now(config.TZ).date())
+        lines = public_holidays.holiday_lines(settings_data.get("cc"), today)
     except Exception:
         _log.warning("myday: holidays unavailable", exc_info=True)
-        return []
+    if cid is not None:
+        try:
+            import local_events
+            lines = [*lines, *local_events.today_lines(cid, today)]
+        except Exception:
+            _log.warning("myday: local events unavailable", exc_info=True)
+    return lines
 
 
 def _rail_works(cid):
@@ -612,7 +621,7 @@ def _build_day_text(cid, *, refresh_current=False):
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),
         rail_works=_rail_works(cid) if on("rail") else [],
-        holidays=_holidays(s) if on("holidays") else [],
+        holidays=_holidays(s, cid) if on("holidays") else [],
         vacation=trip,
     )
     text = msg.text
@@ -679,6 +688,12 @@ async def warm_day_cache(cid, bot=None):
     """Фоново собирает «Мой день» один раз и сохраняет переживающий рестарт кэш."""
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
+    try:
+        import local_events
+        # Местные события города — раз в неделю (кэш), до сборки сводки.
+        await asyncio.to_thread(local_events.events, cid, True)
+    except Exception:
+        _log.warning("myday warm: local events failed cid=%s", cid, exc_info=True)
     cached = _load_day_cache(cid, today)
     if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True

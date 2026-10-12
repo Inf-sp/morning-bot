@@ -578,7 +578,9 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             "Подбор строго только в выбранных жанрах: " + ", ".join(allowed) + ". "
             "Не предлагай артиста из другого основного жанра."
         )
+    import vacation
     style_context = _music_style_context(cid) if not category else ""
+    trip_rule = vacation.trip_priority_rule(cid, "исполнителей")
     fallback_category = category or {
         "value": selected_styles[datetime.now(config.TZ).date().timetuple().tm_yday % len(selected_styles)],
     }
@@ -604,6 +606,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
                 f"Любимые исполнители пользователя (его вкус): {safe_anchors}.\n"
                 f"{genre_context}\n"
                 f"{style_context}\n"
+                + (f"{trip_rule}\n" if trip_rule else "") +
                 f"НЕ предлагай никого из этого списка (уже в любимых, отклонены или недавно показаны): {safe_avoid}.\n"
                 "Предложи ТРЁХ РАЗНЫХ новых исполнителей, максимально близких по вкусу "
                 "пользователя. Предпочитай современных активных артистов с выразительной, мелодичной, "

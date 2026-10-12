@@ -145,8 +145,24 @@ def _game_category_label(data):
                 return _GAME_CATEGORY_LABELS[card["category"]]
     return "другое"
 
+_BASE_GAME_LANGS = ("английский", "нидерландский")
+
+
 def _game_ui(lang=None):
+    if lang and lang not in GAME_UI:
+        # Язык страны отпуска: подписи по-русски, загадка — на языке страны.
+        return {**GAME_UI["русский"], "title": f"Угадай персонажа · {lang[:1].upper()}{lang[1:]}"}
     return GAME_UI.get(lang) or GAME_UI["русский"]
+
+
+def _game_lang(cid):
+    """Язык загадки: в отпуске, когда «Обучение» на языке страны, — он («африкаанс»); иначе изучаемый."""
+    import vacation
+    if vacation.replaces_learning(cid):
+        language = str(vacation.guide(cid).get("language_ru") or "").strip().casefold()
+        if language:
+            return language
+    return _language_for_code(_active_language_code(cid))
 
 
 def _dot(s):
@@ -257,7 +273,10 @@ def _game_has_answer(text, answer, aliases=()):
 
 
 def _game_has_target_language(text, lang):
-    # Русские переводы принадлежат только ALIASES и WORDS.
+    # Русские переводы принадлежат только ALIASES и WORDS. Язык страны отпуска может быть
+    # кириллическим (сербский, болгарский) — там кириллицу не запрещаем.
+    if lang and lang not in _BASE_GAME_LANGS:
+        return bool(str(text or "").strip())
     return not re.search(r"[А-Яа-яЁё]", str(text or ""))
 
 
@@ -437,7 +456,7 @@ def _local_game_data(clue_lang, recent):
     cards.extend(_extra_local_game_cards(clue_lang))
     for card in cards:
         if not _game_is_recent(card, recent):
-            return dict(card)
+            return {**card, "_local": True}  # запасная карточка (английская или нидерландская)
     return {}
 
 
@@ -460,7 +479,9 @@ def _description_is_guessable(data, lang=None):
         or not _game_has_target_language(data.get("explain", ""), lang)
     ):
         return False
-    if data.get("_trusted_local"):
+    if data.get("_trusted_local") or (lang and lang not in _BASE_GAME_LANGS):
+        # Маркеры отличительных признаков — для английского и нидерландского; для языка страны
+        # отпуска достаточно структурных проверок выше.
         return True
     combined = " ".join((description, hint, data.get("explain", ""))).casefold()
     vague_count = sum(bool(re.search(marker, combined)) for marker in _GAME_VAGUE_CLUE_MARKERS)
@@ -555,14 +576,13 @@ def _game_result_kb(ui):
 
 async def start(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)
-    lang = _language_for_code(_active_language_code(cid))
-    store.game_config[str(cid)] = {"lang": lang}
+    store.game_config[str(cid)] = {"lang": _game_lang(cid)}
     await send_game(bot, cid, status=status)
 
 async def send_game(bot, cid, status=None):
     store.challenge_state.pop(str(cid), None)   # фикс: чтобы перевод не перехватывал
-    cfg = store.game_config.get(str(cid), {"lang": "английский"})
-    lang = cfg.get("lang", "английский")
+    cfg = store.game_config.get(str(cid)) or {"lang": _game_lang(cid)}  # после перезапуска — заново
+    lang = cfg.get("lang") or _game_lang(cid)
     ui = _game_ui(lang)
     recent = _game_recent(cid)
     attempted = list(recent)
@@ -594,6 +614,8 @@ async def send_game(bot, cid, status=None):
                 return
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_learn"); return
+    if d.get("_local") and lang not in GAME_UI:
+        ui = _game_ui("английский")  # запасная карточка языка страны — английская, подписи под неё
     _remember_game_answer(cid, d)
     category = _game_category_label(d)
     category = (ui.get("categories") or {}).get(category, category)

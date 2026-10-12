@@ -21,6 +21,7 @@ NOTIF_TYPES = [
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
     ("flight_deals",    "Дешёвые билеты"),
+    ("holidays",        "Праздники и события"),
 ]
 
 CUISINE_OPTIONS = [
@@ -102,12 +103,13 @@ NOTIF_TIMES = {
     "daily_words":     ("11:00", ("08:00", "11:00", "14:00", "18:00")),
     "evening_weather": (EVENING_WEATHER_TIME, ("18:00", "20:00", "21:00")),
     "weekend_events":  ("10:00", ("09:00", "10:00", "18:00")),
+    "holidays":        ("18:00", ("18:00",)),  # накануне праздника или местного события
 }
 _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
-    "flight_deals": "Дешёвые билеты",
+    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и события",
 }
 
 
@@ -162,7 +164,7 @@ def next_notification(cid, now=None) -> str:
     now = now or datetime.now(config.TZ)
     best = None
     for kind in NOTIF_TIMES:
-        if kind == "weather_warn" or not notification_available(cid, kind) or not notif_on(cid, kind):
+        if kind in ("weather_warn", "holidays") or not notification_available(cid, kind) or not notif_on(cid, kind):
             continue
         hour, minute = map(int, notif_time(cid, kind).split(":"))
         for offset in range(8):
@@ -189,6 +191,8 @@ def user_notif_label(cid, kind) -> str:
     time_label = notif_time(cid, kind)
     if kind == "weather_warn":
         time_label += ", если есть повод"
+    elif kind == "holidays":
+        time_label = f"накануне {time_label}"
     elif kind == "weekend_events":
         time_label = f"пт {time_label}"
     return f"{title} · {time_label}"
@@ -206,7 +210,7 @@ def notif_on(cid, kind):
     # До появления переключателя погодные предупреждения приходили всем.
     # Сохраняем это поведение для старых профилей, пока пользователь сам их
     # не отключит.
-    if kind in ("weather_warn", "ns_disruptions"):
+    if kind in ("weather_warn", "ns_disruptions", "holidays"):
         # Сбои NS включены по умолчанию: без города в Нидерландах они всё равно молчат.
         return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
@@ -496,6 +500,32 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "flight_deals":
         import flight_deals
         await flight_deals.check_user(bot, cid)
+    elif kind == "holidays":
+        await _send_holidays_eve(bot, cid)
+
+
+async def _send_holidays_eve(bot, cid):
+    """Накануне: государственный праздник страны и местные события города, которые начинаются завтра;
+    нечего сказать — ничего не отправляем. Дома и в отпуске (страна и город — из Настроек)."""
+    import asyncio
+    from datetime import datetime, timedelta
+    import local_events
+    import public_holidays
+    from ui import myday as myday_ui
+    place = store.get_settings(cid)
+    today = datetime.now(config.TZ).date()
+    lines = [line.removeprefix("Завтра: ") for line in await asyncio.to_thread(
+        public_holidays.holiday_lines, place.get("cc"), today) if line.startswith("Завтра: ")]
+    tomorrow = today + timedelta(days=1)
+    lines += await asyncio.to_thread(local_events.starting_on, cid, tomorrow)
+    if not lines:
+        return
+    msg = myday_ui.holidays_eve(place.get("city", ""), lines)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
+        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
+    ]])
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -537,6 +567,7 @@ _ADMIN_NOTIFICATION_META = {
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
+    "holidays":        ("накануне 18:00, если есть праздник", "Праздники и события"),
 }
 
 
@@ -617,11 +648,12 @@ async def send_notif_kind(bot, cid, kind, q=None):
     on = notif_on(cid, kind)
     rows = [[InlineKeyboardButton(("✅ " if on else "□ ") + "Присылать", callback_data=f"set_notiftgl_{kind}")]]
     current = notif_time(cid, kind)
-    for slot in NOTIF_TIMES.get(kind, ("", ()))[1]:
+    slots = NOTIF_TIMES.get(kind, ("", ()))[1]
+    for slot in slots if len(slots) > 1 else ():  # одно время (праздники — 18:00) не выбирается
         rows.append([InlineKeyboardButton(("✅ " if slot == current else "□ ") + slot,
                                           callback_data=f"set_notiftime_{kind}_{slot.replace(':', '')}")])
     rows.append(nav_row("set_notif"))
-    msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=kind in NOTIF_TIMES)
+    msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=len(slots) > 1)
     await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 

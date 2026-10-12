@@ -19,7 +19,7 @@ import provider_runtime
 _WIKI_UA = {"User-Agent": "morning-bot/1.0"}
 
 _ENGLISH_SEARCH_SCENARIOS = {
-    "concert_specific", "game_releases",
+    "concert_specific", "game_releases", "local_events",
 }
 _ENGLISH_PLACE_NAMES = {
     "нидерланды": "Netherlands", "алкмар": "Alkmaar", "амстердам": "Amsterdam",
@@ -157,6 +157,7 @@ _TAVILY_SCENARIOS = {
     "explicit_research_advanced": {"ttl": 24 * 3600, "economy": True, "advanced": True},
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
+    "local_events": {"ttl": 7 * 86400, "economy": False, "advanced": False},  # раз в неделю на город
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"

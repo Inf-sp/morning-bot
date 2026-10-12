@@ -13,6 +13,7 @@ import movie_engine
 import recommendation_stoplist
 import inclusive_recommendations
 import tracking
+import vacation
 import monthly_rebuses
 from ui import leisure as leisure_ui
 from leisure_collection import (
@@ -568,7 +569,7 @@ async def get_current_movie(cid):
     _cache_movie(cid, it, tm)
     return it, tm
 
-async def _discover_movie_pick(cid, prefs):
+async def _discover_movie_pick(cid, prefs, region=None):
     """Свежий качественный фильм из TMDb discover без AI.
 
     Первая страница discover — всего 20 популярных фильмов; у активного
@@ -587,7 +588,8 @@ async def _discover_movie_pick(cid, prefs):
         for page in range(1, _DISCOVER_PAGES + 1):
             try:
                 items = await asyncio.to_thread(
-                    tmdb.discover, candidate_kind, None, min_rating, 2000, page=page)
+                    tmdb.discover, candidate_kind, None, min_rating, 2000, page=page,
+                    **({"region": region} if region else {}))
             except Exception:
                 items = []
             if not items:
@@ -605,8 +607,9 @@ async def _discover_movie_pick(cid, prefs):
             repeats.extend(items)
         if tm:
             break
-    if not tm and repeats:
-        # Всё свежее уже показано: давно показанный лучше, чем ошибка.
+    if not tm and repeats and not region:
+        # Всё свежее уже показано: давно показанный лучше, чем ошибка
+        # (для страны поездки — нет: тогда обычный подбор).
         shown = [movie_engine._norm(value)
                  for value in store.get_list(config.MOVIE_SHOWN_KEY, cid)]
         order = {name: index for index, name in enumerate(shown)}
@@ -648,8 +651,12 @@ async def send_recos(bot, cid, kind, status=None):
     # рекомендацию; вкус начнёт уточняться после первых отметок в любимом.
     # Явный запрос всегда получает новый вариант, а не утреннюю карточку из кэша.
     seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
+    trip = None if inclusive_pick else vacation.trip_cc(cid)
+    trip_pick = await _discover_movie_pick(cid, prefs, region=trip) if trip else (None, None)
     if inclusive_pick:
         it, tm = inclusive_pick
+    elif trip_pick[0]:
+        it, tm = trip_pick  # в отпуске — сначала фильмы и сериалы страны поездки (TMDb origin_country)
     elif not seen:
         it, tm = await _discover_movie_pick(cid, prefs)
     else:

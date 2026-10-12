@@ -148,6 +148,7 @@ def _reset_day_caches(cid):
     except Exception:
         _log.debug("vacation: day cache reset failed", exc_info=True)
     store.clear_wardrobe_daylook(cid)
+    _clear_leisure_cards(cid)
     store.mutate_profile(cid, lambda profile: ({**profile, "cooking_day_menu": None}, None))
 
 
@@ -242,6 +243,19 @@ async def _finish(bot, cid, until):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     import myday
     await myday.send_plany(bot, cid)
+    # Концерты твоих артистов в стране поездки, премьеры и новинки страны — фоном, не дожидаясь ночи.
+    asyncio.create_task(_warm_trip_leisure(cid))
+
+
+async def _warm_trip_leisure(cid):
+    import asyncio
+    try:
+        import leisure_hub
+        import local_events
+        await asyncio.to_thread(local_events.events, cid, True)  # местные события города поездки
+        await leisure_hub.warm_hub_cache(cid)
+    except Exception:
+        _log.warning("vacation: leisure warm failed cid=%s", cid, exc_info=True)
 
 
 _HOLIDAYS_WITHOUT_DATE = 30  # без даты возвращения — праздники на ближайший месяц
@@ -600,6 +614,31 @@ def cuisine(cid) -> str:
         return ""
     cc = current.get("cc", "")
     return CC_CUISINE.get(cc) or (f"{LOCAL_PREFIX}{cc.lower()}" if cc else "")
+
+
+def trip_cc(cid) -> str:
+    """Код страны поездки («ZA») или "" дома."""
+    return str((state(cid) or {}).get("cc") or "").upper()
+
+
+def trip_priority_rule(cid, what) -> str:
+    """Строка в AI-промпт подбора: в отпуске сначала {what} из страны поездки; дома — ""."""
+    cc = trip_cc(cid)
+    if not cc:
+        return ""
+    country = store.get_settings(cid).get("country") or country_name_en(cid) or cc
+    return (f"Пользователь сейчас в поездке: {country} ({cc}). Сначала предлагай {what} из этой страны — "
+            "первыми в списке, если они подходят под вкус; остальные — следом.")
+
+
+def _clear_leisure_cards(cid):
+    """Карточки дня Досуга (фильм, книга, артист) подбираются заново — уже с приоритетом страны."""
+    for key in (config.MOVIE_RECO_CACHE_KEY, config.BOOK_RECO_CACHE_KEY, config.MUSIC_RECO_CACHE_KEY):
+        def mutate(data):
+            data = data if isinstance(data, dict) else {}
+            data.pop(str(cid), None)
+            return data, None
+        store.mutate_kv(key, mutate)
 
 
 def country_name_en(cid) -> str:

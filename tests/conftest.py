@@ -41,6 +41,15 @@ def _no_country_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_local_events_search(monkeypatch):
+    """Веб-поиск местных событий в тестах не выполняется."""
+    import local_events
+
+    monkeypatch.setattr(local_events, "_search", lambda *_a: [])
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_open_library_covers(monkeypatch):
     """Запасная обложка Open Library в тестах не запрашивается."""
     import leisure_books

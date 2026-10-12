@@ -1065,12 +1065,14 @@ async def find_concerts(bot, cid, mode="home", artists_override=None, q=None):
 
     place_label = f"Концерты · {cname}"
     today_str = _today().isoformat()
+    last_day = trip_end(cid, cc)  # в отпуске — только концерты на время поездки
+    last_str = last_day.isoformat() if last_day else "9999-99-99"
     seen_artist_events = set()
     rows_data = []
     for e in sorted(events, key=lambda event: _event_date(event) or "9999-99-99"):
         artist = e.get("_artist", "")
         date = e.get("dates", {}).get("start", {}).get("localDate", "")
-        if date and date < today_str:
+        if date and (date < today_str or date > last_str):
             continue
         city = ((e.get("_embedded", {}).get("venues") or [{}])[0].get("city") or {}).get("name", "")
         dedup_key = (artist.lower(), date, city.lower())
@@ -1160,12 +1162,25 @@ def cached_favorite_concerts(cid, limit):
     cc = (store.get_settings(cid).get("cc") or "NL").upper()
     today = datetime.now(config.TZ).date()
     events = _concerts_cache_get(cid, cc) or []
-    return concert_items_between(
-        events, today, today + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS), limit,
-    )
+    end = trip_end(cid, cc) or today + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)
+    return concert_items_between(events, today, end, limit)
 
 
 _MONTH_CONCERT_DAYS = 30  # кнопка «Концерты» в Досуге — ближайшие 30 дней
+
+
+def trip_end(cid, cc):
+    """В отпуске, для страны поездки, — последний день поездки (без даты — через 30 дней): концерты
+    показываются только на время отпуска. Дома или для другой страны — None."""
+    import vacation
+    from datetime import date, timedelta
+    trip = vacation.trip_cc(cid)
+    if not trip or trip != str(cc or "").upper():
+        return None
+    try:
+        return date.fromisoformat((vacation.state(cid) or {}).get("until") or "")
+    except ValueError:
+        return _today() + timedelta(days=_MONTH_CONCERT_DAYS)
 
 
 async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели",
@@ -1180,11 +1195,12 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
     s = store.get_settings(cid)
     cc = (s.get("cc") or config.DEFAULT_CITY.get("cc", "")).upper()
     period_start = datetime.now(config.TZ).date()
-    period_end = period_start + timedelta(days=days)
+    trip = trip_end(cid, cc)
+    period_end = trip or period_start + timedelta(days=days)
     mine = concert_items_between(
         _concerts_cache_get(cid, cc) or [], period_start, period_end, _WEEKLY_CONCERT_LIMIT,
     )
-    if len(mine) < min_mine:
+    if len(mine) < min_mine and not trip:
         # «Твои артисты» — минимум min_mine ближайших: за горизонтом берём и более поздние концерты.
         mine = concert_items_between(
             _concerts_cache_get(cid, cc) or [], period_start, period_start + timedelta(days=365),

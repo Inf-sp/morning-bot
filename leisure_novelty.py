@@ -63,7 +63,9 @@ async def _items(cid, kind) -> list[dict]:
         return [dict(item) for item in await leisure_movies.get_movie_premieres(cid)
                 if str(item.get("date") or "")[:10] <= today and countries.allowed(item, off)]
     if kind == "book":
-        return [dict(item) for item in await leisure_books._book_premieres_with_covers()]
+        items = [dict(item) for item in await leisure_books._book_premieres_with_covers()]
+        local = leisure_books.trip_local_books(cid, items)  # в отпуске — сначала авторы страны поездки
+        return local + [item for item in items if item not in local]
     styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)
     cc = str(store.get_settings(cid).get("cc") or "nl")
     # Одна лента страны на все жанры: после первого запроса остальные берут её из кэша.

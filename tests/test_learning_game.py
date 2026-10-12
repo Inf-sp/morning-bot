@@ -536,3 +536,20 @@ def test_detective_card_and_hint_end_with_italic_answer_instruction():
         italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                   for e in msg.entities if e.type == "italic"]
         assert msg.text.rstrip().endswith(ui["reply_next"]) and italic[-1] == ui["reply_next"]
+
+
+def test_game_in_vacation_uses_country_language(monkeypatch):
+    import vacation
+    monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: True)
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"language_ru": "Африкаанс", "language_code": "af"})
+    assert learning_game._game_lang("42") == "африкаанс"
+    assert learning_game._game_ui("африкаанс")["title"] == "Угадай персонажа · Африкаанс"
+
+    card = {"description": "Ek is 'n groot dier. Ek het 'n baie lang nek en lang bene. Ek eet blare van hoë bome in Afrika en ek is geel met bruin kolle.",
+            "answer": "kameelperd", "aliases": ["жираф", "giraffe"], "hint": "Ek is die langste dier.",
+            "explain": "Die kameelperd is baie lank."}
+    # Маркеры признаков — только для английского и нидерландского; карточку языка страны принимаем.
+    assert learning_game._description_is_guessable(card, "африкаанс")
+
+    monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: False)
+    assert learning_game._game_lang("42") in ("английский", "нидерландский")

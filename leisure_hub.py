@@ -154,6 +154,7 @@ def hub_data(cid, day=None, fetch=False) -> dict:
     today = day or today
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
     books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
+    books = leisure_books.trip_local_books(cid, books, fetch) or books  # в отпуске — авторы страны поездки
     import countries
     import movie_recommendation
     off = movie_recommendation.regions_off(cid)

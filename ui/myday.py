@@ -42,6 +42,17 @@ def _split_word_translation(value):
     return cap_sentence(term.strip()), cap_sentence(translation.strip())
 
 
+def holidays_eve(city, lines):
+    """Рассылка накануне: «🎉 Завтра · Алкмар» и по строке на праздник или событие."""
+    b = MessageBuilder()
+    b.bold(f"🎉 Завтра · {city}".rstrip(" ·"))
+    b.newline()
+    b.spacer()
+    for line in lines:
+        b.line(line)
+    return b.build_stripped()
+
+
 def day_summary(
     header,
     city,
