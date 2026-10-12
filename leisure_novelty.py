@@ -108,6 +108,31 @@ async def _image(kind, item) -> str:
     return str(item.get("cover_url") or item.get("cover") or item.get("poster") or "").strip()
 
 
+async def _with_details(kind, item):
+    """Страна (кино — TMDb, книга — автор в Wikidata, музыка — артист в MusicBrainz) и описание альбома."""
+    import countries
+
+    def country():
+        if kind == "movie":
+            return countries.title_info("movie", item.get("id")).get("country_label", "")
+        if kind == "book":
+            return countries.author_label(item.get("author"))
+        return countries.artist_label(item.get("artist"))
+
+    try:
+        item = {**item, "country_label": await asyncio.wait_for(asyncio.to_thread(country), 6)}
+    except Exception:
+        _log.debug("novelty country failed", exc_info=True)
+    if kind == "music" and not item.get("about"):
+        import leisure_hub
+        try:
+            await asyncio.wait_for(leisure_hub.describe_albums([item]), 10)
+        except Exception:
+            _log.debug("novelty album note failed", exc_info=True)
+        item = {**item, "about": leisure_hub._album_notes().get(leisure_hub._album_key(item), "")}
+    return item
+
+
 async def send_novelty(bot, cid, kind, *, status=None):
     """Карточка новинки; без данных — короткое сообщение с возвратом к жанрам."""
     if kind not in KINDS:
@@ -118,6 +143,7 @@ async def send_novelty(bot, cid, kind, *, status=None):
         return
     _remember(cid, kind, item)
     store.last_recos[str(cid)] = {"kind": f"novelty_{kind}", "items": [item.get("title")]}
+    item = await _with_details(kind, item)
     msg = leisure_ui.novelty_card(kind, item)
     kb = card_keyboard(kind)
     image = await _image(kind, item)

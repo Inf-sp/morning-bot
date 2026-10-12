@@ -404,9 +404,11 @@ def artist_card(data):
             if note:
                 b.text_line(f" — {note}")
             b.newline()
-    if data.get("fact"):
+    fact = " ".join(str(data.get("fact") or "").split()).strip()
+    if fact:
         b.spacer()
-        b.line(data["fact"])
+        b.italic(fact if fact[-1] in ".!?…" else fact + ".")  # финальная строка — курсивом и с точкой
+        b.newline()
     return b.build_stripped()
 
 
@@ -1149,17 +1151,18 @@ def novelty_card(kind, item) -> MessageSpec:
     else:
         b.bold(heading)
     b.newline()
+    country = str(item.get("country_label") or "")
     if kind == "movie":
         # Премьеры кино — без оценок: у свежих фильмов они ещё не устоялись.
-        meta = [_movie_genres_for_line(item).replace(", ", " · "),
+        meta = [_movie_genres_for_line(item).replace(", ", " · "), country,
                 _event_date_label(str(_item_value(item, "date", "") or ""))]
         summary = _movie_premiere_summary(_item_value(item, "overview", ""), limit=300)
     elif kind == "book":
-        meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item)]
+        meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item), country]
         summary = _book_premiere_summary(str(_item_value(item, "summary", "") or ""), limit=300)
     else:
-        meta = []
-        summary = ""
+        meta = [str(item.get("genre_label") or ""), country, _event_date_label(str(item.get("date") or ""))]
+        summary = str(item.get("about") or "")
     meta = [value for value in meta if value.strip()]
     if meta:
         b.line(" · ".join(meta))

@@ -425,6 +425,23 @@ _HOME_MEAL_LABELS = {
     "lunch": "обед",
     "dinner": "ужин",
 }
+# Что едят на этот приём пищи — подсказка модели; блюда, которые на завтрак не едят, отклоняются кодом.
+_HOME_MEAL_RULES = {
+    "breakfast": ("Это ЗАВТРАК: каша, омлет, яичница, тосты, бутерброды, сырники, блинчики, оладьи, творог, "
+                  "йогурт или гранола с фруктами, смузи-боул, выпечка к кофе. Не предлагай пасту, суп, салат с "
+                  "морепродуктами, стейк, плов, рагу и другие блюда для обеда или ужина."),
+    "lunch": "Это ОБЕД: суп, сытный салат, паста, крупа или мясо с гарниром. Не предлагай десерты и выпечку к кофе.",
+    "dinner": "Это УЖИН: горячее блюдо — мясо, рыба, паста, овощи или крупа. Не предлагай кашу, сырники и десерты.",
+}
+_NOT_BREAKFAST_RE = re.compile(
+    r"(?:паст[аыу]|спагетти|лазань|ризотто|суп|борщ|щи\b|солянк|плов|стейк|жарко|рагу|гуляш|бургер|пицц|"
+    r"шашлык|карри|рамен|лапш)", re.IGNORECASE,
+)
+
+
+def fits_meal(idea, meal) -> bool:
+    """Подходит ли блюдо к приёму пищи: на завтрак — не обеденное (паста, суп, стейк…)."""
+    return meal != "breakfast" or not _NOT_BREAKFAST_RE.search(str((idea or {}).get("name") or ""))
 
 _HOME_NATURAL_INGREDIENTS = {
     "соус сои": "соевый соус",
@@ -920,6 +937,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     source_block = _recipe_source_prompt_block(sources)
     return (
         f"Сейчас нужен {meal}. Составь одну короткую идею полноценного блюда на сегодня.\n"
+        f"{_HOME_MEAL_RULES.get(context['meal'], '')}\n"
         f"{fridge_context}"
         f"Пищевые предпочтения, аллергии и ограничения: {secure.wrap_untrusted(restrictions, 'ограничения')}.\n"
         f"Другие сохранённые факты пользователя: {secure.wrap_untrusted(memory_prefs, 'предпочтения')}.\n"
@@ -1056,8 +1074,9 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
     def is_new(candidate):
         # «Новый рецепт» не повторяет ни текущий, ни уже показанные в этом месяце;
         # при выбранной кухне рецепт другой кухни не принимается.
-        return _home_idea_complete(candidate) and cuisine_matches(candidate.get("cuisine"), cuisine) and not (
-            refresh and str(candidate.get("name") or "").casefold() in avoided)
+        return (_home_idea_complete(candidate) and cuisine_matches(candidate.get("cuisine"), cuisine)
+                and (dish or fits_meal(candidate, context["meal"]))
+                and not (refresh and str(candidate.get("name") or "").casefold() in avoided))
 
     find_sources = _recipe_sources_for_cuisine if cuisine else _recipe_sources
     # Для блюда из меню образцы из базы не нужны: они почти всегда о другом блюде.

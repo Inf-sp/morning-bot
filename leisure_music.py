@@ -511,8 +511,12 @@ async def listen_dislike(bot, cid, *, status=None):
     """Скрывает текущего артиста и заменяет его карточку следующим."""
     rec = store.last_recos.get(str(cid))
     category = rec.get("category") if isinstance(rec, dict) else None
-    if rec and rec.get("kind") == "listen" and rec["items"]:
-        recommendation_stoplist.add(cid, "artist", rec["items"][0], "hidden")
+    # store.last_recos живёт в памяти и пустеет после перезапуска (автообновление каждые 5 минут) —
+    # текущий артист берётся и из сохранённой карточки дня, иначе «Не нравится» ничего не скрывало.
+    artist = (rec["items"][0] if isinstance(rec, dict) and rec.get("kind") == "listen" and rec.get("items")
+              else str((_cached_artist(cid) or {}).get("artist") or ""))
+    if artist:
+        recommendation_stoplist.add(cid, "artist", artist, "hidden")
     _invalidate_artist(cid)
     await send_listen(bot, cid, category=category, force=bool(category), status=status)
 

@@ -1411,7 +1411,7 @@ async def _with_book_details(it):
     описание по-русски и даёт короткую справку об авторе. Без источника строк нет.
     """
     it = dict(it or {})
-    if it.get("details_ready"):
+    if it.get("details_ready") and "fact" in it:  # старые карточки без факта собираются заново
         return it
     title, title_en = str(it.get("title") or ""), str(it.get("title_en") or "")
     author = str(it.get("author") or "")
@@ -1434,14 +1434,18 @@ async def _with_book_details(it):
     # Свой русский текст каталога — запасной сюжет, если пересказ не получится.
     own = str(it.get("plot") or it.get("desc") or "").strip()
     plot, about = (own if _CYRILLIC_RE.search(own) else ""), ""
-    if description:
+    if description or title:
+        # Факт (экранизация, премия) нужен и без описания издателя: у классики его часто нет.
+        plot_rule = ("Перескажи по-русски, о чём книга, по описанию издателя: 3–5 живых предложений "
+                     "без спойлеров финала, без рекламных оборотов и оценок." if description
+                     else "plot оставь пустым — описания издателя нет.")
         prompt = (
-            "Перескажи по-русски, о чём книга, по описанию издателя: 3–5 живых предложений "
-            "без спойлеров финала, без рекламных оборотов и оценок. Затем одной фразой — кто "
-            "автор (только общеизвестный проверяемый факт; если не уверен — пусто). И fact — одно "
-            "интересное о книге: премия, экранизация, бестселлер — только если точно знаешь, иначе пусто.\n"
+            f"{plot_rule} Затем одной фразой — кто автор (только общеизвестный проверяемый факт; если "
+            "не уверен — пусто). И fact — одно интересное о книге одним предложением по-русски: в первую "
+            "очередь экранизация (фильм или сериал, год, где вышел), иначе премия или мировой успех — "
+            "только если точно знаешь, иначе пусто.\n"
             f"Книга: {secure.wrap_untrusted(f'{title_en or title} — {author_en or author}', 'книга')}\n"
-            f"{secure.wrap_untrusted(description[:2500], 'описание издателя')}\n"
+            f"{secure.wrap_untrusted(description[:2500] or 'нет', 'описание издателя')}\n"
             'JSON: {"plot": "...", "author_about": "...", "fact": ""}'
         )
         try:
@@ -1450,7 +1454,7 @@ async def _with_book_details(it):
                 fallback_allowed=True, privacy_level="public", budget_seconds=8,
                 cache_context={"scenario": "book_details", "title": title_en or title,
                                "author": author_en or author, "description": description[:2500],
-                               "schema_version": 2},
+                               "schema_version": 3},
             )
         except Exception:
             data = {}
