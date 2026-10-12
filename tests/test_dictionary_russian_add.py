@@ -1160,12 +1160,12 @@ def test_saved_word_actions_include_delete_and_dictionary():
     assert keyboard.inline_keyboard[1][0].text == "🔊 Прослушать"
     assert keyboard.inline_keyboard[1][0].callback_data == "tts_word:abc123"
     assert len(keyboard.inline_keyboard[1][0].callback_data.encode("utf-8")) <= 64
-    assert keyboard.inline_keyboard[2][0].text == "🎚️ Настроить"
+    assert keyboard.inline_keyboard[2][0].text == "🎚️ Настроить словарь"
     assert keyboard.inline_keyboard[2][0].callback_data == "a_dictlang_nl_keep"
     assert keyboard.inline_keyboard[-1][0].callback_data == "a_dictlang_nl_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
         "❌ Удалить", "🔊 Прослушать",
-        "🎚️ Настроить", "⬅️ Назад", "#️⃣ Главная",
+        "🎚️ Настроить словарь", "⬅️ Назад", "#️⃣ Главная",
     ]
 
 
@@ -1175,10 +1175,10 @@ def test_duplicate_word_actions_include_dictionary():
     )
 
     assert keyboard.inline_keyboard[0][0].callback_data == "a_dictdelid_def456"
-    assert keyboard.inline_keyboard[1][0].text == "🎚️ Настроить"
+    assert keyboard.inline_keyboard[1][0].text == "🎚️ Настроить словарь"
     assert keyboard.inline_keyboard[1][0].callback_data == "a_dictlang_en_keep"
     assert [button.text for row in keyboard.inline_keyboard for button in row] == [
-        "❌ Удалить", "🎚️ Настроить",
+        "❌ Удалить", "🎚️ Настроить словарь",
         "⬅️ Назад", "#️⃣ Главная",
     ]
 

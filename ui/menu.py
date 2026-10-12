@@ -95,7 +95,7 @@ _SCREENS = {
         "Гардероб",
         "Одежда без хаоса. Подберу образ, помогу разобрать шкаф и выбрать, что стоит докупить. Чем полнее гардероб, тем точнее рекомендации.",
         [
-            [("🎚️ Настроить", "w_closet"), ("#️⃣ Главная", "m_menu")],
+            [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
         ],
     ),
     "m_food": (
@@ -104,7 +104,7 @@ _SCREENS = {
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
             [("🍳 Что приготовить", "m_food")],
-            [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+            [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
         ],
     ),
 }
@@ -201,7 +201,7 @@ def learning_menu(home: dict):
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадать персонажа"), "a_game")],
-        [("🎚️ Настроить", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
     ]))
 
 
@@ -346,7 +346,7 @@ def food_card_kb(meals=None):
         # холодильника под время суток (меню дня — из любых продуктов).
         [InlineKeyboardButton("✨ Другое меню на сегодня", callback_data="food_pick")],
         [InlineKeyboardButton("🧊 Из моих продуктов", callback_data="food_mine")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="as_fridge_home"),
+        [InlineKeyboardButton("🎚️ Настроить холодильник", callback_data="as_fridge_home"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

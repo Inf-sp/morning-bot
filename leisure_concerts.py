@@ -1303,7 +1303,7 @@ async def send_weekend_events(bot, cid):
     # Как «Главные новости»: действие, ниже «Настроить | Главная» одной строкой.
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎫 Все концерты", callback_data="a_concerts_find")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+        [InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     await bot.send_message(

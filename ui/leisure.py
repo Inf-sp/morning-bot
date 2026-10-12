@@ -176,7 +176,9 @@ def movie_card(item, tm):
     if tm and tm.get("country_label"):
         meta_parts.append(tm["country_label"])
     # Дата выхода — в той же строке: полная дата премьеры, если известна, иначе год.
-    release = (_event_date_label((tm or {}).get("release_date")) if tm else "") or year
+    # Год виден всегда, в том числе у премьер текущего года: «16 октября 2026».
+    released = _parse_event_date(str((tm or {}).get("release_date") or "")[:10]) if tm else None
+    release = (_format_date_label(released, include_year=True) if released else "") or year
     if release:
         meta_parts.append(release)
     if meta_parts:
@@ -291,7 +293,8 @@ def book_text(item):
     original = str(
         item.get("original_title") or item.get("title_en") or item.get("alternative_title") or ""
     ).strip()
-    year = str(item.get("year") or "").strip()
+    year = str(item.get("year") or "").strip() or str(item.get("published_date") or "")[:4].strip()
+    year = year if year.isdigit() else ""
     categories = item.get("categories") or []
     if isinstance(categories, str):
         categories = [categories]
@@ -368,8 +371,9 @@ def artist_card(data):
     b.text_line("🎸 ")
     b.bold(artist)
     b.newline()
-    if data.get("country_label"):
-        b.text_line(data["country_label"])
+    meta = [str(value).strip() for value in (data.get("genre_label"), data.get("country_label")) if value]
+    if meta:
+        b.text_line(" · ".join(meta))
         b.newline()
     if data.get("desc"):
         b.spacer()
@@ -728,6 +732,9 @@ def _write_book_premiere(
 
 
 def _book_premiere_genres(item) -> str:
+    determined = str(_item_value(item, "genre_label", "") or "").strip()
+    if determined and determined != "Без жанра":
+        return determined
     categories = _item_value(item, "categories", [])
     if isinstance(categories, str):
         categories = [categories]
@@ -1074,7 +1081,7 @@ def leisure_hub_kb():
          InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_lib"),
+        [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

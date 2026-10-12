@@ -112,9 +112,9 @@ _REFRESH_RE = re.compile(
 _PREFS_RE = re.compile(r"^Выбрать предпочтения$")
 _DISLIKE_TOP = ("movie_no_", "book_no_", "listen_no", "nov_no_")
 _BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
-_NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить|Показать списком|Показать карточками)$")
+_NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить(?: .+)?|Показать списком|Показать карточками)$")
 # Синие — только «Главная», «Назад» и «Настроить»; листание и «Показать списком» стандартные.
-_BLUE_RE = re.compile(r"^(?:Главная|Назад|Настроить)$")
+_BLUE_RE = re.compile(r"^(?:Главная|Назад|Настроить(?: .+)?)$")
 # Листание: эмодзи-стрелки ◀️/▶️ → «←»/«→» стандартного цвета.
 _PAGER_ARROWS = {"◀️": "←", "◀": "←", "⬅️": "←", "⬅": "←", "▶️": "→", "▶": "→", "➡️": "→", "➡": "→"}
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
@@ -258,7 +258,8 @@ def _enhance_markup(markup, level=2):
     result = []
     for row in (rows[index] for index in order):
         # «Настроить | Главная» — в один столбец: «Настроить», в самом низу «Главная».
-        if [str(button.get("text") or "") for button in row] == ["Настроить", "Главная"]:
+        texts = [str(button.get("text") or "") for button in row]
+        if len(texts) == 2 and texts[0].startswith("Настроить") and texts[1] == "Главная":
             result += [[row[0]], [row[1]]]
         else:
             result.append(row)

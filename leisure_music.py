@@ -329,7 +329,7 @@ def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_music")],
+        [InlineKeyboardButton("🎚️ Настроить музыку", callback_data="lz_cfg_music")],
         nav_row("m_leisure"),
     ])
 
@@ -675,7 +675,9 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
 
 
 async def _with_country(data):
-    """Страна артиста из MusicBrainz (хранится полгода); нет данных — без строки."""
+    """Жанр (ключ стиля из подбора → «Инди») и страна артиста из MusicBrainz; нет данных — без них."""
+    labels = {key: label for key, label, _prompt in _MUSIC_GENRES}
+    data = {**data, "genre_label": data.get("genre_label") or labels.get(str(data.get("genre") or "").casefold(), "")}
     if data.get("country_label") is not None:
         return data
     import countries

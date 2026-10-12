@@ -264,7 +264,7 @@ def _book_kb(i):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Не нравится", callback_data=f"book_no_{i}", api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_pick_{i}")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="lz_cfg_book")],
+        [InlineKeyboardButton("🎚️ Настроить книги", callback_data="lz_cfg_book")],
         nav_row("m_leisure"),
     ])
 
@@ -1151,6 +1151,10 @@ async def get_book_premieres(*, refresh=False):
     """Свежие книги из Google Books; днём используется готовый недельный кэш."""
     today = datetime.now(config.TZ).date()
     cached = _book_premieres_cache_get(today)
+    if cached is not None and refresh and any(_favorite_book_genre(item) == "Без жанра" for item in cached):
+        # Прогрев досчитывает жанр книгам, у которых его нет в Google Books.
+        cached = await _determine_manual_book_genres([dict(item) for item in cached])
+        _book_premieres_cache_set(today, cached)
     if cached is not None and (cached or not refresh):
         return cached
     if not refresh:
@@ -1204,6 +1208,8 @@ async def get_book_premieres(*, refresh=False):
                 break
     if items:
         items = await _russian_premiere_summaries(items)
+        # Жанр обязателен: без категории Google Books его определяет AI по названию, автору и описанию.
+        items = await _determine_manual_book_genres(items)
         _book_premieres_cache_set(today, items)
     return items
 

@@ -622,7 +622,7 @@ async def _send_scheduled_notification(bot, cid, kind):
         import weather as _w
         # Одна строка: «Настроить» (настройки уведомлений новым сообщением) | «Главная».
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+            InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]])
         await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)

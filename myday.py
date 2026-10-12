@@ -908,7 +908,7 @@ def _day_menu_kb(cid=None):
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
         *trip,
         # «Настроить» — какие блоки показывать; экран приходит новым сообщением.
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="set_myday_new"),
+        [InlineKeyboardButton("🎚️ Настроить мой день", callback_data="set_myday_new"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

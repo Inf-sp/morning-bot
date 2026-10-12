@@ -136,7 +136,7 @@ async def send_daily_practice(bot, cid):
         entities=word_msg.entities,
         reply_markup=InlineKeyboardMarkup([*del_row, [
             # Отдельным сообщением: слово дня остаётся в истории.
-            InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+            InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
             InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
         ]]),
     )

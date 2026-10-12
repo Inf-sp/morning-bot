@@ -1238,7 +1238,7 @@ def _dict_saved_kb(entry, term_key=None, show_dictionary=True):
         *delete_row,
         *_dict_tts_row(entry),
         *([[InlineKeyboardButton(
-            "🎚️ Настроить", callback_data=f"a_dictlang_{lang}_keep",
+            "🎚️ Настроить словарь", callback_data=f"a_dictlang_{lang}_keep",
         )]] if show_dictionary else []),
         nav_row(f"a_dictlang_{lang}_keep"),
     ])

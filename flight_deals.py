@@ -121,7 +121,7 @@ def deal_details(item):
 def _keyboard(link):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Открыть публикацию", url=link)],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+        [InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
 

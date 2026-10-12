@@ -57,7 +57,7 @@ def test_recommendation_cards_have_no_refresh_label():
             "Не нравится", callback, {"style": "danger"},
         )
         # Над навигацией — синяя «Настроить» своего раздела, затем «Назад | Главная».
-        assert keyboard.inline_keyboard[-2][0].text == "🎚️ Настроить"
+        assert keyboard.inline_keyboard[-2][0].text.startswith("🎚️ Настроить ")  # «… кино / книги / музыку»
         assert keyboard.inline_keyboard[-2][0].callback_data.startswith("lz_cfg_")
         assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]

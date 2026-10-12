@@ -111,7 +111,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
         [("✨ Другое меню на сегодня", "food_pick")],
         [("🧊 Из моих продуктов", "food_mine")],
-        [("🎚️ Настроить", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
 
 

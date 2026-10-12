@@ -34,7 +34,7 @@ def is_active_time(now=None):
 
 def _keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🎚️ Настроить", callback_data="set_notif_new"),
+        InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
     ]])
 

@@ -91,13 +91,17 @@ def _remember(cid, kind, item):
     store.mutate_profile(cid, change)
 
 
+_CONFIGURE_LABEL = {"movie": "🎚️ Настроить кино", "book": "🎚️ Настроить книги",
+                    "music": "🎚️ Настроить музыку"}
+
+
 def card_keyboard(kind):
     """«Другой…» открывает выбор жанра под карточкой (там же следующая «Новинка»)."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Не нравится", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
         [InlineKeyboardButton(_OTHER_LABEL[kind], callback_data=f"nov_pick_{kind}")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data=f"lz_cfg_{kind}")],
+        [InlineKeyboardButton(_CONFIGURE_LABEL.get(kind, "🎚️ Настроить"), callback_data=f"lz_cfg_{kind}")],
         nav_row("m_leisure"),
     ])
 

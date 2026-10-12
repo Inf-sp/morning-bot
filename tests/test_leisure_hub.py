@@ -115,7 +115,7 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
     assert _labels(msg.reply_markup) == [
         ["🎬 Кино", "📚 Книги", "🎧 Музыка"],
         ["🎫 Концерты"],
-        ["🎚️ Настроить", "#️⃣ Главная"],
+        ["🎚️ Настроить библиотеку", "#️⃣ Главная"],
     ]
 
 

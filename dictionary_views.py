@@ -510,7 +510,7 @@ async def send_dict_add_prompt(bot, cid, lang):
 def _dict_manage_kb(lang: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")],
-        [InlineKeyboardButton("🎚️ Настроить", callback_data=f"a_dictlang_{lang}")],
+        [InlineKeyboardButton("🎚️ Настроить словарь", callback_data=f"a_dictlang_{lang}")],
         nav_row(f"a_dictlang_{lang}"),
     ])
 
@@ -535,7 +535,7 @@ def _dict_search_kb(entry, term_key):
     return InlineKeyboardMarkup([
         *delete_row,
         *_dict_tts_row(entry),
-        [InlineKeyboardButton("🎚️ Настроить", callback_data=f"a_dictlang_{lang}_keep")],
+        [InlineKeyboardButton("🎚️ Настроить словарь", callback_data=f"a_dictlang_{lang}_keep")],
         [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"a_dictsearch_{lang}")],
         nav_row(f"a_dictlang_{lang}_keep"),
     ])

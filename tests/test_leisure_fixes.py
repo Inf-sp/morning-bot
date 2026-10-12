@@ -62,3 +62,32 @@ def test_book_fact_is_asked_even_without_publisher_description(monkeypatch):
     assert item["fact"].startswith("В 2024 году Netflix") and "экранизация" in prompts[0]
     text = leisure_ui.book_text(item).text
     assert text.endswith("В 2024 году Netflix выпустил сериал по роману.")
+
+
+def test_artist_card_shows_genre_and_country_line():
+    msg = leisure_ui.artist_card({"artist": "Wolf Alice", "genre_label": "Инди", "country_label": "🇬🇧 UK"})
+    assert msg.text.startswith("🎸 Wolf Alice\n\nИнди · 🇬🇧 UK")
+
+
+def test_cards_show_year_even_for_this_year_release():
+    _title, card = leisure_ui.movie_card({"title": "Диггер"}, {"name": "Диггер", "kind": "movie",
+                                                               "release_date": "2026-10-01"})
+    assert "1 октября 2026" in card.text
+    book = leisure_ui.book_text({"title": "Mikan Road", "author": "Автор", "published_date": "2026-09-15"})
+    assert "2026" in book.text
+
+
+def test_new_books_without_category_get_genre_from_classifier(monkeypatch):
+    item = {"title": "Mikan Road", "genre_label": "Семейная сага"}
+    assert leisure_ui._book_premiere_genres(item) == "Семейная сага"
+
+
+def test_configure_buttons_name_what_they_open():
+    import telegram_runtime
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    rows = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎚️ Настроить словарь", callback_data="a"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]))["inline_keyboard"]
+    # «Настроить …» — синяя и в один столбец с «Главная» под ней.
+    assert [[(b["text"], b.get("style")) for b in row] for row in rows] == [
+        [("Настроить словарь", "primary")], [("Главная", "primary")]]
