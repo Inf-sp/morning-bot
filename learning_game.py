@@ -1,12 +1,16 @@
 """Языковая игра-детектив: состояние, генерация, ответы и подсказки."""
 
-import logging
 import asyncio
+import functools
+import json
+import logging
 import re
+from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import ai
+import config
 import store
 import verify
 from ui import learning as learning_ui
@@ -195,11 +199,24 @@ def _game_is_recent(d, recent):
     return any(_game_same(name, old) for name in names for old in (recent or []))
 
 
-def _game_recent(cid):
-    """Все уже загаданные пользователю ответы и варианты названий.
+_REPEAT_AFTER_DAYS = 180  # сыгранная загадка может вернуться через полгода; новые — всегда раньше
 
-    Ключ ``game_recent`` из старых профилей сохраняем как начальную историю,
-    а новые раунды больше не вытесняют старые: повторять загадку нельзя.
+
+def _game_recent(cid):
+    """Загадки, которые сейчас нельзя повторять: сыгранные за последние полгода.
+
+    Записи без даты (до появления дат) считаются свежими; дата им ставится при следующей игре.
+    """
+    from datetime import date, timedelta
+    seen_at = (store.get_profile(cid) or {}).get("game_seen_at") or {}
+    cutoff = (date.today() - timedelta(days=_REPEAT_AFTER_DAYS)).isoformat()
+    return [name for name in _game_seen_all(cid) if str(seen_at.get(name.casefold()) or "9999") >= cutoff]
+
+
+def _game_seen_all(cid):
+    """Все когда-либо загаданные пользователю ответы и варианты названий.
+
+    Ключ ``game_recent`` из старых профилей сохраняем как начальную историю.
     """
     prof = store.get_profile(cid)
     persisted = prof.get("game_seen", prof.get("game_recent", [])) if isinstance(prof, dict) else []
@@ -222,13 +239,25 @@ def _set_game_recent(cid, rec):
 
 
 def _remember_game_answer(cid, d):
-    names = [d.get("answer", "")] + list(d.get("aliases") or [])
-    rec = _game_recent(cid)
+    from datetime import date
+    names = [str(name or "").strip() for name in [d.get("answer", ""), *(d.get("aliases") or [])]]
+    names = [name for name in names if name]
+    rec = _game_seen_all(cid)
     for name in names:
-        name = (name or "").strip()
-        if name and not any(_game_same(name, old) for old in rec):
+        if not any(_game_same(name, old) for old in rec):
             rec.append(name)
     _set_game_recent(cid, rec)
+    today = date.today().isoformat()
+
+    def stamp(profile):
+        seen_at = dict(profile.get("game_seen_at") or {})
+        for name in rec:  # старые записи без даты получают сегодняшнюю — отсчёт полугода с сегодня
+            seen_at.setdefault(name.casefold(), today)
+        for name in names:
+            seen_at[name.casefold()] = today
+        return {**profile, "game_seen_at": seen_at}, None
+
+    store.mutate_profile(cid, stamp)
 
 
 _GAME_VAGUE_CLUE_MARKERS = (
@@ -436,6 +465,81 @@ def _extra_local_game_cards(clue_lang):
     return cards
 
 
+_RIDDLES_FILE = Path(__file__).with_name("game_riddles.json")
+_RIDDLE_LANGS = {"английский": "en", "нидерландский": "nl"}
+_CATALOG_MAX = 500  # загадок AI на язык в общем каталоге; новая вытесняет самую старую
+
+
+@functools.lru_cache(maxsize=None)
+def _builtin_riddles(clue_lang) -> tuple:
+    """Встроенный набор (game_riddles.json): 100 тем на английском и нидерландском, с фактом и вариантами."""
+    code = _RIDDLE_LANGS.get(clue_lang)
+    if not code:
+        return ()
+    try:
+        rows = json.loads(_RIDDLES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        _log.warning("game riddles file unavailable", exc_info=True)
+        return ()
+
+    def bare(answer):
+        return re.sub(r"^(the|a|an|de|het|een)\s+", "", str(answer or ""), flags=re.I).strip()
+
+    cards = []
+    for row in rows:
+        text = row.get(code) or {}
+        if not text.get("answer"):
+            continue
+        cards.append({
+            "description": text["description"], "answer": text["answer"], "answer_en": bare(row["en"]["answer"]),
+            "category": row.get("category", ""), "aliases": [row.get("ru", ""), bare(row["en"]["answer"]),
+                                                               bare(row["nl"]["answer"])],
+            "hint": text["hint"], "explain": text.get("fact", ""), "wrong": list(text.get("wrong") or []),
+            "words": [], "_trusted_local": True, "_fact": True,
+        })
+    return tuple(cards)
+
+
+def _all_local_cards(clue_lang) -> list:
+    """Локальные загадки языка: прежние карточки, запасные темы и встроенный набор."""
+    return [*(_LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"]),
+            *_extra_local_game_cards(clue_lang), *_builtin_riddles(clue_lang)]
+
+
+def _catalog_cards(clue_lang) -> list:
+    return list(((store._load(config.GAME_CATALOG_KEY) or {}).get(clue_lang)) or [])
+
+
+def _catalog_add(clue_lang, card) -> None:
+    """Удачная загадка AI попадает в общий каталог языка — её получат и другие раунды и пользователи."""
+    keep = {key: card.get(key) for key in ("description", "answer", "answer_en", "category", "aliases",
+                                           "hint", "explain", "wrong", "words") if card.get(key)}
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        cards = [item for item in data.get(clue_lang) or []
+                 if not _game_same(item.get("answer", ""), keep.get("answer", ""))]
+        data[clue_lang] = [*cards, {**keep, "_fact": True}][-_CATALOG_MAX:]
+        return data, None
+
+    store.mutate_kv(config.GAME_CATALOG_KEY, mutate)
+
+
+def _stored_card(clue_lang, recent, attempt=0) -> dict:
+    """Ещё не сыгранная загадка из каталога, затем из встроенного набора; категории — по кругу.
+
+    Для языка страны отпуска — только каталог этого языка (встроенные загадки — на других языках).
+    """
+    import random
+    pool = _catalog_cards(clue_lang) + (_all_local_cards(clue_lang) if clue_lang in _RIDDLE_LANGS else [])
+    fresh = [card for card in pool if not _game_is_recent(card, recent) and _description_is_guessable(card, clue_lang)]
+    if not fresh:
+        return {}
+    category = _GAME_REQUEST_FOCUSES[(len(recent) + attempt) % len(_GAME_REQUEST_FOCUSES)][1]
+    same = [card for card in fresh if card.get("category") == category]
+    return dict(random.choice(same or fresh))
+
+
 def _local_game_data(clue_lang, recent):
     cards = list(_LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"])
     cards.extend(_extra_local_game_cards(clue_lang))
@@ -447,7 +551,7 @@ def _local_game_data(clue_lang, recent):
 
 def _oldest_local_card(lang, recent):
     """Все локальные загадки сыграны: та, что была давнее всех, — лучше, чем «новой загадки нет»."""
-    cards = list(_LOCAL_GAME_CARDS.get(lang) or _LOCAL_GAME_CARDS["английский"]) + _extra_local_game_cards(lang)
+    cards = _all_local_cards(lang)
 
     def played_at(card):
         names = [card.get("answer"), *(card.get("aliases") or [])]
@@ -595,14 +699,17 @@ async def send_game(bot, cid, status=None):
         import vacation
         country = vacation.country_name_en(cid) or store.get_settings(cid).get("country") or ""
     try:
-        d = {}
-        for attempt in range(5):
+        # Сначала — несыгранная загадка из каталога и встроенного набора; AI — когда они кончились.
+        d = _stored_card(lang, recent)
+        for attempt in range(0 if d else 5):
             # game_data вызывает синхронный ai.llm: не блокируем event loop.
             cand = await asyncio.to_thread(game_data, lang, attempted, attempt=attempt,
                                            **({"country": country} if country else {}))
             if (cand.get("answer") and _description_is_guessable(cand, lang)
                     and not _game_is_recent(cand, recent)):
                 d = cand
+                if not cand.get("_local"):
+                    _catalog_add(lang, cand)  # удачная загадка AI пополняет общий каталог языка
                 break
             if cand.get("answer"):
                 attempted += [cand.get("answer", "")] + list(cand.get("aliases") or [])
@@ -637,7 +744,7 @@ async def send_game(bot, cid, status=None):
                                   "explain": _dot(d.get("explain", "")),
                                   "words": d.get("words", []), "tries": 0,
                                   # У запасных карточек explain — описание, а не факт: факт в разгадке — от AI.
-                                  "local": bool(d.get("_local"))}
+                                  "local": bool(d.get("_local")) and not d.get("_fact")}
     options, correct = _game_options(d, lang)
     store.game_state[str(cid)].update(options=options, correct=correct, wrong_picked=[])
     msg = learning_ui.game_card(ui, d.get("description", ""), category=category)
@@ -748,7 +855,7 @@ async def _finish_game_round(bot, cid, st, ui):
 
 def _local_answers(lang, category=None) -> list:
     """Ответы локальных загадок на языке игры (запасные неверные варианты), без повторов."""
-    cards = list(_LOCAL_GAME_CARDS.get(lang) or _LOCAL_GAME_CARDS["английский"]) + _extra_local_game_cards(lang)
+    cards = _all_local_cards(lang)
     return list(dict.fromkeys(str(card["answer"]) for card in cards
                               if category in (None, card.get("category")) and card.get("answer")))
 

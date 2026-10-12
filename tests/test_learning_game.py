@@ -182,6 +182,7 @@ def test_detective_buttons_stay_in_russian_while_clue_message_is_dutch(monkeypat
     monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "нидерландский"}})
     monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: [])
     monkeypatch.setattr(learning_game, "_remember_game_answer", lambda *_args: None)
+    monkeypatch.setattr(learning_game, "_stored_card", lambda *_a, **_k: {})  # загадка от AI
     monkeypatch.setattr(learning_game, "game_data", lambda *_args, **_kwargs: {
         "description": "Ik woon vaak bij mensen. Overdag slaap ik graag op warme plekken. Ik kan heel stil lopen en soms jaag ik op kleine dieren.",
         "answer": "De kat", "answer_en": "Cat", "aliases": [],
@@ -373,6 +374,7 @@ def test_detective_uses_local_round_when_ai_repeats_every_attempt(monkeypatch):
     monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: ["the cat", "cat", "kat"])
     monkeypatch.setattr(learning_game, "game_data", lambda *_args, **_kwargs: repeated)
     monkeypatch.setattr(learning_game, "_local_game_data", lambda *_args: fallback)
+    monkeypatch.setattr(learning_game, "_stored_card", lambda *_a, **_k: {})  # каталог и набор пройдены
     monkeypatch.setattr(learning_game, "_remember_game_answer", lambda _cid, data: remembered.append(data))
 
     bot = FakeBot()
@@ -627,7 +629,7 @@ def test_when_every_riddle_was_played_the_oldest_comes_back_instead_of_error(mon
         async def send_message(self, **kwargs):
             sent.append(kwargs)
 
-    cards = list(learning_game._LOCAL_GAME_CARDS["нидерландский"]) + learning_game._extra_local_game_cards("нидерландский")
+    cards = learning_game._all_local_cards("нидерландский")
     played = [card["answer"] for card in cards]  # всё сыграно, первой — самая давняя
     monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "нидерландский"}})
     monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: played)
@@ -637,3 +639,46 @@ def test_when_every_riddle_was_played_the_oldest_comes_back_instead_of_error(mon
 
     assert "geen nieuw raadsel" not in sent[0]["text"]
     assert learning_game.store.game_state["42"]["answer"] == cards[0]["answer"]
+
+
+def test_builtin_riddles_are_all_valid_with_fact_and_three_options():
+    for lang in ("нидерландский", "английский"):
+        cards = learning_game._builtin_riddles(lang)
+        assert len(cards) == 100
+        for card in cards:
+            assert learning_game._description_is_guessable(card, lang), card["answer"]
+            assert card["explain"] and len(card["wrong"]) == 2 and card["aliases"][0]
+            options, correct = learning_game._game_options(card, lang)
+            assert len(set(options)) == 3 and options[correct] == card["answer"]
+
+
+def test_stored_riddles_come_first_and_ai_riddles_fill_the_catalog(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(learning_game.store, "_load", lambda _key: dict(saved))
+    monkeypatch.setattr(learning_game.store, "mutate_kv",
+                        lambda _key, change: saved.update(change(dict(saved))[0]))
+    riddle = {"description": "Ik ben een groot grijs dier met een heel dikke huid. Ik woon in Afrika of Azië. "
+                             "Op mijn neus groeit iets hards en puntigs.",
+              "answer": "de neushoorn", "aliases": ["носорог", "rhino"], "hint": "Soms heb ik er zelfs twee.",
+              "explain": "Dit dier ziet slecht, maar ruikt heel goed.", "category": "animal"}
+    learning_game._catalog_add("нидерландский", riddle)
+    learning_game._catalog_add("нидерландский", riddle)  # без дублей
+    assert [card["answer"] for card in saved["нидерландский"]] == ["de neushoorn"]
+
+    played = [c["answer"] for c in learning_game._all_local_cards("нидерландский")]
+    # Встроенные сыграны — остаётся загадка из каталога, с фактом от AI.
+    assert learning_game._stored_card("нидерландский", recent=played)["answer"] == "de neushoorn"
+    assert learning_game._stored_card("нидерландский", recent=[])  # несыгранные есть — без AI
+    # Для языка страны отпуска встроенные загадки (на других языках) не подходят — только его каталог.
+    assert learning_game._stored_card("африкаанс", recent=[]) == {}
+
+
+def test_played_riddle_returns_only_after_half_a_year(monkeypatch):
+    from datetime import date, timedelta
+    old = (date.today() - timedelta(days=200)).isoformat()
+    fresh = (date.today() - timedelta(days=10)).isoformat()
+    monkeypatch.setattr(learning_game, "_game_seen_all", lambda _cid: ["de kat", "de hond", "de beer"])
+    monkeypatch.setattr(learning_game.store, "get_profile", lambda _cid: {
+        "game_seen_at": {"de kat": old, "de hond": fresh}})
+    # Кошка — 200 дней назад (снова можно), собака — 10 дней (нельзя), медведь без даты — пока нельзя.
+    assert learning_game._game_recent("42") == ["de hond", "de beer"]

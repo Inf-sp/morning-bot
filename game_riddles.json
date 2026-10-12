@@ -1,0 +1,2402 @@
+[
+{
+"category": "animal",
+"ru": "медведь",
+"en": {
+"answer": "the bear",
+"description": "I am a big and strong animal with thick brown fur. I live in the forest and I love sweet honey. In winter I sleep for many weeks in a cave.",
+"hint": "Children often sleep with a soft toy version of me.",
+"fact": "Polar bears have black skin under their white fur.",
+"wrong": [
+"the wolf",
+"the gorilla"
+]
+},
+"nl": {
+"answer": "de beer",
+"description": "Ik ben een groot en sterk dier met dikke bruine vacht. Ik woon in het bos en ik hou van zoete honing. In de winter slaap ik wekenlang in een hol.",
+"hint": "Kinderen slapen vaak met een zachte knuffel van mij.",
+"fact": "IJsberen hebben een zwarte huid onder hun witte vacht.",
+"wrong": [
+"de wolf",
+"de gorilla"
+]
+}
+},
+{
+"category": "animal",
+"ru": "лиса",
+"en": {
+"answer": "the fox",
+"description": "I am an orange animal with a long bushy tail. I am clever and I often hunt at night. In many stories I am the smart one who tricks other animals.",
+"hint": "I am a wild relative of the dog with pointed ears.",
+"fact": "This animal can hear a mouse moving under the snow.",
+"wrong": [
+"the wolf",
+"the squirrel"
+]
+},
+"nl": {
+"answer": "de vos",
+"description": "Ik ben een oranje dier met een lange dikke staart. Ik ben slim en ik jaag vaak in de nacht. In veel verhalen ben ik degene die andere dieren voor de gek houdt.",
+"hint": "Ik ben een wilde familie van de hond met puntige oren.",
+"fact": "Dit dier kan een muis onder de sneeuw horen bewegen.",
+"wrong": [
+"de wolf",
+"de eekhoorn"
+]
+}
+},
+{
+"category": "animal",
+"ru": "белка",
+"en": {
+"answer": "the squirrel",
+"description": "I am a small animal with a big fluffy tail. I climb trees very fast and jump from branch to branch. In autumn I hide nuts in the ground for winter.",
+"hint": "In the park I often hold an acorn in my little paws.",
+"fact": "This animal forgets where it buried many of its nuts, and new trees grow from them.",
+"wrong": [
+"the mouse",
+"the rabbit"
+]
+},
+"nl": {
+"answer": "de eekhoorn",
+"description": "Ik ben een klein dier met een grote pluizige staart. Ik klim heel snel in bomen en spring van tak naar tak. In de herfst verstop ik nootjes in de grond voor de winter.",
+"hint": "In het park houd ik vaak een eikel in mijn kleine pootjes.",
+"fact": "Dit dier vergeet waar het veel nootjes heeft begraven, en daaruit groeien nieuwe bomen.",
+"wrong": [
+"de muis",
+"het konijn"
+]
+}
+},
+{
+"category": "animal",
+"ru": "ёж",
+"en": {
+"answer": "the hedgehog",
+"description": "I am a small brown animal that walks around at night. When I am afraid, I roll into a ball. I like to eat insects and worms in the garden.",
+"hint": "My back is covered with thousands of sharp spikes.",
+"fact": "This small animal has about five thousand spines on its back.",
+"wrong": [
+"the mouse",
+"the mole"
+]
+},
+"nl": {
+"answer": "de egel",
+"description": "Ik ben een klein bruin dier dat 's avonds rondloopt in de tuin. Als ik bang ben, rol ik me op tot een bal. Ik eet graag insecten en wormen.",
+"hint": "Mijn rug zit vol met duizenden scherpe stekels.",
+"fact": "Dit kleine dier heeft ongeveer vijfduizend stekels op zijn rug.",
+"wrong": [
+"de muis",
+"de mol"
+]
+}
+},
+{
+"category": "animal",
+"ru": "лягушка",
+"en": {
+"answer": "the frog",
+"description": "I am a small green animal that lives near water. I have long back legs and I can jump very far. I catch flies with my sticky tongue.",
+"hint": "I say croak, and when I was young I was a tadpole.",
+"fact": "Some of these animals can jump more than twenty times their own length.",
+"wrong": [
+"the turtle",
+"the lizard"
+]
+},
+"nl": {
+"answer": "de kikker",
+"description": "Ik ben een klein groen dier dat bij het water woont. Ik heb lange achterpoten en kan heel ver springen. Ik vang vliegen met mijn plakkerige tong.",
+"hint": "Ik zeg kwak, en toen ik jong was, was ik een kikkervisje.",
+"fact": "Sommige van deze dieren kunnen meer dan twintig keer hun eigen lengte springen.",
+"wrong": [
+"de schildpad",
+"de hagedis"
+]
+}
+},
+{
+"category": "animal",
+"ru": "утка",
+"en": {
+"answer": "the duck",
+"description": "I am a bird that swims on lakes and canals. My feet are orange and flat, so I can paddle well. People sometimes give me pieces of bread in the park.",
+"hint": "I say quack quack.",
+"fact": "The feathers of this bird stay dry because they are covered with a thin layer of oil.",
+"wrong": [
+"the swan",
+"the chicken"
+]
+},
+"nl": {
+"answer": "de eend",
+"description": "Ik ben een vogel die op meren en grachten zwemt. Mijn poten zijn oranje en plat, zodat ik goed kan peddelen. Mensen geven me soms stukjes brood in het park.",
+"hint": "Ik zeg kwak kwak.",
+"fact": "De veren van deze vogel blijven droog omdat er een dun laagje olie op zit.",
+"wrong": [
+"de zwaan",
+"de kip"
+]
+}
+},
+{
+"category": "animal",
+"ru": "курица",
+"en": {
+"answer": "the chicken",
+"description": "I am a bird that lives on a farm. I cannot fly very well, but I walk around and pick seeds from the ground. Every morning the farmer comes to collect what I give.",
+"hint": "People eat my eggs for breakfast.",
+"fact": "There are more of these birds in the world than there are people.",
+"wrong": [
+"the duck",
+"the goose"
+]
+},
+"nl": {
+"answer": "de kip",
+"description": "Ik ben een vogel die op een boerderij woont. Ik kan niet goed vliegen, maar ik loop rond en pik zaadjes van de grond. Elke ochtend komt de boer halen wat ik geef.",
+"hint": "Mensen eten mijn eieren bij het ontbijt.",
+"fact": "Er zijn meer van deze vogels op de wereld dan mensen.",
+"wrong": [
+"de eend",
+"de gans"
+]
+}
+},
+{
+"category": "animal",
+"ru": "свинья",
+"en": {
+"answer": "the pig",
+"description": "I am a pink farm animal with a round nose. I like to roll in the mud on hot days. I eat almost everything and I make a funny sound.",
+"hint": "I have a curly little tail and I say oink.",
+"fact": "This animal is very smart and can learn its own name.",
+"wrong": [
+"the cow",
+"the sheep"
+]
+},
+"nl": {
+"answer": "het varken",
+"description": "Ik ben een roze boerderijdier met een ronde neus. Op warme dagen rol ik graag in de modder. Ik eet bijna alles en ik maak een grappig geluid.",
+"hint": "Ik heb een klein krulstaartje en ik zeg knor.",
+"fact": "Dit dier is heel slim en kan zijn eigen naam leren.",
+"wrong": [
+"de koe",
+"het schaap"
+]
+}
+},
+{
+"category": "animal",
+"ru": "овца",
+"en": {
+"answer": "the sheep",
+"description": "I am a farm animal with thick white curly hair. I eat grass in the field with my friends. Every year the farmer cuts my soft coat.",
+"hint": "People make warm sweaters from my wool.",
+"fact": "This animal can recognise the faces of other animals and people for years.",
+"wrong": [
+"the goat",
+"the cow"
+]
+},
+"nl": {
+"answer": "het schaap",
+"description": "Ik ben een boerderijdier met dikke witte krullen. Ik eet gras in het weiland met mijn vrienden. Elk jaar knipt de boer mijn zachte vacht.",
+"hint": "Mensen maken warme truien van mijn wol.",
+"fact": "Dit dier kan jarenlang gezichten van andere dieren en mensen herkennen.",
+"wrong": [
+"de geit",
+"de koe"
+]
+}
+},
+{
+"category": "animal",
+"ru": "мышь",
+"en": {
+"answer": "the mouse",
+"description": "I am a very small grey animal with a long thin tail. I live in holes and I am very quiet. Cats like to chase me through the house.",
+"hint": "I love to eat cheese.",
+"fact": "This small animal can squeeze through a hole the size of a pencil.",
+"wrong": [
+"the rat",
+"the hamster"
+]
+},
+"nl": {
+"answer": "de muis",
+"description": "Ik ben een heel klein grijs dier met een lange dunne staart. Ik woon in gaatjes en ik ben heel stil. Katten jagen graag op mij in het huis.",
+"hint": "Ik eet heel graag kaas.",
+"fact": "Dit kleine dier kan door een gaatje zo groot als een potlood kruipen.",
+"wrong": [
+"de rat",
+"de hamster"
+]
+}
+},
+{
+"category": "animal",
+"ru": "летучая мышь",
+"en": {
+"answer": "the bat",
+"description": "I am an animal that flies at night. During the day I sleep upside down in a dark cave. I find my food by listening to echoes.",
+"hint": "I am the only mammal that can really fly.",
+"fact": "Some of these animals eat more than a thousand insects in one night.",
+"wrong": [
+"the owl",
+"the bird"
+]
+},
+"nl": {
+"answer": "de vleermuis",
+"description": "Ik ben een dier dat 's nachts vliegt. Overdag slaap ik ondersteboven in een donkere grot. Ik vind mijn eten door naar echo's te luisteren.",
+"hint": "Ik ben het enige zoogdier dat echt kan vliegen.",
+"fact": "Sommige van deze dieren eten meer dan duizend insecten in één nacht.",
+"wrong": [
+"de uil",
+"de vogel"
+]
+}
+},
+{
+"category": "animal",
+"ru": "кит",
+"en": {
+"answer": "the whale",
+"description": "I am the biggest animal in the sea. I am not a fish, because I breathe air. Sometimes I blow a big fountain of water from my head.",
+"hint": "I am so huge that I am bigger than a bus.",
+"fact": "The blue variety of this animal is the largest animal that has ever lived.",
+"wrong": [
+"the shark",
+"the dolphin"
+]
+},
+"nl": {
+"answer": "de walvis",
+"description": "Ik ben het grootste dier in de zee. Ik ben geen vis, want ik adem lucht. Soms blaas ik een grote fontein van water uit mijn kop.",
+"hint": "Ik ben zo enorm dat ik groter ben dan een bus.",
+"fact": "De blauwe soort van dit dier is het grootste dier dat ooit heeft geleefd.",
+"wrong": [
+"de haai",
+"de dolfijn"
+]
+}
+},
+{
+"category": "animal",
+"ru": "дельфин",
+"en": {
+"answer": "the dolphin",
+"description": "I am a friendly and smart animal that lives in the sea. I like to jump out of the water and play. I talk to my friends with clicks and whistles.",
+"hint": "I am grey and I often swim next to boats.",
+"fact": "This animal sleeps with only half of its brain at a time.",
+"wrong": [
+"the whale",
+"the shark"
+]
+},
+"nl": {
+"answer": "de dolfijn",
+"description": "Ik ben een vriendelijk en slim dier dat in de zee woont. Ik spring graag uit het water en speel. Ik praat met mijn vrienden met klikjes en fluitjes.",
+"hint": "Ik ben grijs en zwem vaak naast boten.",
+"fact": "Dit dier slaapt telkens met maar de helft van zijn hersenen.",
+"wrong": [
+"de walvis",
+"de haai"
+]
+}
+},
+{
+"category": "animal",
+"ru": "акула",
+"en": {
+"answer": "the shark",
+"description": "I am a big fish with many sharp teeth. I swim fast and many people are afraid of me. Above the water you can sometimes see the fin on my back.",
+"hint": "There is a famous film about me called Jaws.",
+"fact": "This fish keeps growing new teeth during its whole life.",
+"wrong": [
+"the whale",
+"the dolphin"
+]
+},
+"nl": {
+"answer": "de haai",
+"description": "Ik ben een grote vis met veel scherpe tanden. Ik zwem snel en veel mensen zijn bang voor mij. Boven het water zie je soms de vin op mijn rug.",
+"hint": "Er is een beroemde film over mij die Jaws heet.",
+"fact": "Deze vis krijgt zijn hele leven lang nieuwe tanden.",
+"wrong": [
+"de walvis",
+"de dolfijn"
+]
+}
+},
+{
+"category": "animal",
+"ru": "крокодил",
+"en": {
+"answer": "the crocodile",
+"description": "I am a long green animal that lives in rivers. I have a big mouth full of teeth. I can lie very still in the water, so nobody sees me.",
+"hint": "I look a bit like a dinosaur and my skin is very hard.",
+"fact": "This animal cannot stick out its tongue.",
+"wrong": [
+"the lizard",
+"the snake"
+]
+},
+"nl": {
+"answer": "de krokodil",
+"description": "Ik ben een lang groen dier dat in rivieren woont. Ik heb een grote bek vol tanden. Ik kan heel stil in het water liggen, zodat niemand mij ziet.",
+"hint": "Ik lijk een beetje op een dinosaurus en mijn huid is heel hard.",
+"fact": "Dit dier kan zijn tong niet uitsteken.",
+"wrong": [
+"de hagedis",
+"de slang"
+]
+}
+},
+{
+"category": "animal",
+"ru": "зебра",
+"en": {
+"answer": "the zebra",
+"description": "I am an animal from Africa that looks like a horse. I live in big groups on the grass plains. Lions sometimes try to catch me.",
+"hint": "I am covered in black and white stripes.",
+"fact": "No two of these animals have exactly the same stripes.",
+"wrong": [
+"the horse",
+"the donkey"
+]
+},
+"nl": {
+"answer": "de zebra",
+"description": "Ik ben een dier uit Afrika dat op een paard lijkt. Ik woon in grote groepen op de grasvlakte. Leeuwen proberen mij soms te vangen.",
+"hint": "Ik heb overal zwarte en witte strepen.",
+"fact": "Geen twee van deze dieren hebben precies dezelfde strepen.",
+"wrong": [
+"het paard",
+"de ezel"
+]
+}
+},
+{
+"category": "animal",
+"ru": "верблюд",
+"en": {
+"answer": "the camel",
+"description": "I am a tall animal that lives in the hot desert. I can walk for many days without drinking water. People sometimes ride on my back through the sand.",
+"hint": "I have one or two humps on my back.",
+"fact": "This animal can drink more than one hundred litres of water in a few minutes.",
+"wrong": [
+"the horse",
+"the giraffe"
+]
+},
+"nl": {
+"answer": "de kameel",
+"description": "Ik ben een groot dier dat in de hete woestijn woont. Ik kan dagenlang lopen zonder water te drinken. Mensen rijden soms op mijn rug door het zand.",
+"hint": "Ik heb een of twee bulten op mijn rug.",
+"fact": "Dit dier kan in een paar minuten meer dan honderd liter water drinken.",
+"wrong": [
+"het paard",
+"de giraf"
+]
+}
+},
+{
+"category": "animal",
+"ru": "кенгуру",
+"en": {
+"answer": "the kangaroo",
+"description": "I am an animal from Australia. I do not walk, but I jump on my strong back legs. My long tail helps me to keep my balance.",
+"hint": "My baby lives in a pocket on my belly.",
+"fact": "This animal cannot walk backwards.",
+"wrong": [
+"the rabbit",
+"the koala"
+]
+},
+"nl": {
+"answer": "de kangoeroe",
+"description": "Ik ben een dier uit Australië. Ik loop niet, maar ik spring op mijn sterke achterpoten. Mijn lange staart helpt me om mijn evenwicht te houden.",
+"hint": "Mijn baby woont in een buidel op mijn buik.",
+"fact": "Dit dier kan niet achteruit lopen.",
+"wrong": [
+"het konijn",
+"de koala"
+]
+}
+},
+{
+"category": "animal",
+"ru": "улитка",
+"en": {
+"answer": "the snail",
+"description": "I am a small and very slow animal. I come out when it rains and I leave a shiny trail behind me. I like to eat the leaves in your garden.",
+"hint": "I carry my little house on my back.",
+"fact": "This animal has thousands of tiny teeth on its tongue.",
+"wrong": [
+"the worm",
+"the turtle"
+]
+},
+"nl": {
+"answer": "de slak",
+"description": "Ik ben een klein en heel langzaam dier. Ik kom naar buiten als het regent en laat een glanzend spoor achter. Ik eet graag de blaadjes in jouw tuin.",
+"hint": "Ik draag mijn huisje op mijn rug.",
+"fact": "Dit dier heeft duizenden piepkleine tandjes op zijn tong.",
+"wrong": [
+"de worm",
+"de schildpad"
+]
+}
+},
+{
+"category": "animal",
+"ru": "муравей",
+"en": {
+"answer": "the ant",
+"description": "I am a very small insect. I live with thousands of brothers and sisters in a big nest. We work together all day and carry food home.",
+"hint": "I can carry something that is many times heavier than me.",
+"fact": "Some of these insects have lived on Earth since the time of the dinosaurs.",
+"wrong": [
+"the bee",
+"the spider"
+]
+},
+"nl": {
+"answer": "de mier",
+"description": "Ik ben een heel klein insect. Ik woon met duizenden broers en zussen in een groot nest. We werken de hele dag samen en dragen eten naar huis.",
+"hint": "Ik kan iets dragen dat vele keren zwaarder is dan ik.",
+"fact": "Sommige van deze insecten leven al op aarde sinds de tijd van de dinosaurussen.",
+"wrong": [
+"de bij",
+"de spin"
+]
+}
+},
+{
+"category": "food",
+"ru": "груша",
+"en": {
+"answer": "the pear",
+"description": "I am a sweet and juicy fruit. I am green or yellow and I grow on a tree. My shape is round at the bottom and thin at the top.",
+"hint": "I look a bit like an apple, but I am shaped like a light bulb.",
+"fact": "This fruit ripens best after it has been picked from the tree.",
+"wrong": [
+"the apple",
+"the lemon"
+]
+},
+"nl": {
+"answer": "de peer",
+"description": "Ik ben een zoete en sappige vrucht. Ik ben groen of geel en ik groei aan een boom. Mijn vorm is rond van onderen en smal van boven.",
+"hint": "Ik lijk een beetje op een appel, maar ik heb de vorm van een gloeilamp.",
+"fact": "Deze vrucht wordt het best rijp nadat hij van de boom is geplukt.",
+"wrong": [
+"de appel",
+"de citroen"
+]
+}
+},
+{
+"category": "food",
+"ru": "вишня",
+"en": {
+"answer": "the cherry",
+"description": "I am a small round red fruit. I grow on trees in early summer. I have a hard stone inside, so be careful when you eat me.",
+"hint": "I often hang in pairs on a long green stem.",
+"fact": "In Japan the blossom of this tree is a famous sign of spring.",
+"wrong": [
+"the strawberry",
+"the grape"
+]
+},
+"nl": {
+"answer": "de kers",
+"description": "Ik ben een kleine ronde rode vrucht. Ik groei aan bomen in de vroege zomer. Ik heb een harde pit vanbinnen, dus pas op als je mij eet.",
+"hint": "Ik hang vaak met twee aan een lang groen steeltje.",
+"fact": "In Japan is de bloesem van deze boom een beroemd teken van de lente.",
+"wrong": [
+"de aardbei",
+"de druif"
+]
+}
+},
+{
+"category": "food",
+"ru": "ананас",
+"en": {
+"answer": "the pineapple",
+"description": "I am a big tropical fruit. My skin is hard, brown and rough. Inside I am yellow, sweet and a little bit sour.",
+"hint": "On my head I have a crown of spiky green leaves.",
+"fact": "It takes about two years for one of these fruits to grow.",
+"wrong": [
+"the mango",
+"the coconut"
+]
+},
+"nl": {
+"answer": "de ananas",
+"description": "Ik ben een grote tropische vrucht. Mijn schil is hard, bruin en ruw. Vanbinnen ben ik geel, zoet en een beetje zuur.",
+"hint": "Op mijn hoofd heb ik een kroon van stekelige groene bladeren.",
+"fact": "Het duurt ongeveer twee jaar voordat een van deze vruchten groeit.",
+"wrong": [
+"de mango",
+"de kokosnoot"
+]
+}
+},
+{
+"category": "food",
+"ru": "манго",
+"en": {
+"answer": "the mango",
+"description": "I am a sweet fruit from warm countries. My skin is green, yellow or red. Inside I am soft and orange, with one big flat stone.",
+"hint": "In India people call me the king of fruits.",
+"fact": "This fruit is the national fruit of India.",
+"wrong": [
+"the peach",
+"the papaya"
+]
+},
+"nl": {
+"answer": "de mango",
+"description": "Ik ben een zoete vrucht uit warme landen. Mijn schil is groen, geel of rood. Vanbinnen ben ik zacht en oranje, met één grote platte pit.",
+"hint": "In India noemen mensen mij de koning van het fruit.",
+"fact": "Deze vrucht is de nationale vrucht van India.",
+"wrong": [
+"de perzik",
+"de papaja"
+]
+}
+},
+{
+"category": "food",
+"ru": "персик",
+"en": {
+"answer": "the peach",
+"description": "I am a round and sweet summer fruit. My skin is soft and a bit fuzzy. I am orange and pink, with a big stone in the middle.",
+"hint": "My skin feels like velvet when you touch it.",
+"fact": "This fruit first grew in China thousands of years ago.",
+"wrong": [
+"the apricot",
+"the apple"
+]
+},
+"nl": {
+"answer": "de perzik",
+"description": "Ik ben een ronde en zoete zomervrucht. Mijn schil is zacht en een beetje harig. Ik ben oranje en roze, met een grote pit in het midden.",
+"hint": "Mijn schil voelt als fluweel als je hem aanraakt.",
+"fact": "Deze vrucht groeide duizenden jaren geleden voor het eerst in China.",
+"wrong": [
+"de abrikoos",
+"de appel"
+]
+}
+},
+{
+"category": "food",
+"ru": "лук",
+"en": {
+"answer": "the onion",
+"description": "I am a round vegetable with many thin layers. My skin is brown, red or white. Cooks use me in many soups and sauces.",
+"hint": "When you cut me, your eyes start to cry.",
+"fact": "People have grown this vegetable for more than five thousand years.",
+"wrong": [
+"the garlic",
+"the potato"
+]
+},
+"nl": {
+"answer": "de ui",
+"description": "Ik ben een ronde groente met veel dunne laagjes. Mijn schil is bruin, rood of wit. Koks gebruiken mij in veel soepen en sauzen.",
+"hint": "Als je mij snijdt, gaan je ogen huilen.",
+"fact": "Mensen kweken deze groente al meer dan vijfduizend jaar.",
+"wrong": [
+"de knoflook",
+"de aardappel"
+]
+}
+},
+{
+"category": "food",
+"ru": "чеснок",
+"en": {
+"answer": "the garlic",
+"description": "I am a small white plant that you use in the kitchen. I have many little cloves inside me. I give food a strong taste and a strong smell.",
+"hint": "In old stories I keep vampires away.",
+"fact": "This plant was given to workers who built the pyramids in Egypt.",
+"wrong": [
+"the onion",
+"the ginger"
+]
+},
+"nl": {
+"answer": "de knoflook",
+"description": "Ik ben een kleine witte plant die je in de keuken gebruikt. Ik heb veel kleine teentjes in mij. Ik geef eten een sterke smaak en een sterke geur.",
+"hint": "In oude verhalen houd ik vampiers op afstand.",
+"fact": "Deze plant werd gegeven aan de arbeiders die de piramides in Egypte bouwden.",
+"wrong": [
+"de ui",
+"de gember"
+]
+}
+},
+{
+"category": "food",
+"ru": "тыква",
+"en": {
+"answer": "the pumpkin",
+"description": "I am a big round orange vegetable. I grow on the ground in autumn. People make soup and pie from me.",
+"hint": "At Halloween people cut a funny face into me and put a candle inside.",
+"fact": "The heaviest one of these ever grown weighed more than one thousand kilograms.",
+"wrong": [
+"the melon",
+"the carrot"
+]
+},
+"nl": {
+"answer": "de pompoen",
+"description": "Ik ben een grote ronde oranje groente. Ik groei in de herfst op de grond. Mensen maken soep en taart van mij.",
+"hint": "Met Halloween snijden mensen een grappig gezicht in mij en zetten er een kaars in.",
+"fact": "De zwaarste die ooit is gekweekt, woog meer dan duizend kilo.",
+"wrong": [
+"de meloen",
+"de wortel"
+]
+}
+},
+{
+"category": "food",
+"ru": "кукуруза",
+"en": {
+"answer": "the corn",
+"description": "I am a tall plant that grows in big fields. My seeds are small, yellow and sweet. You can eat me with butter or turn me into popcorn.",
+"hint": "My yellow seeds grow in rows on a cob.",
+"fact": "This plant was first grown in Mexico about nine thousand years ago.",
+"wrong": [
+"the rice",
+"the wheat"
+]
+},
+"nl": {
+"answer": "de mais",
+"description": "Ik ben een hoge plant die op grote velden groeit. Mijn zaadjes zijn klein, geel en zoet. Je kunt mij met boter eten of er popcorn van maken.",
+"hint": "Mijn gele korrels groeien in rijen aan een kolf.",
+"fact": "Deze plant werd ongeveer negenduizend jaar geleden voor het eerst in Mexico gekweekt.",
+"wrong": [
+"de rijst",
+"de tarwe"
+]
+}
+},
+{
+"category": "food",
+"ru": "гриб",
+"en": {
+"answer": "the mushroom",
+"description": "I grow in the forest after rain, often under the trees. I am not a plant and I have no leaves. Some of us are tasty, but some are poisonous.",
+"hint": "I have a stem and a round cap on top.",
+"fact": "The largest living thing in the world is one of these, growing under a forest in the USA.",
+"wrong": [
+"the onion",
+"the potato"
+]
+},
+"nl": {
+"answer": "de paddenstoel",
+"description": "Ik groei in het bos na de regen, vaak onder de bomen. Ik ben geen plant en ik heb geen bladeren. Sommigen van ons zijn lekker, maar sommigen zijn giftig.",
+"hint": "Ik heb een steel en een ronde hoed erop.",
+"fact": "Het grootste levende wezen ter wereld is er een van deze soort, onder een bos in de VS.",
+"wrong": [
+"de ui",
+"de aardappel"
+]
+}
+},
+{
+"category": "food",
+"ru": "яйцо",
+"en": {
+"answer": "the egg",
+"description": "I am white or brown and I have an oval shape. A chicken gives me to the farmer. You can boil me, fry me or use me to bake a cake.",
+"hint": "I have a hard shell and a yellow yolk inside.",
+"fact": "The colour of the shell does not change the taste.",
+"wrong": [
+"the potato",
+"the cheese"
+]
+},
+"nl": {
+"answer": "het ei",
+"description": "Ik ben wit of bruin en ik heb een ovale vorm. Een kip geeft mij aan de boer. Je kunt mij koken, bakken of gebruiken om een taart te maken.",
+"hint": "Ik heb een harde schaal en vanbinnen een gele dooier.",
+"fact": "De kleur van de schaal verandert de smaak niet.",
+"wrong": [
+"de aardappel",
+"de kaas"
+]
+}
+},
+{
+"category": "food",
+"ru": "хлеб",
+"en": {
+"answer": "the bread",
+"description": "I am made from flour, water and yeast. The baker puts me in a hot oven early in the morning. People cut me into slices for sandwiches.",
+"hint": "The outside part of me is called the crust.",
+"fact": "People baked this food more than ten thousand years ago.",
+"wrong": [
+"the cake",
+"the cheese"
+]
+},
+"nl": {
+"answer": "het brood",
+"description": "Ik word gemaakt van meel, water en gist. De bakker zet mij vroeg in de ochtend in een hete oven. Mensen snijden mij in sneetjes voor boterhammen.",
+"hint": "De buitenkant van mij heet de korst.",
+"fact": "Mensen bakten dit eten al meer dan tienduizend jaar geleden.",
+"wrong": [
+"de taart",
+"de kaas"
+]
+}
+},
+{
+"category": "food",
+"ru": "сыр",
+"en": {
+"answer": "the cheese",
+"description": "I am made from milk of cows or goats. I can be soft or hard, young or old. In the Netherlands people sell me on markets in big round wheels.",
+"hint": "Mice love me, and some of my kinds have holes.",
+"fact": "The Netherlands exports more than half a billion kilograms of this food every year.",
+"wrong": [
+"the butter",
+"the bread"
+]
+},
+"nl": {
+"answer": "de kaas",
+"description": "Ik word gemaakt van melk van koeien of geiten. Ik kan zacht of hard zijn, jong of oud. In Nederland verkopen mensen mij op markten in grote ronde wielen.",
+"hint": "Muizen zijn dol op mij, en sommige soorten van mij hebben gaten.",
+"fact": "Nederland exporteert elk jaar meer dan een half miljard kilo van dit eten.",
+"wrong": [
+"de boter",
+"het brood"
+]
+}
+},
+{
+"category": "food",
+"ru": "мёд",
+"en": {
+"answer": "the honey",
+"description": "I am sweet, golden and sticky. Bees make me from flowers and keep me in their hive. People put me in tea or on bread.",
+"hint": "Bears love to eat me.",
+"fact": "This food never goes bad: some was found in very old Egyptian tombs.",
+"wrong": [
+"the jam",
+"the sugar"
+]
+},
+"nl": {
+"answer": "de honing",
+"description": "Ik ben zoet, goudkleurig en plakkerig. Bijen maken mij van bloemen en bewaren mij in hun korf. Mensen doen mij in de thee of op brood.",
+"hint": "Beren eten mij heel graag.",
+"fact": "Dit eten wordt nooit slecht: er is wat gevonden in heel oude Egyptische graven.",
+"wrong": [
+"de jam",
+"de suiker"
+]
+}
+},
+{
+"category": "food",
+"ru": "шоколад",
+"en": {
+"answer": "the chocolate",
+"description": "I am a sweet brown treat. I am made from cocoa beans that grow in warm countries. On a hot day I melt in your hand.",
+"hint": "People give me as a gift, often as a bar or in a heart-shaped box.",
+"fact": "Belgium makes more than two hundred thousand tonnes of this sweet every year.",
+"wrong": [
+"the candy",
+"the cookie"
+]
+},
+"nl": {
+"answer": "de chocolade",
+"description": "Ik ben een zoete bruine lekkernij. Ik word gemaakt van cacaobonen die in warme landen groeien. Op een warme dag smelt ik in je hand.",
+"hint": "Mensen geven mij als cadeau, vaak als reep of in een doosje in de vorm van een hart.",
+"fact": "België maakt elk jaar meer dan tweehonderdduizend ton van deze lekkernij.",
+"wrong": [
+"het snoep",
+"het koekje"
+]
+}
+},
+{
+"category": "food",
+"ru": "суп",
+"en": {
+"answer": "the soup",
+"description": "I am a warm dish that you eat with a spoon. I am made with water, vegetables and sometimes meat. On a cold day I make you feel warm.",
+"hint": "Your mother gives me to you in a bowl when you are sick.",
+"fact": "In the Netherlands, pea soup is called snert and is a winter favourite.",
+"wrong": [
+"the salad",
+"the stew"
+]
+},
+"nl": {
+"answer": "de soep",
+"description": "Ik ben een warm gerecht dat je met een lepel eet. Ik word gemaakt met water, groenten en soms vlees. Op een koude dag zorg ik dat je het warm hebt.",
+"hint": "Je moeder geeft mij in een kom als je ziek bent.",
+"fact": "In Nederland heet erwtensoep ook snert, een favoriet in de winter.",
+"wrong": [
+"de salade",
+"de stoofpot"
+]
+}
+},
+{
+"category": "food",
+"ru": "блин",
+"en": {
+"answer": "the pancake",
+"description": "I am flat and round and made from flour, milk and eggs. You cook me in a hot pan. People like to eat me with syrup or sugar.",
+"hint": "Sometimes the cook flips me high in the air.",
+"fact": "Dutch versions of this dish are much bigger than American ones.",
+"wrong": [
+"the waffle",
+"the cake"
+]
+},
+"nl": {
+"answer": "de pannenkoek",
+"description": "Ik ben plat en rond en gemaakt van meel, melk en eieren. Je bakt mij in een hete pan. Mensen eten mij graag met stroop of suiker.",
+"hint": "Soms gooit de kok mij hoog in de lucht om me te keren.",
+"fact": "De Nederlandse versie van dit gerecht is veel groter dan de Amerikaanse.",
+"wrong": [
+"de wafel",
+"de taart"
+]
+}
+},
+{
+"category": "food",
+"ru": "мороженое",
+"en": {
+"answer": "the ice cream",
+"description": "I am a cold and sweet treat. I come in many flavours, like vanilla and strawberry. On a hot summer day I melt very quickly.",
+"hint": "People eat me from a cone or a cup.",
+"fact": "Vanilla is the most popular flavour of this dessert in the world.",
+"wrong": [
+"the yogurt",
+"the cake"
+]
+},
+"nl": {
+"answer": "het ijsje",
+"description": "Ik ben een koude en zoete lekkernij. Ik heb veel smaken, zoals vanille en aardbei. Op een warme zomerdag smelt ik heel snel.",
+"hint": "Mensen eten mij uit een hoorntje of een bakje.",
+"fact": "Vanille is de populairste smaak van dit toetje ter wereld.",
+"wrong": [
+"de yoghurt",
+"de taart"
+]
+}
+},
+{
+"category": "food",
+"ru": "рис",
+"en": {
+"answer": "the rice",
+"description": "I am made of many small white grains. I grow in wet fields in Asia. You cook me in water and eat me with curry or vegetables.",
+"hint": "In China and Japan people eat me with chopsticks.",
+"fact": "More than half of the people in the world eat this food every day.",
+"wrong": [
+"the pasta",
+"the corn"
+]
+},
+"nl": {
+"answer": "de rijst",
+"description": "Ik besta uit veel kleine witte korrels. Ik groei op natte velden in Azië. Je kookt mij in water en eet mij met curry of groenten.",
+"hint": "In China en Japan eten mensen mij met stokjes.",
+"fact": "Meer dan de helft van de mensen op de wereld eet dit voedsel elke dag.",
+"wrong": [
+"de pasta",
+"de mais"
+]
+}
+},
+{
+"category": "food",
+"ru": "молоко",
+"en": {
+"answer": "the milk",
+"description": "I am a white drink. Cows give me to the farmer every day. Children drink me so their bones grow strong.",
+"hint": "People put me in coffee or on cereal.",
+"fact": "A cow gives about twenty-five litres of this drink every day.",
+"wrong": [
+"the water",
+"the juice"
+]
+},
+"nl": {
+"answer": "de melk",
+"description": "Ik ben een witte drank. Koeien geven mij elke dag aan de boer. Kinderen drinken mij zodat hun botten sterk worden.",
+"hint": "Mensen doen mij in de koffie of op hun ontbijtgranen.",
+"fact": "Een koe geeft ongeveer vijfentwintig liter van deze drank per dag.",
+"wrong": [
+"het water",
+"het sap"
+]
+}
+},
+{
+"category": "object",
+"ru": "зонт",
+"en": {
+"answer": "the umbrella",
+"description": "You take me with you when the weather is bad. I am closed and long when you carry me. When you open me, I keep you dry.",
+"hint": "In a strong wind I sometimes turn inside out.",
+"fact": "This object was first used to protect people from the sun, not the rain.",
+"wrong": [
+"the raincoat",
+"the hat"
+]
+},
+"nl": {
+"answer": "de paraplu",
+"description": "Je neemt mij mee als het weer slecht is. Als je mij draagt, ben ik dicht en lang. Als je mij openmaakt, houd ik je droog.",
+"hint": "Bij harde wind klap ik soms om.",
+"fact": "Dit voorwerp werd eerst gebruikt tegen de zon, niet tegen de regen.",
+"wrong": [
+"de regenjas",
+"de hoed"
+]
+}
+},
+{
+"category": "object",
+"ru": "ключ",
+"en": {
+"answer": "the key",
+"description": "I am small and made of metal. You keep me in your pocket or on a ring. Without me you cannot open your front door.",
+"hint": "You put me in a lock and turn me.",
+"fact": "The oldest known lock of this kind was made in Egypt about four thousand years ago.",
+"wrong": [
+"the coin",
+"the lock"
+]
+},
+"nl": {
+"answer": "de sleutel",
+"description": "Ik ben klein en gemaakt van metaal. Je bewaart mij in je zak of aan een ring. Zonder mij kun je je voordeur niet openmaken.",
+"hint": "Je steekt mij in een slot en draait mij om.",
+"fact": "Het oudste bekende slot van deze soort werd ongeveer vierduizend jaar geleden in Egypte gemaakt.",
+"wrong": [
+"de munt",
+"het slot"
+]
+}
+},
+{
+"category": "object",
+"ru": "часы",
+"en": {
+"answer": "the clock",
+"description": "I hang on the wall or stand on a table. I have a round face with numbers on it. I tell you when it is time to go to school.",
+"hint": "My two hands move around and I say tick tock.",
+"fact": "Big Ben in London is actually the name of the bell, not of the tower.",
+"wrong": [
+"the calendar",
+"the phone"
+]
+},
+"nl": {
+"answer": "de klok",
+"description": "Ik hang aan de muur of sta op een tafel. Ik heb een rond gezicht met cijfers erop. Ik vertel je wanneer het tijd is om naar school te gaan.",
+"hint": "Mijn twee wijzers draaien rond en ik zeg tik tak.",
+"fact": "Big Ben in Londen is eigenlijk de naam van de bel, niet van de toren.",
+"wrong": [
+"de kalender",
+"de telefoon"
+]
+}
+},
+{
+"category": "object",
+"ru": "стул",
+"en": {
+"answer": "the chair",
+"description": "I have four legs, but I cannot walk. You find me at a table in the kitchen or at school. I have a back so you can lean on me.",
+"hint": "You sit on me when you eat dinner.",
+"fact": "The Dutch designer Gerrit Rietveld made a famous red and blue one of these.",
+"wrong": [
+"the table",
+"the bed"
+]
+},
+"nl": {
+"answer": "de stoel",
+"description": "Ik heb vier poten, maar ik kan niet lopen. Je vindt mij aan een tafel in de keuken of op school. Ik heb een rugleuning zodat je tegen mij aan kunt leunen.",
+"hint": "Je zit op mij als je avondeten eet.",
+"fact": "De Nederlandse ontwerper Gerrit Rietveld maakte een beroemde rood-blauwe versie hiervan.",
+"wrong": [
+"de tafel",
+"het bed"
+]
+}
+},
+{
+"category": "object",
+"ru": "кровать",
+"en": {
+"answer": "the bed",
+"description": "I stand in the bedroom and I am soft and comfortable. I have a mattress, a pillow and a warm blanket. Every evening you lie on me.",
+"hint": "You sleep in me every night.",
+"fact": "People spend about one third of their life in this piece of furniture.",
+"wrong": [
+"the sofa",
+"the chair"
+]
+},
+"nl": {
+"answer": "het bed",
+"description": "Ik sta in de slaapkamer en ik ben zacht en comfortabel. Ik heb een matras, een kussen en een warme deken. Elke avond lig je op mij.",
+"hint": "Je slaapt elke nacht in mij.",
+"fact": "Mensen brengen ongeveer een derde van hun leven door in dit meubel.",
+"wrong": [
+"de bank",
+"de stoel"
+]
+}
+},
+{
+"category": "object",
+"ru": "зеркало",
+"en": {
+"answer": "the mirror",
+"description": "I hang in the bathroom or in the hall. I am made of glass and I am very shiny. When you look at me, you see yourself.",
+"hint": "In a famous fairy tale a queen asks me who is the most beautiful.",
+"fact": "Old superstition says that breaking this object brings seven years of bad luck.",
+"wrong": [
+"the window",
+"the picture"
+]
+},
+"nl": {
+"answer": "de spiegel",
+"description": "Ik hang in de badkamer of in de gang. Ik ben gemaakt van glas en ik ben heel glanzend. Als je naar mij kijkt, zie je jezelf.",
+"hint": "In een beroemd sprookje vraagt een koningin mij wie de mooiste is.",
+"fact": "Volgens een oud bijgeloof brengt het breken van dit voorwerp zeven jaar ongeluk.",
+"wrong": [
+"het raam",
+"de foto"
+]
+}
+},
+{
+"category": "object",
+"ru": "свеча",
+"en": {
+"answer": "the candle",
+"description": "I am made of wax and I have a string in the middle. When you light me, I give a small warm light. I get shorter and shorter while I burn.",
+"hint": "You blow me out on a birthday cake.",
+"fact": "Before electric light, people read books by the light of this object.",
+"wrong": [
+"the lamp",
+"the match"
+]
+},
+"nl": {
+"answer": "de kaars",
+"description": "Ik ben gemaakt van was en ik heb een draadje in het midden. Als je mij aansteekt, geef ik een klein warm licht. Ik word steeds korter terwijl ik brand.",
+"hint": "Je blaast mij uit op een verjaardagstaart.",
+"fact": "Voor het elektrische licht lazen mensen boeken bij het licht van dit voorwerp.",
+"wrong": [
+"de lamp",
+"de lucifer"
+]
+}
+},
+{
+"category": "object",
+"ru": "книга",
+"en": {
+"answer": "the book",
+"description": "I have a cover and many pages with words. You can find me in a library or a shop. I can tell you a story or teach you something new.",
+"hint": "You read me from the first page to the last.",
+"fact": "The Bible is the best-selling one of these in history.",
+"wrong": [
+"the magazine",
+"the notebook"
+]
+},
+"nl": {
+"answer": "het boek",
+"description": "Ik heb een kaft en veel bladzijden met woorden. Je vindt mij in een bibliotheek of een winkel. Ik kan je een verhaal vertellen of je iets nieuws leren.",
+"hint": "Je leest mij van de eerste tot de laatste bladzijde.",
+"fact": "De Bijbel is het best verkochte exemplaar hiervan in de geschiedenis.",
+"wrong": [
+"het tijdschrift",
+"het schrift"
+]
+}
+},
+{
+"category": "object",
+"ru": "карандаш",
+"en": {
+"answer": "the pencil",
+"description": "I am long and thin and made of wood. Inside me there is something grey. Children use me at school to write and draw.",
+"hint": "When I get blunt, you have to sharpen me.",
+"fact": "The grey part inside is not lead but graphite.",
+"wrong": [
+"the pen",
+"the crayon"
+]
+},
+"nl": {
+"answer": "het potlood",
+"description": "Ik ben lang en dun en gemaakt van hout. In mij zit iets grijs. Kinderen gebruiken mij op school om te schrijven en te tekenen.",
+"hint": "Als ik bot ben, moet je mij slijpen.",
+"fact": "Het grijze deel vanbinnen is geen lood, maar grafiet.",
+"wrong": [
+"de pen",
+"het krijtje"
+]
+}
+},
+{
+"category": "object",
+"ru": "ножницы",
+"en": {
+"answer": "the scissors",
+"description": "I have two sharp parts that work together. You put your fingers in my two holes. I am very useful for cutting paper.",
+"hint": "You must never run with me in your hand.",
+"fact": "This tool has existed for more than three thousand years.",
+"wrong": [
+"the knife",
+"the stapler"
+]
+},
+"nl": {
+"answer": "de schaar",
+"description": "Ik heb twee scherpe delen die samenwerken. Je steekt je vingers in mijn twee gaten. Ik ben heel handig om papier te knippen.",
+"hint": "Je mag nooit met mij in je hand rennen.",
+"fact": "Dit gereedschap bestaat al meer dan drieduizend jaar.",
+"wrong": [
+"het mes",
+"de nietmachine"
+]
+}
+},
+{
+"category": "object",
+"ru": "телефон",
+"en": {
+"answer": "the phone",
+"description": "I am small and I usually live in your pocket. You use me to call your friends and send messages. I also have a camera and many apps.",
+"hint": "I ring when somebody wants to talk to you.",
+"fact": "The first call with this device was made by Alexander Graham Bell in 1876.",
+"wrong": [
+"the computer",
+"the radio"
+]
+},
+"nl": {
+"answer": "de telefoon",
+"description": "Ik ben klein en meestal zit ik in je zak. Je gebruikt mij om je vrienden te bellen en berichtjes te sturen. Ik heb ook een camera en veel apps.",
+"hint": "Ik ga over als iemand met je wil praten.",
+"fact": "Het eerste gesprek met dit apparaat werd in 1876 door Alexander Graham Bell gevoerd.",
+"wrong": [
+"de computer",
+"de radio"
+]
+}
+},
+{
+"category": "object",
+"ru": "очки",
+"en": {
+"answer": "the glasses",
+"description": "I sit on your nose and behind your ears. I have two round or square pieces of glass. I help people who cannot see well.",
+"hint": "You put me on to read small letters.",
+"fact": "People started wearing these in Italy around the year 1290.",
+"wrong": [
+"the hat",
+"the mask"
+]
+},
+"nl": {
+"answer": "de bril",
+"description": "Ik zit op je neus en achter je oren. Ik heb twee ronde of vierkante stukjes glas. Ik help mensen die niet goed kunnen zien.",
+"hint": "Je zet mij op om kleine letters te lezen.",
+"fact": "Mensen begonnen dit rond het jaar 1290 in Italië te dragen.",
+"wrong": [
+"de hoed",
+"het masker"
+]
+}
+},
+{
+"category": "object",
+"ru": "зубная щётка",
+"en": {
+"answer": "the toothbrush",
+"description": "I live in the bathroom in a cup. I have a long handle and soft little hairs at the end. You use me every morning and every evening.",
+"hint": "You put toothpaste on me.",
+"fact": "Dentists say you should replace this object every three months.",
+"wrong": [
+"the comb",
+"the spoon"
+]
+},
+"nl": {
+"answer": "de tandenborstel",
+"description": "Ik woon in de badkamer in een beker. Ik heb een lange steel en zachte haartjes aan het eind. Je gebruikt mij elke ochtend en elke avond.",
+"hint": "Je doet tandpasta op mij.",
+"fact": "Tandartsen zeggen dat je dit voorwerp elke drie maanden moet vervangen.",
+"wrong": [
+"de kam",
+"de lepel"
+]
+}
+},
+{
+"category": "object",
+"ru": "мяч",
+"en": {
+"answer": "the ball",
+"description": "I am round and I can bounce. Children kick me, throw me and catch me. Many sports are played with me.",
+"hint": "In football players try to get me into the goal.",
+"fact": "The classic one for football has thirty-two black and white pieces.",
+"wrong": [
+"the balloon",
+"the wheel"
+]
+},
+"nl": {
+"answer": "de bal",
+"description": "Ik ben rond en ik kan stuiteren. Kinderen schoppen mij, gooien mij en vangen mij. Veel sporten worden met mij gespeeld.",
+"hint": "Bij voetbal proberen spelers mij in het doel te krijgen.",
+"fact": "De klassieke versie voor voetbal heeft tweeëndertig zwarte en witte stukken.",
+"wrong": [
+"de ballon",
+"het wiel"
+]
+}
+},
+{
+"category": "object",
+"ru": "гитара",
+"en": {
+"answer": "the guitar",
+"description": "I am a musical instrument made of wood. I have a long neck and six strings. You play me with your fingers.",
+"hint": "Rock stars often play an electric version of me.",
+"fact": "Jimi Hendrix played this instrument upside down because he was left-handed.",
+"wrong": [
+"the violin",
+"the piano"
+]
+},
+"nl": {
+"answer": "de gitaar",
+"description": "Ik ben een muziekinstrument van hout. Ik heb een lange hals en zes snaren. Je bespeelt mij met je vingers.",
+"hint": "Rocksterren spelen vaak een elektrische versie van mij.",
+"fact": "Jimi Hendrix speelde dit instrument ondersteboven omdat hij linkshandig was.",
+"wrong": [
+"de viool",
+"de piano"
+]
+}
+},
+{
+"category": "object",
+"ru": "холодильник",
+"en": {
+"answer": "the fridge",
+"description": "I stand in the kitchen and I am cold inside. You keep milk, cheese and vegetables in me. When you open my door, a little light goes on.",
+"hint": "I keep your food fresh for a longer time.",
+"fact": "Before this machine, people used blocks of ice to keep food cold.",
+"wrong": [
+"the oven",
+"the cupboard"
+]
+},
+"nl": {
+"answer": "de koelkast",
+"description": "Ik sta in de keuken en vanbinnen ben ik koud. Je bewaart melk, kaas en groenten in mij. Als je mijn deur opendoet, gaat er een lampje aan.",
+"hint": "Ik houd je eten langer vers.",
+"fact": "Voor deze machine gebruikten mensen blokken ijs om eten koel te houden.",
+"wrong": [
+"de oven",
+"de kast"
+]
+}
+},
+{
+"category": "object",
+"ru": "рюкзак",
+"en": {
+"answer": "the backpack",
+"description": "I am a bag with two straps. Children take me to school with books inside. Hikers carry me when they walk in the mountains.",
+"hint": "You do not hold me in your hand, you wear me on your back.",
+"fact": "Soldiers were among the first people to use this kind of bag.",
+"wrong": [
+"the suitcase",
+"the handbag"
+]
+},
+"nl": {
+"answer": "de rugzak",
+"description": "Ik ben een tas met twee banden. Kinderen nemen mij mee naar school met boeken erin. Wandelaars dragen mij als ze in de bergen lopen.",
+"hint": "Je houdt mij niet in je hand, je draagt mij op je rug.",
+"fact": "Soldaten waren bij de eersten die deze soort tas gebruikten.",
+"wrong": [
+"de koffer",
+"de handtas"
+]
+}
+},
+{
+"category": "object",
+"ru": "подушка",
+"en": {
+"answer": "the pillow",
+"description": "I am soft and I lie on your bed. I am full of feathers or foam. At night your head rests on me.",
+"hint": "Children sometimes have a fight with me.",
+"fact": "People in ancient Egypt used hard ones made of stone.",
+"wrong": [
+"the blanket",
+"the towel"
+]
+},
+"nl": {
+"answer": "het kussen",
+"description": "Ik ben zacht en ik lig op je bed. Ik zit vol veren of schuim. 's Nachts rust je hoofd op mij.",
+"hint": "Kinderen houden soms een gevecht met mij.",
+"fact": "Mensen in het oude Egypte gebruikten harde exemplaren van steen.",
+"wrong": [
+"de deken",
+"de handdoek"
+]
+}
+},
+{
+"category": "transport",
+"ru": "велосипед",
+"en": {
+"answer": "the bicycle",
+"description": "I have two wheels and a seat. You move me with your own legs. In the Netherlands almost everybody rides me to work or school.",
+"hint": "I have pedals, a bell and a chain.",
+"fact": "The Netherlands has more of these than people.",
+"wrong": [
+"the scooter",
+"the car"
+]
+},
+"nl": {
+"answer": "de fiets",
+"description": "Ik heb twee wielen en een zadel. Je beweegt mij met je eigen benen. In Nederland rijdt bijna iedereen met mij naar werk of school.",
+"hint": "Ik heb trappers, een bel en een ketting.",
+"fact": "Nederland heeft er meer van dan mensen.",
+"wrong": [
+"de scooter",
+"de auto"
+]
+}
+},
+{
+"category": "transport",
+"ru": "поезд",
+"en": {
+"answer": "the train",
+"description": "I am very long and I have many cars. I run on rails from city to city. You wait for me at the station.",
+"hint": "Sometimes I am late and people get angry.",
+"fact": "The fastest ones in the world go more than six hundred kilometres per hour.",
+"wrong": [
+"the tram",
+"the bus"
+]
+},
+"nl": {
+"answer": "de trein",
+"description": "Ik ben heel lang en ik heb veel wagons. Ik rijd over rails van stad naar stad. Je wacht op mij op het station.",
+"hint": "Soms ben ik te laat en worden mensen boos.",
+"fact": "De snelste ter wereld rijden meer dan zeshonderd kilometer per uur.",
+"wrong": [
+"de tram",
+"de bus"
+]
+}
+},
+{
+"category": "transport",
+"ru": "самолёт",
+"en": {
+"answer": "the airplane",
+"description": "I am big and I have two long wings. I take people to other countries very quickly. You get on me at the airport.",
+"hint": "I fly high above the clouds.",
+"fact": "The Wright brothers made the first flight with this machine in 1903.",
+"wrong": [
+"the helicopter",
+"the rocket"
+]
+},
+"nl": {
+"answer": "het vliegtuig",
+"description": "Ik ben groot en ik heb twee lange vleugels. Ik breng mensen heel snel naar andere landen. Je stapt bij mij in op de luchthaven.",
+"hint": "Ik vlieg hoog boven de wolken.",
+"fact": "De gebroeders Wright maakten de eerste vlucht met deze machine in 1903.",
+"wrong": [
+"de helikopter",
+"de raket"
+]
+}
+},
+{
+"category": "transport",
+"ru": "лодка",
+"en": {
+"answer": "the boat",
+"description": "I float on the water. People use me to cross a river or to go fishing. In Amsterdam you can see me on the canals.",
+"hint": "Some of my kind have sails, others have an engine.",
+"fact": "People made this vehicle from tree trunks more than eight thousand years ago.",
+"wrong": [
+"the submarine",
+"the bridge"
+]
+},
+"nl": {
+"answer": "de boot",
+"description": "Ik drijf op het water. Mensen gebruiken mij om een rivier over te steken of om te vissen. In Amsterdam zie je mij op de grachten.",
+"hint": "Sommigen van mijn soort hebben zeilen, anderen een motor.",
+"fact": "Mensen maakten dit vervoermiddel al meer dan achtduizend jaar geleden van boomstammen.",
+"wrong": [
+"de onderzeeër",
+"de brug"
+]
+}
+},
+{
+"category": "transport",
+"ru": "машина",
+"en": {
+"answer": "the car",
+"description": "I have four wheels and a steering wheel. I need petrol or electricity to drive. A family can travel in me with their bags in the back.",
+"hint": "You need a driving licence to drive me.",
+"fact": "Karl Benz built the first one of these with a petrol engine in 1886.",
+"wrong": [
+"the bus",
+"the truck"
+]
+},
+"nl": {
+"answer": "de auto",
+"description": "Ik heb vier wielen en een stuur. Ik heb benzine of stroom nodig om te rijden. Een gezin kan in mij reizen met de tassen achterin.",
+"hint": "Je hebt een rijbewijs nodig om mij te besturen.",
+"fact": "Karl Benz bouwde in 1886 de eerste met een benzinemotor.",
+"wrong": [
+"de bus",
+"de vrachtwagen"
+]
+}
+},
+{
+"category": "transport",
+"ru": "такси",
+"en": {
+"answer": "the taxi",
+"description": "I am a car, but I am not yours. You call me or wave at me on the street. The driver takes you where you want, and then you pay.",
+"hint": "In New York I am famous for being yellow.",
+"fact": "The word comes from the taximeter, the machine that counts the price.",
+"wrong": [
+"the bus",
+"the limousine"
+]
+},
+"nl": {
+"answer": "de taxi",
+"description": "Ik ben een auto, maar ik ben niet van jou. Je belt mij of je zwaait naar mij op straat. De chauffeur brengt je waar je wilt, en dan betaal je.",
+"hint": "In New York ben ik beroemd omdat ik geel ben.",
+"fact": "Het woord komt van de taximeter, het apparaat dat de prijs telt.",
+"wrong": [
+"de bus",
+"de limousine"
+]
+}
+},
+{
+"category": "transport",
+"ru": "трамвай",
+"en": {
+"answer": "the tram",
+"description": "I drive on rails through the streets of a city. I use electricity from wires above me. I stop often so people can get on and off.",
+"hint": "I ring my bell when people walk in front of me.",
+"fact": "Amsterdam, Rotterdam and The Hague all have networks of this vehicle.",
+"wrong": [
+"the train",
+"the bus"
+]
+},
+"nl": {
+"answer": "de tram",
+"description": "Ik rijd over rails door de straten van een stad. Ik gebruik stroom van draden boven mij. Ik stop vaak zodat mensen kunnen in- en uitstappen.",
+"hint": "Ik bel met mijn bel als mensen voor mij lopen.",
+"fact": "Amsterdam, Rotterdam en Den Haag hebben allemaal een netwerk van dit vervoermiddel.",
+"wrong": [
+"de trein",
+"de bus"
+]
+}
+},
+{
+"category": "transport",
+"ru": "вертолёт",
+"en": {
+"answer": "the helicopter",
+"description": "I can fly, but I have no wings. I can go straight up and stay in one place in the air. Doctors sometimes use me to help people quickly.",
+"hint": "Big blades turn very fast on my roof.",
+"fact": "Leonardo da Vinci drew a design for this machine more than five hundred years ago.",
+"wrong": [
+"the airplane",
+"the drone"
+]
+},
+"nl": {
+"answer": "de helikopter",
+"description": "Ik kan vliegen, maar ik heb geen vleugels. Ik kan recht omhoog gaan en op één plek in de lucht blijven. Artsen gebruiken mij soms om mensen snel te helpen.",
+"hint": "Grote bladen draaien heel snel op mijn dak.",
+"fact": "Leonardo da Vinci tekende meer dan vijfhonderd jaar geleden een ontwerp voor deze machine.",
+"wrong": [
+"het vliegtuig",
+"de drone"
+]
+}
+},
+{
+"category": "transport",
+"ru": "трактор",
+"en": {
+"answer": "the tractor",
+"description": "I am a strong vehicle that works on a farm. I have big back wheels for the muddy fields. I pull heavy machines for the farmer.",
+"hint": "I am often green or red and I drive very slowly on the road.",
+"fact": "The first ones of these used steam engines.",
+"wrong": [
+"the truck",
+"the car"
+]
+},
+"nl": {
+"answer": "de tractor",
+"description": "Ik ben een sterk voertuig dat op een boerderij werkt. Ik heb grote achterwielen voor de modderige velden. Ik trek zware machines voor de boer.",
+"hint": "Ik ben vaak groen of rood en ik rijd heel langzaam op de weg.",
+"fact": "De eerste exemplaren werkten met stoommachines.",
+"wrong": [
+"de vrachtwagen",
+"de auto"
+]
+}
+},
+{
+"category": "transport",
+"ru": "ракета",
+"en": {
+"answer": "the rocket",
+"description": "I am tall and pointed at the top. I fly faster than anything else. I carry astronauts and satellites into space.",
+"hint": "Before I start, people count down from ten to zero.",
+"fact": "One of these took people to the Moon for the first time in 1969.",
+"wrong": [
+"the airplane",
+"the satellite"
+]
+},
+"nl": {
+"answer": "de raket",
+"description": "Ik ben hoog en puntig aan de bovenkant. Ik vlieg sneller dan al het andere. Ik breng astronauten en satellieten naar de ruimte.",
+"hint": "Voordat ik vertrek, tellen mensen af van tien naar nul.",
+"fact": "Een van deze bracht in 1969 voor het eerst mensen naar de maan.",
+"wrong": [
+"het vliegtuig",
+"de satelliet"
+]
+}
+},
+{
+"category": "profession",
+"ru": "учитель",
+"en": {
+"answer": "the teacher",
+"description": "I work at a school with many children. I explain new things and give homework. I write on the board in the classroom.",
+"hint": "Children raise their hand when they want to ask me something.",
+"fact": "World Teachers' Day is celebrated every year on the fifth of October.",
+"wrong": [
+"the doctor",
+"the librarian"
+]
+},
+"nl": {
+"answer": "de leraar",
+"description": "Ik werk op een school met veel kinderen. Ik leg nieuwe dingen uit en geef huiswerk. Ik schrijf op het bord in de klas.",
+"hint": "Kinderen steken hun vinger op als ze mij iets willen vragen.",
+"fact": "Elk jaar op vijf oktober is het de Dag van de Leraar.",
+"wrong": [
+"de dokter",
+"de bibliothecaris"
+]
+}
+},
+{
+"category": "profession",
+"ru": "пилот",
+"en": {
+"answer": "the pilot",
+"description": "I wear a uniform with a hat. I sit in the front of an airplane. I fly people safely to other countries.",
+"hint": "Before landing, I talk to the passengers through the speakers.",
+"fact": "People in this job must check their health every year.",
+"wrong": [
+"the driver",
+"the captain"
+]
+},
+"nl": {
+"answer": "de piloot",
+"description": "Ik draag een uniform met een pet. Ik zit helemaal voorin een groot vliegtuig. Ik vlieg mensen veilig naar andere landen en steden.",
+"hint": "Voor de landing praat ik met de passagiers via de luidsprekers.",
+"fact": "Mensen met dit beroep moeten elk jaar hun gezondheid laten controleren.",
+"wrong": [
+"de chauffeur",
+"de kapitein"
+]
+}
+},
+{
+"category": "profession",
+"ru": "пожарный",
+"en": {
+"answer": "the firefighter",
+"description": "I wear a helmet and a strong jacket. When there is a fire, I come very fast with my team. I use water to stop the flames.",
+"hint": "I drive a big red truck with a siren and a ladder.",
+"fact": "Ancient Rome already had a team of people doing this job.",
+"wrong": [
+"the police officer",
+"the doctor"
+]
+},
+"nl": {
+"answer": "de brandweerman",
+"description": "Ik draag een helm en een sterke jas. Als er brand is, kom ik heel snel met mijn team. Ik gebruik water om de vlammen te stoppen.",
+"hint": "Ik rijd in een grote rode wagen met een sirene en een ladder.",
+"fact": "Het oude Rome had al een team dat dit werk deed.",
+"wrong": [
+"de politieagent",
+"de dokter"
+]
+}
+},
+{
+"category": "profession",
+"ru": "полицейский",
+"en": {
+"answer": "the police officer",
+"description": "I wear a blue uniform and I help people in the city. I make sure everybody follows the rules. When there is a problem, people call me.",
+"hint": "I catch thieves and my car has blue lights.",
+"fact": "In the Netherlands you call this service with the number 112 in an emergency.",
+"wrong": [
+"the firefighter",
+"the soldier"
+]
+},
+"nl": {
+"answer": "de politieagent",
+"description": "Ik draag een blauw uniform en ik help mensen in de stad. Ik zorg dat iedereen zich aan de regels houdt. Als er een probleem is, bellen mensen mij.",
+"hint": "Ik vang dieven en mijn auto heeft blauwe lampen.",
+"fact": "In Nederland bel je in een noodgeval het nummer 112.",
+"wrong": [
+"de brandweerman",
+"de soldaat"
+]
+}
+},
+{
+"category": "profession",
+"ru": "пекарь",
+"en": {
+"answer": "the baker",
+"description": "I get up very early, when it is still dark. I work with flour, water and a hot oven. In the morning my shop smells wonderful.",
+"hint": "I make fresh bread and cakes every day.",
+"fact": "People in this job often start work around three or four in the morning.",
+"wrong": [
+"the cook",
+"the farmer"
+]
+},
+"nl": {
+"answer": "de bakker",
+"description": "Ik sta heel vroeg op, als het nog donker is. Ik werk met meel, water en een hete oven. 's Ochtends ruikt mijn winkel heerlijk.",
+"hint": "Ik maak elke dag vers brood en taart.",
+"fact": "Mensen met dit beroep beginnen vaak rond drie of vier uur 's nachts.",
+"wrong": [
+"de kok",
+"de boer"
+]
+}
+},
+{
+"category": "profession",
+"ru": "фермер",
+"en": {
+"answer": "the farmer",
+"description": "I live in the countryside and work outside every day. I take care of cows, chickens and pigs. I also grow vegetables on my land.",
+"hint": "I often drive a tractor across the fields.",
+"fact": "Dutch people in this job are famous all over the world for growing tulips.",
+"wrong": [
+"the gardener",
+"the baker"
+]
+},
+"nl": {
+"answer": "de boer",
+"description": "Ik woon op het platteland en werk elke dag buiten. Ik zorg voor koeien, kippen en varkens. Ik kweek ook groenten op mijn land.",
+"hint": "Ik rijd vaak met een tractor over de velden.",
+"fact": "Nederlanders met dit beroep zijn over de hele wereld bekend om hun tulpen.",
+"wrong": [
+"de tuinman",
+"de bakker"
+]
+}
+},
+{
+"category": "profession",
+"ru": "повар",
+"en": {
+"answer": "the cook",
+"description": "I work in the kitchen of a restaurant. I cut, fry and boil all day long. I make sure the food tastes delicious.",
+"hint": "I wear a tall white hat.",
+"fact": "The tall white hat in this job traditionally has one hundred folds.",
+"wrong": [
+"the waiter",
+"the baker"
+]
+},
+"nl": {
+"answer": "de kok",
+"description": "Ik werk in de keuken van een restaurant. Ik snijd, bak en kook de hele dag. Ik zorg dat het eten heerlijk smaakt.",
+"hint": "Ik draag een hoge witte muts.",
+"fact": "De hoge witte muts in dit beroep heeft traditioneel honderd plooien.",
+"wrong": [
+"de ober",
+"de bakker"
+]
+}
+},
+{
+"category": "profession",
+"ru": "стоматолог",
+"en": {
+"answer": "the dentist",
+"description": "People visit me twice a year. I ask them to sit in a special chair and open their mouth. Some children are a little bit afraid of me.",
+"hint": "I take care of your teeth.",
+"fact": "Ancient people in Pakistan already drilled teeth nine thousand years ago.",
+"wrong": [
+"the doctor",
+"the nurse"
+]
+},
+"nl": {
+"answer": "de tandarts",
+"description": "Mensen bezoeken mij twee keer per jaar. Ik vraag ze in een speciale stoel te gaan zitten en hun mond open te doen. Sommige kinderen zijn een beetje bang voor mij.",
+"hint": "Ik zorg voor je tanden.",
+"fact": "Mensen in Pakistan boorden al negenduizend jaar geleden in tanden.",
+"wrong": [
+"de dokter",
+"de verpleegkundige"
+]
+}
+},
+{
+"category": "profession",
+"ru": "парикмахер",
+"en": {
+"answer": "the hairdresser",
+"description": "I work in a salon with big mirrors. People sit in my chair and tell me what they want. I use scissors, a comb and a dryer.",
+"hint": "I cut and wash your hair.",
+"fact": "In old times people in this job also pulled teeth.",
+"wrong": [
+"the barber",
+"the tailor"
+]
+},
+"nl": {
+"answer": "de kapper",
+"description": "Ik werk in een salon met grote spiegels. Mensen zitten in mijn stoel en vertellen me wat ze willen. Ik gebruik een schaar, een kam en een föhn.",
+"hint": "Ik knip en was je haar.",
+"fact": "Vroeger trokken mensen met dit beroep ook tanden.",
+"wrong": [
+"de barbier",
+"de kleermaker"
+]
+}
+},
+{
+"category": "profession",
+"ru": "почтальон",
+"en": {
+"answer": "the postman",
+"description": "I walk or cycle through the streets every day. I carry a big bag full of envelopes and packages. I put things in your letterbox.",
+"hint": "I bring you letters and cards.",
+"fact": "Dogs famously bark at people in this job all over the world.",
+"wrong": [
+"the courier",
+"the driver"
+]
+},
+"nl": {
+"answer": "de postbode",
+"description": "Ik loop of fiets elke dag door de straten. Ik draag een grote tas vol enveloppen en pakketjes. Ik stop dingen in je brievenbus.",
+"hint": "Ik breng je brieven en kaarten.",
+"fact": "Honden blaffen over de hele wereld vaak naar mensen met dit beroep.",
+"wrong": [
+"de koerier",
+"de chauffeur"
+]
+}
+},
+{
+"category": "profession",
+"ru": "медсестра",
+"en": {
+"answer": "the nurse",
+"description": "I work in a hospital, day and night. I help the doctor and give patients their medicine. I check if people feel better.",
+"hint": "I take care of sick people in their hospital bed.",
+"fact": "Florence Nightingale is the most famous person in this job in history.",
+"wrong": [
+"the doctor",
+"the dentist"
+]
+},
+"nl": {
+"answer": "de verpleegkundige",
+"description": "Ik werk dag en nacht in een ziekenhuis. Ik help de dokter en geef patiënten hun medicijnen. Ik kijk of mensen zich beter voelen.",
+"hint": "Ik zorg voor zieke mensen in hun ziekenhuisbed.",
+"fact": "Florence Nightingale is de beroemdste persoon met dit beroep in de geschiedenis.",
+"wrong": [
+"de dokter",
+"de tandarts"
+]
+}
+},
+{
+"category": "profession",
+"ru": "художник",
+"en": {
+"answer": "the painter",
+"description": "I work with brushes and many colours. I make pictures of people, flowers and landscapes. My work hangs in museums.",
+"hint": "Van Gogh and Rembrandt did the same job as me.",
+"fact": "Vincent van Gogh made more than two thousand artworks in about ten years.",
+"wrong": [
+"the photographer",
+"the writer"
+]
+},
+"nl": {
+"answer": "de schilder",
+"description": "Ik werk met penselen en veel kleuren. Ik maak afbeeldingen van mensen, bloemen en landschappen. Mijn werk hangt in musea.",
+"hint": "Van Gogh en Rembrandt deden hetzelfde werk als ik.",
+"fact": "Vincent van Gogh maakte in ongeveer tien jaar meer dan tweeduizend kunstwerken.",
+"wrong": [
+"de fotograaf",
+"de schrijver"
+]
+}
+},
+{
+"category": "place",
+"ru": "пляж",
+"en": {
+"answer": "the beach",
+"description": "I am a place next to the sea. I am covered with soft sand. In summer many people come to swim and lie in the sun.",
+"hint": "Children build sandcastles on me.",
+"fact": "The sand here is made of tiny pieces of rock and shells.",
+"wrong": [
+"the lake",
+"the park"
+]
+},
+"nl": {
+"answer": "het strand",
+"description": "Ik ben een plek naast de zee. Ik ben bedekt met zacht zand. In de zomer komen veel mensen zwemmen en in de zon liggen.",
+"hint": "Kinderen bouwen zandkastelen op mij.",
+"fact": "Het zand hier bestaat uit piepkleine stukjes steen en schelpen.",
+"wrong": [
+"het meer",
+"het park"
+]
+}
+},
+{
+"category": "place",
+"ru": "библиотека",
+"en": {
+"answer": "the library",
+"description": "I am a quiet building full of shelves. People come to read and study here. You can take things home for free and bring them back later.",
+"hint": "I am full of books that you can borrow.",
+"fact": "The library in Alexandria was one of the most famous places of this kind in the ancient world.",
+"wrong": [
+"the bookshop",
+"the school"
+]
+},
+"nl": {
+"answer": "de bibliotheek",
+"description": "Ik ben een rustig gebouw vol planken. Mensen komen hier lezen en studeren. Je kunt dingen gratis mee naar huis nemen en later terugbrengen.",
+"hint": "Ik zit vol boeken die je kunt lenen.",
+"fact": "De bibliotheek van Alexandrië was een van de beroemdste plekken van deze soort in de oudheid.",
+"wrong": [
+"de boekwinkel",
+"de school"
+]
+}
+},
+{
+"category": "place",
+"ru": "больница",
+"en": {
+"answer": "the hospital",
+"description": "I am a big building where people go when they are very sick. Doctors and nurses work here day and night. Many babies are born here.",
+"hint": "An ambulance brings people to me.",
+"fact": "Many of these buildings have a landing place for helicopters on the roof.",
+"wrong": [
+"the pharmacy",
+"the hotel"
+]
+},
+"nl": {
+"answer": "het ziekenhuis",
+"description": "Ik ben een groot gebouw waar mensen naartoe gaan als ze erg ziek zijn. Dokters en verpleegkundigen werken hier dag en nacht. Er worden hier veel baby's geboren.",
+"hint": "Een ambulance brengt mensen naar mij toe.",
+"fact": "Veel van deze gebouwen hebben een landingsplek voor helikopters op het dak.",
+"wrong": [
+"de apotheek",
+"het hotel"
+]
+}
+},
+{
+"category": "place",
+"ru": "школа",
+"en": {
+"answer": "the school",
+"description": "Children come to me on weekdays. They sit in classrooms and learn to read, write and count. In the break they play outside.",
+"hint": "A bell rings when the lessons start.",
+"fact": "In the Netherlands children must go here from the age of five.",
+"wrong": [
+"the library",
+"the playground"
+]
+},
+"nl": {
+"answer": "de school",
+"description": "Kinderen komen op doordeweekse dagen naar mij toe. Ze zitten in klaslokalen en leren lezen, schrijven en rekenen. In de pauze spelen ze buiten.",
+"hint": "Er gaat een bel als de lessen beginnen.",
+"fact": "In Nederland moeten kinderen hier vanaf vijf jaar naartoe.",
+"wrong": [
+"de bibliotheek",
+"de speeltuin"
+]
+}
+},
+{
+"category": "place",
+"ru": "зоопарк",
+"en": {
+"answer": "the zoo",
+"description": "I am a big park where you can see animals from all over the world. Lions, giraffes and monkeys live here. Families visit me on sunny weekends.",
+"hint": "You buy a ticket to see the elephants and penguins.",
+"fact": "Artis in Amsterdam is the oldest place of this kind in the Netherlands, from 1838.",
+"wrong": [
+"the farm",
+"the circus"
+]
+},
+"nl": {
+"answer": "de dierentuin",
+"description": "Ik ben een groot park waar je dieren van over de hele wereld kunt zien. Leeuwen, giraffen en apen wonen hier. Gezinnen bezoeken mij op zonnige weekenden.",
+"hint": "Je koopt een kaartje om de olifanten en pinguïns te zien.",
+"fact": "Artis in Amsterdam is de oudste plek van deze soort in Nederland, uit 1838.",
+"wrong": [
+"de boerderij",
+"het circus"
+]
+}
+},
+{
+"category": "place",
+"ru": "аэропорт",
+"en": {
+"answer": "the airport",
+"description": "I am a very big place with long runways. People come here with suitcases and passports. From here they travel to other countries.",
+"hint": "Airplanes take off and land here.",
+"fact": "Schiphol near Amsterdam lies about three metres below sea level.",
+"wrong": [
+"the station",
+"the harbour"
+]
+},
+"nl": {
+"answer": "de luchthaven",
+"description": "Ik ben een heel grote plek met lange startbanen. Mensen komen hier met koffers en paspoorten. Van hieruit reizen ze naar andere landen.",
+"hint": "Vliegtuigen stijgen hier op en landen hier.",
+"fact": "Schiphol bij Amsterdam ligt ongeveer drie meter onder zeeniveau.",
+"wrong": [
+"het station",
+"de haven"
+]
+}
+},
+{
+"category": "place",
+"ru": "супермаркет",
+"en": {
+"answer": "the supermarket",
+"description": "I am a big shop with many long aisles. You find bread, milk, fruit and soap here. You take a trolley and pay at the checkout.",
+"hint": "You go to me when your fridge is empty.",
+"fact": "Albert Heijn opened its first shop in Oostzaan in 1887.",
+"wrong": [
+"the market",
+"the bakery"
+]
+},
+"nl": {
+"answer": "de supermarkt",
+"description": "Ik ben een grote winkel met veel lange gangpaden. Je vindt hier brood, melk, fruit en zeep. Je pakt een karretje en betaalt bij de kassa.",
+"hint": "Je gaat naar mij als je koelkast leeg is.",
+"fact": "Albert Heijn opende in 1887 zijn eerste winkel in Oostzaan.",
+"wrong": [
+"de markt",
+"de bakkerij"
+]
+}
+},
+{
+"category": "place",
+"ru": "музей",
+"en": {
+"answer": "the museum",
+"description": "I am a building full of old and beautiful things. You can see paintings, statues and even dinosaur bones here. You must not touch the art.",
+"hint": "The Rijksmuseum in Amsterdam is a famous example of me.",
+"fact": "In the Rijksmuseum you can see The Night Watch by Rembrandt.",
+"wrong": [
+"the gallery",
+"the library"
+]
+},
+"nl": {
+"answer": "het museum",
+"description": "Ik ben een gebouw vol oude en mooie dingen. Je kunt hier schilderijen, beelden en zelfs dinosaurusbotten zien. Je mag de kunst niet aanraken.",
+"hint": "Het Rijksmuseum in Amsterdam is een beroemd voorbeeld van mij.",
+"fact": "In het Rijksmuseum kun je De Nachtwacht van Rembrandt zien.",
+"wrong": [
+"de galerie",
+"de bibliotheek"
+]
+}
+},
+{
+"category": "place",
+"ru": "лес",
+"en": {
+"answer": "the forest",
+"description": "I am a big place full of tall trees. Deer, foxes and birds live here. In autumn my leaves turn yellow and red.",
+"hint": "People walk in me and look for mushrooms.",
+"fact": "About one third of the land on Earth is covered by this kind of place.",
+"wrong": [
+"the park",
+"the garden"
+]
+},
+"nl": {
+"answer": "het bos",
+"description": "Ik ben een grote plek vol hoge bomen. Herten, vossen en vogels wonen hier. In de herfst worden mijn bladeren geel en rood.",
+"hint": "Mensen wandelen in mij en zoeken naar paddenstoelen.",
+"fact": "Ongeveer een derde van het land op aarde is bedekt met deze soort plek.",
+"wrong": [
+"het park",
+"de tuin"
+]
+}
+},
+{
+"category": "place",
+"ru": "замок",
+"en": {
+"answer": "the castle",
+"description": "I am a very old building made of stone. I have towers, thick walls and sometimes water around me. Long ago kings and knights lived in me.",
+"hint": "In fairy tales a princess often lives in my tower.",
+"fact": "The Muiderslot near Amsterdam is more than seven hundred years old.",
+"wrong": [
+"the palace",
+"the church"
+]
+},
+"nl": {
+"answer": "het kasteel",
+"description": "Ik ben een heel oud gebouw van steen. Ik heb torens, dikke muren en soms water om mij heen. Lang geleden woonden koningen en ridders in mij.",
+"hint": "In sprookjes woont er vaak een prinses in mijn toren.",
+"fact": "Het Muiderslot bij Amsterdam is meer dan zevenhonderd jaar oud.",
+"wrong": [
+"het paleis",
+"de kerk"
+]
+}
+},
+{
+"category": "character",
+"ru": "Санта-Клаус",
+"en": {
+"answer": "Santa Claus",
+"description": "I am an old man with a long white beard. I wear a red suit and live at the North Pole. Once a year I bring presents to children.",
+"hint": "My sleigh is pulled by reindeer, and I say ho ho ho.",
+"fact": "His story is based on Saint Nicholas, a bishop from more than sixteen hundred years ago.",
+"wrong": [
+"Saint Nicholas",
+"the Easter Bunny"
+]
+},
+"nl": {
+"answer": "de Kerstman",
+"description": "Ik ben een oude man met een lange witte baard. Ik draag een rood pak en woon op de Noordpool. Eén keer per jaar breng ik cadeautjes aan kinderen.",
+"hint": "Mijn slee wordt getrokken door rendieren, en ik zeg ho ho ho.",
+"fact": "Zijn verhaal is gebaseerd op Sint-Nicolaas, een bisschop van meer dan zestienhonderd jaar geleden.",
+"wrong": [
+"Sinterklaas",
+"de Paashaas"
+]
+}
+},
+{
+"category": "character",
+"ru": "Микки Маус",
+"en": {
+"answer": "Mickey Mouse",
+"description": "I am a cartoon character who is almost one hundred years old. I have big round black ears and red shorts. My girlfriend is called Minnie.",
+"hint": "Walt Disney created me in 1928.",
+"fact": "Walt Disney himself was the first voice of this character.",
+"wrong": [
+"Donald Duck",
+"Goofy"
+]
+},
+"nl": {
+"answer": "Mickey Mouse",
+"description": "Ik ben een tekenfilmfiguur die bijna honderd jaar oud is. Ik heb grote ronde zwarte oren en een rode korte broek. Mijn vriendin heet Minnie.",
+"hint": "Walt Disney heeft mij in 1928 bedacht.",
+"fact": "Walt Disney zelf was de eerste stem van dit figuur.",
+"wrong": [
+"Donald Duck",
+"Goofy"
+]
+}
+},
+{
+"category": "character",
+"ru": "Гарри Поттер",
+"en": {
+"answer": "Harry Potter",
+"description": "I am a young wizard with round glasses. I have a scar on my forehead in the shape of lightning. My best friends are Ron and Hermione.",
+"hint": "I study at Hogwarts, a school of magic.",
+"fact": "The books about him have been translated into more than eighty languages.",
+"wrong": [
+"Ron Weasley",
+"Merlin"
+]
+},
+"nl": {
+"answer": "Harry Potter",
+"description": "Ik ben een jonge tovenaar met een ronde bril. Ik heb een litteken op mijn voorhoofd in de vorm van een bliksemschicht. Mijn beste vrienden heten Ron en Hermelien.",
+"hint": "Ik studeer op Zweinstein, een school voor toverkunst.",
+"fact": "De boeken over hem zijn in meer dan tachtig talen vertaald.",
+"wrong": [
+"Ron Wemel",
+"Merlijn"
+]
+}
+},
+{
+"category": "character",
+"ru": "Пиноккио",
+"en": {
+"answer": "Pinocchio",
+"description": "I am a puppet made of wood. An old man called Geppetto made me. I dream of becoming a real boy.",
+"hint": "When I tell a lie, my nose grows longer.",
+"fact": "The story was written by the Italian writer Carlo Collodi in 1883.",
+"wrong": [
+"Peter Pan",
+"Buratino"
+]
+},
+"nl": {
+"answer": "Pinokkio",
+"description": "Ik ben een pop van hout. Een oude man die Geppetto heet, heeft mij gemaakt. Ik droom ervan om een echte jongen te worden.",
+"hint": "Als ik lieg, wordt mijn neus langer.",
+"fact": "Het verhaal werd in 1883 geschreven door de Italiaanse schrijver Carlo Collodi.",
+"wrong": [
+"Peter Pan",
+"Kabouter Plop"
+]
+}
+},
+{
+"category": "character",
+"ru": "Человек-паук",
+"en": {
+"answer": "Spider-Man",
+"description": "I am a superhero from New York. A special bite gave me my powers when I was a teenager. I wear a red and blue suit with a mask.",
+"hint": "I can climb walls and shoot webs from my wrists.",
+"fact": "His real name is Peter Parker.",
+"wrong": [
+"Batman",
+"Superman"
+]
+},
+"nl": {
+"answer": "Spider-Man",
+"description": "Ik ben een superheld uit New York. Een speciale beet gaf mij mijn krachten toen ik een tiener was. Ik draag een rood-blauw pak met een masker.",
+"hint": "Ik kan tegen muren op klimmen en webben uit mijn polsen schieten.",
+"fact": "Zijn echte naam is Peter Parker.",
+"wrong": [
+"Batman",
+"Superman"
+]
+}
+},
+{
+"category": "character",
+"ru": "Белоснежка",
+"en": {
+"answer": "Snow White",
+"description": "I am a princess with black hair and red lips. I live in the forest with seven small friends. An evil queen wants to hurt me.",
+"hint": "I fall asleep after eating a poisoned apple.",
+"fact": "Disney made the first full-length cartoon film about her in 1937.",
+"wrong": [
+"Cinderella",
+"Sleeping Beauty"
+]
+},
+"nl": {
+"answer": "Sneeuwwitje",
+"description": "Ik ben een prinses met zwart haar en rode lippen. Ik woon in het bos met zeven kleine vrienden. Een gemene koningin wil mij kwaad doen.",
+"hint": "Ik val in slaap nadat ik een vergiftigde appel heb gegeten.",
+"fact": "Disney maakte in 1937 de eerste lange tekenfilm over haar.",
+"wrong": [
+"Assepoester",
+"Doornroosje"
+]
+}
+},
+{
+"category": "character",
+"ru": "Супермен",
+"en": {
+"answer": "Superman",
+"description": "I come from another planet called Krypton. I am very strong and I can fly. I wear a blue suit with a red cape.",
+"hint": "At work I am a quiet reporter with glasses called Clark Kent.",
+"fact": "He first appeared in a comic book in 1938.",
+"wrong": [
+"Batman",
+"Spider-Man"
+]
+},
+"nl": {
+"answer": "Superman",
+"description": "Ik kom van een andere planeet die Krypton heet. Ik ben heel sterk en ik kan vliegen. Ik draag een blauw pak met een rode cape.",
+"hint": "Op mijn werk ben ik een rustige verslaggever met een bril, Clark Kent.",
+"fact": "Hij verscheen in 1938 voor het eerst in een stripboek.",
+"wrong": [
+"Batman",
+"Spider-Man"
+]
+}
+},
+{
+"category": "character",
+"ru": "Золушка",
+"en": {
+"answer": "Cinderella",
+"description": "I am a kind girl who works hard for my mean stepmother. With the help of magic I go to a royal ball. I must leave before midnight.",
+"hint": "I lose one of my glass slippers on the stairs.",
+"fact": "Versions of her story exist in hundreds of cultures around the world.",
+"wrong": [
+"Snow White",
+"Rapunzel"
+]
+},
+"nl": {
+"answer": "Assepoester",
+"description": "Ik ben een lief meisje dat hard werkt voor mijn gemene stiefmoeder. Met behulp van toverkracht ga ik naar een koninklijk bal. Ik moet voor middernacht weg.",
+"hint": "Ik verlies een van mijn glazen muiltjes op de trap.",
+"fact": "Er bestaan versies van haar verhaal in honderden culturen over de hele wereld.",
+"wrong": [
+"Sneeuwwitje",
+"Rapunzel"
+]
+}
+},
+{
+"category": "object",
+"ru": "лампа",
+"en": {
+"answer": "the lamp",
+"description": "I stand on a desk or hang from the ceiling. When it gets dark, you switch me on. Then I fill the room with light.",
+"hint": "Inside me there is a bulb that gets warm.",
+"fact": "Thomas Edison made a long-lasting bulb for this object in 1879.",
+"wrong": [
+"the candle",
+"the torch"
+]
+},
+"nl": {
+"answer": "de lamp",
+"description": "Ik sta op een bureau of hang aan het plafond. Als het donker wordt, doe je mij aan. Dan vul ik de kamer met licht.",
+"hint": "In mij zit een peertje dat warm wordt.",
+"fact": "Thomas Edison maakte in 1879 een gloeilamp die lang bleef branden.",
+"wrong": [
+"de kaars",
+"de zaklamp"
+]
+}
+},
+{
+"category": "object",
+"ru": "фотоаппарат",
+"en": {
+"answer": "the camera",
+"description": "I help you to remember special moments. You look through me and press a button. Then I make a picture of what you see.",
+"hint": "Tourists carry me around their neck and say cheese.",
+"fact": "The first photo of this kind took about eight hours to make, in 1826.",
+"wrong": [
+"the phone",
+"the binoculars"
+]
+},
+"nl": {
+"answer": "de camera",
+"description": "Ik help je om bijzondere momenten te onthouden. Je kijkt door mij heen en drukt op een knop. Dan maak ik een plaatje van wat je ziet.",
+"hint": "Toeristen dragen mij om hun nek en zeggen cheese.",
+"fact": "De eerste foto van deze soort kostte in 1826 ongeveer acht uur om te maken.",
+"wrong": [
+"de telefoon",
+"de verrekijker"
+]
+}
+}
+]
