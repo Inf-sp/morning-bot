@@ -6,17 +6,32 @@ def ask_city():
     b = MessageBuilder()
     b.section("✈️ В отпуске")
     b.spacer()
-    b.line("Напиши город, куда едешь, например Cape Town.")
-    b.line("Погода, праздники, кухня, концерты и премьеры переключатся на эту страну, "
-           "«Обучение» — на язык страны, а в «Моём дне» появятся факты о ней.")
+    b.line("Напиши город, куда едешь, и сроки, например «Cape Town до 20 октября».")
+    b.spacer()
+    b.italic("Погода, праздники, кухня, концерты и премьеры переключатся на эту страну, "
+             "«Обучение» — на язык страны, а в «Моём дне» появятся факты о ней.")
+    b.newline()
     return b.build_stripped()
 
 
-def ask_days(city):
+def ask_days(city, flag="", facts=()):
+    """«✈️ Кейптаун 🇿🇦», коротко о стране, внизу курсивом — вопрос о дате возвращения."""
     b = MessageBuilder()
-    b.section(f"✈️ {city}".rstrip())
+    b.section(f"✈️ {city} {flag}".strip())
     b.spacer()
-    b.line("До какого дня отпуск? В этот день я сам верну домашний город.")
+    for label, value in facts:
+        b.labeled_line(label, value, lowercase=False)
+    if facts:
+        b.spacer()
+    b.italic("До какого дня отпуск? В этот день я сам верну домашний город. "
+             "Можно написать дату в чат, например «20 октября» или «20.10».")
+    b.newline()
+    return b.build_stripped()
+
+
+def until_not_understood():
+    b = MessageBuilder()
+    b.line("Не понял дату. Напиши, например, «20 октября», «20.10» или «на неделю» — или выбери кнопку выше.")
     return b.build_stripped()
 
 

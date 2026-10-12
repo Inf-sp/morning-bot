@@ -29,6 +29,7 @@ def _env(monkeypatch, place=None):
         "now", {"lat": lat, "lon": lon, "city": city, "country": country, "cc": cc}))
     monkeypatch.setattr(store, "mutate_profile", lambda *_a, **_k: None)
     monkeypatch.setattr(vacation, "_reset_day_caches", lambda _cid: None)
+    monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})  # без сети
     return saved, places
 
 
@@ -175,3 +176,52 @@ def test_country_block_and_summary_lines():
     assert "✈️ В отпуске до 20 октября · дома Алкмар" in text
     assert "🌍 Страна:\nСтолица: Pretoria" in text and "🎯 Тренажер: Dankie → Спасибо" in text
     assert "Разговорник" not in text
+
+
+def test_dates_in_any_form_and_city_with_dates_in_one_message():
+    today = date(2026, 10, 12)
+    assert vacation.split_city_and_until("Cape Town до 20 октября", today) == ("Cape Town", date(2026, 10, 20))
+    assert vacation.split_city_and_until("Рим с 15 по 25 октября", today) == ("Рим", date(2026, 10, 25))
+    assert vacation.split_city_and_until("Барселона на неделю", today) == ("Барселона", date(2026, 10, 19))
+    assert vacation.split_city_and_until("Cape Town", today) == ("Cape Town", None)
+    assert vacation.parse_until("20.10", today) == date(2026, 10, 20)
+    assert vacation.parse_until("5 января", today) == date(2027, 1, 5)  # прошедшая дата — следующий год
+    assert vacation.parse_until("когда-нибудь", today) is None
+
+
+def test_city_with_dates_skips_question_and_manual_date_works(monkeypatch):
+    saved, places = _env(monkeypatch)
+    import weather
+    import myday
+    finished = []
+
+    async def set_city(_bot, _cid, text, **_kwargs):
+        assert text == "Cape Town"  # сроки отрезаны от города
+        places["now"] = dict(CAPE)
+        return True
+
+    async def plany(*_a, **_k):
+        finished.append(vacation.state("42")["until"])
+
+    monkeypatch.setattr(weather, "set_city_text", set_city)
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
+    monkeypatch.setattr(myday, "send_plany", plany)
+    monkeypatch.setattr(vacation, "parse_until", lambda text, today=None: (
+        date(2026, 10, 20) if "20" in str(text) else None))
+
+    asyncio.run(vacation.city_entered(Bot(), "42", "Cape Town до 20 октября"))
+    assert finished == ["2026-10-20"]
+
+    bot = Bot()
+    asyncio.run(vacation.until_entered(bot, "42", "не знаю"))
+    assert store.pending_input["42"] == "vacation_until" and "Не понял дату" in bot.sent[-1]["text"]
+    asyncio.run(vacation.until_entered(bot, "42", "20.10"))
+    assert finished[-1] == "2026-10-20"
+
+
+def test_ask_days_screen_shows_flag_facts_and_italic_question():
+    msg = vacation_ui.ask_days("Кейптаун", "🇿🇦", [("Столица", "Pretoria"), ("Валюта", "ZAR (R) · 1 € = 18,53 R")])
+    assert msg.text.startswith("✈️ Кейптаун 🇿🇦\n\nСтолица: Pretoria\nВалюта:")
+    italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+              for e in msg.entities if e.type == "italic"]
+    assert italic and italic[-1].startswith("До какого дня отпуск?") and "дату в чат" in italic[-1]

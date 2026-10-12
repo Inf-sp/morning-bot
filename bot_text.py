@@ -106,6 +106,9 @@ async def handle(update, context, remove_reply_keyboard):
         if kind == "vacation_city":
             import vacation
             await vacation.city_entered(bot, cid, text); return
+        if kind == "vacation_until":
+            import vacation
+            await vacation.until_entered(bot, cid, text); return
         if kind == "concert_artist_search":
             import leisure_concerts
             await leisure_concerts.find_artist_concerts(bot, cid, text); return

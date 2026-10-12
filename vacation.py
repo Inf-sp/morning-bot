@@ -12,6 +12,7 @@ Open-Meteo (часовой пояс города). Уроки языка стр�
 """
 import json
 import logging
+import re
 import time
 from datetime import date, datetime, timedelta
 
@@ -34,6 +35,75 @@ _LESSONS_TOTAL = 7
 _WORDS_TOTAL = 30
 _GUIDE_VERSION = 3  # 3 — уроки: тема → значение, пример, объяснение
 DAY_CHOICES = (("3 дня", 3), ("Неделя", 7), ("2 недели", 14), ("Без даты", 0))
+_MONTHS_GEN = ("январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр")
+_DATE_RE = re.compile(
+    r"(?P<iso>\d{4}-\d{2}-\d{2})"
+    r"|(?P<dm>\d{1,2})[./](?P<mm>\d{1,2})(?:[./](?P<yy>\d{2,4}))?"
+    r"|(?P<d>\d{1,2})\s+(?P<month>[а-яё]+)(?:\s+(?P<y>\d{4}))?"
+    r"|(?:на\s+)?(?P<n>\d{1,3})\s+(?P<unit>д[не]\w*|недел\w*)"
+    r"|на\s+(?P<word>неделю|две\s+недели|месяц)",
+    re.IGNORECASE,
+)
+_DATE_GLUE_RE = re.compile(r"\s*(?:\bдо\b|\bпо\b|\bс\b|\bна\b|[–—,-])\s*$|^\s*(?:\bдо\b|\bпо\b|\bс\b|[–—,-])\s*",
+                           re.IGNORECASE)
+
+
+def _month_number(word):
+    word = word.casefold()
+    for index, stem in enumerate(_MONTHS_GEN, start=1):
+        if word.startswith(stem) and (stem != "ма" or word in ("мая", "май")):
+            return index
+    return 0
+
+
+def parse_until(text, today=None):
+    """Дата возвращения из текста: «до 20 октября», «20.10», «2026-10-20», «на неделю», «на 5 дней».
+
+    Берётся последняя дата (у «с 15 по 25 октября» — 25-е); без года прошедшая дата — в следующем году.
+    Не дальше года вперёд; не распознано — None.
+    """
+    today = today or datetime.now(config.TZ).date()
+    found = None
+    for match in _DATE_RE.finditer(str(text or "")):
+        try:
+            if match["iso"]:
+                day = date.fromisoformat(match["iso"])
+            elif match["dm"]:
+                year = int(match["yy"]) if match["yy"] else today.year
+                year += 2000 if year < 100 else 0
+                day = date(year, int(match["mm"]), int(match["dm"]))
+                if not match["yy"] and day < today:
+                    day = day.replace(year=year + 1)
+            elif match["d"]:
+                month = _month_number(match["month"])
+                if not month:
+                    continue
+                day = date(int(match["y"] or today.year), month, int(match["d"]))
+                if not match["y"] and day < today:
+                    day = day.replace(year=day.year + 1)
+            elif match["n"]:
+                count = int(match["n"])
+                day = today + timedelta(days=count * 7 if match["unit"].casefold().startswith("нед") else count)
+            else:
+                word = match["word"].casefold()
+                day = today + timedelta(days=30 if word == "месяц" else 14 if "две" in word else 7)
+        except ValueError:
+            continue
+        found = day
+    if found is None or not today < found <= today + timedelta(days=366):
+        return None
+    return found
+
+
+def split_city_and_until(text, today=None):
+    """«Cape Town до 20 октября» → («Cape Town», date); без даты — (текст, None)."""
+    until = parse_until(text, today)
+    if until is None:
+        return " ".join(str(text or "").split()), None
+    city = _DATE_RE.sub(" ", str(text))
+    for _ in range(3):
+        city = _DATE_GLUE_RE.sub("", city.strip())
+    return " ".join(city.split()).strip(" ,.") or str(text).strip(), until
 
 # Страна совпадает с кухней из списка Готовки — берём её (с фото); иначе — кухня страны от AI.
 CC_CUISINE = {"IT": "italian", "JP": "japanese", "TH": "thai", "MX": "mexican", "IN": "indian",
@@ -92,9 +162,12 @@ async def ask_city(bot, cid):
 
 
 async def city_entered(bot, cid, text):
+    """Город (и, если написаны, сроки) отпуска: с датой — сразу готово, без неё — вопрос о дате."""
+    import asyncio
     import weather
     home = _pending_home.pop(str(cid), None) or (state(cid) or {}).get("home") or dict(store.get_settings(cid))
-    ok = await weather.set_city_text(bot, cid, text, show_brief=False, announce=False,
+    city_text, until = split_city_and_until(text)
+    ok = await weather.set_city_text(bot, cid, city_text, show_brief=False, announce=False,
                                               retry_kind="vacation_city")
     if not ok:
         _pending_home[str(cid)] = home  # город не найден — ждём новый ввод
@@ -103,10 +176,34 @@ async def city_entered(bot, cid, text):
     _save(cid, {"home": home, "until": "", "cc": str(place.get("cc") or "").upper(),
                 "since": datetime.now(config.TZ).date().isoformat()})
     _reset_day_caches(cid)
-    msg = vacation_ui.ask_days(place.get("city", ""))
+    if until:
+        await _finish(bot, cid, until)
+        return
+    import util
+    try:
+        facts = await asyncio.wait_for(asyncio.to_thread(country_facts, cid), 15)
+    except Exception:
+        facts = {}
+    short = [line for line in vacation_ui.country_lines(facts)
+             if line[0] in ("Столица", "Население", "Валюта", "Время")]
+    msg = vacation_ui.ask_days(place.get("city", ""), util.flag_from_cc(place.get("cc", "")), short)
     rows = [[InlineKeyboardButton(label, callback_data=f"set_vacd_{days}")] for label, days in DAY_CHOICES]
+    store.pending_input[str(cid)] = "vacation_until"  # дату можно написать в чат
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def until_entered(bot, cid, text):
+    """Дата возвращения, написанная в чат: «20 октября», «20.10», «на неделю»."""
+    until = parse_until(text)
+    if not state(cid):
+        return
+    if until is None:
+        store.pending_input[str(cid)] = "vacation_until"
+        msg = vacation_ui.until_not_understood()
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        return
+    await _finish(bot, cid, until)
 
 
 async def set_days(bot, cid, value, q=None):
@@ -115,12 +212,22 @@ async def set_days(bot, cid, value, q=None):
         return
     days = int(value)
     today = datetime.now(config.TZ).date()
-    _save(cid, {**current, "until": (today + timedelta(days=days)).isoformat() if days else ""})
+    store.pending_input.pop(str(cid), None)
     if q is not None:
         try:
             await q.message.edit_reply_markup(reply_markup=None)
         except Exception:
             _log.debug("vacation: days keyboard not cleared", exc_info=True)
+    await _finish(bot, cid, today + timedelta(days=days) if days else None)
+
+
+async def _finish(bot, cid, until):
+    """Дата возвращения сохранена: готовим язык и кухню страны и показываем «Мой день»."""
+    current = state(cid)
+    if not current:
+        return
+    store.pending_input.pop(str(cid), None)
+    _save(cid, {**current, "until": until.isoformat() if until else ""})
     import asyncio
     await asyncio.to_thread(guide, cid)  # уроки языка и кухня страны — один AI-запрос заранее
     place = store.get_settings(cid)
