@@ -250,7 +250,9 @@ def test_weather_suggests_accessories_instead_of_wardrobe_items():
         ", лучше выбрать лёгкие вещи и солнечные очки.")
     assert rules.weather_reason(frost, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается -6°, лучше выбрать шапку и перчатки."
     assert rules.weather_reason(chilly, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается +4°, лучше выбрать шарф."
-    assert rules.weather_reason(wear_window(_hourly(18, 17), NOW), [TEE, JEANS, SNEAKERS]) == ""
+    # Спокойная погода — короткая сводка сверху, без советов; без прогноза — ничего.
+    assert rules.weather_reason(wear_window(_hourly(18, 17), NOW), [TEE, JEANS, SNEAKERS]) == "Сухо, до +18°, ветер до 4 м/с."
+    assert rules.weather_reason({"tmax": None}, [TEE, JEANS, SNEAKERS]) == ""
 
 
 HOODIE = _it("hoodie", "Кофты", "Серая худи с капюшоном", "серый")

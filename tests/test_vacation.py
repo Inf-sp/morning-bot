@@ -249,3 +249,22 @@ def test_holidays_of_the_trip_are_listed_with_russian_names(monkeypatch):
     text = vacation_ui.started("Кейптаун", "до 31 декабря", "Алкмар", lines).text
     assert "Праздники в эти дни:\n• 16 декабря · Day of Reconciliation — День примирения" in text
     assert "Государственных праздников в эти дни нет." in vacation_ui.started("Кейптаун", "до 1 ноября", "", []).text
+
+
+def test_trip_changes_wardrobe_purchase_key_and_prompt_gets_trip_weather(monkeypatch):
+    import weather
+    import wardrobe_management
+    saved, _places = _env(monkeypatch, CAPE)
+    wardrobe = {"_v": 3}
+    home_key = wardrobe_management._purchase_cache_key(wardrobe, "42")
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "2026-10-14"}
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_a: {"daily": {
+        "time": ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"],
+        "temperature_2m_max": [17.2, 21, 24.4, 30], "precipitation_probability_max": [70, 10, 0, 90],
+        "windspeed_10m_max": [5, 9.4, 3, 20]}})
+
+    assert wardrobe_management._purchase_cache_key(wardrobe, "42") != home_key
+    summary = vacation.trip_weather_summary("42")
+    # Только дни отпуска (до 14-го): 15-е с +30° и ливнем не считается.
+    assert summary.endswith("днём от +17° до +24°, дождь в 1 из 3 дней, ветер до 9 м/с")
+    assert summary.startswith("Кейптаун (ZA), до 14 октября")

@@ -354,6 +354,13 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     except WeatherDailyLimitExceeded:
         await bot.send_message(chat_id=cid, text=WEATHER_LIMIT_FALLBACK)
         return
+    except Exception as error:
+        # API погоды недоступен и свежего кэша нет: понятный текст вместо общей ошибки.
+        _log.warning("send_weather: forecast unavailable mode=%s cid=%s: %r", mode, cid, error, exc_info=True)
+        msg = weather_ui.forecast_unavailable()
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                               reply_markup=InlineKeyboardMarkup([nav_row("m_myday")]))
+        return
     d = data["daily"]
     now = datetime.now(TZ)
 

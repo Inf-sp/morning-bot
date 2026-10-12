@@ -205,7 +205,8 @@ def _and_list(values):
 def weather_reason(ctx, items):
     """«Дождь и порывы ветра до 16 м/с, лучше выбрать непромокаемую верхнюю одежду и закрытую обувь.»
 
-    Одна фраза без тире, только когда погода повлияла на выбор; иначе "".
+    Одна фраза без тире. В спокойную погоду — сводка «Сухо, до +14°, ветер до 5 м/с.»;
+    без прогноза — "".
     """
     weather, consequences = [], []
     if ctx.get("has_rain"):
@@ -233,6 +234,11 @@ def weather_reason(ctx, items):
     if not parts and low is not None and low <= COLD_FEELS:
         parts.append(f"холодно, ощущается {round(low):+d}°")
     consequences.extend(accessory_advice(ctx))
+    if not parts and ctx.get("tmax") is not None:
+        # Погода ни на что не повлияла — всё равно коротко говорим, какая она.
+        parts.append(f"сухо, до {round(float(ctx['tmax'])):+d}°")
+        if ctx.get("wind_ms"):
+            parts.append(f"ветер до {round(float(ctx['wind_ms']))} м/с")
     if not parts:
         return ""
     text = ", ".join(parts)

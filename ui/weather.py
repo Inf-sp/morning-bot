@@ -30,6 +30,15 @@ from util import cap_sentence, country_flag, flag_from_cc
 WEEK_FORECAST_BUTTON = "🗓️ Погода на неделю"
 
 
+def forecast_unavailable():
+    b = MessageBuilder()
+    b.line("🌦️ Прогноз сейчас недоступен — сервис погоды не ответил.")
+    b.spacer()
+    b.italic("Попробуй через несколько минут.")
+    b.newline()
+    return b.build_stripped()
+
+
 def weather_warning(events, when="", icon="⚠️"):
     """Погодное предупреждение: значок главного события в заголовке → события → когда.
 

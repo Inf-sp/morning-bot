@@ -6,7 +6,9 @@
 типичных блюд. Полный рецепт блюда собирается отдельно по кнопке приёма пищи.
 """
 import logging
+import re
 from datetime import datetime
+from difflib import SequenceMatcher
 
 import ai
 import config
@@ -105,6 +107,31 @@ def _today(now=None):
     return (now or datetime.now(config.TZ)).date()
 
 
+_FRIDGE_RECENT = 3  # «Из моих продуктов»: последние кухни не повторяются
+
+
+def next_fridge_cuisine(cid) -> str:
+    """Следующая кухня по кругу из выбранных в Настройках (без них — из всех), без последних трёх."""
+    pool = _settings().cuisines(cid) or [key for key, _label in _settings().CUISINE_OPTIONS]
+    history = [key for key in (store.get_profile(cid) or {}).get("fridge_cuisine_history") or [] if key in pool]
+    recent = history[-min(_FRIDGE_RECENT, len(pool) - 1):] if len(pool) > 1 else []
+    start = pool.index(history[-1]) + 1 if history else 0
+    ordered = pool[start:] + pool[:start]
+    return next((key for key in ordered if key not in recent), ordered[0])
+
+
+def remember_fridge_cuisine(cid, cuisine) -> None:
+    if not cuisine:
+        return
+
+    def change(profile):
+        history = [*(profile.get("fridge_cuisine_history") or []), cuisine][-10:]
+        profile["fridge_cuisine_history"] = history
+        return profile, None
+
+    store.mutate_profile(cid, change)
+
+
 def get_cached_day_menu(cid, now=None) -> dict | None:
     """Меню текущего дня из профиля или None — без AI и побочных эффектов."""
     menu = (store.get_profile(cid) or {}).get("cooking_day_menu")
@@ -145,8 +172,32 @@ def _clean(value, limit) -> str:
     return text if 0 < len(text) <= limit else ""
 
 
+def _dish_key(name) -> str:
+    return re.sub(r"[^\w]+", " ", str(name or "").casefold()).strip()
+
+
+def is_repeat(name, avoided_names) -> bool:
+    """«Омлет с сыром» — повтор «Омлета», «Pasta Carbonara!» — «pasta carbonara»: сравниваем без регистра
+    и знаков, по вхождению и похожести, а не только точным совпадением."""
+    key = _dish_key(name)
+    if not key:
+        return False
+    for other in avoided_names:
+        other = _dish_key(other)
+        if other and (key == other or (min(len(key), len(other)) >= 5 and (key in other or other in key))
+                      or SequenceMatcher(None, key, other).ratio() >= 0.8):
+            return True
+    return False
+
+
 def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="") -> str:
-    lines = "\n".join(f"- {meal}: {typical_dish_line(cuisine, meal)}" for meal in meals)
+    def examples(meal):
+        # Уже показанные блюда в примеры не попадают, иначе модель выбирает их снова.
+        fresh = [(name, note) for name, note in (TYPICAL_DISHES.get(cuisine) or {}).get(meal, ())
+                 if not is_repeat(name, avoided_names)]
+        return ", ".join(f"{name} ({note})" for name, note in fresh) or "придумай сам"
+
+    lines = "\n".join(f"- {meal}: {examples(meal)}" for meal in meals)
     limits = (f"Обязательные ограничения в еде: {restrictions_text}. Блюдо, которое их нарушает, — ошибка.\n"
               if restrictions_text else "")
     json_shape = ",".join(f'"{meal}":{{"name":"","note":""}}' for meal in meals)
@@ -160,7 +211,9 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
         f"Нужны типичные домашние блюда этой кухни на: {', '.join(names[meal] for meal in meals)} — то, что в "
         "этой стране действительно едят на этот приём пищи, без фьюжна и случайных комбинаций.\n"
         f"Типичные варианты:\n{lines}\n"
-        "Выбери из них или столь же традиционные; все блюда разные.\n"
+        "Выбери из них или другие столь же традиционные блюда этой кухни; все блюда разные.\n"
+        + ("Это новое меню взамен показанного: предложи блюда, которых ещё не было, смелее бери "
+           "традиционные блюда не из примеров.\n" if avoided_names else "") +
         f"{limits}{fridge}{avoid}"
         "name — общепринятое название блюда (для итальянской, французской и мексиканской кухни — "
         "оригинальное латиницей, для остальных — по-русски); note — что это за блюдо, по-русски, "
@@ -211,7 +264,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
         name, note = _clean(raw.get("name"), _NAME_MAX), _clean(raw.get("note"), _NOTE_MAX)
-        if (not name or name.casefold() in avoided or name.casefold() in used
+        if (not name or is_repeat(name, avoided_names) or name.casefold() in used
                 or not fits_restrictions({"name": name, "note": note}, restrictions)):
             dish = _fallback_dish(cuisine, meal, day, avoided | used, restrictions)
         else:
@@ -227,6 +280,8 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
     cached = get_cached_day_menu(cid, now)
     if cached and not refresh:
         return cached
+    if refresh and cuisine is None:
+        cuisine = (cached or {}).get("cuisine")  # «Другое меню на сегодня» — та же кухня, что на экране
     current = [dish["name"] for dish in ((cached or {}).get("dishes") or {}).values()]
     menu = build_day_menu(cid, now=now, cuisine=cuisine, avoid=current)
     month = _today(now).strftime("%Y-%m")

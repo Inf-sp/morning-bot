@@ -1042,10 +1042,12 @@ def get_cached_cooking_home_idea(cid, now=None) -> dict | None:
     return normalized if _home_idea_complete(normalized) else None
 
 
-def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None) -> dict:
+def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None, hint_cuisine=None) -> dict:
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника.
 
     dish — {name, note} блюда из меню дня: тогда нужен рецепт именно этого блюда.
+    hint_cuisine — мягкая подсказка кухни для разнообразия «Из моих продуктов»: если из продуктов
+    её блюдо не получается, подойдёт другая кухня (в отличие от строгого cuisine).
     """
     context = _home_idea_context(cid, now=now, cuisine=cuisine)
     if dish:
@@ -1097,6 +1099,10 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
         )
     elif cuisine:
         prompt += _typical_dish_rule(cuisine, context["meal"])
+    elif hint_cuisine:
+        hint = next((label for key, label in _cuisine_options() if key == hint_cuisine), hint_cuisine)
+        prompt += (f"\nДля разнообразия на этот раз возьми кухню: {hint.split(' ', 1)[-1]} — если из этих "
+                   "продуктов получается её домашнее блюдо; иначе другую кухню. Поле cuisine — кухня блюда.")
     prompt += (
         "\nКоличества пиши по-человечески: «2 яйца», «½ стакана», без «8.0» и «0.25»; "
         "в шагах только продукты из списка ингредиентов."
@@ -1124,6 +1130,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
                     "sources": sources,
                     "previous_recipe": previous_name,
                     "dish": (dish or {}).get("name", ""),
+                    "hint_cuisine": hint_cuisine or "",
                     "avoid": avoided_names[-31:],
                     "attempt": attempt,
                     "language": "ru",

@@ -109,10 +109,14 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("✨ Другое меню на сегодня", "food_pick")],
+        [("✨ Другое меню на сегодня", "m_food_next")],
+        [("✨ Другая кухня", "food_pick")],
         [("🧊 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
+    # В отпуске холодильник остался дома — кнопки «Из моих продуктов» нет.
+    away = menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
+    assert "food_mine" not in [b.callback_data for row in away for b in row]
 
 
 def test_other_menu_picker_lists_cuisines_and_starts_new_day_menu(monkeypatch):
@@ -280,8 +284,10 @@ def test_menu_dish_never_falls_back_to_an_unrelated_recipe(monkeypatch):
 def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     calls, shown = [], []
     monkeypatch.setattr(menu.store, "get_list", lambda *_a: [{"name": "яйца", "on": True}])
-    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda cid, now=None, refresh=False: calls.append(
-        refresh) or {"name": "Омлет с сыром", "cuisine": "french", "ingredients": ["яйца", "сыр"],
+    monkeypatch.setattr(day_menu, "next_fridge_cuisine", lambda _cid: "french")
+    monkeypatch.setattr(day_menu, "remember_fridge_cuisine", lambda _cid, cuisine: calls.append(cuisine))
+    monkeypatch.setattr(recipe_generation, "get_cooking_home_idea", lambda cid, now=None, refresh=False, cuisine=None,
+                        dish=None, hint_cuisine=None: calls.append((refresh, hint_cuisine)) or {"name": "Омлет с сыром", "cuisine": "french", "ingredients": ["яйца", "сыр"],
                      "missing_ingredients": ["зелень"], "steps": [{"text": "Взбей яйца"}]})
     monkeypatch.setattr(recipe_generation, "_home_meal_for_hour", lambda _hour: "dinner")
 
@@ -292,7 +298,8 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True))
 
     text, markup = shown[0]
-    assert calls == [True] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
+    # Подсказка кухни по кругу, круг сдвигается после нового рецепта.
+    assert calls == [(True, "french"), "french"] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
     assert "Не хватает:\nзелень" in text
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_new"], ["m_food", "m_menu"]]
 
@@ -308,3 +315,38 @@ def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status()))
     assert sent[0][0].startswith("🧊 Из моих продуктов")
     assert sent[0][1].inline_keyboard[0][0].callback_data == "as_fridge_add"
+
+
+def test_other_menu_keeps_screen_cuisine_and_skips_near_repeats(monkeypatch):
+    profile = _profile(monkeypatch)
+    prompts = _ai(monkeypatch, {
+        "breakfast": {"name": "Crostata", "note": "пирог"},
+        "lunch": {"name": "Pasta Carbonara!", "note": "почти тот же обед"},
+        "dinner": {"name": "Ossobuco", "note": "тушёная телячья голень"},
+    })
+    profile["cooking_day_menu"] = {"date": "2026-10-09", "cuisine": "italian", "dishes": {
+        "breakfast": {"name": "Crostata"}, "lunch": {"name": "Pasta carbonara"}, "dinner": {"name": "Lasagna"}}}
+
+    menu_data = day_menu.get_day_menu("42", now=NOW, refresh=True)  # кухню не выбирали
+
+    assert menu_data["cuisine"] == "italian"  # та же кухня, что на экране
+    names = [dish["name"] for dish in menu_data["dishes"].values()]
+    assert "Crostata" not in names and "Pasta Carbonara!" not in names and "Ossobuco" in names
+    # Уже показанные блюда не подсказываются примерами, модель просят выйти за список.
+    assert "Crostata (" not in prompts[0] and "не из примеров" in prompts[0]
+    assert day_menu.is_repeat("Омлет с сыром", ["Омлет"]) and not day_menu.is_repeat("Куриный суп", ["Куриный шашлык"])
+
+
+def test_fridge_recipe_cuisines_go_round_without_last_three(monkeypatch):
+    profile = _profile(monkeypatch)
+    monkeypatch.setattr(day_menu._settings(), "cuisines", lambda _cid: ["italian", "georgian", "thai", "mexican", "russian"])
+    picked = []
+    for _ in range(6):
+        cuisine = day_menu.next_fridge_cuisine("42")
+        picked.append(cuisine)
+        day_menu.remember_fridge_cuisine("42", cuisine)
+
+    assert picked == ["italian", "georgian", "thai", "mexican", "russian", "italian"]
+    profile["fridge_cuisine_history"] = ["italian"]
+    monkeypatch.setattr(day_menu._settings(), "cuisines", lambda _cid: ["italian", "georgian"])
+    assert day_menu.next_fridge_cuisine("42") == "georgian"  # две кухни — просто чередуются

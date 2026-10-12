@@ -141,12 +141,13 @@ def forget(cid):
 
 
 def _reset_day_caches(cid):
-    """Сводка дня и меню Готовки пересобираются под новый город и кухню."""
+    """Сводка дня, образ дня и меню Готовки пересобираются под новый город, погоду и кухню."""
     try:
         import myday
         myday.reset_day_cache(cid)
     except Exception:
         _log.debug("vacation: day cache reset failed", exc_info=True)
+    store.clear_wardrobe_daylook(cid)
     store.mutate_profile(cid, lambda profile: ({**profile, "cooking_day_menu": None}, None))
 
 
@@ -327,6 +328,39 @@ def until_label(cid) -> str:
         return ""
     from util import _MONTHS
     return f"до {day.day} {_MONTHS[day.month - 1]}"
+
+
+def trip_key(cid) -> str:
+    """«cc|город|до» поездки или "" дома — меняется вместе с поездкой (ключи кэшей)."""
+    current = state(cid)
+    if not current:
+        return ""
+    place = store.get_settings(cid)
+    return f"{current.get('cc') or ''}|{place.get('city') or ''}|{current.get('until') or ''}"
+
+
+def trip_weather_summary(cid) -> str:
+    """«Кейптаун (ZA), до 20 октября; днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
+    if not active(cid):
+        return ""
+    import weather
+    place = store.get_settings(cid)
+    head = f"{place.get('city') or ''} ({(state(cid) or {}).get('cc') or place.get('cc') or ''})"
+    head = ", ".join(part for part in (head, until_label(cid)) if part)
+    try:
+        daily = weather.fetch_weather(place["lat"], place["lon"], 9)["daily"]
+    except Exception:
+        _log.debug("vacation: trip weather unavailable cid=%s", cid, exc_info=True)
+        return head
+    until = (state(cid) or {}).get("until") or "9999-12-31"
+    days = [index for index, day in enumerate(daily.get("time") or []) if day <= until]
+    highs = [daily["temperature_2m_max"][i] for i in days if daily["temperature_2m_max"][i] is not None]
+    if not highs:
+        return head
+    rainy = sum(1 for i in days if (daily["precipitation_probability_max"][i] or 0) >= 50)
+    wind = max(daily["windspeed_10m_max"][i] or 0 for i in days)
+    return (f"{head}; днём от {round(min(highs)):+d}° до {round(max(highs)):+d}°, "
+            f"дождь в {rainy} из {len(days)} дней, ветер до {round(wind)} м/с")
 
 
 # ---------- факты о стране ----------

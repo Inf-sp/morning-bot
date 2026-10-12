@@ -313,3 +313,27 @@ def test_daytime_temperature_uses_only_hours_from_eight_to_twenty():
     }
 
     assert weather._daytime_temperature_range(data, "2026-08-14", 7, 25) == (12, 21)
+
+
+def test_full_and_week_forecast_share_cache_with_my_day():
+    import weather_provider
+    # «Мой день» (2 дня) и полный прогноз (9 дней) берут один ответ API.
+    assert weather_provider._weather_cache_key(52.63, 4.75, 2) == weather_provider._weather_cache_key(52.63, 4.75, 9)
+
+
+def test_forecast_shows_clear_message_when_weather_service_fails(monkeypatch):
+    import asyncio
+    import weather
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(weather.store, "get_settings", lambda _cid: {"city": "Alkmaar", "lat": 52.63, "lon": 4.75})
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_a: (_ for _ in ()).throw(RuntimeError("401")))
+    for mode in ("full", "week"):
+        asyncio.run(weather.send_weather(Bot(), "42", mode))
+
+    assert [m["text"].splitlines()[0] for m in sent] == ["🌦️ Прогноз сейчас недоступен — сервис погоды не ответил."] * 2
+    assert "Что-то пошло не так" not in sent[0]["text"]

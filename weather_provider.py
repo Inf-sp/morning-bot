@@ -16,7 +16,7 @@ import store
 _log = logging.getLogger(__name__)
 TZ = config.TZ
 
-_WX_CACHE = {}          # (lat2, lon2, days) -> (ts, json)
+_WX_CACHE = {}          # (lat2, lon2) -> (ts, json)
 _WX_TTL = 3 * 3600      # сек: обновляем прогноз раз в 3 часа вместо 12
 _WX_STALE_TTL = 24 * 3600
 _CURRENT_CACHE = {}     # (lat2, lon2) -> (ts, current conditions)
@@ -232,8 +232,10 @@ def _safe_error_reason(exc=None, response=None):
     return "request failed"
 
 
-def _weather_cache_key(lat, lon, days):
-    return f"{round(float(lat), 2):.2f}:{round(float(lon), 2):.2f}:{int(days)}"
+def _weather_cache_key(lat, lon, _days=None):
+    """Один кэш на точку: все экраны («Мой день», Гардероб, полный и недельный прогноз) получают
+    один и тот же ответ API, поэтому число дней в ключ не входит."""
+    return f"{round(float(lat), 2):.2f}:{round(float(lon), 2):.2f}"
 
 
 def _cache_date_ok(data, now=None):
@@ -451,9 +453,9 @@ def _fetch_alert_details(alert_ids, timeout=15):
 
 
 def fetch_weather(lat, lon, days=2):
-    days = max(days, 2)
-    key = (round(lat, 2), round(lon, 2), days)
-    cache_key = _weather_cache_key(lat, lon, days)
+    """Прогноз точки (текущая погода, по часам, по дням); days — для совместимости, API отдаёт всё сразу."""
+    key = (round(lat, 2), round(lon, 2))
+    cache_key = _weather_cache_key(lat, lon)
     cached = _weather_cache_get(key, cache_key, max_age=_WX_TTL)
     if cached is not None:
         return cached

@@ -438,10 +438,11 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True))),
-    # «Другое меню на сегодня»: кухня → новое меню на день (предпочтения не меняются).
-    # food_meal_* — кнопки старых сообщений с шагом приёма пищи.
+    # «Другое меню на сегодня» (m_food_next) — новые блюда той же кухни; «Другая кухня» (food_pick):
+    # кухня → новое меню на день (предпочтения не меняются). food_meal_* — кнопки старых сообщений.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
-    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid)))),
+    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
+                                                         show_mine=not vacation.active(c.cid)))),
     R("food_go_*", _picked(_food_recipe)),
     R("m_menu", _main_menu),
     # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.

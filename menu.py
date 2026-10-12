@@ -71,12 +71,14 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-def _day_menu_message(menu):
+def _day_menu_message(menu, cid=None):
     import day_menu
+    import vacation
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
         intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),
+        show_mine=cid is None or not vacation.active(cid),
     )
 
 
@@ -117,8 +119,12 @@ async def send_mine_recipe(bot, cid, status=None, refresh=False):
         return
 
     async def build(status):
+        import day_menu
         meal = recipe_generation._home_meal_for_hour(datetime.now(config.TZ).hour)
-        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh)
+        hint = day_menu.next_fridge_cuisine(cid)  # каждый новый рецепт — другая кухня из выбранных
+        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, None, None, hint)
+        if refresh or str(idea.get("cuisine") or "").lower() == hint:
+            day_menu.remember_fridge_cuisine(cid, hint)  # новый рецепт — круг кухонь сдвигается
         msg = menu_ui.food_menu(idea, meal=meal, from_fridge=True)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
@@ -146,12 +152,12 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
     if not refresh:
         ready = day_menu.get_cached_day_menu(cid)
         if ready is not None:
-            await _deliver(bot, cid, _day_menu_message(ready), status, q)
+            await _deliver(bot, cid, _day_menu_message(ready, cid), status, q)
             return
 
     async def build_menu(status):
         menu = await asyncio.to_thread(day_menu.get_day_menu, cid, None, refresh, cuisine)
-        msg = _day_menu_message(menu)
+        msg = _day_menu_message(menu, cid)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
     await _with_food_status(bot, cid, status, q, build_menu)

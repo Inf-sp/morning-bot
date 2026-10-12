@@ -193,7 +193,7 @@ def test_hard_limit_blocks_new_http():
 
 def test_cache_available_when_blocked():
     _reset()
-    weather._WX_CACHE[(52.37, 4.89, 2)] = (__import__("time").time(), {
+    weather._WX_CACHE[(52.37, 4.89)] = (__import__("time").time(), {
         "provider": "cached",
         "daily": {"time": [weather.datetime.now(weather.TZ).strftime("%Y-%m-%d")]},
     })

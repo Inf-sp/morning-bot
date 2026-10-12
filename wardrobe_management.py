@@ -362,8 +362,11 @@ def _purchase_result_kb():
 # ---------- «💳 Что докупить»: экран 1 (разбор + топ-3) и карточка покупки ----------
 
 
-def _purchase_cache_key(wardrobe):
-    return f"{wardrobe.get('_v', 0)}:{_wardrobe._day_key()}"
+def _purchase_cache_key(wardrobe, cid=None):
+    """Версия шкафа, день и поездка: в отпуске — свои идеи под климат поездки."""
+    import vacation
+    trip = vacation.trip_key(cid) if cid is not None else ""
+    return f"{wardrobe.get('_v', 0)}:{_wardrobe._day_key()}" + (f":{trip}" if trip else "")
 
 
 def _purchase_state(cid):
@@ -373,7 +376,11 @@ def _purchase_state(cid):
 
 def _build_purchase_cache(cid, wardrobe, ai_items=None):
     """Пересобирает разбор и кандидатов без сети: AI-идеи берутся из прошлого кэша."""
+    import vacation
     previous = _purchase_state(cid)
+    trip = vacation.trip_key(cid)
+    if previous.get("trip", "") != trip:
+        previous = {}  # начало или конец поездки: прежние AI-идеи были под другой климат
     fresh_ai = ai_items is not None
     ai_items = ai_items if fresh_ai else [x for x in previous.get("ai") or [] if isinstance(x, dict)]
     lat = (store.get_settings(cid) or {}).get("lat")
@@ -384,7 +391,8 @@ def _build_purchase_cache(cid, wardrobe, ai_items=None):
     primary = look_gap if look_gap.get("item") and look_gap.get("version") == _wardrobe.PURCHASE_RECOMMENDATION_VERSION else None
     local = _wardrobe._purchase_candidates(wardrobe, {}, _settings.wardrobe_styles(cid), primary=primary, limit=3)
     state = {
-        "key": _purchase_cache_key(wardrobe),
+        "key": _purchase_cache_key(wardrobe, cid),
+        "trip": trip,
         "facts": facts,
         "analysis": purchase_logic.analysis(facts),
         "pool": purchase_logic.rank_candidates(wardrobe, ai_items, local),
@@ -404,14 +412,18 @@ def _build_purchase_cache(cid, wardrobe, ai_items=None):
 
 def _purchase_cache(cid, wardrobe):
     state = _purchase_state(cid)
-    if state.get("key") == _purchase_cache_key(wardrobe) and isinstance(state.get("pool"), list):
+    if state.get("key") == _purchase_cache_key(wardrobe, cid) and isinstance(state.get("pool"), list):
         return state
     return _build_purchase_cache(cid, wardrobe)
 
 
 async def _ai_purchase_ideas(cid, wardrobe, facts, avoid=()):
     """AI предлагает вещи структурно; числа и текст карточки собирает код."""
+    import vacation
     prefs = _settings.wardrobe_prefs_context(cid)
+    trip = vacation.trip_weather_summary(cid)
+    trip_line = (f"\nСейчас пользователь в поездке: {secure.wrap_untrusted(trip, 'поездка')}. Предлагай в первую "
+                 "очередь вещи, которые пригодятся в этой поездке и при этой погоде." if trip else "")
     avoid = sorted({str(name) for name in avoid if str(name).strip()})
     avoid_line = (f"\nНе предлагай эти вещи и их близкие варианты: "
                   f"{secure.wrap_untrusted(', '.join(avoid), 'исключённые вещи')}" if avoid else "")
@@ -426,12 +438,12 @@ async def _ai_purchase_ideas(cid, wardrobe, facts, avoid=()):
 Правила: не предлагай вещи, которые уже есть; закрывай слабые места; называй цвет и тип вещи
 («Белые кожаные кеды»), без брендов и цен. why — одно предложение, почему вещь нужна именно этому
 шкафу, только по фактам и вещам выше. tip — один практичный совет по выбору этой вещи.
-JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}{avoid_line}"""
+JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}{avoid_line}{trip_line}"""
     data = await ai.allm_json(
         prompt, 900, tier="smart", module="wardrobe",
         cache_context={
             "scenario": "wardrobe_purchase_ideas", "wardrobe": wardrobe, "preferences": prefs,
-            "facts": facts, "language": "ru", "schema_version": 1, "avoid": avoid,
+            "facts": facts, "language": "ru", "schema_version": 1, "avoid": avoid, "trip": trip,
         },
     )
     return [item for item in (data or {}).get("items") or [] if isinstance(item, dict)][:8]
@@ -443,7 +455,7 @@ async def warm_purchase_cache(cid):
     if wardrobe_stats(wardrobe)[0] < purchase_logic.MIN_ITEMS:
         return
     state = _purchase_state(cid)
-    if state.get("key") == _purchase_cache_key(wardrobe) and state.get("ai_date") == _wardrobe._day_key():
+    if state.get("key") == _purchase_cache_key(wardrobe, cid) and state.get("ai_date") == _wardrobe._day_key():
         return
     facts = purchase_logic.wardrobe_facts(wardrobe, cold_season=purchase_logic.is_cold_season(
         datetime.now(config.TZ).month, (store.get_settings(cid) or {}).get("lat"),
@@ -503,8 +515,9 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
         await _purchase_reply(bot, cid, q, wardrobe_ui.purchase_small_wardrobe(), kb)
         return
     state = _purchase_cache(cid, wardrobe)
-    if not state.get("pool") and state.get("ai_date") != _wardrobe._day_key():
-        # Ночной прогрев не дал идей — без рекомендаций экран бесполезен, спросим AI сейчас.
+    if (not state.get("pool") or (state.get("trip") and not state.get("ai"))) \
+            and state.get("ai_date") != _wardrobe._day_key():
+        # Ночной прогрев не дал идей (или началась поездка) — спросим AI сейчас.
         try:
             ai_items = await _ai_purchase_ideas(cid, wardrobe, state["facts"])
         except Exception:
