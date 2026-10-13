@@ -1156,7 +1156,7 @@ def _week_line(item, kind) -> str:
 
 
 def week_premieres_screen(kind, blocks) -> MessageSpec:
-    """Список недели: «Пн · «Название» · жанр · страна», с понедельника по воскресенье.
+    """Список недели: «Название» · жанр · страна» — в порядке дней, без подписей дней и без повторов.
 
     blocks — [(подпись блока или "", [(день, пункт)])]; у кино — «Фильмы» и «Сериалы».
     """
@@ -1170,8 +1170,8 @@ def week_premieres_screen(kind, blocks) -> MessageSpec:
         if label:
             b.bold(f"{label}:")
             b.newline()
-        for weekday, item in rows:
-            b.line(f"{weekday} · {_week_line(item, kind)}")
+        for line in dict.fromkeys(_week_line(item, kind) for _weekday, item in rows):
+            b.line(line)
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("lz_prem")]))
 
 

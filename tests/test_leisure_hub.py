@@ -167,8 +167,9 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert leisure_hub.week_data("42", "book", day=monday) == []
 
     screen = leisure_ui.week_premieres_screen("movie", blocks)
-    assert screen.text.startswith("🎬 Премьеры недели · кино\n\nФильмы:\nПн · «Фильм 0»\nВт · «Фильм 1»")
-    assert "\n\nСериалы:\nПн · «Суд» · HBO\n" in screen.text
+    assert screen.text.startswith("🎬 Премьеры недели · кино\n\nФильмы:\n«Фильм 0»\n«Фильм 1»")
+    assert screen.text.endswith("\n\nСериалы:\n«Суд» · HBO")  # один сериал — одна строка, без повторов по дням
+    assert "Пн" not in screen.text
     assert len(screen.entities) == 3  # жирные только заголовок, «Фильмы:», «Сериалы:» — сегодняшняя строка обычная
     assert _callbacks(screen.reply_markup) == ["lz_prem", "m_menu"]
     empty = leisure_ui.week_premieres_screen("book", [])
