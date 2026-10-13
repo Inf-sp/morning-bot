@@ -292,15 +292,18 @@ def _outfits_word(n):
 def purchase_screen(data):
     """Экран 1 «💳 Что докупить»: вывод сверху, затем сильные и слабые стороны шкафа.
 
-    data: {strengths[], weaknesses[], has_picks, top: {item, gain}}; покупки — кнопками под экраном.
+    data: {strengths[], weaknesses[], has_picks, picks: [{item, gain, why}]}; те же вещи — кнопками под экраном.
     """
     data = data or {}
     b = MessageBuilder()
     b.title("💳 Что докупить")
-    top = data.get("top") or {}
-    name, gain = _lower_first(_clean_text(top.get("item"))), int(top.get("gain") or 0)
-    if data.get("has_picks") and name:
-        b.line(f"Главное сейчас — {name}: +{gain} {_outfits_word(gain)}." if gain > 0 else f"Главное сейчас — {name}.")
+    picks = [p for p in data.get("picks") or [] if _clean_text(p.get("item"))]
+    if data.get("has_picks") and picks:
+        b.line("Главное сейчас:")
+        for pick in picks:
+            gain, why = int(pick.get("gain") or 0), _lower_first(_finish_dot(pick.get("why")))
+            line = _clean_text(pick["item"]) + (f": +{gain} {_outfits_word(gain)}" if gain > 0 else "")
+            b.line(f"- {line}" + (f" — {why}" if why else "."))
     else:
         b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
     strengths = [_clean_text(x) for x in data.get("strengths") or [] if _clean_text(x)]

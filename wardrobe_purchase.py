@@ -319,6 +319,12 @@ def _fallback_why(candidate, facts):
     return f"Верхней одежды сейчас {count} {ru_plural(count, 'вещь', 'вещи', 'вещей')} — новый слой добавит образов на прохладные дни."
 
 
+def pick_reason(wardrobe, candidate, facts):
+    """Почему эта вещь: проверенное объяснение AI или правило по шкафу — одним предложением."""
+    why = _grounded_why(candidate.get("why"), wardrobe, candidate, facts) or _fallback_why(candidate, facts)
+    return re.split(r"(?<=[.!?…])\s+", why.strip(), maxsplit=1)[0]
+
+
 def card(wardrobe, candidate, facts):
     """Данные карточки покупки: всё посчитано по текущему шкафу."""
     item = wardrobe_item(candidate)

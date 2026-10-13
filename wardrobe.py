@@ -877,7 +877,6 @@ from wardrobe_management import (  # noqa: E402 — wardrobe_management uses nam
     handle_wardrobe_search,
     _normalize_purchase_check,
     check_purchase,
-    check_purchase_photo,
     _purchase_result_kb,
     _purchase_cache_key,
     _purchase_state,

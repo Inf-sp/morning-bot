@@ -375,28 +375,6 @@ def _purchase_check_extras(data, wardrobe):
             "styles": styles, "gain": max(0, gain)}
 
 
-async def check_purchase_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=""):
-    """Фото вещи → короткое описание (Gemini через общий AI-слой) → обычная проверка покупки."""
-    try:
-        parsed = await ai.allm_image_json(
-            image_bytes, mime_type,
-            f"""Опиши по-русски одну главную вещь одежды или обуви на фото для проверки покупки: тип, цвет,
-материал и крой — только то, что видно. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
-JSON: {{"description": "Белая льняная рубашка свободного кроя"}}""",
-            max_tokens=200,
-        )
-        description = _wardrobe._clean_text((parsed or {}).get("description"))
-    except Exception:
-        _log.warning("purchase check photo: vision unavailable cid=%s", cid, exc_info=True)
-        description = ""
-    if not description:
-        store.pending_input[str(cid)] = "wardrobe_check"
-        await bot.send_message(chat_id=cid, text="Не получилось разобрать фото — опиши вещь текстом.",
-                               reply_markup=_purchase_result_kb())
-        return
-    await check_purchase(bot, cid, f"{description}. {caption}".strip(" ."))
-
-
 def _purchase_result_kb():
     return _wardrobe._kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]])
 
@@ -580,11 +558,12 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     else:
         batch = _stable_batch(pool, profile)
     _remember_purchase_batch(cid, batch, cycle_reset)
-    msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch),
-                                       "top": batch[0] if batch else {}})
+    picks = [{"item": c["item"], "gain": c.get("gain") or 0,
+              "why": purchase_logic.pick_reason(wardrobe, c, state["facts"])} for c in batch]
+    msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch), "picks": picks})
     # Рекомендации — только кнопки стандартного цвета.
     kb = InlineKeyboardMarkup([
-        # Проверка своей покупки по фото или описанию — зелёная, сверху.
+        # Проверка своей покупки по описанию — зелёная, сверху.
         [InlineKeyboardButton("🔎 Проверить покупку", callback_data="w_check")],
         *[[InlineKeyboardButton(c["item"][:40], callback_data=f"w_buy_i:{c['id']}")] for c in batch],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"),
@@ -674,11 +653,11 @@ async def reject_purchase(bot, cid, item_id, q=None):
 
 
 async def ask_purchase_check(bot, cid):
-    """«🔎 Проверить покупку»: ждём фото вещи или её описание."""
+    """«🔎 Проверить покупку»: ждём описание вещи."""
     store.pending_input[str(cid)] = "wardrobe_check"
     await bot.send_message(
         chat_id=cid,
-        text="Пришли фото вещи или опиши её: тип, цвет, материал и крой.",
+        text="Опиши вещь: тип, цвет, материал и крой.",
         reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
     )
 
