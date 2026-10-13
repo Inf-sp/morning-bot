@@ -456,14 +456,14 @@ async def _ai_purchase_ideas(cid, wardrobe, facts, avoid=()):
 Зоны и подкатегории: {_wardrobe._ZONES_DESC}
 
 Правила: не предлагай вещи, которые уже есть; закрывай слабые места; называй цвет и тип вещи
-(«Белые кожаные кеды»), без брендов и цен. why — одно предложение, почему вещь нужна именно этому
-шкафу, только по фактам и вещам выше. tip — один практичный совет по выбору этой вещи.
+(«Белые кожаные кеды»), без брендов и цен. why — одна короткая строка до 60 символов, почему вещь нужна
+именно этому шкафу, только по фактам и вещам выше; цвет и стиль упоминай, только если они объясняют выбор. tip — один практичный совет по выбору этой вещи.
 JSON без Markdown: {{"items":[{{"item":"","zone":"","subcategory":"","color":"","warmth":"обычные","why":"","tip":""}}]}}{avoid_line}{trip_line}"""
     data = await ai.allm_json(
         prompt, 900, tier="smart", module="wardrobe",
         cache_context={
             "scenario": "wardrobe_purchase_ideas", "wardrobe": wardrobe, "preferences": prefs,
-            "facts": facts, "language": "ru", "schema_version": 1, "avoid": avoid, "trip": trip,
+            "facts": facts, "language": "ru", "schema_version": 2, "avoid": avoid, "trip": trip,
         },
     )
     return [item for item in (data or {}).get("items") or [] if isinstance(item, dict)][:8]
@@ -558,7 +558,12 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     else:
         batch = _stable_batch(pool, profile)
     _remember_purchase_batch(cid, batch, cycle_reset)
+    has_gaps = bool(state["analysis"].get("weaknesses"))
+    # Сначала → Потом → Необязательно; кнопки — в том же порядке, что и список.
+    batch = sorted(batch, key=lambda c: purchase_logic.PRIORITIES.index(
+        purchase_logic.pick_priority(c, state["facts"], has_gaps)))
     picks = [{"item": c["item"], "gain": c.get("gain") or 0,
+              "priority": purchase_logic.pick_priority(c, state["facts"], has_gaps),
               "why": purchase_logic.pick_reason(wardrobe, c, state["facts"])} for c in batch]
     msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch), "picks": picks})
     # Рекомендации — только кнопки стандартного цвета.

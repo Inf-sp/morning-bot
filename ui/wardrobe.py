@@ -292,27 +292,39 @@ def _outfits_word(n):
 def purchase_screen(data):
     """Экран 1 «💳 Что докупить»: вывод сверху, затем сильные и слабые стороны шкафа.
 
-    data: {strengths[], weaknesses[], has_picks, picks: [{item, gain, why}]}; те же вещи — кнопками под экраном.
+    data: {strengths[], weaknesses[], has_picks, picks: [{item, gain, priority, why}]};
+    те же вещи — кнопками под экраном, в том же порядке.
     """
     data = data or {}
     b = MessageBuilder()
     b.title("💳 Что докупить")
     picks = [p for p in data.get("picks") or [] if _clean_text(p.get("item"))]
     if data.get("has_picks") and picks:
-        b.line("Главное сейчас:")
+        b.line("Покупки, которые расширят твой гардероб")
         for pick in picks:
-            gain, why = int(pick.get("gain") or 0), _lower_first(_finish_dot(pick.get("why")))
-            line = _clean_text(pick["item"]) + (f": +{gain} {_outfits_word(gain)}" if gain > 0 else "")
-            b.line(f"- {line}" + (f" — {why}" if why else "."))
+            gain = int(pick.get("gain") or 0)
+            meta = [_clean_text(pick["item"]), _clean_text(pick.get("priority")),
+                    f"+{gain} {_outfits_word(gain)}" if gain > 0 else ""]
+            b.spacer()
+            b.line("- " + " · ".join(part for part in meta if part))
+            if _clean_text(pick.get("why")):
+                b.line(_upper_first(_finish_dot(pick["why"])))
     else:
         b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
     strengths = [_clean_text(x) for x in data.get("strengths") or [] if _clean_text(x)]
     weaknesses = [_clean_text(x) for x in data.get("weaknesses") or [] if _clean_text(x)]
-    if strengths:
+    first = next((p["item"] for p in picks if p.get("priority") == "Сначала"), "")
+    if weaknesses:
+        gaps = ", ".join(weaknesses)
+        gaps = gaps[:1].upper() + gaps[1:] + "." + (f" Первым делом — {_lower_first(_clean_text(first))}." if first else "")
+    else:
+        gaps = "Явных пробелов нет — покупки необязательны." if picks else ""
+    if strengths or gaps:
         b.spacer()
-        b.labeled_line("Сильно", " · ".join(strengths))
-    b.spacer()
-    b.labeled_line("Слабо", " · ".join(weaknesses) if weaknesses else "явных пробелов нет")
+        b.labeled_line("Сильные и слабые стороны", _finish_dot(", ".join(strengths)) if strengths else gaps,
+                       lowercase=False)
+        if strengths and gaps:
+            b.line(gaps)
     return b.build_stripped()
 
 

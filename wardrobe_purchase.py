@@ -319,10 +319,48 @@ def _fallback_why(candidate, facts):
     return f"Верхней одежды сейчас {count} {ru_plural(count, 'вещь', 'вещи', 'вещей')} — новый слой добавит образов на прохладные дни."
 
 
+PRIORITIES = ("Сначала", "Потом", "Необязательно")
+_SHORT_WHY = 70
+
+
+def _closes_gap(candidate, facts):
+    """Закрывает ли вещь слабое место шкафа (те же правила, что «Слабо» в analysis)."""
+    zone = candidate.get("zone")
+    return ((zone == "Обувь" and facts["shoes"] <= 2)
+            or (zone == "Низ" and facts["bottoms"] <= 2)
+            or (zone == "Верх" and facts["tops"] <= 2)
+            or (zone == "Верхняя одежда" and facts["cold_season"] and not facts["warm_outer"])
+            or (not facts["cold_season"] and not facts.get("light") and candidate.get("warmth") == "лёгкие"))
+
+
+def pick_priority(candidate, facts, has_gaps):
+    """«Сначала» — закрывает пробел, «Потом» — добавляет образы; без пробелов всё необязательно."""
+    if has_gaps and _closes_gap(candidate, facts):
+        return "Сначала"
+    return "Потом" if has_gaps and int(candidate.get("gain") or 0) > 0 else "Необязательно"
+
+
+def _short_fallback_why(candidate, facts):
+    zone = candidate.get("zone")
+    if zone == "Обувь":
+        return "Обуви мало — новая пара сразу даст свежие сочетания." if facts["shoes"] <= 2 \
+            else "Новая пара освежит привычные комплекты."
+    if zone == "Низ":
+        return "Низа мало — новый низ раскроет имеющийся верх." if facts["bottoms"] <= 2 \
+            else "Новый низ раскроет уже имеющийся верх."
+    if zone == "Верх":
+        return "Верха мало — с ним появятся новые комплекты." if facts["tops"] <= 2 \
+            else "Ещё один верх освежит привычные комплекты."
+    if facts["cold_season"] and not facts["warm_outer"]:
+        return "Тёплой верхней одежды нет — понадобится к зиме."
+    return "Ещё один слой на прохладные дни."
+
+
 def pick_reason(wardrobe, candidate, facts):
-    """Почему эта вещь: проверенное объяснение AI или правило по шкафу — одним предложением."""
-    why = _grounded_why(candidate.get("why"), wardrobe, candidate, facts) or _fallback_why(candidate, facts)
-    return re.split(r"(?<=[.!?…])\s+", why.strip(), maxsplit=1)[0]
+    """Почему эта вещь — одна строка: короткое проверенное объяснение AI или правило по зоне."""
+    why = _grounded_why(candidate.get("why"), wardrobe, candidate, facts)
+    why = re.split(r"(?<=[.!?…])\s+", why.strip(), maxsplit=1)[0] if why else ""
+    return why if 0 < len(why) <= _SHORT_WHY else _short_fallback_why(candidate, facts)
 
 
 def card(wardrobe, candidate, facts):

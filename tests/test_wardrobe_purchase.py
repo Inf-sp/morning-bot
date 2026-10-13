@@ -73,18 +73,17 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
     assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 3, 2, 1)  # худи — кофта, не верх
     assert data["weaknesses"] == ["1 пара обуви на все случаи", "нет тёплой куртки к зиме"]
     text = wardrobe_ui.purchase_screen({**data, "has_picks": True, "picks": [
-        {"item": "Белая льняная рубашка", "gain": 18, "why": "Закрывает лёгкий верх к лету"},
-        {"item": "Чёрные ботинки", "gain": 0, "why": ""},
+        {"item": "Чёрные ботинки", "gain": 18, "priority": "Сначала", "why": "Обуви мало — новая пара даст сочетания"},
+        {"item": "Белая льняная рубашка", "gain": 0, "priority": "Необязательно", "why": ""},
     ]}).text
-    assert text.startswith("💳 Что докупить\n\nГлавное сейчас:\n"
-                           "- Белая льняная рубашка: +18 образов — закрывает лёгкий верх к лету.\n"
-                           "- Чёрные ботинки.\n\n")
-    assert "Твой шкаф" not in text  # строки статистики на этом экране нет
-    assert text.endswith("Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме")
-    assert "Самое полезное" not in text and "Явных пробелов нет" not in text
+    assert text == ("💳 Что докупить\n\nПокупки, которые расширят твой гардероб\n\n"
+                    "- Чёрные ботинки · Сначала · +18 образов\nОбуви мало — новая пара даст сочетания.\n\n"
+                    "- Белая льняная рубашка · Необязательно\n\n"
+                    "Сильные и слабые стороны: 1 пара обуви на все случаи, нет тёплой куртки к зиме. "
+                    "Первым делом — чёрные ботинки.")
     calm = wardrobe_ui.purchase_screen({"strengths": ["много базового верха"], "weaknesses": [], "has_picks": False}).text
     assert calm == ("💳 Что докупить\n\nЯвных пробелов нет — шкаф уже закрывает основные образы.\n\n"
-                    "Сильно: много базового верха\n\nСлабо: явных пробелов нет")
+                    "Сильные и слабые стороны: много базового верха.")
     assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
@@ -198,7 +197,7 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     assert wardrobe._purchase_state(cid)["key"] != old_key
     # «Часы» в шкаф не попадают (только одежда и обувь): 8 вещей + кеды.
     assert wardrobe._purchase_state(cid)["analysis"]["total"] == 9  # пересчитано: 8 вещей + кеды
-    assert bot.sent[-1]["text"].startswith("💳 Что докупить\n\nГлавное сейчас:\n- ") and "👔" not in bot.sent[-1]["text"]
+    assert bot.sent[-1]["text"].startswith("💳 Что докупить\n\nПокупки, которые расширят твой гардероб\n\n- ") and "👔" not in bot.sent[-1]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
     wardrobe.store.pending_input.pop(cid, None)
 
@@ -387,8 +386,29 @@ def test_pick_reason_is_one_sentence():
     candidate = {"item": "Белые кеды", "zone": "Обувь", "why": ""}
     facts = {"tops": 3, "bottoms": 2, "shoes": 1}
 
-    assert wardrobe_management.purchase_logic.pick_reason(_wardrobe(), candidate, facts) == (
-        "На 3 верха и 2 низа сейчас 1 пара обуви — новая пара сразу даст свежие сочетания.")
+    long_why = {**candidate, "why": "Белые кеды подойдут к трём верхам и двум низам, а ещё освежат весенние образы."}
+    logic = wardrobe_management.purchase_logic
+
+    assert logic.pick_reason(_wardrobe(), candidate, facts) == "Обуви мало — новая пара сразу даст свежие сочетания."
+    assert logic.pick_reason(_wardrobe(), long_why, facts) == "Обуви мало — новая пара сразу даст свежие сочетания."
+
+
+def test_pick_priority_first_closes_gap_and_nothing_is_urgent_without_gaps():
+    facts = {"tops": 6, "bottoms": 4, "shoes": 1, "cold_season": True, "warm_outer": True, "light": 1}
+    logic = wardrobe_management.purchase_logic
+
+    assert logic.pick_priority({"zone": "Обувь", "gain": 5}, facts, True) == "Сначала"
+    assert logic.pick_priority({"zone": "Низ", "gain": 5}, facts, True) == "Потом"
+    assert logic.pick_priority({"zone": "Низ", "gain": 0}, facts, True) == "Необязательно"
+    assert logic.pick_priority({"zone": "Обувь", "gain": 5}, facts, False) == "Необязательно"
+
+
+def test_purchase_screen_without_gaps_does_not_push_buying():
+    text = wardrobe_ui.purchase_screen({"strengths": ["много базового верха"], "weaknesses": [], "has_picks": True,
+                                        "picks": [{"item": "Белый лонгслив", "priority": "Необязательно"}]}).text
+
+    assert text.endswith("Сильные и слабые стороны: много базового верха.\n"
+                         "Явных пробелов нет — покупки необязательны.")
 
 
 def test_purchase_check_extras_counts_outfit_gain():
