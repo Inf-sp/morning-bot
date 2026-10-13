@@ -323,7 +323,8 @@ async def check_purchase(bot, cid, text):
 8. В wear_with дай до трёх готовых сочетаний только с реальными вещами из шкафа. При нехватке данных можно дать условное сочетание, но явно назвать условие. Если честного сочетания нет — верни пустой список.
 
 Верни JSON (без markdown):
-{{"verdict":"брать / брать только со скидкой / не брать / недостаточно данных","fits_count":0,"duplicates":"да / нет / недостаточно данных","closes_gap":"да / нет / недостаточно данных","not_buy_reason":"duplicate / fit / forbidden_color / low_compatibility / material_or_season / price_vs_utility / poor_condition / пустая строка","why":"одно конкретное объяснение","wear_with":["до трёх готовых сочетаний"]}}
+{{"title":"короткое название вещи по-русски, например «Белая льняная рубашка»","zone":"зона из списка","subcategory":"","color":"основной цвет","warmth":"лёгкие / обычные / тёплые","verdict":"брать / брать только со скидкой / не брать / недостаточно данных","fits_count":0,"duplicates":"да / нет / недостаточно данных","closes_gap":"да / нет / недостаточно данных","not_buy_reason":"duplicate / fit / forbidden_color / low_compatibility / material_or_season / price_vs_utility / poor_condition / пустая строка","why":"одно конкретное объяснение","color_advice":"одно предложение: как цвет ляжет в палитру шкафа и какой оттенок взять, если этот хуже","styles":["стили из списка {', '.join(_settings.STYLES)}, к которым подходит вещь"],"wear_with":["до трёх конкретных вещей из шкафа, с которыми она сочетается"]}}
+Зоны и подкатегории: {_wardrobe._ZONES_DESC}
 
 Если гардероб пустой, fits_count должен быть 0, а вывод не должен притворяться точным."""
     try:
@@ -336,7 +337,7 @@ async def check_purchase(bot, cid, text):
                 "preferences": prefs,
                 "language": "ru",
                 "profile_version": 1,
-                "schema_version": 1,
+                "schema_version": 2,
             },
         )
     except Exception:
@@ -348,11 +349,52 @@ async def check_purchase(bot, cid, text):
             "why": "Не хватило данных о вещи для честной оценки. Попробуй указать цвет, материал и крой.",
             "wear_with": [],
         }
-    text_out, entities = _wardrobe._build_purchase_message(_normalize_purchase_check(d, wardrobe=w))
+    result = {**_normalize_purchase_check(d, wardrobe=w), **_purchase_check_extras(d, w)}
+    text_out, entities = _wardrobe._build_purchase_message(result)
     store.last_source[str(cid)] = "Гардероб · Покупка"
     store.last_answer[str(cid)] = text_out
     await bot.send_message(chat_id=cid, text=text_out, entities=entities,
         reply_markup=_purchase_result_kb())
+
+
+def _purchase_check_extras(data, wardrobe):
+    """Название, совет по цвету, подходящие стили и +N образов (считает код по шкафу)."""
+    data = data if isinstance(data, dict) else {}
+    styles = [s for s in (data.get("styles") or []) if isinstance(s, str) and s in _settings.STYLES][:3]
+    gain = 0
+    if _wardrobe._clean_text(data.get("zone")):
+        try:
+            candidate = {"item": data.get("title") or "", "zone": data.get("zone"), "subcategory": data.get("subcategory"),
+                         "color": data.get("color"), "warmth": data.get("warmth") or "обычные"}
+            gain = purchase_logic.count_outfits(purchase_logic._with_item(
+                wardrobe, purchase_logic.wardrobe_item(candidate))) - purchase_logic.count_outfits(wardrobe)
+        except Exception:
+            _log.debug("purchase check: outfit gain unavailable", exc_info=True)
+    return {"title": _wardrobe._clean_text(data.get("title")),
+            "color_advice": _wardrobe._clean_text(data.get("color_advice")),
+            "styles": styles, "gain": max(0, gain)}
+
+
+async def check_purchase_photo(bot, cid, image_bytes, mime_type="image/jpeg", caption=""):
+    """Фото вещи → короткое описание (Gemini через общий AI-слой) → обычная проверка покупки."""
+    try:
+        parsed = await ai.allm_image_json(
+            image_bytes, mime_type,
+            f"""Опиши по-русски одну главную вещь одежды или обуви на фото для проверки покупки: тип, цвет,
+материал и крой — только то, что видно. Подпись пользователя: {secure.wrap_untrusted(caption, 'подпись')}
+JSON: {{"description": "Белая льняная рубашка свободного кроя"}}""",
+            max_tokens=200,
+        )
+        description = _wardrobe._clean_text((parsed or {}).get("description"))
+    except Exception:
+        _log.warning("purchase check photo: vision unavailable cid=%s", cid, exc_info=True)
+        description = ""
+    if not description:
+        store.pending_input[str(cid)] = "wardrobe_check"
+        await bot.send_message(chat_id=cid, text="Не получилось разобрать фото — опиши вещь текстом.",
+                               reply_markup=_purchase_result_kb())
+        return
+    await check_purchase(bot, cid, f"{description}. {caption}".strip(" ."))
 
 
 def _purchase_result_kb():
@@ -538,9 +580,12 @@ async def send_purchase_screen(bot, cid, q=None, *, more=False):
     else:
         batch = _stable_batch(pool, profile)
     _remember_purchase_batch(cid, batch, cycle_reset)
-    msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch)})
+    msg = wardrobe_ui.purchase_screen({**state["analysis"], "has_picks": bool(batch),
+                                       "top": batch[0] if batch else {}})
     # Рекомендации — только кнопки стандартного цвета.
     kb = InlineKeyboardMarkup([
+        # Проверка своей покупки по фото или описанию — зелёная, сверху.
+        [InlineKeyboardButton("🔎 Проверить покупку", callback_data="w_check")],
         *[[InlineKeyboardButton(c["item"][:40], callback_data=f"w_buy_i:{c['id']}")] for c in batch],
         [InlineKeyboardButton("⬅️ Назад", callback_data="m_wardrobe"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -629,11 +674,11 @@ async def reject_purchase(bot, cid, item_id, q=None):
 
 
 async def ask_purchase_check(bot, cid):
-    """«🔎 Стоит ли покупать…»: ждём описание вещи для проверки покупки."""
+    """«🔎 Проверить покупку»: ждём фото вещи или её описание."""
     store.pending_input[str(cid)] = "wardrobe_check"
     await bot.send_message(
         chat_id=cid,
-        text="Опиши вещь, которую присматриваешь: тип, цвет, материал и крой.",
+        text="Пришли фото вещи или опиши её: тип, цвет, материал и крой.",
         reply_markup=_wardrobe._kb([[("⬅️ Назад", "w_buy"), ("#️⃣ Главная", "m_menu")]]),
     )
 

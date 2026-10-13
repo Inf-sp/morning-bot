@@ -1058,10 +1058,11 @@ _MONTHS_IN = ("в январе", "в феврале", "в марте", "в ап�
               "в августе", "в сентябре", "в октябре", "в ноябре", "в декабре")
 
 
-def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city="") -> MessageSpec:
+def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city="", library=None) -> MessageSpec:
     """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты.
 
     Заголовок «🍿 Досуг в октябре · Alkmaar»: месяц и город — если известны.
+    library — {"movies", "books", "artists"}: курсивная строка «Твоя библиотека · …» внизу.
     """
     b = MessageBuilder()
     title = ui_label("leisure", "Досуг")
@@ -1077,7 +1078,18 @@ def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city
         ("Новая музыка", _music_event_rows, music, LEISURE_HUB_FEATURED),
     )):
         b.line("Выбери, что посмотреть, почитать или послушать.")
+    if library:
+        b.spacer()
+        b.italic(library_stats_line(library.get("movies"), library.get("books"), library.get("artists")))
+        b.newline()
     return b.build_stripped(reply_markup=reply_markup)
+
+
+def library_stats_line(movies, books, artists) -> str:
+    movies, books, artists = int(movies or 0), int(books or 0), int(artists or 0)
+    return (f"Твоя библиотека · {movies} {ru_plural(movies, 'фильм', 'фильма', 'фильмов')}"
+            f" · {books} {ru_plural(books, 'книга', 'книги', 'книг')}"
+            f" · {artists} {ru_plural(artists, 'артист', 'артиста', 'артистов')}")
 
 
 def plain_from_html(text):

@@ -174,6 +174,14 @@ def test_hub_hides_empty_blocks():
     assert empty.text.startswith("🍿 Досуг\n\n")
 
 
+def test_hub_footer_shows_library_stats():
+    msg = leisure_ui.leisure_hub_screen([], [{"title": "Книга"}], [],
+                                        library={"movies": 12, "books": 8, "artists": 25})
+
+    assert msg.text.endswith("\n\nТвоя библиотека · 12 фильмов · 8 книг · 25 артистов")
+    assert [e.type for e in msg.entities][-1] == "italic"
+
+
 def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     _memory_store(monkeypatch)
     _seed_caches(monkeypatch)

@@ -72,10 +72,15 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
 
     assert (facts["total"], facts["tops"], facts["bottoms"], facts["shoes"]) == (9, 3, 2, 1)  # худи — кофта, не верх
     assert data["weaknesses"] == ["1 пара обуви на все случаи", "нет тёплой куртки к зиме"]
-    text = wardrobe_ui.purchase_screen({**data, "has_picks": True}).text
-    assert text.startswith("💳 Что докупить\n\nТвой шкаф · 9 вещей · 12 образов\n")
-    assert "Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме" in text
+    text = wardrobe_ui.purchase_screen({**data, "has_picks": True,
+                                        "top": {"item": "Белая льняная рубашка", "gain": 18}}).text
+    assert text.startswith("💳 Что докупить\n\nГлавное сейчас — белая льняная рубашка: +18 образов.\n\n")
+    assert "Твой шкаф" not in text  # строки статистики на этом экране нет
+    assert text.endswith("Слабо: 1 пара обуви на все случаи · нет тёплой куртки к зиме")
     assert "Самое полезное" not in text and "Явных пробелов нет" not in text
+    calm = wardrobe_ui.purchase_screen({"strengths": ["много базового верха"], "weaknesses": [], "has_picks": False}).text
+    assert calm == ("💳 Что докупить\n\nЯвных пробелов нет — шкаф уже закрывает основные образы.\n\n"
+                    "Сильно: много базового верха\n\nСлабо: явных пробелов нет")
     assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
@@ -129,12 +134,13 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     labels = _labels(message["reply_markup"])
     best = wardrobe._purchase_state(cid)["pool"][0]
     assert (best["zone"], best["gain"]) == ("Обувь", 12)
-    assert labels[0] == [best["item"]]
-    assert labels[3:] == [["⬅️ Назад", "#️⃣ Главная"]]
-    assert best["item"] not in message["text"] and "Самое полезное" not in message["text"]
-    styles = [row[0].api_kwargs.get("style") for row in message["reply_markup"].inline_keyboard[:3]]
+    assert labels[0] == ["🔎 Проверить покупку"]  # проверка своей покупки — сверху
+    assert labels[1] == [best["item"]]
+    assert labels[4:] == [["⬅️ Назад", "#️⃣ Главная"]]
+    assert "Самое полезное" not in message["text"]
+    styles = [row[0].api_kwargs.get("style") for row in message["reply_markup"].inline_keyboard[1:4]]
     assert styles == [None] * 3  # стандартного цвета
-    assert message["reply_markup"].inline_keyboard[3][0].callback_data == "m_wardrobe"
+    assert message["reply_markup"].inline_keyboard[4][0].callback_data == "m_wardrobe"
     callbacks = [b.callback_data for row in message["reply_markup"].inline_keyboard for b in row]
     assert all(len(data.encode()) <= 64 and "кед" not in data for data in callbacks)
     assert all(routing.resolve_callback_handler(data)["handled"] for data in callbacks if data.startswith("w_"))
@@ -143,8 +149,8 @@ def test_screen_one_shows_top_three_with_short_callbacks(monkeypatch):
     # Старая кнопка «Другие покупки» из истории чата всё ещё работает.
     query = Query()
     asyncio.run(wardrobe.handle_callback(bot, cid, query, "w_buy_more"))
-    first = {row[0] for row in labels[:3]}
-    second = {row[0].text for row in query.edited[0]["reply_markup"].inline_keyboard[:3]}
+    first = {row[0] for row in labels[1:4]}
+    second = {row[0].text for row in query.edited[0]["reply_markup"].inline_keyboard[1:4]}
     assert not first & second
     wardrobe.store.pending_input.pop(cid, None)
 
@@ -154,7 +160,7 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     _user(cid, monkeypatch)
     bot, query = RecordingBot(), Query()
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
-    first = bot.sent[0]["reply_markup"].inline_keyboard[0][0].callback_data
+    first = bot.sent[0]["reply_markup"].inline_keyboard[1][0].callback_data  # [0] — «Проверить покупку»
 
     asyncio.run(wardrobe.handle_callback(bot, cid, query, first))
 
@@ -187,7 +193,8 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     assert query.edited[0]["text"].startswith("✅ «Белые кожаные кеды» — в шкафу")
     assert wardrobe._purchase_state(cid)["key"] != old_key
     # «Часы» в шкаф не попадают (только одежда и обувь): 8 вещей + кеды.
-    assert "Твой шкаф · 9 вещей" in bot.sent[-1]["text"] and "👔" not in bot.sent[-1]["text"]
+    assert wardrobe._purchase_state(cid)["analysis"]["total"] == 9  # пересчитано: 8 вещей + кеды
+    assert bot.sent[-1]["text"].startswith("💳 Что докупить\n\nГлавное сейчас — ") and "👔" not in bot.sent[-1]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
     wardrobe.store.pending_input.pop(cid, None)
 
@@ -205,7 +212,7 @@ def test_not_needed_is_persisted_and_replaced(monkeypatch):
     assert profile["wardrobe_purchase_rejections"] == {"items": ["Белые кожаные кеды"]}
     assert "Белые кожаные кеды" not in query.edited[0]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
-    assert len(query.edited[0]["reply_markup"].inline_keyboard) == 4
+    assert len(query.edited[0]["reply_markup"].inline_keyboard) == 5  # + «Проверить покупку»
     wardrobe.store.pending_input.pop(cid, None)
 
 
@@ -289,7 +296,7 @@ def test_purchase_check_button_waits_for_item_description():
     asyncio.run(wardrobe.handle_callback(bot, "purchase-check", None, "w_check"))
 
     assert wardrobe.store.pending_input.pop("purchase-check") == "wardrobe_check"
-    assert bot.sent[0]["text"].startswith("Опиши вещь, которую присматриваешь")
+    assert bot.sent[0]["text"].startswith("Пришли фото вещи или опиши её")
 
 
 def test_free_text_after_screen_one_gets_personal_answer(monkeypatch):
@@ -365,8 +372,51 @@ def test_disliked_picks_are_replaced_by_fresh_ai_ideas_when_pool_runs_out(monkey
                 *purchase.rejected_names(profile), name]}}, None))
     asyncio.run(wardrobe.send_purchase_screen(bot, cid))
 
-    labels = [row[0].text for row in bot.sent[-1]["reply_markup"].inline_keyboard[:-1]]
+    labels = [row[0].text for row in bot.sent[-1]["reply_markup"].inline_keyboard[1:-1]]
     # Аксессуары не предлагаются даже от AI: на свободное место встаёт свитер.
     assert len(labels) == 3 and "Бордовый свитер" in labels and "Бордовый шерстяной шарф" not in labels
     assert set(pool[:-2]) <= set(asked[0])
     wardrobe.store.pending_input.pop(cid, None)
+
+
+def test_purchase_check_photo_describes_item_then_checks(monkeypatch):
+    seen = []
+
+    async def vision(image, mime, prompt, **_kwargs):
+        return {"description": "Белая льняная рубашка"}
+
+    async def check(_bot, cid, text):
+        seen.append((cid, text))
+
+    monkeypatch.setattr(ai, "allm_image_json", vision)
+    monkeypatch.setattr(wardrobe_management, "check_purchase", check)
+
+    asyncio.run(wardrobe_management.check_purchase_photo(RecordingBot(), "photo-check", b"img", caption="на лето"))
+
+    assert seen == [("photo-check", "Белая льняная рубашка. на лето")]
+
+
+def test_purchase_check_photo_without_vision_asks_text(monkeypatch):
+    async def vision(*_args, **_kwargs):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(ai, "allm_image_json", vision)
+    bot = RecordingBot()
+
+    asyncio.run(wardrobe_management.check_purchase_photo(bot, "photo-fail", b"img"))
+
+    assert wardrobe.store.pending_input.pop("photo-fail") == "wardrobe_check"
+    assert bot.sent[0]["text"] == "Не получилось разобрать фото — опиши вещь текстом."
+
+
+def test_purchase_check_extras_counts_outfit_gain():
+    extras = wardrobe_management._purchase_check_extras(
+        {"title": "Белые кеды", "zone": "Обувь", "subcategory": "Кеды", "color": "белый",
+         "styles": ["Минимализм", "Несуществующий"]}, _wardrobe())
+
+    assert extras["gain"] > 0 and extras["styles"] == ["Минимализм"]
+
+
+def test_wardrobe_footer_is_stats_line():
+    assert wardrobe_ui.wardrobe_stats_line(37, 528) == "Твой шкаф · 37 вещей · 528 образов"
+    assert wardrobe_ui.wardrobe_stats_line(1, 2) == "Твой шкаф · 1 вещь · 2 образа"

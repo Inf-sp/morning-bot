@@ -267,23 +267,22 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
     assert bot.sends == []
 
 
-def test_purchase_check_card_uses_decision_format_and_limits_outfits():
+def test_purchase_check_card_shows_verdict_color_styles_and_matches():
     message = purchase_check_card({
-        "verdict": "брать",
-        "fits_count": 3,
-        "duplicates": "нет",
-        "closes_gap": "да",
-        "why": "Добавляет недостающий яркий низ и сочетается с базовыми вещами",
-        "wear_with": ["С белой футболкой", "С чёрной рубашкой", "Третий комплект"],
+        "title": "Белая льняная рубашка", "verdict": "брать", "gain": 18,
+        "why": "Закрывает лёгкий верх к лету",
+        "color_advice": "Белый хорошо ляжет в спокойную палитру; запасной вариант — светло-голубой",
+        "styles": ["Минимализм", "Скандинавский"],
+        "wear_with": ["Тёмные джинсы", "Бежевые чиносы", "Белые кеды", "Лишняя"],
     })
 
-    assert message.text.startswith("🧐 Проверка покупки")
-    assert "Вердикт: брать." in message.text
-    assert "Подойдёт: к 3 вещам из шкафа" in message.text
-    assert "Дублирует: нет." in message.text
-    assert "Закрывает пробел: да." in message.text
-    assert "Почему: добавляет недостающий яркий низ" in message.text
-    assert "Как носить:" not in message.text
+    assert message.text == (
+        "🔎 Белая льняная рубашка\n\n"
+        "Брать — закрывает лёгкий верх к лету, +18 образов.\n"
+        "Цвет: белый хорошо ляжет в спокойную палитру; запасной вариант — светло-голубой.\n"
+        "Стили: Минимализм, Скандинавский\n"
+        "Сочетается с: тёмные джинсы, бежевые чиносы, белые кеды"
+    )
 
 
 def test_purchase_check_rejects_unexplained_negative_verdict():
@@ -318,7 +317,7 @@ def test_purchase_check_does_not_invent_zero_compatibility():
     message = purchase_check_card(result)
 
     assert result["fits_count"] == "недостаточно данных"
-    assert "Подойдёт: недостаточно данных" in message.text
+    assert message.text.startswith("🔎 Проверка покупки\n\nПока не ясно — ") and "0 вещ" not in message.text
 
 
 def test_wardrobe_home_actions_use_one_column():

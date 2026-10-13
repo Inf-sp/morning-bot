@@ -67,7 +67,7 @@ def test_hint_comes_as_quiz_and_answer_reveals_the_riddle(monkeypatch):
     poll = bot.polls[0]
     assert poll["type"] == "quiz" and poll["options"] == ["de hond", "de kat", "het konijn"]
     assert poll["correct_option_id"] == 1 and "Ik heb snorharen." in poll["question"]
-    assert poll["question"].endswith("Kies het juiste antwoord.")
+    assert poll["question"] == "💡 Hint\n\nIk heb snorharen."  # без «Kies het juiste antwoord»
     labels = [b.text for row in poll["reply_markup"].inline_keyboard for b in row]
     assert labels == ["⬅️ Назад", "#️⃣ Главная"]  # без «Сдаюсь»
     assert [b.text for row in message.edited_markup.inline_keyboard for b in row] == ["⬅️ Назад", "#️⃣ Главная"]

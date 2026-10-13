@@ -231,7 +231,7 @@ async def photo_handler(update, context):
         return
     tracking.touch(cid)
     pending = store.pending_input.get(cid)
-    if pending not in ("wardrobe_add", "wardrobe_add_set"):
+    if pending not in ("wardrobe_add", "wardrobe_add_set", "wardrobe_check"):
         return
     store.pending_input.pop(cid, None)
     photo = update.message.photo[-1]
@@ -244,6 +244,10 @@ async def photo_handler(update, context):
         body = await f.download_as_bytearray()
     except Exception as e:
         await verify.safe_error(context.bot, cid, e)
+        return
+    if pending == "wardrobe_check":  # «🔎 Проверить покупку» по фото
+        await wardrobe.check_purchase_photo(
+            context.bot, cid, body, "image/jpeg", secure.clamp(update.message.caption or ""))
         return
     await wardrobe.add_item_photo(
         context.bot, cid, body, "image/jpeg", secure.clamp(update.message.caption or ""))

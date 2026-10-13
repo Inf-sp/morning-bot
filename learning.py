@@ -158,7 +158,15 @@ def build_learning_home(cid):
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
         "live_language": phrase,
+        "stats": _learning_stats(cid, lang_code),
     }
+
+
+def _learning_stats(cid, lang_code):
+    """Нижняя строка «Обучения»: слов в словаре языка и изученных тем грамматики."""
+    words = sum(1 for w in DictionaryRepository(cid).all() if entry_language(w) == lang_code and entry_term(w))
+    progress = ((store.get_profile(cid) or {}).get("grammar_progress") or {}).get(lang_code) or {}
+    return {"words": words, "topics": len(progress.get("seen") or [])}
 
 
 def refresh_learning_home(cid):

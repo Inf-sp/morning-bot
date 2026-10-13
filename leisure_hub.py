@@ -216,6 +216,9 @@ async def send_hub(bot, cid, q=None):
     msg = leisure_ui.leisure_hub_screen(
         **data, reply_markup=leisure_ui.leisure_hub_kb(),
         month=today.month, city=store.get_settings(cid).get("city") or "",
+        library={"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
+                 "books": len(store.get_list(config.FAVORITE_BOOKS_KEY, cid) or []),
+                 "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
     )
     await _show(bot, cid, msg, q)
     missing = [item for item in data.get("music") or [] if not item.get("about")]

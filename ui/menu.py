@@ -7,6 +7,7 @@ from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_FLAG, LANGUAGE_EMOJI, ui_label
 from .food import CUISINE_RU
 from .navigation import nav_row
+from .text import ru_plural
 
 UI_MYDAY = ui_label("myday", "").strip()
 UI_WARDROBE = ui_label("wardrobe", "").strip()
@@ -188,7 +189,11 @@ def learning_menu(home: dict):
         b.newline()
     if phrase.get("more") and phrase.get("more_translation"):
         b.spacer()
-        b.italic(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+        b.line(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+    stats = home.get("stats")
+    if stats:  # статистика — последней строкой курсивом
+        b.spacer()
+        b.italic(learning_stats_line(title, stats.get("words"), stats.get("topics")))
         b.newline()
 
     if home.get("vacation"):
@@ -204,6 +209,12 @@ def learning_menu(home: dict):
         [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
     ]))
+
+
+def learning_stats_line(language, words, topics) -> str:
+    words, topics = int(words or 0), int(topics or 0)
+    return (f"Твой {str(language).lower()} · {words} {ru_plural(words, 'слово', 'слова', 'слов')}"
+            f" · {topics} {ru_plural(topics, 'изученная тема', 'изученные темы', 'изученных тем')}")
 
 
 def menu_screen(key):
@@ -244,14 +255,18 @@ _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "d
 _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
 
 
-def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True):
-    """Главный экран Готовки: кухня дня, вступление и три блюда без рецептов.
+def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None):
+    """Главный экран Готовки: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (холодильник остался дома).
+    stats — {"products": N, "meals": M}: курсивная строка «Твой холодильник · …» внизу.
     """
     b = MessageBuilder()
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     b.section(f"{flag} Меню на сегодня · {cuisine_label} кухня")
+    if intro:  # тон и настроение меню — сразу под заголовком, обычным текстом
+        b.spacer()
+        b.line(intro)
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
@@ -260,12 +275,18 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True):
         b.bold(f"{label}:")
         note = _cooking_text(dish.get("note"))
         b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
-    if intro:  # описание кухни — под блюдами: «Турецкая кухня — это мясо, овощи…»
+    if stats:
         b.spacer()
-        b.italic(f"{cuisine_label} кухня — это {intro[:1].lower()}{intro[1:]}")
+        b.italic(fridge_stats_line(stats.get("products"), stats.get("meals")))
         b.newline()
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes],
                                                       show_mine=show_mine))
+
+
+def fridge_stats_line(products, meals) -> str:
+    products, meals = int(products or 0), int(meals or 0)
+    return (f"Твой холодильник · {products} {ru_plural(products, 'продукт', 'продукта', 'продуктов')}"
+            f" · {meals} {ru_plural(meals, 'приём', 'приёма', 'приёмов')} пищи")
 
 
 def food_menu(idea=None, *, meal="", from_fridge=False):

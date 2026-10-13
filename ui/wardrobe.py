@@ -128,8 +128,11 @@ def render_wardrobe_message(look_data):
         for item in items:
             b.line(f"- {item}")
 
-    # Финальная фраза — курсивом, без эмодзи и заголовка: цвета, силуэт или стиль (меняется по дням).
-    closing = _clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, "")
+    # Нижняя строка курсивом — статистика шкафа: «Твой шкаф · 37 вещей · 528 образов».
+    # Без статистики (старые данные) — прежняя финальная фраза о стиле.
+    stats = look_data.get("stats") or {}
+    closing = (wardrobe_stats_line(stats.get("items"), stats.get("outfits")) if stats.get("items")
+               else _clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, ""))
     if closing:
         b.spacer()
         b.italic(closing)
@@ -209,50 +212,35 @@ def entity_card(title, summary="", quote="", bullets=None, final="", bullet_labe
     return b.build_stripped()
 
 
-def purchase_check_card(data):
-    """Проверка покупки отвечает на один вопрос: стоит ли добавлять вещь в шкаф.
+_VERDICT_LABELS = {"брать": "Брать", "брать только со скидкой": "Брать со скидкой", "не брать": "Не брать",
+                   "недостаточно данных": "Пока не ясно"}
 
-    data: {verdict, fits_count, duplicates, closes_gap, why, wear_with[]}
+
+def purchase_check_card(data):
+    """«🔎 Белая льняная рубашка», вердикт с причиной (+N образов), цвет, стили и с чем сочетается.
+
+    data: {title, verdict, why, gain, color_advice, styles[], wear_with[]}
     """
     data = data or {}
     b = MessageBuilder()
-    b.section("🧐 Проверка покупки")
-
-    verdict = _clean_text(data.get("verdict"))
-    if verdict:
-        verdict_labels = {
-            "брать": "Брать",
-            "можно брать": "Можно брать",
-            "скорее не брать": "Скорее не брать",
-            "не брать": "Не брать",
-        }
-        verdict_text = verdict_labels.get(verdict.casefold(), _upper_first(verdict).rstrip("."))
-        b.spacer()
-        b.labeled_line("Вердикт", _finish_dot(verdict_text), lowercase=True)
-
-    fits_count = data.get("fits_count")
-    if isinstance(fits_count, int) and not isinstance(fits_count, bool) and fits_count >= 0:
-        if fits_count == 0:
-            b.labeled_line("Подойдёт", "ни с одной вещью из текущего шкафа")
-        else:
-            b.labeled_line("Подойдёт", f"к {fits_count} {_pluralize_dative_items(fits_count)} из шкафа")
-    elif fits_count == "недостаточно данных":
-        b.labeled_line("Подойдёт", "недостаточно данных")
-
-    duplicates = _clean_text(data.get("duplicates"))
-    if duplicates:
-        b.labeled_line("Дублирует", _finish_dot(duplicates))
-
-    closes_gap = _clean_text(data.get("closes_gap"))
-    if closes_gap:
-        b.labeled_line("Закрывает пробел", _finish_dot(closes_gap))
-
-    why = _finish_dot(data.get("why"))
-    why = why.replace("пользователя", "").replace("запретах", "предпочтениях")
-    if why:
-        b.spacer()
-        b.labeled_line("Почему", why)
-
+    b.section(f"🔎 {_clean_text(data.get('title')) or 'Проверка покупки'}")
+    b.spacer()
+    verdict = _VERDICT_LABELS.get(_clean_text(data.get("verdict")).casefold(), "Пока не ясно")
+    why = _clean_text(data.get("why")).replace("пользователя", "").replace("запретах", "предпочтениях").strip()
+    why = _lower_first(why.rstrip(".")) if why else ""
+    gain = int(data.get("gain") or 0)
+    if gain > 0 and verdict != "Не брать":
+        why = f"{why}, +{gain} {_outfits_word(gain)}" if why else f"+{gain} {_outfits_word(gain)}"
+    b.line(f"{verdict} — {why}." if why else f"{verdict}.")
+    color = _finish_dot(data.get("color_advice"))
+    if color:
+        b.labeled_line("Цвет", _lower_first(color))
+    styles = [_clean_text(s) for s in data.get("styles") or [] if _clean_text(s)]
+    if styles:
+        b.labeled_line("Стили", ", ".join(styles), lowercase=False)
+    wear = [_lower_first(_clean_text(x)) for x in data.get("wear_with") or [] if _clean_text(x)][:3]
+    if wear:
+        b.labeled_line("Сочетается с", ", ".join(wear))
     return b.build_stripped()
 
 
@@ -292,31 +280,36 @@ def purchase_suggestions_card(data):
     return b.build_stripped()
 
 
+def wardrobe_stats_line(items, outfits) -> str:
+    items, outfits = int(items or 0), int(outfits or 0)
+    return f"Твой шкаф · {items} {_pluralize_items(items)} · {outfits} {_outfits_word(outfits)}"
+
+
 def _outfits_word(n):
     return ru_plural(n, "образ", "образа", "образов")
 
 
 def purchase_screen(data):
-    """Экран 1 «💳 Что докупить»: разбор шкафа и самые полезные покупки.
+    """Экран 1 «💳 Что докупить»: вывод сверху, затем сильные и слабые стороны шкафа.
 
-    data: {total, outfits, strengths[], weaknesses[], has_picks}
+    data: {strengths[], weaknesses[], has_picks, top: {item, gain}}; покупки — кнопками под экраном.
     """
     data = data or {}
     b = MessageBuilder()
     b.title("💳 Что докупить")
-    total = int(data.get("total") or 0)
-    outfits = int(data.get("outfits") or 0)
-    b.line(f"Твой шкаф · {total} {_pluralize_items(total)} · {outfits} {_outfits_word(outfits)}")
+    top = data.get("top") or {}
+    name, gain = _lower_first(_clean_text(top.get("item"))), int(top.get("gain") or 0)
+    if data.get("has_picks") and name:
+        b.line(f"Главное сейчас — {name}: +{gain} {_outfits_word(gain)}." if gain > 0 else f"Главное сейчас — {name}.")
+    else:
+        b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
     strengths = [_clean_text(x) for x in data.get("strengths") or [] if _clean_text(x)]
     weaknesses = [_clean_text(x) for x in data.get("weaknesses") or [] if _clean_text(x)]
     if strengths:
-        b.labeled_line("Сильно", " · ".join(strengths))
-    if weaknesses:
-        b.labeled_line("Слабо", " · ".join(weaknesses))
-    # Рекомендации показываются только кнопками под экраном.
-    if not data.get("has_picks"):
         b.spacer()
-        b.line("Явных пробелов нет — шкаф уже закрывает основные образы.")
+        b.labeled_line("Сильно", " · ".join(strengths))
+    b.spacer()
+    b.labeled_line("Слабо", " · ".join(weaknesses) if weaknesses else "явных пробелов нет")
     return b.build_stripped()
 
 

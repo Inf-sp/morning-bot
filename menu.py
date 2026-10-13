@@ -72,13 +72,20 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
 
 
 def _day_menu_message(menu, cid=None):
+    import config
     import day_menu
     import vacation
+    from fridge_model import _fridge_available
+    import settings
+    stats = None
+    if cid is not None and not vacation.active(cid):  # в отпуске холодильник остался дома
+        stats = {"products": len(_fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))),
+                 "meals": len(settings.food_meals(cid))}
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
         intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),
-        show_mine=cid is None or not vacation.active(cid),
+        show_mine=cid is None or not vacation.active(cid), stats=stats,
     )
 
 

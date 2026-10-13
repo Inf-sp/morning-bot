@@ -97,15 +97,18 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "breakfast": {"name": "Crostata", "note": "Песочный пирог с джемом"},
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
         "dinner": {"name": "Lasagna", "note": ""},
-    }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.")
+    }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.",
+        stats={"products": 77, "meals": 3})
 
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
+        "Свежие продукты и простые сочетания.\n\n"
         "Завтрак: Crostata — песочный пирог с джемом\n\n"
         "Обед: Pasta al pomodoro — паста с томатами\n\n"
         "Ужин: Lasagna\n\n"
-        "Итальянская кухня — это свежие продукты и простые сочетания."
+        "Твой холодильник · 77 продуктов · 3 приёма пищи"
     )
+    assert menu_ui.fridge_stats_line(1, 1) == "Твой холодильник · 1 продукт · 1 приём пищи"
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],

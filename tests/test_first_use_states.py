@@ -88,6 +88,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
             "more": "Ik bel je terug zodra ik klaar ben.",
             "more_translation": "Я перезвоню тебе, как только закончу",
         },
+        "stats": {"words": 120, "topics": 14},
         "daily_practice": {
             "entries": [{"term": "Inmiddels", "translation": "Уже"}],
             "tip": "Не должно появиться на главном экране.",
@@ -108,7 +109,8 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         "Грамматика: Zodra",
         "Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
         "Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
-    ]  # фраза дня — в «Моём дне», здесь: тема → объяснение цитатой → пример курсивом
+        "Твой нидерландский · 120 слов · 14 изученных тем",
+    ]  # фраза дня — в «Моём дне», здесь: тема → объяснение цитатой → пример → статистика курсивом
 
     def marked(kind):
         raw = message.text.encode("utf-16-le")
@@ -117,7 +119,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
 
     assert marked("bold")[1:] == ["Грамматика:"]  # «Пример:» больше нет
     assert marked("blockquote") == ["Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
-    assert marked("italic") == ["Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу."]
+    assert marked("italic") == ["Твой нидерландский · 120 слов · 14 изученных тем"]  # пример — обычным текстом
     assert marked("spoiler") == []
 
 

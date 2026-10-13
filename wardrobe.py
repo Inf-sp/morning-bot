@@ -183,6 +183,12 @@ def _closing_line(items, primary_style, style_tip):
     return options[seed % len(options)] if options else ""
 
 
+def wardrobe_counts(w) -> dict:
+    """«Твой шкаф · 37 вещей · 528 образов» — для нижней строки карточки образа."""
+    from wardrobe_outfit import count_outfits
+    return {"items": wardrobe_stats(w)[0], "outfits": count_outfits(w)}
+
+
 def _build_look_message(look_data):
     msg = wardrobe_ui.render_wardrobe_message(look_data)
     return msg.text, msg.entities
@@ -610,6 +616,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
         look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
+        if not look_data.get("stats"):  # образ, сохранённый до строки статистики
+            look_data = {**look_data, "stats": wardrobe_counts(store.load_wardrobe(cid))}
         if not look_data.get("weather_reason") and weather_now[1] is not None:
             # Образ собран раньше, чем строка о погоде стала обязательной: дописываем её сверху.
             reason = wardrobe_rules.weather_reason(weather_now[0], look_data.get("items") or [])
@@ -734,6 +742,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "purchase_recommendation": purchase_recommendation,
     }
     look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
+    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
     if kb is None:
         result_kb = build_wardrobe_keyboard()
     text, entities = _build_look_message(look_data)
@@ -868,6 +877,7 @@ from wardrobe_management import (  # noqa: E402 — wardrobe_management uses nam
     handle_wardrobe_search,
     _normalize_purchase_check,
     check_purchase,
+    check_purchase_photo,
     _purchase_result_kb,
     _purchase_cache_key,
     _purchase_state,

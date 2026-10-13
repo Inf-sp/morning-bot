@@ -48,7 +48,6 @@ GAME_UI = {
         "reply_next": "Напиши ответ следующим сообщением — можно на любом языке.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Подсказка",
-        "choose": "Выбери верный ответ.",
         "found": "✅ Дело раскрыто!",
         "answer_was": "💡 Верный ответ",
         "ended": "Эта загадка уже закончилась — держи новую.",
@@ -67,7 +66,6 @@ GAME_UI = {
         "no_new": "No new riddle right now. Try again later.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
-        "choose": "Choose the right answer.",
         "found": "✅ Case solved!",
         "answer_was": "💡 The right answer",
         "ended": "This riddle is already over — try a new one.",
@@ -86,7 +84,6 @@ GAME_UI = {
         "no_new": "Er is nu geen nieuw raadsel. Probeer het later nog eens.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
-        "choose": "Kies het juiste antwoord.",
         "found": "✅ Zaak opgelost!",
         "answer_was": "💡 Het juiste antwoord",
         "ended": "Dit raadsel is al voorbij — probeer een nieuw.",
@@ -973,7 +970,7 @@ async def game_hint(bot, cid, q):
         # следом бот присылает разгадку (game_poll_answer).
         message = await bot.send_poll(
             chat_id=cid,
-            question=f"{ui['hint_title']}\n\n{st['hint']}\n\n{ui.get('choose', '')}".strip()[:300],
+            question=f"{ui['hint_title']}\n\n{st['hint']}".strip()[:300],
             options=[str(option)[:100] for option in st.get("options") or ()],
             type="quiz", correct_option_id=int(st.get("correct") or 0), is_anonymous=False,
             reply_markup=_game_play_kb(ui, hint_available=False),
