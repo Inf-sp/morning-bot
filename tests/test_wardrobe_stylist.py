@@ -591,11 +591,14 @@ def test_parsed_item_keeps_fit_season_and_occasions():
     assert item["occasions"] == ["город", "офис"]
 
 
-def test_style_summary_shows_only_selected_styles():
-    # Экран стиля упрощён (3435405): посадка, цвета и ограничения в сводке не выводятся.
-    message = wardrobe_style(["минимализм", "скандинавский"])
+def test_style_screen_shows_two_groups_with_descriptions():
+    message = wardrobe_style([(label, about) for _key, label, about, _members in settings.STYLE_GROUPS])
 
-    assert "Стиль: минимализм · скандинавский" in message.text
+    assert message.text == (
+        "Стиль\n\nВыбери стили, которые тебе близки. Изменения сохраняются сразу.\n\n"
+        "Повседневный\nНа каждый день, комфорт и простые сочетания.\n\n"
+        "Классический\nСтруктурированные силуэты и более элегантные сочетания."
+    )
     assert "Не предлагать" not in message.text
 
 
@@ -641,16 +644,12 @@ def test_style_preferences_invalidate_current_outfit_and_purchase_advice(monkeyp
     assert invalidated == [("look", "42"), ("purchase", "42")]
 
 
-def test_wardrobe_preferences_show_six_styles_as_toggles_without_emoji():
-    markup = settings._wardrobe_style_kb("prefs-test", state={
-        "styles": ["Минимализм"], "fit": "", "palette": [], "avoid": [],
-    })
+def test_wardrobe_preferences_show_two_style_groups_as_toggles():
+    markup = settings._wardrobe_style_kb("prefs-test", raw={"style_groups": ["classic"]})
     labels = [button.text for row in markup.inline_keyboard for button in row]
 
-    assert labels[:-2] == [
-        "✅ Минимализм", "□ Скандинавский", "□ Повседневный",
-        "□ Городской", "□ Классический", "□ Спортивный",
-    ]
+    assert labels[:-2] == ["□ Повседневный", "✅ Классический"]
+    assert [row[0].callback_data for row in markup.inline_keyboard[:-1]] == ["set_stgroup_0", "set_stgroup_1"]
     assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 
@@ -706,8 +705,8 @@ def test_old_cached_sock_line_is_shown_as_last_item():
 def test_any_number_of_styles_can_be_selected(monkeypatch):
     import asyncio
 
-    saved = {"style": ["Минимализм", "Скандинавский", "Повседневный"]}
-    monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: saved.get(key, default))
+    saved = {"style": ["Минимализм", "Скандинавский"]}  # старый профиль: шесть стилей → группы
+    monkeypatch.setattr(settings, "_all", lambda: {"42": saved})
     monkeypatch.setattr(settings, "set_", lambda _cid, key, value: saved.__setitem__(key, value))
     monkeypatch.setattr(settings, "_invalidate_wardrobe_recommendations", lambda _cid: None)
 
@@ -715,11 +714,17 @@ def test_any_number_of_styles_can_be_selected(monkeypatch):
         return None
 
     monkeypatch.setattr(settings, "send_wardrobe_style", no_screen)
-    asyncio.run(settings.set_style(None, "42", settings.STYLES.index("Городской")))
+    assert settings.style_groups("42") == ["casual"]
+    asyncio.run(settings.set_style_group(None, "42", 1))  # + Классический
 
-    assert saved["style"][-1] == "Городской" and len(saved["style"]) == 4
-    text = settings.settings_ui.wardrobe_style(saved["style"]).text
-    assert "Стиль: Минимализм · Скандинавский" in text and "до трёх" not in text
+    assert saved["style_groups"] == ["casual", "classic"]
+    assert settings.wardrobe_styles("42") == [
+        "Повседневный", "Городской", "Скандинавский", "Спортивный", "Минимализм", "Классический"]
+    asyncio.run(settings.set_style_group(None, "42", 0))  # − Повседневный
+    assert settings.wardrobe_styles("42") == ["Классический", "Минимализм"]
+    # Перенос: только «Минимализм» — обе группы; ничего — ни одной.
+    assert settings.style_groups_of(["Минимализм"]) == ["casual", "classic"]
+    assert settings.style_groups_of([]) == []
 
 
 def test_accessories_are_in_the_list_and_old_accent_is_hidden():

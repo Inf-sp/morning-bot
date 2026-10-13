@@ -54,12 +54,20 @@ def wardrobe_item_input():
     return b.build()
 
 
-def wardrobe_style(styles):
+def wardrobe_style(groups):
+    """Экран «Стиль»: две группы с описанием; выбор — переключателями под экраном.
+
+    groups — [(название, описание)].
+    """
     b = MessageBuilder()
     b.section("Стиль")
     b.spacer()
-    b.labeled_line("Стиль", " · ".join(styles) if styles else "не выбран", lowercase=False)
-    b.line("Выбери любые стили. Изменения сохраняются сразу.")
+    b.line("Выбери стили, которые тебе близки. Изменения сохраняются сразу.")
+    for label, about in groups:
+        b.spacer()
+        b.bold(label)
+        b.newline()
+        b.line(about)
     return b.build_stripped()
 
 

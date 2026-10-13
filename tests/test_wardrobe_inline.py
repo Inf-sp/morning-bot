@@ -322,11 +322,12 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
-        ["✨ Новый образ"],
+        ["Повседневный образ", "Классический образ"],  # вместо «Новый образ» — две группы стиля
         ["💳 Что докупить"],
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
-    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[0][0].callback_data == "w_pick"
+    assert [b.callback_data for b in wardrobe.build_wardrobe_keyboard().inline_keyboard[0]] == [
+        "w_lookst_casual", "w_lookst_classic"]
     assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_buy"
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
@@ -719,10 +720,10 @@ def test_delete_removes_item_at_once_without_confirmation(monkeypatch):
 def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
     import wardrobe_router
 
-    kb = wardrobe.style_picker_kb().inline_keyboard
+    kb = wardrobe.style_picker_kb().inline_keyboard  # старая «Новый образ» из истории — те же две группы
     assert kb[-1][0].callback_data == "w_card"
-    assert [row[0].text for row in kb[:-1]] == list(wardrobe._settings.STYLES)
-    assert all(not row[0].api_kwargs for row in kb[:-1])
+    assert [b.text for b in kb[0]] == ["Повседневный образ", "Классический образ"]
+    assert all(not b.api_kwargs for b in kb[0])
 
     styles = []
 
@@ -737,10 +738,15 @@ def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
         async def stop(self, delete=True):
             return None
 
-    for data in ("w_lookst_2", "w_lookst_any"):
+    for data in ("w_lookst_casual", "w_lookst_classic", "w_lookst_2", "w_lookst_any"):
         asyncio.run(wardrobe_router.handle_callback(object(), "42", None, data, status=Status()))
 
-    assert styles == [wardrobe._settings.STYLES[2], None]
+    assert styles == [
+        ["Повседневный", "Городской", "Скандинавский", "Спортивный", "Минимализм"],
+        ["Классический", "Минимализм"],
+        wardrobe._settings.STYLES[2],  # старая кнопка одного стиля из истории чата
+        None,
+    ]
 
 
 def test_listen_button_has_standard_color():

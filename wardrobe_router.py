@@ -12,8 +12,10 @@ async def ingest(bot, cid, text):
 
 
 def _settings_style(choice):
-    """w_lookst_<индекс стиля|any> → название стиля или None (любой)."""
+    """w_lookst_<casual|classic> → стили группы; w_lookst_<индекс> (старые кнопки) → один стиль; иначе None."""
     import settings
+    if choice in ("casual", "classic"):
+        return settings.style_group_members(choice)
     return settings.STYLES[int(choice)] if choice.isdigit() and int(choice) < len(settings.STYLES) else None
 
 

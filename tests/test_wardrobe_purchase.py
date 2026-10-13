@@ -414,9 +414,10 @@ def test_purchase_screen_without_gaps_does_not_push_buying():
 def test_purchase_check_extras_counts_outfit_gain():
     extras = wardrobe_management._purchase_check_extras(
         {"title": "Белые кеды", "zone": "Обувь", "subcategory": "Кеды", "color": "белый",
-         "styles": ["Минимализм", "Несуществующий"]}, _wardrobe())
+         "styles": ["Скандинавский", "Классический", "Несуществующий"]}, _wardrobe())
 
-    assert extras["gain"] > 0 and extras["styles"] == ["Минимализм"]
+    # Пользователь видит группы стиля, а не тонкие стили AI.
+    assert extras["gain"] > 0 and extras["styles"] == ["Повседневный", "Классический"]
 
 
 def test_wardrobe_footer_is_stats_line():

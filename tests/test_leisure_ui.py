@@ -1413,13 +1413,13 @@ def test_preferences_summary_lists_every_section(monkeypatch):
               "movie_min_rating": "7.0", "book_recency": "new"}
     monkeypatch.setattr(settings, "get", lambda _cid, key, default=None: values.get(key, default))
     monkeypatch.setattr(settings.store, "learning_is_enabled", lambda _cid: False)
-    monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Скандинавский"])
+    monkeypatch.setattr(settings, "style_groups", lambda _cid: ["casual", "classic"])
 
     summary = dict(settings.preferences_summary("42"))
 
     assert summary["Обучение"] == "не изучаю"
     assert summary["Кухни"] == "Итальянская" and summary["Ограничения в еде"] == "Без свинины"
-    assert summary["Стиль"] == "Скандинавский" and summary["Музыка"] == "не выбрано"
+    assert summary["Стиль"] == "Повседневный · Классический" and summary["Музыка"] == "не выбрано"
     assert summary["Кино"] == "от ⭐ 7.0" and summary["Книги"] == "новинки"
 
 

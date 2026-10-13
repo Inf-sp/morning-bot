@@ -52,6 +52,15 @@ STYLES = [
     "Спортивный",
 ]
 
+# Пользователь выбирает две группы; подбор внутри учитывает тонкие стили группы. Минимализм — в обеих.
+STYLE_GROUPS = [
+    ("casual", "Повседневный", "На каждый день, комфорт и простые сочетания.",
+     ("Повседневный", "Городской", "Скандинавский", "Спортивный", "Минимализм")),
+    ("classic", "Классический", "Структурированные силуэты и более элегантные сочетания.",
+     ("Классический", "Минимализм")),
+]
+_SHARED_STYLE = "Минимализм"
+
 FIT_OPTIONS = [
     "свободная",
     "прямая",
@@ -359,7 +368,7 @@ def preferences_summary(cid) -> list:
         ("Обучение", learning),
         ("Кухни", ", ".join(label.split(" ", 1)[-1] for label in cuisine_labels(cid)) or _NOT_SET),
         ("Ограничения в еде", ", ".join(restrictions[key] for key in food_restrictions(cid)).capitalize() or "нет"),
-        ("Стиль", ", ".join(wardrobe_styles(cid)) or _NOT_SET),
+        ("Стиль", " · ".join(style_group_labels(style_groups(cid))) or _NOT_SET),
         ("Музыка", ", ".join(music[key] for key in leisure_music._music_styles(cid)) or _NOT_SET),
         ("Кино", " · ".join(part for part in movie if part) or _NOT_SET),
         ("Книги", " · ".join(part for part in books if part) or _NOT_SET),
@@ -834,8 +843,36 @@ def _normalize_wardrobe_styles(cur):
     return []
 
 
+def style_groups_of(styles) -> list:
+    """Группы по тонким стилям (старые профили, проверка покупки); только «Минимализм» — обе группы."""
+    styles = set(styles or ())
+    found = [key for key, _label, _about, members in STYLE_GROUPS if styles & (set(members) - {_SHARED_STYLE})]
+    return found or ([key for key, *_rest in STYLE_GROUPS] if _SHARED_STYLE in styles else [])
+
+
+def style_group_labels(keys) -> list:
+    return [label for key, label, _about, _members in STYLE_GROUPS if key in set(keys or ())]
+
+
+def style_group_members(key) -> list:
+    return next((list(members) for group, _label, _about, members in STYLE_GROUPS if group == key), [])
+
+
+def style_groups(cid, raw=None) -> list:
+    """Выбранные группы стиля; у старых профилей — из прежних шести стилей. raw — уже прочитанные настройки."""
+    raw = raw if raw is not None else _all().get(str(cid), {})
+    saved = raw.get("style_groups")
+    if isinstance(saved, list):
+        return [key for key, *_rest in STYLE_GROUPS if key in saved]
+    return style_groups_of(_normalize_wardrobe_styles(raw.get("style", [])))
+
+
 def wardrobe_styles(cid):
-    return _normalize_wardrobe_styles(get(cid, "style", []))
+    """Тонкие стили для подбора: все стили выбранных групп, по порядку групп."""
+    styles = []
+    for key in style_groups(cid):
+        styles += [style for style in style_group_members(key) if style not in styles]
+    return styles
 
 
 def _invalidate_wardrobe_recommendations(cid):
@@ -844,18 +881,14 @@ def _invalidate_wardrobe_recommendations(cid):
     store.clear_wardrobe_purchase_recommendation(cid)
 
 
-async def set_style(bot, cid, i, q=None):
-    if 0 <= i < len(STYLES):
-        chosen = STYLES[i]
-        selected = wardrobe_styles(cid)
-        if chosen in selected:
-            selected = [s for s in selected if s != chosen]
-            set_(cid, "style", selected)
-            _invalidate_wardrobe_recommendations(cid)
-        else:
-            selected.append(chosen)
-            set_(cid, "style", selected)
-            _invalidate_wardrobe_recommendations(cid)
+async def set_style_group(bot, cid, i, q=None):
+    """Переключатель группы стиля; старые кнопки шести стилей (set_style_*) просто открывают экран."""
+    if 0 <= i < len(STYLE_GROUPS):
+        key = STYLE_GROUPS[i][0]
+        selected = style_groups(cid)
+        selected = [k for k in selected if k != key] if key in selected else [*selected, key]
+        set_(cid, "style_groups", [k for k, *_rest in STYLE_GROUPS if k in selected])
+        _invalidate_wardrobe_recommendations(cid)
     await send_wardrobe_style(bot, cid, q=q)
 
 
@@ -1035,12 +1068,10 @@ def _wardrobe_style_state(cid):
     }
 
 
-def _wardrobe_style_kb(cid, state=None):
-    state = state or _wardrobe_style_state(cid)
-    selected_styles = set(state["styles"])
-    style_buttons = [InlineKeyboardButton(("✅ " if s in selected_styles else "□ ") + s, callback_data=f"set_style_{i}")
-                     for i, s in enumerate(STYLES)]
-    rows = [[button] for button in style_buttons]
+def _wardrobe_style_kb(cid, raw=None):
+    selected = set(style_groups(cid, raw))
+    rows = [[InlineKeyboardButton(("✅ " if key in selected else "□ ") + label, callback_data=f"set_stgroup_{i}")]
+            for i, (key, label, _about, _members) in enumerate(STYLE_GROUPS)]
     rows.append(nav_row("w_closet"))
     return InlineKeyboardMarkup(rows)
 
@@ -1048,9 +1079,8 @@ def _wardrobe_style_kb(cid, state=None):
 async def send_wardrobe_style(bot, cid, q=None):
     """Стиль гардероба — один экран, все переключатели нажимаются сразу (стиль и
     посадка — toggle с галочкой на месте, без перехода на отдельный подэкран)."""
-    state = _wardrobe_style_state(cid)
-    msg = settings_ui.wardrobe_style(state["styles"])
-    kb = _wardrobe_style_kb(cid, state)
+    msg = settings_ui.wardrobe_style([(label, about) for _key, label, about, _members in STYLE_GROUPS])
+    kb = _wardrobe_style_kb(cid, _all().get(str(cid), {}))  # настройки читаются один раз
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -1129,8 +1159,10 @@ async def handle_callback(bot, cid, data, q=None):
         # Compat-редирект: настройки гардероба переехали из Персонализации в раздел
         # «Гардероб» → «Настройки гардероба» → «Стиль», слои убраны из UI.
         await send_wardrobe_style(bot, cid, q)
-    elif data.startswith("set_style_"):
-        await set_style(bot, cid, int(data[len("set_style_"):]), q)
+    elif data.startswith("set_stgroup_"):
+        await set_style_group(bot, cid, int(data[len("set_stgroup_"):]), q)
+    elif data.startswith("set_style_"):  # кнопки прежних шести стилей из истории чата
+        await send_wardrobe_style(bot, cid, q)
     elif data.startswith("set_fit_"):
         await set_fit(bot, cid, int(data[len("set_fit_"):]), q)
     elif data.startswith("set_palette_"):

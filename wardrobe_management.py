@@ -360,7 +360,9 @@ async def check_purchase(bot, cid, text):
 def _purchase_check_extras(data, wardrobe):
     """Название, совет по цвету, подходящие стили и +N образов (считает код по шкафу)."""
     data = data if isinstance(data, dict) else {}
-    styles = [s for s in (data.get("styles") or []) if isinstance(s, str) and s in _settings.STYLES][:3]
+    # AI отвечает тонкими стилями, пользователь видит группы: «Повседневный, Классический».
+    styles = _settings.style_group_labels(_settings.style_groups_of(
+        s for s in (data.get("styles") or []) if isinstance(s, str) and s in _settings.STYLES))
     gain = 0
     if _wardrobe._clean_text(data.get("zone")):
         try:

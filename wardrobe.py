@@ -435,7 +435,8 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard():
     rows = [
-        [("✨ Новый образ", "w_pick")],  # выбор стиля под образом; в чате — зелёная без эмодзи
+        # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
+        [("Повседневный образ", "w_lookst_casual"), ("Классический образ", "w_lookst_classic")],
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -446,11 +447,12 @@ _wardrobe_home_kb = build_wardrobe_keyboard
 
 
 def style_picker_kb():
-    """«Новый образ»: направление — один из шести стилей, стандартного цвета."""
-    rows = [[InlineKeyboardButton(name, callback_data=f"w_lookst_{index}")]
-            for index, name in enumerate(_settings.STYLES)]
-    rows.append(nav_row("w_card"))
-    return InlineKeyboardMarkup(rows)
+    """Старая кнопка «Новый образ» из истории чата: те же две группы стиля."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Повседневный образ", callback_data="w_lookst_casual"),
+         InlineKeyboardButton("Классический образ", callback_data="w_lookst_classic")],
+        nav_row("w_card"),
+    ])
 
 
 def _cancel_wardrobe_input(cid):
@@ -685,8 +687,9 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
-    # style — разовый выбор направления из «Новый образ»; предпочтения не меняются.
-    selected_styles = [style] if style else _settings.wardrobe_styles(cid)
+    # style — разовый выбор группы («Повседневный / Классический образ») или старого стиля; предпочтения не меняются.
+    selected_styles = (list(style) if isinstance(style, (list, tuple)) else [style]) if style \
+        else _settings.wardrobe_styles(cid)
     if not style and previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
         next_index = (selected_styles.index(previous_style) + 1) % len(selected_styles)
         selected_styles = [selected_styles[next_index]]
