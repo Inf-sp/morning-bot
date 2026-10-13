@@ -1,7 +1,7 @@
 """Хаб «🍿 Досуг»: премьеры кино и книг, новая музыка, подборки и библиотека.
 
-Открытие хаба читает готовые кэши премьер — без AI; «Новая музыка» берётся из
-ленты Apple Music с кэшем на 6 часов. Кэши обновляет ночной прогрев
+Открытие хаба читает готовые кэши премьер — без AI; «Новая музыка» — недельный
+выпуск из ленты Apple Music, обновляется по пятницам (``weekly_music``). Кэши обновляет ночной прогрев
 ``warm_hub_cache`` (задача ``leisure`` в bot_maintenance.job_warm_home_pages).
 Концерты любимых артистов приходят рассылкой «Концерты недели».
 """
@@ -50,11 +50,20 @@ def new_music(cid, cc, today) -> list[dict]:
 _WEEK_TOP = 7  # топ недели: по одному на каждый день
 
 
-def _daily(items, today, count=1, popularity=None):
-    """Самые популярные за неделю по очереди: в понедельник — первый, дальше каждый день следующий.
+_FRIDAY = 4  # музыкальная неделя — с пятницы, когда выходят новые альбомы
+
+
+def _week_start(day, first=0):
+    """Первый день недели, в которую входит day: понедельник (first=0) или пятница (first=_FRIDAY)."""
+    return day - timedelta(days=(day.weekday() - first) % 7)
+
+
+def _daily(items, today, count=1, popularity=None, first=0):
+    """Самые популярные за неделю по очереди: в первый день недели — первый, дальше каждый день следующий.
 
     popularity — оценка популярности элемента (TMDb popularity, число оценок книги); без неё — порядок
-    источника (у музыки это чарт). count — сколько показать в день.
+    источника (у музыки это чарт). count — сколько показать в день. first — первый день недели
+    (0 — понедельник; у музыки — пятница).
     """
     items = list(items or [])
     if popularity is not None:
@@ -62,7 +71,7 @@ def _daily(items, today, count=1, popularity=None):
     items = items[:_WEEK_TOP]
     if len(items) <= count:
         return items
-    start = today.weekday() * count
+    start = (today - _week_start(today, first)).days * count
     return [items[(start + index) % len(items)] for index in range(count)]
 
 
@@ -151,11 +160,31 @@ async def _warm_details(cid):
         await asyncio.to_thread(hub_data, cid, day, True)
 
 
+def weekly_music(cid, cc, day) -> list[dict]:
+    """Выпуск «Новой музыки» на неделю с пятницы: 7 альбомов чарта, до следующей пятницы не меняется.
+
+    Другие стили или страна — выпуск собирается заново сразу; чарт недоступен — остаётся прошлый.
+    Сохраняется только выпуск текущей недели (прогрев «на завтра» в четверг не затирает сегодняшний).
+    """
+    friday = _week_start(day, _FRIDAY)
+    key = {"week": friday.isoformat(), "cc": cc, "styles": sorted(leisure_music._music_styles(cid) or [])}
+    saved = (store.get_profile(cid) or {}).get("hub_music") or {}
+    if saved.get("items") and all(saved.get(name) == value for name, value in key.items()):
+        return list(saved["items"])
+    items = new_music(cid, cc, day)[:_WEEK_TOP]
+    if not items:
+        return list(saved.get("items") or [])
+    if friday == _week_start(_today_and_cc(cid)[0], _FRIDAY):
+        store.mutate_profile(cid, lambda profile: ({**profile, "hub_music": {**key, "items": items}}, None))
+    return items
+
+
 async def _warm_album_notes(cid):
     """Описания альбомов на сегодня и завтра — заранее, чтобы хаб не ждал AI."""
     today, cc = _today_and_cc(cid)
-    albums = await asyncio.to_thread(new_music, cid, cc, today)
-    await describe_albums(_daily(albums, today, 1) + _daily(albums, today + timedelta(days=1), 1))
+    days = (today, today + timedelta(days=1))
+    albums = [await asyncio.to_thread(weekly_music, cid, cc, day) for day in days]
+    await describe_albums([item for day, pool in zip(days, albums) for item in _daily(pool, day, 1, first=_FRIDAY)])
 
 
 def hub_data(cid, day=None, fetch=False) -> dict:
@@ -168,14 +197,17 @@ def hub_data(cid, day=None, fetch=False) -> dict:
     today = day or today
     pools = _pools(cid, today, fetch, music=True)
     one = leisure_ui.LEISURE_HUB_FEATURED
-    picked = {kind: _daily(pool, today, one, popularity) for kind, (pool, popularity) in pools.items()}
+    picked = {kind: _daily(pool, today, one, popularity, first) for kind, (pool, popularity, first) in pools.items()}
     # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
     return _with_labels({"movies": picked["movies"] + picked["series"], "books": picked["books"],
                          "music": picked["music"]}, fetch)
 
 
 def _pools(cid, today, fetch=False, *, music=False) -> dict:
-    """Пулы недели из кэшей с фильтрами хаба: {kind: (items, popularity)}; music=True — лента Apple Music."""
+    """Пулы недели из кэшей с фильтрами хаба: {kind: (items, popularity, первый день недели)}.
+
+    music=True — недельный выпуск музыки (с пятницы).
+    """
     _today, cc = _today_and_cc(cid)
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
     books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
@@ -186,14 +218,15 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     movies = [item for item in movies if countries.allowed(item, off)]
     series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)]
     pools = {
-        "movies": ([m for m in movies if m.get("overview")] or movies, _popularity),
-        "series": ([s for s in series if s.get("overview")] or series, _popularity),
-        "books": ([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)] or books, _popularity),
+        "movies": ([m for m in movies if m.get("overview")] or movies, _popularity, 0),
+        "series": ([s for s in series if s.get("overview")] or series, _popularity, 0),
+        "books": ([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)] or books,
+                  _popularity, 0),
     }
     if music:
         notes = _album_notes()
         pools["music"] = ([{**item, "about": notes.get(_album_key(item), "")}
-                           for item in new_music(cid, cc, today)], None)
+                           for item in weekly_music(cid, cc, today)], None, _FRIDAY)
     return pools
 
 
@@ -214,24 +247,24 @@ _WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
 def week_data(cid, kind, day=None) -> list[tuple[str, list]]:
-    """«Премьеры недели»: блоки [(подпись, [пн…вс])] — те же пункты, что хаб показывает в каждый день недели.
+    """«Премьеры недели»: блоки [(подпись, [(день, пункт)])] — те же пункты, что хаб показывает в каждый день.
 
-    kind — movie (фильмы и сериалы), book, music. Без данных — пустой список.
+    kind — movie (фильмы и сериалы), book — с понедельника; music — с пятницы (Пт…Чт). Без данных — пустой список.
     """
     today = day or _today_and_cc(cid)[0]
-    monday = today - timedelta(days=today.weekday())
     pools = _pools(cid, today, music=kind == "music")
     keys = {"movie": (("Фильмы", "movies"), ("Сериалы", "series")),
             "book": (("", "books"),), "music": (("", "music"),)}[kind]
     blocks = []
     for label, key in keys:
-        pool, popularity = pools[key]
+        pool, popularity, first = pools[key]
         field = "movies" if key == "series" else key
         rows = []
-        for index, weekday in enumerate(_WEEKDAYS):
-            picked = _daily(pool, monday + timedelta(days=index), 1, popularity)
+        for offset in range(7):
+            current = _week_start(today, first) + timedelta(days=offset)
+            picked = _daily(pool, current, 1, popularity, first)
             if picked:
-                rows.append((weekday, _with_labels({field: picked})[field][0]))
+                rows.append((_WEEKDAYS[current.weekday()], _with_labels({field: picked})[field][0]))
         if rows:
             blocks.append((label, rows))
     return blocks

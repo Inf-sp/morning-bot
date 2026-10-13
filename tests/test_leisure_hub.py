@@ -175,6 +175,49 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert empty.text == "📚 Премьеры недели · книги\n\nПремьер на эту неделю пока нет."
 
 
+def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
+    import leisure_hub
+    from datetime import date, timedelta
+
+    cid = "music-week"
+    leisure_hub.store.set_profile(cid, {})
+    chart = {"items": [{"title": f"Альбом {i}", "artist": f"A{i}"} for i in range(9)]}
+    today = {"day": date(2026, 10, 16)}  # пятница
+    styles = {"value": ["rock"]}
+    monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: list(chart["items"]))
+    monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid: (today["day"], "NL"))
+    monkeypatch.setattr(leisure_hub.leisure_music, "_music_styles", lambda _cid: styles["value"])
+
+    friday = leisure_hub.weekly_music(cid, "NL", today["day"])
+    chart["items"] = [{"title": "Другой", "artist": "B"}]  # чарт поменялся среди недели
+    today["day"] = date(2026, 10, 22)  # четверг той же недели
+    assert leisure_hub.weekly_music(cid, "NL", today["day"]) == friday
+    # Прогрев «на завтра» в четверг не затирает текущий выпуск.
+    assert leisure_hub.weekly_music(cid, "NL", date(2026, 10, 23))[0]["title"] == "Другой"
+    assert leisure_hub.weekly_music(cid, "NL", today["day"]) == friday
+    # Новая пятница — новый выпуск; чарт недоступен — остаётся прошлый.
+    today["day"] = date(2026, 10, 23)
+    assert leisure_hub.weekly_music(cid, "NL", today["day"])[0]["title"] == "Другой"
+    chart["items"] = []
+    styles["value"] = ["jazz"]
+    assert leisure_hub.weekly_music(cid, "NL", today["day"])[0]["title"] == "Другой"
+
+    # Пт — первый альбом выпуска, список «Премьеры → Музыка» начинается с пятницы.
+    leisure_hub.store.set_profile(cid, {})
+    chart["items"] = [{"title": f"Альбом {i}", "artist": f"A{i}"} for i in range(9)]
+    today["day"] = date(2026, 10, 18)  # воскресенье
+    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: [])
+    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
+    monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: [])
+    rows = leisure_hub.week_data(cid, "music")[0][1]
+    assert [day for day, _item in rows] == ["Пт", "Сб", "Вс", "Пн", "Вт", "Ср", "Чт"]
+    assert [item["title"] for _day, item in rows] == [f"Альбом {i}" for i in range(7)]
+    assert leisure_hub.hub_data(cid)["music"][0]["title"] == "Альбом 2"
+    for day in range(7):
+        today["day"] = date(2026, 10, 16) + timedelta(days=day)
+        assert leisure_hub.hub_data(cid)["music"][0]["title"] == rows[day][1]["title"]
+
+
 def test_concerts_button_opens_month_concerts(monkeypatch):
     import leisure_hub
     shown = []
