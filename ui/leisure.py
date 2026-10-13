@@ -35,8 +35,6 @@ def _pluralize_titles(n):
     return ru_plural(n, "фильм/сериал", "фильма/сериала", "фильмов/сериалов")
 
 
-
-
 def favorite_movie_list(genre, total):
     """Заголовок списка категории «Моего кино»; сами фильмы — кнопками, как в словаре."""
     b = MessageBuilder()
@@ -878,21 +876,6 @@ def _weekly_rating(value, count, scale) -> str:
     return f"⭐ {rating:.1f}/{scale}"
 
 
-def _weekly_item(builder: MessageBuilder, title, url="", meta=()) -> None:
-    title = " ".join(str(title or "").split())
-    if not title:
-        return
-    builder.text_line("• ")
-    if str(url or "").strip():
-        builder.link(title, str(url).strip())
-    else:
-        builder.bold(title)
-    values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
-    if values:
-        builder.text_line(f" · {' · '.join(values)}")
-    builder.newline()
-
-
 _ABOUT_MAX = 160
 
 
@@ -928,93 +911,10 @@ def _hub_about(text) -> str:
     return about
 
 
-def _hub_block(b: MessageBuilder, label, title, url="", meta=(), about="") -> None:
-    """Блок хаба одним абзацем сразу после подписи: «**Новинка в кино:** «Восставший» · история ·
-    🇩🇪 DE · 1381 год, Англия охвачена беспорядками. …»."""
-    title = " ".join(str(title or "").split())
-    if not title:
-        return
-    b.spacer()
-    b.bold(f"{label}:")
-    b.text_line(" ")
-    if str(url or "").strip():
-        b.link(title, str(url).strip())
-    else:
-        b.text_line(title)
-    values = [" ".join(str(value).split()) for value in (*meta, _hub_about(about)) if str(value or "").strip()]
-    if values:
-        b.text_line(f" · {' · '.join(values)}")
-    b.newline()
-
-
-def _movie_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """«Новинка в кино:» — фильм дня (kind≠tv) одним абзацем."""
-    rows = [item for item in list(items or []) if item.get("kind") != "tv"
-            and _item_value(item, "title", "")][:limit]
-    for item in rows:
-        movie_id = _item_value(item, "id", "")
-        url = str(_item_value(item, "trailer_url", "") or "").strip()
-        if not url and movie_id:
-            url = f"https://www.themoviedb.org/movie/{movie_id}"
-        genres = _movie_genres_for_line(item).replace(", ", " · ")
-        _hub_block(b, title, f"«{_item_value(item, 'title', '')}»", url,
-                   (genres, item.get("country_label")), _item_value(item, "overview", ""))
-    return bool(rows)
-
-
-def _series_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """«Новый сериал:» — сериал дня одним абзацем, как кино; новый сезон — «2-й сезон» в описании."""
-    rows = [item for item in list(items or []) if item.get("kind") == "tv" and item.get("name")][:limit]
-    for item in rows:
-        season = int(item.get("season_number") or 0)
-        _hub_block(b, title, f"«{item.get('name')}»", item.get("url") or "",
-                   (f"{season}-й сезон" if season > 1 else "", item.get("country_label"), item.get("network")),
-                   item.get("overview"))
-    return bool(rows)
-
-
 def _event_date_label(value) -> str:
     """Дата события в хабе — как у концертов: «16 октября», год только если не текущий."""
     day = _parse_event_date(str(value or "")[:10])
     return _format_date_label(day, include_year=day.year != date.today().year) if day else ""
-
-
-def _music_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """«Новая музыка:» «Album» — Artist · жанр · страна · описание — одним абзацем."""
-    rows = [item for item in list(items or []) if item.get("title") and item.get("artist")][:limit]
-    for item in rows:
-        _hub_block(b, title, f"«{item['title']}» — {item['artist']}", item.get("url"),
-                   (item.get("genre_label"), item.get("country_label")), item.get("about"))
-    return bool(rows)
-
-
-def _concert_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    rows = [item for item in list(items or []) if item.get("title")][:limit]
-    if rows:
-        b.section(title)
-    for item in rows:
-        _weekly_item(b, item.get("title"), item.get("url"), (item.get("genre"), _event_date_label(item.get("date"))))
-    return bool(rows)
-
-
-def _book_event_rows(b: MessageBuilder, title, items, limit) -> bool:
-    """«Новая книга:» — самая популярная книга недели на сегодня, одним абзацем."""
-    rows = [item for item in list(items or []) if _item_value(item, "title", "")][:limit]
-    for item in rows:
-        rating = _weekly_rating(
-            _item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5,
-        )
-        _hub_block(
-            b, title, f"«{_item_value(item, 'title', '')}»", _item_value(item, "url", ""),
-            (_book_premiere_genres(item), rating, item.get("country_label")), _item_value(item, "summary", ""),
-        )
-    return bool(rows)
-
-
-def _event_sections(b: MessageBuilder, sections) -> bool:
-    """Пишет блоки (заголовок, writer, items, limit); пустой блок скрыт."""
-    added = [writer(b, title, items, limit) for title, writer, items, limit in sections]
-    return any(added)
 
 
 def _weekly_concert_rows(b: MessageBuilder, title, items):
@@ -1050,41 +950,6 @@ def weekly_concerts_card(mine, popular, title="🎫 Концерты недел�
     return b.build_stripped()
 
 
-LEISURE_HUB_LIMIT = 3      # новая музыка — три альбома в день
-LEISURE_HUB_FEATURED = 1   # кино и книги — по одной премьере в день с описанием
-
-
-_MONTHS_IN = ("в январе", "в феврале", "в марте", "в апреле", "в мае", "в июне", "в июле",
-              "в августе", "в сентябре", "в октябре", "в ноябре", "в декабре")
-
-
-def leisure_hub_screen(movies, books, music, reply_markup=None, *, month=0, city="", library=None) -> MessageSpec:
-    """Хаб «Досуг»: только готовые данные из кэшей, пустые блоки скрыты.
-
-    Заголовок «🍿 Досуг в октябре · Alkmaar»: месяц и город — если известны.
-    library — {"movies", "books", "artists"}: курсивная строка «Твоя библиотека · …» внизу.
-    """
-    b = MessageBuilder()
-    title = ui_label("leisure", "Досуг")
-    if 1 <= int(month or 0) <= 12:
-        title += f" {_MONTHS_IN[int(month) - 1]}"
-    if str(city or "").strip():
-        title += f" · {str(city).strip()}"
-    b.title(title)
-    if not _event_sections(b, (
-        ("Новинка в кино", _movie_event_rows, movies, LEISURE_HUB_FEATURED),
-        ("Новый сериал", _series_event_rows, movies, LEISURE_HUB_FEATURED),
-        ("Новая книга", _book_event_rows, books, LEISURE_HUB_FEATURED),
-        ("Новая музыка", _music_event_rows, music, LEISURE_HUB_FEATURED),
-    )):
-        b.line("Выбери, что посмотреть, почитать или послушать.")
-    if library:
-        b.spacer()
-        b.italic(library_stats_line(library.get("movies"), library.get("books"), library.get("artists")))
-        b.newline()
-    return b.build_stripped(reply_markup=reply_markup)
-
-
 def library_stats_line(movies, books, artists) -> str:
     movies, books, artists = int(movies or 0), int(books or 0), int(artists or 0)
     return (f"Твоя библиотека · {movies} {ru_plural(movies, 'фильм', 'фильма', 'фильмов')}"
@@ -1100,14 +965,86 @@ def _column_kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in rows])
 
 
-def leisure_hub_kb():
-    """«Все премьеры» — выше всех; Фильмы | Сериалы и Книги | Музыка в два столбца; ниже «Концерты»."""
+def runtime_label(minutes, *, episode=False) -> str:
+    """«1 ч 52 мин», «серия 45 мин»; 0 — ""."""
+    minutes = int(minutes or 0)
+    if minutes <= 0:
+        return ""
+    hours, rest = divmod(minutes, 60)
+    label = " ".join(part for part in (f"{hours} ч" if hours else "", f"{rest} мин" if rest else "") if part)
+    return f"серия {label}" if episode else label
+
+
+_TODAY_MAIN = {"movie": "Фильм на вечер", "tv": "Сериал на вечер", "book": "Книга на вечер",
+               "music": "Музыка под настроение"}
+_TODAY_ALT = {"movie": "Фильм", "tv": "Сериал", "book": "Книга", "music": "Музыка"}
+
+
+def _today_name(b: MessageBuilder, pick, meta=True) -> None:
+    """«**Имя**(ссылка) · метаданные» без перевода строки."""
+    name = " ".join(str(pick.get("name") or "").split())
+    url = str(pick.get("url") or "").strip()
+    b.bold_link(name, url) if url else b.bold(name)
+    values = [" ".join(str(value).split()) for value in pick.get("meta") or () if str(value or "").strip()]
+    if meta and values:
+        b.text_line(" · " + " · ".join(values))
+
+
+def leisure_today_screen(picks, *, main=0, city="", outing=None, library=None, reply_markup=None) -> MessageSpec:
+    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка с описанием и «почему», остальные — строкой,
+    событие рядом (если есть), статистика библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
+    b = MessageBuilder()
+    b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
+    if not picks:
+        b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Книги» ниже.")
+    else:
+        first = picks[main % len(picks)]
+        b.bold(f"{_TODAY_MAIN.get(first['kind'], 'На сегодня')}:")
+        b.newline()
+        _today_name(b, first)
+        b.newline()
+        about = _hub_about(first.get("about"))
+        if about:
+            b.line(about)
+        if str(first.get("why") or "").strip():
+            b.line(str(first["why"]).strip())
+        rest = [pick for pick in picks if pick is not first]
+        if rest:
+            b.spacer()
+            b.bold("Если не хочется кино:" if first["kind"] == "movie" else "Другие варианты:")
+            b.newline()
+            for pick in rest:
+                b.text_line(f"{_TODAY_ALT.get(pick['kind'], '')} — ")
+                _today_name(b, pick)
+                b.newline()
+    if outing:
+        b.spacer()
+        b.bold("Если захочется выйти:")
+        b.newline()
+        _today_name(b, {"name": outing.get("name"), "url": outing.get("url")}, meta=False)
+        tail = ", ".join(part for part in (outing.get("when"), outing.get("place")) if str(part or "").strip())
+        if tail:
+            b.text_line(f" — {tail}")
+        b.newline()
+    if library:
+        b.spacer()
+        b.italic(library_stats_line(library.get("movies"), library.get("books"), library.get("artists")))
+        b.newline()
+    return b.build_stripped(reply_markup=reply_markup)
+
+
+def leisure_hub_kb(next_main=None):
+    """«Другой вариант» (если карточек больше одной) — главным становится следующий по кругу;
+    Фильмы | Сериалы и Книги | Музыка — полные карточки; ниже «Все премьеры», «Концерты»."""
+    rows = [[InlineKeyboardButton("✨ Другой вариант", callback_data=f"lz_today_{next_main}")]] \
+        if next_main is not None else []
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Все премьеры", callback_data="lz_prem")],  # стандартного цвета
+        *rows,
         [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco")],
         [InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
+        [InlineKeyboardButton("🆕 Все премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

@@ -3,6 +3,7 @@
 import logging
 import asyncio
 import re
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -38,10 +39,33 @@ def _movie_prefs(cid):
     }
 
 
+# С понедельника по четверг — короткий вечер: фильм до ~2 ч 10 мин, серия до ~50 мин; с пятницы — без ограничения.
+WEEKDAY_MAX_MINUTES = {"movie": 130, "tv": 50}
+
+
+def runtime_limit(kind, day=None):
+    day = day or datetime.now(config.TZ).date()
+    return WEEKDAY_MAX_MINUTES.get(kind) if day.weekday() < 4 else None
+
+
+def minutes_of(tm) -> int:
+    """Длительность фильма или серии в минутах из деталей TMDb; 0 — неизвестна."""
+    return int((tm or {}).get("runtime") or (tm or {}).get("episode_runtime") or 0)
+
+
+def fits_runtime(tm, limit) -> bool:
+    """Неизвестная длительность не отсекает: лучше показать, чем остаться без варианта."""
+    minutes = minutes_of(tm)
+    return not limit or not minutes or minutes <= limit
+
+
 def _kind_prefs(cid, kind="movie"):
-    """Предпочтения подбора строго одного типа: «Фильмы» — только фильмы, «Сериалы» — только сериалы."""
+    """Предпочтения подбора строго одного типа: «Фильмы» — только фильмы, «Сериалы» — только сериалы.
+
+    max_runtime — будний вечер (пн–чт): длинный фильм или серия уступают более коротким.
+    """
     kind = "tv" if kind == "tv" else "movie"
-    return {**_movie_prefs(cid), "type_pref": kind, "only": kind}
+    return {**_movie_prefs(cid), "type_pref": kind, "only": kind, "max_runtime": runtime_limit(kind)}
 
 
 def _rec_key(cid, kind="movie"):
@@ -119,19 +143,22 @@ async def _tmdb_engine_pick(cid, prefs=None, timeout=None):
         cands = [c for c in cands if (c.get("kind") or "movie") == prefs["only"]]
     if not cands:
         return None, None
-    return _first_allowed_card(cid, cands, prefs)
+    # Детали TMDb — сеть: не в потоке событий бота.
+    return await asyncio.to_thread(_first_allowed_card, cid, cands, prefs)
 
 
 _REGION_CHECKS = 5  # в списках TMDb у фильмов нет страны — проверяем по деталям первых кандидатов
 
 
 def _first_allowed_card(cid, cands, prefs, reason=None):
-    """Первый кандидат, чья страна производства (детали TMDb) не в выключенном регионе."""
+    """Первый кандидат, чья страна производства (детали TMDb) не в выключенном регионе
+    и длительность подходит будному вечеру (max_runtime)."""
     import countries
     off = (prefs or {}).get("regions_off")
-    for c in cands[:_REGION_CHECKS] if off else cands[:1]:
+    limit = (prefs or {}).get("max_runtime")
+    for c in cands[:_REGION_CHECKS] if off or limit else cands[:1]:
         it, tm = _candidate_to_card(cid, c, reason=reason)
-        if countries.allowed(tm, off):
+        if countries.allowed(tm, off) and fits_runtime(tm, limit):
             return it, tm
     return None, None
 

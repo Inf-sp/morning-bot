@@ -73,7 +73,6 @@ def _seed_caches(monkeypatch):
     ])
 
 
-
 def test_main_menu_has_leisure_hub_instead_of_four_sections():
     assert _labels(menu.main_menu_kb()) == [
         ["☀️ Мой день"],
@@ -88,61 +87,6 @@ def test_main_menu_has_leisure_hub_instead_of_four_sections():
         [("🧠", "m_learn")], [("🎬", "m_movie"), ("🎧", "m_music")], [("🎚️", "m_settings")],
     ])
     assert menu.is_main_menu_markup(old_menu)
-
-
-def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
-    msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Дюна", "trailer_url": "https://y.example",
-          "overview": "Пол Атрейдес отправляется на Арракис. Дальше спойлеры."}],
-        [{"title": "Книга", "url": "https://b.example"}] * 5,
-        [{"title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "date": "2026-10-03",
-          "url": "https://t.example"}],
-        reply_markup=leisure_ui.leisure_hub_kb(),
-    )
-
-    # Блок одной строкой сразу после подписи: «Новинка в кино: «Название» · метаданные · описание», без дат.
-    assert msg.text.startswith(
-        "🍿 Досуг\n\nНовинка в кино: «Дюна» · Пол Атрейдес отправляется на Арракис. Дальше спойлеры."
-        "\n\nНовая книга: «Книга»")
-    assert msg.text.endswith("Новая музыка: «Blue Rev» — Alvvays · Инди")
-    assert "Концерты" not in msg.text
-    for title in ("Новинка в кино:", "Новая книга:", "«Дюна»", "«Книга»"):
-        assert title in msg.text
-    assert "игр" not in msg.text
-    assert msg.text.count("«Книга»") == leisure_ui.LEISURE_HUB_FEATURED == 1
-    assert {entity.url for entity in msg.entities if entity.url} >= {
-        "https://t.example", "https://y.example", "https://b.example",
-    }
-    assert _labels(msg.reply_markup) == [
-        ["🆕 Все премьеры"],  # выше всех кнопок, стандартного цвета
-        ["🎬 Фильмы", "📺 Сериалы"],  # в два столбца
-        ["📚 Книги", "🎧 Музыка"],
-        ["🎫 Концерты"],
-        ["🎚️ Настроить библиотеку", "#️⃣ Главная"],
-    ]
-
-
-def test_hub_rotates_premieres_daily(monkeypatch):
-    import leisure_hub
-    from datetime import date, timedelta
-
-    movies = [{"title": f"Фильм {i}", "overview": "Описание."} for i in range(5)] + [{"title": "Без описания"}]
-    albums = [{"title": f"Альбом {i}", "artist": f"A{i}"} for i in range(10)]
-    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
-    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
-    monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: albums)
-
-    days = []
-    for offset in range(5):
-        day = date(2026, 10, 12) + timedelta(days=offset)
-        monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid, day=day: (day, "NL"))
-        days.append(leisure_hub.hub_data("42"))
-
-    # Кино: одна премьера в день, все пять с описанием за пять дней, без пустых.
-    assert all(len(data["movies"]) == 1 for data in days)
-    assert {data["movies"][0]["title"] for data in days} == {f"Фильм {i}" for i in range(5)}
-    # Музыка: один альбом в день, на следующий день — следующий.
-    assert len(days[0]["music"]) == 1 and days[0]["music"][0]["title"] != days[1]["music"][0]["title"]
 
 
 def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
@@ -163,9 +107,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     films = leisure_hub.week_data("42", "movie", day=monday + timedelta(days=2))
 
     assert [weekday for weekday, _item in films] == ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    for offset, (_weekday, item) in enumerate(films):
-        monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid, day=monday + timedelta(days=offset): (day, "NL"))
-        assert leisure_hub.hub_data("42")["movies"][0]["title"] == item["title"]
+    assert [item["title"] for _weekday, item in films] == [f"Фильм {i}" for i in range(7)]  # топ-7 по популярности
     assert leisure_hub.week_data("42", "book", day=monday) == []
 
     screen = leisure_ui.week_premieres_screen("movie", films)
@@ -234,10 +176,6 @@ def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
     rows = leisure_hub.week_data(cid, "music")
     assert [day for day, _item in rows] == ["Пт", "Сб", "Вс", "Пн", "Вт", "Ср", "Чт"]
     assert [item["title"] for _day, item in rows] == [f"Альбом {i}" for i in range(7)]
-    assert leisure_hub.hub_data(cid)["music"][0]["title"] == "Альбом 2"
-    for day in range(7):
-        today["day"] = date(2026, 10, 16) + timedelta(days=day)
-        assert leisure_hub.hub_data(cid)["music"][0]["title"] == rows[day][1]["title"]
 
 
 def test_concerts_button_opens_month_concerts(monkeypatch):
@@ -258,51 +196,6 @@ def test_concerts_button_opens_month_concerts(monkeypatch):
 
     assert shown[0].text.startswith("🎫 Концерты на месяц") and "Placebo" in shown[0].text
     assert _callbacks(shown[0].reply_markup) == ["m_leisure", "m_menu"]
-
-
-def test_hub_hides_empty_blocks():
-    only_books = leisure_ui.leisure_hub_screen([], [{"title": "Книга"}], [])
-    empty = leisure_ui.leisure_hub_screen([], [], [])
-
-    assert "Новая книга:" in only_books.text
-    for title in ("Новая музыка:", "Новинка в кино:", "Новый сериал:"):
-        assert title not in only_books.text
-        assert title not in empty.text
-    assert empty.text.startswith("🍿 Досуг\n\n")
-
-
-def test_hub_footer_shows_library_stats():
-    msg = leisure_ui.leisure_hub_screen([], [{"title": "Книга"}], [],
-                                        library={"movies": 12, "books": 8, "artists": 25})
-
-    assert msg.text.endswith("\n\nТвоя библиотека · 12 фильмов · 8 книг · 25 артистов")
-    assert [e.type for e in msg.entities][-1] == "italic"
-
-
-def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
-    _memory_store(monkeypatch)
-    _seed_caches(monkeypatch)
-    for module, name in (
-        (leisure_concerts, "_fetch_concerts"), (leisure_concerts, "refresh_concerts_cache"),
-        (leisure_movies.tmdb, "get_now_playing"), (leisure_movies.tmdb, "get_upcoming_theatrical_releases"),
-        (leisure_books.google_books, "search_new_releases"),
-    ):
-        monkeypatch.setattr(module, name, _boom)
-    monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: [{
-        "name": "Blue Rev", "artistName": "Alvvays", "releaseDate": datetime.now(config.TZ).date().isoformat(),
-        "url": "https://music.example/blue-rev", "genres": [{"genreId": "20"}],
-    }])
-    bot = RecordingBot()
-
-    asyncio.run(leisure_hub.send_hub(bot, "42"))
-
-    text = bot.sent[0]["text"]
-    for value in ("«Blue Rev» — Alvvays", "«Дюна»", "«Новая книга»"):
-        assert value in text
-    assert "Muse" not in text  # концерты — в рассылке «Концерты недели», не в хабе
-    # Раздела игр больше нет.
-    assert "Новые игры" not in text and "Подобрать игру" not in str(bot.sent[0]["reply_markup"])
-    assert bot.sent[0]["disable_web_page_preview"] is True
 
 
 def test_hub_is_ready_only_with_fresh_caches_and_movie_card(monkeypatch):
@@ -333,14 +226,16 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
         calls.append("movie_reco" if kind == "movie" else "tv_reco")
 
     monkeypatch.setattr(leisure_movies, "get_current_movie", current)
+    monkeypatch.setattr(leisure_books, "get_current_book", step("book_reco"))
+    monkeypatch.setattr(leisure_hub.leisure_music, "send_listen", step("artist_reco"))
     monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
     monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
     monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "tv_reco", "series", "album_notes",
-                     "details"]
+    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "tv_reco", "book_reco", "artist_reco",
+                     "series", "album_notes", "details"]
 
 
 def test_premieres_and_library_submenus():
@@ -444,12 +339,6 @@ def test_what_to_watch_opens_cached_daily_card_without_new_pick(monkeypatch):
     assert sent == [("Дюна", "Dune")]
 
 
-def test_hub_title_names_month_and_city():
-    msg = leisure_ui.leisure_hub_screen([], [], [{"title": "Книга"}], month=10, city="Alkmaar")
-    assert msg.text.startswith("🍿 Досуг в октябре · Alkmaar\n\n")
-    assert leisure_ui.leisure_hub_screen([], [], []).text.startswith("🍿 Досуг\n")
-
-
 def test_new_music_follows_music_styles_with_one_album_per_artist(monkeypatch):
     import leisure_hub
     from datetime import date
@@ -483,26 +372,6 @@ def test_book_premiere_summaries_are_russian_or_dropped(monkeypatch):
     assert items[0]["summary"] == "A war is coming."  # исходный список не меняется
 
 
-def test_hub_never_shows_english_description():
-    msg = leisure_ui.leisure_hub_screen([], [{"title": "Book", "summary": "An English blurb."}], [])
-    assert "English" not in msg.text and "«Book»" in msg.text
-
-
-def test_hub_shows_film_then_series_and_album_with_description():
-    msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Дюна", "overview": "Пол едет на Арракис."},
-         {"kind": "tv", "name": "Одни из нас", "season_number": 2, "release_date": "2026-10-13",
-          "overview": "Элли и Джоэл снова в пути.", "url": "https://www.themoviedb.org/tv/1"}],
-        [],
-        [{"title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "date": "2026-10-03",
-          "about": "Мечтательный инди-поп с шумными гитарами."}],
-    )
-
-    assert "Новинка в кино: «Дюна» · Пол едет на Арракис.\n\nНовый сериал: «Одни из нас» · 2-й сезон · " \
-           "Элли и Джоэл снова в пути." in msg.text
-    assert msg.text.endswith("Новая музыка: «Blue Rev» — Alvvays · Инди · Мечтательный инди-поп с шумными гитарами.")
-
-
 def test_album_descriptions_are_stored_once(monkeypatch):
     import leisure_hub
     saved, calls = {}, []
@@ -524,21 +393,6 @@ def test_album_descriptions_are_stored_once(monkeypatch):
     asyncio.run(leisure_hub.describe_albums([album]))
 
     assert leisure_hub._album_notes()["alvvays|blue rev"] == "Мечтательный инди-поп." and calls == [1]
-
-
-def test_hub_rows_show_country_and_series_network_from_cache():
-    msg = leisure_ui.leisure_hub_screen(
-        [{"title": "Диггер", "genres": "комедия, драма", "country_label": "🇺🇸 USA", "date": "2026-10-01",
-          "overview": "Самый могущественный человек отправляется на миссию."},
-         {"kind": "tv", "name": "Суд", "country_label": "🇺🇸 USA", "network": "HBO", "release_date": "2026-09-11",
-          "overview": "Дочь рабочего подвергается насилию."}],
-        [], [],
-    )
-    lines = [line for line in msg.text.splitlines() if line]
-    assert lines[1] == ("Новинка в кино: «Диггер» · комедия · драма · 🇺🇸 USA · "
-                        "Самый могущественный человек отправляется на миссию.")
-    assert lines[2] == "Новый сериал: «Суд» · 🇺🇸 USA · HBO · Дочь рабочего подвергается насилию."
-    assert "октября" not in msg.text and "сентября" not in msg.text
 
 
 def test_hub_shows_most_popular_on_monday_then_next_each_day():
@@ -595,3 +449,95 @@ def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
 
     asyncio.run(main())
     assert calls == [("book", False), ("book", True)]  # открытие — из кэша, страна — догрузка в фоне
+
+
+def _today_picks(monkeypatch, *, rain=False, concert=True):
+    import leisure_hub
+    from datetime import date
+    film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "genres": "история, драма",
+                                     "runtime": 112, "overview": "Историческая драма о восстании. Второе. Третье.",
+                                     "because": "Гладиатор", "trailer_url": "https://y.example/t"})
+    series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "genres": "драма", "network": "Prime Video",
+                                 "episode_runtime": 45, "url": "https://tmdb.example/tv/2"})
+    monkeypatch.setattr(leisure_hub.leisure_movies, "_cached_movie",
+                        lambda _cid, kind="movie": film if kind == "movie" else series)
+    monkeypatch.setattr(leisure_hub.leisure_books, "_cached_book",
+                        lambda _cid: {"title": "Under Story", "author": "Chloe Benjamin", "genre": "проза"})
+    monkeypatch.setattr(leisure_hub.leisure_music, "_cached_artist",
+                        lambda _cid: {"artist": "Focus Group", "genre": "indie", "why": ["Как Bonobo, но теплее"]})
+    monkeypatch.setattr(leisure_hub, "_evening_rain", lambda *_a: rain)
+    events = [{"dates": {"start": {"localDate": "2026-10-13"}}, "name": "Muse", "url": "https://t.example/m",
+               "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}] if concert else []
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "_concerts_cache_get", lambda *_a: events)
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "_not_a_concert", lambda _e: False)
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(leisure_hub.store, "get_list", lambda key, _cid: ["a"] * {
+        leisure_hub.config.FAVORITE_MOVIES_KEY: 55, leisure_hub.config.FAVORITE_BOOKS_KEY: 6}.get(key, 42))
+    monkeypatch.setattr(leisure_hub.movie_recommendation, "runtime_limit", lambda _kind, day=None: 130)
+    return leisure_hub.today_data("42", day=date(2026, 10, 13))
+
+
+def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(monkeypatch):
+    data = _today_picks(monkeypatch)
+    msg = leisure_ui.leisure_today_screen(data["picks"], city=data["city"], outing=data["outing"],
+                                          library=data["library"])
+
+    assert msg.text == (
+        "🍿 Досуг на сегодня · Alkmaar\n\n"
+        "Фильм на вечер:\n"
+        "Восставший · история · драма · 1 ч 52 мин\n"
+        "Историческая драма о восстании. Второе.\n"
+        "Похоже на «Гладиатор» из твоих любимых.\n\n"
+        "Если не хочется кино:\n"
+        "Сериал — Нили · Prime Video · драма · серия 45 мин\n"
+        "Книга — Under Story · Chloe Benjamin · проза\n"
+        "Музыка — Focus Group · Инди\n\n"
+        "Если захочется выйти:\n"
+        "Muse — сегодня, Ziggo Dome\n\n"
+        "Твоя библиотека · 55 фильмов · 6 книг · 42 артиста"
+    )
+    raw = msg.text.encode("utf-16-le")
+    marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
+    assert ("text_link", "Восставший") in marked and ("bold", "Нили") in marked
+    assert [e.type for e in msg.entities][-1] == "italic"
+
+
+def test_another_option_rotates_main_and_rain_hides_outing(monkeypatch):
+    data = _today_picks(monkeypatch, rain=True)
+    assert data["outing"] is None  # вечером дождь — прогулку не советуем
+
+    msg = leisure_ui.leisure_today_screen(data["picks"], main=1, city="Alkmaar")
+    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · Prime Video")
+    assert "Другие варианты:\nФильм — Восставший" in msg.text
+
+    kb = leisure_ui.leisure_hub_kb(next_main=2)
+    assert _labels(kb)[0] == ["✨ Другой вариант"] and _callbacks(kb)[0] == "lz_today_2"
+    assert routing.resolve_callback_handler("lz_today_2")["handled"]
+    assert _labels(leisure_ui.leisure_hub_kb())[0] == ["🎬 Фильмы", "📺 Сериалы"]  # одна карточка — без «Другого»
+
+
+def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
+    import leisure_hub
+    _today_picks(monkeypatch, concert=False)
+    monkeypatch.setattr(leisure_hub.ai, "allm_json", _boom)
+    import local_events
+    monkeypatch.setattr(local_events, "events", lambda _cid, fetch=True: [])
+    bot = RecordingBot()
+
+    asyncio.run(leisure_hub.send_hub(bot, "42", main=5))  # main по кругу: 5 % 4 = 1 — сериал
+
+    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:")
+    assert "Если захочется выйти" not in bot.sent[0]["text"]
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_today_2"
+
+
+def test_runtime_label_and_weekday_limit():
+    from datetime import date
+    import movie_recommendation
+    assert leisure_ui.runtime_label(112) == "1 ч 52 мин"
+    assert leisure_ui.runtime_label(45, episode=True) == "серия 45 мин"
+    assert leisure_ui.runtime_label(120) == "2 ч" and leisure_ui.runtime_label(0) == ""
+    assert movie_recommendation.runtime_limit("movie", date(2026, 10, 15)) == 130  # четверг
+    assert movie_recommendation.runtime_limit("tv", date(2026, 10, 16)) is None  # пятница — без ограничения
+    assert movie_recommendation.fits_runtime({"runtime": 150}, 130) is False
+    assert movie_recommendation.fits_runtime({}, 130) is True  # неизвестная длительность не отсекает

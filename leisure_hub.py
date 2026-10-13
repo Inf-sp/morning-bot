@@ -19,6 +19,7 @@ import leisure_books
 import leisure_concerts
 import leisure_movies
 import leisure_music
+import movie_recommendation
 import secure
 import store
 import util
@@ -158,11 +159,7 @@ JSON: {{"items":[{{"id":0,"about":""}}]}}
 
 
 async def _warm_details(cid):
-    """Страна, студия сериала, страна автора и артиста — для хаба на сегодня и завтра и для всех пунктов недели
-    во «Всех премьерах»."""
-    today, _cc = _today_and_cc(cid)
-    for day in (today, today + timedelta(days=1)):
-        await asyncio.to_thread(hub_data, cid, day, True)
+    """Страна, студия сериала, страна автора и артиста — для всех пунктов недели во «Всех премьерах»."""
     for kind in _WEEK_POOLS:
         await asyncio.to_thread(week_data, cid, kind, None, True)
 
@@ -193,22 +190,6 @@ async def _warm_album_notes(cid):
     for day in (today, today + timedelta(days=1)):
         albums.extend(item for item in await asyncio.to_thread(weekly_music, cid, cc, day) if item not in albums)
     await describe_albums(albums)
-
-
-def hub_data(cid, day=None, fetch=False) -> dict:
-    """Блоки хаба; пустой список — блок скрыт. «Новая музыка» может сходить в сеть — вызывать в потоке.
-
-    Страна, студия сериала, страна автора и артиста — из кэшей (fetch=False); ночной прогрев
-    (fetch=True) заранее догружает их для сегодняшних и завтрашних пунктов.
-    """
-    today, _cc = _today_and_cc(cid)
-    today = day or today
-    pools = _pools(cid, today, fetch, music=True)
-    one = leisure_ui.LEISURE_HUB_FEATURED
-    picked = {kind: _daily(pool, today, one, popularity, first) for kind, (pool, popularity, first) in pools.items()}
-    # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
-    return _with_labels({"movies": picked["movies"] + picked["series"], "books": picked["books"],
-                         "music": picked["music"]}, fetch)
 
 
 def _pools(cid, today, fetch=False, *, music=False) -> dict:
@@ -301,21 +282,131 @@ async def _show(bot, cid, msg, q=None):
     )
 
 
-async def send_hub(bot, cid, q=None):
-    today, _cc = _today_and_cc(cid)
+# ---------- «Досуг на сегодня»: план из персональных карточек дня ----------
+
+_TODAY_KINDS = ("movie", "tv", "book", "music")  # главное — фильм; «Другой вариант» — следующий по кругу
+_EVENING_HOURS = range(18, 23)
+
+
+def _movie_pick(kind, cached):
+    it, tm = cached
+    tm = tm or {}
+    minutes = movie_recommendation.minutes_of(tm)
+    because = str(tm.get("because") or "").strip()
+    limit = movie_recommendation.runtime_limit(kind)
+    if because:
+        why = f"Похоже на «{because}» из твоих любимых."
+    elif limit and minutes:
+        why = "Одна серия — как раз на будний вечер." if kind == "tv" else "Не слишком длинный — как раз на будний вечер."
+    else:
+        why = ""
+    url = tm.get("trailer_url") or tm.get("url") or (
+        f"https://www.themoviedb.org/{kind}/{tm['id']}" if tm.get("id") else "")
+    meta = [str(tm.get("genres") or "").replace(", ", " · ")]
+    if kind == "tv":
+        meta = [tm.get("network") or "", *meta]
+    meta.append(leisure_ui.runtime_label(minutes, episode=kind == "tv"))
+    return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url,
+            "meta": meta, "about": tm.get("overview") or "", "why": why}
+
+
+def _book_pick(book):
+    return {"kind": "book", "name": book.get("title") or "", "url": book.get("url") or "",
+            "meta": [book.get("author") or "", book.get("genre_label") or book.get("genre") or ""],
+            "about": book.get("desc") or book.get("description") or book.get("plot") or "",
+            "why": "Отдых от экрана — читать в спокойном темпе."}
+
+
+def _music_pick(artist):
+    labels = {key: label for key, label, _prompt in leisure_music._MUSIC_GENRES}
+    why = artist.get("why")
+    why = why[0] if isinstance(why, list) and why else why if isinstance(why, str) else ""
+    return {"kind": "music", "name": artist.get("artist") or "", "url": artist.get("url") or "",
+            "meta": [labels.get(artist.get("genre"), ""), artist.get("country_label") or ""],
+            "about": artist.get("desc") or "", "why": str(why or "").strip()}
+
+
+def _evening_rain(cid, today) -> bool:
+    """Дождь вечером (18–23) по почасовому прогнозу; без прогноза — False (событие не прячем)."""
+    import wardrobe_weather
+    import weather
+    place = store.get_settings(cid) or {}
+    if place.get("lat") is None or place.get("lon") is None:
+        return False
+    try:
+        hourly = (weather.fetch_weather(place["lat"], place["lon"], 2) or {}).get("hourly") or {}
+    except Exception:
+        _log.debug("leisure today: weather unavailable", exc_info=True)
+        return False
+    probs, mms = hourly.get("precipitation_probability") or [], hourly.get("precipitation") or []
+    for index, stamp in enumerate(hourly.get("time") or []):
+        stamp = str(stamp)
+        if not stamp.startswith(today.isoformat()) or int(stamp[11:13] or 0) not in _EVENING_HOURS:
+            continue
+        prob = probs[index] if index < len(probs) else 0
+        mm = mms[index] if index < len(mms) else 0
+        if (prob or 0) >= wardrobe_weather.RAIN_PROB or (mm or 0) >= wardrobe_weather.RAIN_MM:
+            return True
+    return False
+
+
+def _outing(cid, today):
+    """Концерт или местное событие сегодня/завтра из готовых кэшей; без сети."""
+    import local_events
+    tomorrow = today + timedelta(days=1)
+    when = {today.isoformat(): "сегодня", tomorrow.isoformat(): "завтра"}
+    cc = (store.get_settings(cid).get("cc") or "NL").upper()
+    concerts = leisure_concerts.concert_items_between(
+        leisure_concerts._concerts_cache_get(cid, cc) or [], today, tomorrow, 1)
+    if concerts:
+        concert = concerts[0]
+        return {"name": concert["artist"], "url": concert.get("url") or "", "when": when.get(concert["date"], ""),
+                "place": concert.get("venue") or concert.get("city") or ""}
+    for event in local_events.events(cid, fetch=False):
+        if event["start"] <= tomorrow.isoformat() and event["end"] >= today.isoformat():
+            day = "сегодня" if event["start"] <= today.isoformat() else "завтра"
+            return {"name": event["name"], "url": event.get("url") or "", "when": day,
+                    "place": event.get("about") or ""}
+    return None
+
+
+def today_data(cid, day=None) -> dict:
+    """Досуг на сегодня: персональные карточки дня (фильм, сериал, книга, артист) из кэшей, событие рядом,
+    если вечером без дождя, и статистика библиотеки. Без AI; погода — из кэша прогноза."""
+    today = day or _today_and_cc(cid)[0]
+    picks = []
+    for kind in _TODAY_KINDS:
+        if kind in ("movie", "tv"):
+            cached = leisure_movies._cached_movie(cid, kind)
+            pick = _movie_pick(kind, cached) if cached else None
+        elif kind == "book":
+            book = leisure_books._cached_book(cid)
+            pick = _book_pick(book) if book else None
+        else:
+            artist = leisure_music._cached_artist(cid)
+            pick = _music_pick(artist) if artist else None
+        if pick and pick["name"]:
+            picks.append(pick)
+    outing = None if _evening_rain(cid, today) else _outing(cid, today)
+    return {
+        "picks": picks, "outing": outing, "city": store.get_settings(cid).get("city") or "",
+        "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
+                    "books": len(store.get_list(config.FAVORITE_BOOKS_KEY, cid) or []),
+                    "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
+    }
+
+
+async def send_hub(bot, cid, q=None, main=0):
+    """«🍿 Досуг на сегодня»; main — какая карточка главная («Другой вариант» листает по кругу)."""
     # Плашка ожидания «🎬 Смотрю афиши кинотеатров...» — общий индикатор роутера (bot_callbacks).
-    data = await asyncio.to_thread(hub_data, cid)
-    msg = leisure_ui.leisure_hub_screen(
-        **data, reply_markup=leisure_ui.leisure_hub_kb(),
-        month=today.month, city=store.get_settings(cid).get("city") or "",
-        library={"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
-                 "books": len(store.get_list(config.FAVORITE_BOOKS_KEY, cid) or []),
-                 "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
+    data = await asyncio.to_thread(today_data, cid)
+    count = len(data["picks"])
+    main = main % count if count else 0
+    msg = leisure_ui.leisure_today_screen(
+        data["picks"], main=main, city=data["city"], outing=data["outing"], library=data["library"],
+        reply_markup=leisure_ui.leisure_hub_kb(next_main=(main + 1) % count if count > 1 else None),
     )
     await _show(bot, cid, msg, q)
-    missing = [item for item in data.get("music") or [] if not item.get("about")]
-    if missing:  # описание альбома — в фоне, хаб не ждёт AI; появится при следующем открытии
-        util.background(describe_albums(missing), "album notes")
 
 
 async def send_concerts(bot, cid, q=None):
@@ -374,6 +465,8 @@ async def warm_hub_cache(cid):
         ("new_music", lambda: asyncio.to_thread(apple_music._feed, _today_and_cc(cid)[1].lower())),
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
         ("tv_reco", lambda: leisure_movies.get_current_movie(cid, "tv")),
+        ("book_reco", lambda: leisure_books.get_current_book(cid)),
+        ("artist_reco", lambda: leisure_music.send_listen(None, cid, preview=True)),
         ("series", lambda: _warm_series(cid)),
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),

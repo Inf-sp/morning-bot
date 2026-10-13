@@ -563,7 +563,7 @@ async def get_current_movie(cid, kind="movie"):
         candidates = movie_engine.rank(candidates, {
             "genres": {}, "countries": {}, "kind_pref": None,
         }, prefs)
-        tm = candidates[0] if candidates else None
+        tm = await _first_fitting(candidates, prefs)
         it = {"title": (tm or {}).get("name", ""), "hook": _FRESH_HOOK[kind]} if tm else None
     else:
         it, tm = await _tmdb_engine_pick(cid, prefs)
@@ -571,8 +571,36 @@ async def get_current_movie(cid, kind="movie"):
             it, tm = await _llm_movie_pick(cid, _movie_used(cid))
     if not it or not _of_kind(tm, kind):
         return None, None
+    tm = await _with_details(tm)  # длительность и студия — для строки «Досуга на сегодня»
     _cache_movie(cid, it, tm, kind)
     return it, tm
+
+
+_DETAIL_FIELDS = ("runtime", "episode_runtime", "network", "countries")
+
+
+async def _with_details(tm):
+    """Длительность, студия и страны из деталей TMDb (кэш сутки), если их ещё нет; сеть — в потоке."""
+    if not tm or not tm.get("id") or minutes_of(tm):
+        return tm
+    try:
+        details = await asyncio.to_thread(tmdb.detail, tm.get("id"), tm.get("kind") or "movie") or {}
+    except Exception:
+        return tm
+    return {**tm, **{key: details[key] for key in _DETAIL_FIELDS if details.get(key)}}
+
+
+_RUNTIME_CHECKS = 5
+
+
+async def _first_fitting(ranked, prefs):
+    """Первый из лучших кандидатов, чья длительность подходит будному вечеру; без лимита — лучший."""
+    limit = (prefs or {}).get("max_runtime")
+    for tm in (ranked or [])[:_RUNTIME_CHECKS if limit else 1]:
+        tm = await _with_details(tm)
+        if fits_runtime(tm, limit):
+            return tm
+    return await _with_details(ranked[0]) if ranked else None
 
 
 _FRESH_HOOK = {"movie": "Свежий фильм с хорошими оценками — можно начать с него.",
@@ -609,9 +637,9 @@ async def _discover_movie_pick(cid, prefs, region=None):
             fresh = [movie for movie in items
                      if movie_engine._norm(movie.get("name")) not in excluded]
             if fresh:
-                tm = movie_engine.rank(fresh, {
+                tm = await _first_fitting(movie_engine.rank(fresh, {
                     "genres": {}, "countries": {}, "kind_pref": None,
-                }, prefs)[0]
+                }, prefs), prefs)
                 break
             repeats.extend(items)
         if tm:
@@ -681,6 +709,8 @@ async def send_recos(bot, cid, kind, status=None):
             tm = await _lookup_movie_tm(it)
     # Без данных TMDb карточка выходит пустой («Название» + сырой hook) — не показываем;
     # чужой тип (сериал в «Фильмах») — тоже.
+    if it and tm:
+        tm = await _with_details(tm)
     if not it or not _of_kind(tm, kind):
         _log.warning(
             "movie reco: no TMDb-backed pick (tmdb_key=%s, llm_item=%s)",
@@ -736,6 +766,8 @@ from movie_recommendation import (  # noqa: E402 — movie_recommendation uses n
     _kind_prefs,
     _rec_key,
     _of_kind,
+    fits_runtime,
+    minutes_of,
     _inclusive_movie_pick,
     _as_float,
     _tmdb_engine_pick,
