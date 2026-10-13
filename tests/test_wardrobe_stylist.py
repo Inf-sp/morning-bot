@@ -12,7 +12,7 @@ import wardrobe
 from ui.settings import wardrobe_style
 from ui.myday import day_summary
 from ui.wardrobe import (
-    outfit_emoji, outfit_header, outfit_item_names, render_wardrobe_message,
+    outfit_emoji, outfit_group, outfit_header, outfit_item_names, render_wardrobe_message,
 )
 from wardrobe_model import normalize_parsed_item
 from wardrobe_outfit import (
@@ -187,7 +187,7 @@ def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
         ],
     })
 
-    assert "Надень сегодня\n\n- Фиолетовая футболка" in message.text
+    assert "Надень сегодня · Повседневный\n\n- Фиолетовая футболка" in message.text
     assert "- Белые кеды\n- Лёгкая ветровка" in message.text
     assert "Верхняя одежда:" not in message.text
 
@@ -199,6 +199,11 @@ def test_outfit_header_uses_emoji_of_selected_style():
     assert outfit_header("Скандинавский") == "🧥 Надень сегодня · Скандинавский"
     assert outfit_header("Классический") == "👔 Надень сегодня · Классический"
     assert outfit_header("Спортивный") == "👟 Надень сегодня · Спортивный"
+
+    # Карточка показывает группу стиля: выбранную кнопкой, иначе по стилю образа (старые образы тоже).
+    assert outfit_group({"primary_style": "Минимализм", "style_group": "Классический"}) == "Классический"
+    assert outfit_group({"primary_style": "Классический"}) == "Классический"
+    assert outfit_group({"primary_style": "Городской"}) == outfit_group({}) == "Повседневный"
 
 
 def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypatch):
@@ -217,7 +222,7 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {"look_data": look})
     summary = wardrobe.get_cached_outfit_summary("42")
 
-    assert summary["emoji"] == outfit_emoji(look["primary_style"]) == "👕"
+    assert summary["emoji"] == outfit_emoji(outfit_group(look)) == "👖"
     assert summary["items"] == outfit_item_names(look) == [
         "Белая футболка", "Чёрные брюки", "Белые кеды", "Серые часы",
     ]
@@ -225,7 +230,7 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
         "Вт, 1 сентября", "Алкмар",
         outfit_items=summary["items"], outfit_emoji=summary["emoji"],
     )
-    assert "👕 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
+    assert "👖 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
     assert "носки" not in message.text.casefold()
 
 

@@ -374,7 +374,7 @@ def _swap_kb(make_kb):
 
 
 def _replaced(handler):
-    """«Другой… / Не нравится / Новый… / выбор жанра или кухни»: новая карточка заменяет прежнюю —
+    """«Другой… / Не интересно / Новый… / выбор жанра или кухни»: новая карточка заменяет прежнюю —
     в чате остаётся одна актуальная. Обработчик правил сообщение сам — ничего не делаем; прислал новую
     карточку — прежнее сообщение удаляется; ошибка или ничего не пришло — прежнее остаётся.
     Открытые рецепты и детали — другие сообщения, их это не касается."""
@@ -457,8 +457,8 @@ ROUTES = (
     R("m_notes", lambda c: settings.send_home(c.bot, c.cid)),
     R("m_food_next", _replaced(lambda c: c.status(
         lambda status: menu.send_food_menu(c.bot, c.cid, status=status, refresh=True)))),
-    # «Другое меню на сегодня» (food_pick): кухня → новое меню на день на месте прежнего (предпочтения
-    # не меняются). m_food_next — старые кнопки: новое меню той же кухни. food_meal_* — старые сообщения.
+    # Старая «Другое меню на сегодня» (food_pick) из истории чата: кухня → новое меню на день на месте прежнего
+    # (предпочтения не меняются). m_food_next — новое меню той же кухни. food_meal_* — старые сообщения.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
                                                          show_mine=not vacation.active(c.cid)))),
@@ -505,16 +505,21 @@ ROUTES = (
     R("leisure_prefs_music_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
-    R("lz_prem", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, q=c.q)),  # «Все премьеры» — с кино
-    # «Досуг на сегодня» → «Другой вариант»: главной становится следующая карточка, на месте.
-    R("lz_today_*", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q, main=_tail_int(c))),
+    R("lz_prem", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, q=c.q)),  # «Премьеры» — с кино
     R("lz_prem_*", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, c.data.removeprefix("lz_prem_"), q=c.q)),
-    # «Новых премьер» больше нет: старая кнопка из истории чата открывает хаб.
-    R("lz_more", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
+    # «Новых премьер» и «Другого варианта» больше нет: старые кнопки из истории чата открывают хаб.
+    R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
+    # «Другой рецепт» из моих продуктов: кухня → новый рецепт из тех же продуктов на месте прежнего.
+    # food_mine_new — старые кнопки: новый рецепт в кухне меню дня.
+    R("food_mine_pick", _swap_kb(lambda c: menu_ui.food_cuisine_kb(
+        settings.CUISINE_OPTIONS, prefix="food_mine_go_", back="food_mine_card"))),
+    R("food_mine_card", _swap_kb(lambda c: menu_ui.mine_recipe_kb())),
+    R("food_mine_go_*", _picked(lambda c: c.status(lambda status: menu.send_mine_recipe(
+        c.bot, c.cid, status=status, refresh=True, cuisine=c.data.removeprefix("food_mine_go_"))))),
     R("food_mine_new", _replaced(lambda c: c.status(
         lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status, refresh=True)))),
     # Книги.
@@ -611,7 +616,7 @@ ROUTES = (
     R("nov_*", _picked(lambda c: c.status(lambda status: leisure_novelty.send_novelty(
         c.bot, c.cid, c.data[len("nov_"):], status=status)))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
-    # «Не нравится» заменяет карточку артиста на месте: статус правит то же сообщение.
+    # «Не интересно» заменяет карточку артиста на месте: статус правит то же сообщение.
     R("listen_no", lambda c: c.status(
         lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
     R("movie_no_*", _replaced(lambda c: c.status(

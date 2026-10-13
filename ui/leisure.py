@@ -990,22 +990,23 @@ def _today_name(b: MessageBuilder, pick, meta=True) -> None:
         b.text_line(" · " + " · ".join(values))
 
 
-def leisure_today_screen(picks, *, main=0, city="", outing=None, library=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка с описанием и «почему», остальные — строкой,
-    событие рядом (если есть), статистика библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
+def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_markup=None) -> MessageSpec:
+    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка (первая, обычно фильм) — имя, метаданные и описание
+    одним абзацем через «•», ниже «почему»; остальные — строкой, событие рядом (если есть), статистика
+    библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
         b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Книги» ниже.")
     else:
-        first = picks[main % len(picks)]
+        first = picks[0]
         b.bold(f"{_TODAY_MAIN.get(first['kind'], 'На сегодня')}:")
         b.newline()
         _today_name(b, first)
-        b.newline()
         about = _hub_about(first.get("about"))
         if about:
-            b.line(about)
+            b.text_line(f" • {about}")
+        b.newline()
         if str(first.get("why") or "").strip():
             b.line(str(first["why"]).strip())
         rest = [pick for pick in picks if pick is not first]
@@ -1033,18 +1034,14 @@ def leisure_today_screen(picks, *, main=0, city="", outing=None, library=None, r
     return b.build_stripped(reply_markup=reply_markup)
 
 
-def leisure_hub_kb(next_main=None):
-    """«Другой вариант» (если карточек больше одной) — главным становится следующий по кругу;
-    Фильмы | Сериалы и Книги | Музыка — полные карточки; ниже «Все премьеры», «Концерты»."""
-    rows = [[InlineKeyboardButton("✨ Другой вариант", callback_data=f"lz_today_{next_main}")]] \
-        if next_main is not None else []
+def leisure_hub_kb():
+    """«Премьеры» — первой строкой; Фильмы | Сериалы и Книги | Музыка — полные карточки; ниже «Концерты»."""
     return InlineKeyboardMarkup([
-        *rows,
+        [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco")],
         [InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("🆕 Все премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

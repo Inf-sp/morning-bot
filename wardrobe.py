@@ -407,7 +407,7 @@ def get_cached_outfit_summary(cid):
         return {"emoji": "", "items": []}
     look_data = cached.get("look_data") or {}
     return {
-        "emoji": wardrobe_ui.outfit_emoji(look_data.get("primary_style")),
+        "emoji": wardrobe_ui.outfit_emoji(wardrobe_ui.outfit_group(look_data)),
         "items": wardrobe_ui.outfit_item_names(look_data),
     }
 
@@ -436,7 +436,7 @@ def _save_cached_look(cid, item_ids, look_data):
 def build_wardrobe_keyboard():
     rows = [
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
-        [("Повседневный образ", "w_lookst_casual"), ("Классический образ", "w_lookst_classic")],
+        [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -449,8 +449,8 @@ _wardrobe_home_kb = build_wardrobe_keyboard
 def style_picker_kb():
     """Старая кнопка «Новый образ» из истории чата: те же две группы стиля."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Повседневный образ", callback_data="w_lookst_casual"),
-         InlineKeyboardButton("Классический образ", callback_data="w_lookst_classic")],
+        [InlineKeyboardButton("Повседневный", callback_data="w_lookst_casual"),
+         InlineKeyboardButton("Классический", callback_data="w_lookst_classic")],
         nav_row("w_card"),
     ])
 
@@ -687,7 +687,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
 
     w = await migrate_item_attrs(cid, w)
     style_block = _settings.wardrobe_prefs_context(cid)
-    # style — разовый выбор группы («Повседневный / Классический образ») или старого стиля; предпочтения не меняются.
+    # style — разовый выбор группы («Повседневный / Классический») или старого стиля; предпочтения не меняются.
     selected_styles = (list(style) if isinstance(style, (list, tuple)) else [style]) if style \
         else _settings.wardrobe_styles(cid)
     if not style and previous_item_ids and len(selected_styles) > 1 and previous_style in selected_styles:
@@ -744,6 +744,10 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "weather": weather_signature(weather_ctx, flags),
         "purchase_recommendation": purchase_recommendation,
     }
+    # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
+    groups = _settings.style_groups_of(selected_styles)
+    look_data["style_group"] = (_settings.style_group_labels(groups)[0] if len(groups) == 1
+                                else wardrobe_ui.outfit_group(look_data))
     look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
     look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
     if kb is None:
@@ -795,9 +799,6 @@ async def send_wardrobe_zones(bot, cid, q=None):
             f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    rows.append([InlineKeyboardButton(
-        "📝 Выбрать предпочтения", callback_data="set_pref_style",
-    )])
     rows.append(nav_row("m_wardrobe"))
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)

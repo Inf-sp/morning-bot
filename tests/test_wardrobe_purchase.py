@@ -173,7 +173,7 @@ def test_screen_two_card_uses_real_counts_and_items(monkeypatch):
     assert "Готовые образы:\n• серая футболка + синие джинсы" in text
     assert "💡 " in text and "http" not in text and "€" not in text
     assert _labels(query.edited[0]["reply_markup"]) == [
-        ["Не нравится"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["Не интересно"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     keyboard = query.edited[0]["reply_markup"].inline_keyboard
     assert keyboard[0][0].api_kwargs == {"style": "danger"}

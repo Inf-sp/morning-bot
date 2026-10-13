@@ -322,7 +322,7 @@ def test_purchase_check_does_not_invent_zero_compatibility():
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
-        ["Повседневный образ", "Классический образ"],  # вместо «Новый образ» — две группы стиля
+        ["Повседневный", "Классический"],  # вместо «Новый образ» — две группы стиля
         ["💳 Что докупить"],
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
@@ -722,7 +722,7 @@ def test_other_look_asks_style_direction_for_this_look_only(monkeypatch):
 
     kb = wardrobe.style_picker_kb().inline_keyboard  # старая «Новый образ» из истории — те же две группы
     assert kb[-1][0].callback_data == "w_card"
-    assert [b.text for b in kb[0]] == ["Повседневный образ", "Классический образ"]
+    assert [b.text for b in kb[0]] == ["Повседневный", "Классический"]
     assert all(not b.api_kwargs for b in kb[0])
 
     styles = []

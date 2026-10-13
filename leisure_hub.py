@@ -184,7 +184,7 @@ def weekly_music(cid, cc, day) -> list[dict]:
 
 
 async def _warm_album_notes(cid):
-    """Описания всех альбомов выпуска недели (и завтрашнего, если завтра пятница) — хаб и «Все премьеры» не ждут AI."""
+    """Описания всех альбомов выпуска недели (и завтрашнего, если завтра пятница) — хаб и «Премьеры» не ждут AI."""
     today, cc = _today_and_cc(cid)
     albums = []
     for day in (today, today + timedelta(days=1)):
@@ -205,7 +205,7 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     import movie_recommendation
     off = movie_recommendation.regions_off(cid)
     movies = [item for item in movies if countries.allowed(item, off)]
-    # Сериал без жанра или страны не попадает ни в хаб, ни в «Все премьеры».
+    # Сериал без жанра или страны не попадает ни в хаб, ни в «Премьеры».
     series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)
               and item.get("genres") and countries.title_countries(item)]
     pools = {
@@ -284,7 +284,7 @@ async def _show(bot, cid, msg, q=None):
 
 # ---------- «Досуг на сегодня»: план из персональных карточек дня ----------
 
-_TODAY_KINDS = ("movie", "tv", "book", "music")  # главное — фильм; «Другой вариант» — следующий по кругу
+_TODAY_KINDS = ("movie", "tv", "book", "music")  # главное — фильм, остальные — варианты строкой
 _EVENING_HOURS = range(18, 23)
 
 
@@ -396,15 +396,13 @@ def today_data(cid, day=None) -> dict:
     }
 
 
-async def send_hub(bot, cid, q=None, main=0):
-    """«🍿 Досуг на сегодня»; main — какая карточка главная («Другой вариант» листает по кругу)."""
+async def send_hub(bot, cid, q=None):
+    """«🍿 Досуг на сегодня»: главная карточка — фильм на вечер."""
     # Плашка ожидания «🎬 Смотрю афиши кинотеатров...» — общий индикатор роутера (bot_callbacks).
     data = await asyncio.to_thread(today_data, cid)
-    count = len(data["picks"])
-    main = main % count if count else 0
     msg = leisure_ui.leisure_today_screen(
-        data["picks"], main=main, city=data["city"], outing=data["outing"], library=data["library"],
-        reply_markup=leisure_ui.leisure_hub_kb(next_main=(main + 1) % count if count > 1 else None),
+        data["picks"], city=data["city"], outing=data["outing"], library=data["library"],
+        reply_markup=leisure_ui.leisure_hub_kb(),
     )
     await _show(bot, cid, msg, q)
 
@@ -425,7 +423,7 @@ async def send_concerts(bot, cid, q=None):
 
 
 async def send_week_premieres(bot, cid, kind="movie", q=None):
-    """«Все премьеры»: вкладки фильмы → сериалы → книги → музыка со стрелками; премьеры недели с описанием."""
+    """«Премьеры»: вкладки фильмы → сериалы → книги → музыка со стрелками; премьеры недели с описанием."""
     kind = kind if kind in leisure_ui.WEEK_PAGES else "movie"
     rows = await asyncio.to_thread(week_data, cid, kind)
     await _show(bot, cid, leisure_ui.week_premieres_screen(kind, rows), q)

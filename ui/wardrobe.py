@@ -76,6 +76,13 @@ def outfit_header(primary_style=""):
     return f"{emoji} Надень сегодня" + (f" · {style}" if style else "")
 
 
+def outfit_group(look_data) -> str:
+    """Группа стиля образа для заголовка: «Повседневный» или «Классический» (старые образы — по стилю)."""
+    look_data = look_data or {}
+    return _clean_text(look_data.get("style_group")) or (
+        "Классический" if _clean_text(look_data.get("primary_style")) == "Классический" else "Повседневный")
+
+
 def outfit_emoji(primary_style=""):
     """Тот же эмодзи стиля для карточки гардероба и кратких сводок."""
     return _STYLE_EMOJI.get(_clean_text(primary_style), "👕")
@@ -102,7 +109,7 @@ def render_wardrobe_message(look_data):
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
-    b.section(outfit_header(primary_style))
+    b.section(outfit_header(outfit_group(look_data)))
 
     slots = _outfit_slots(look_data.get("items") or [])
     items = outfit_item_names(look_data)

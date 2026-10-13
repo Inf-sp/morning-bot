@@ -52,7 +52,7 @@ def test_movie_novelty_card_says_now_in_cinema_and_has_actions(monkeypatch):
     assert sent["text"].startswith(f"🎬 Уже в кино\n\n«Фильм 0»\nдрама · {today}\n\nПервое предложение.")
     rows = sent["reply_markup"].inline_keyboard
     assert [(row[0].text, row[0].callback_data) for row in rows[:2]] == [
-        ("Не нравится", "nov_no_movie"), ("✨ Другой фильм", "nov_pick_movie"),
+        ("Не интересно", "nov_no_movie"), ("По жанру", "nov_pick_movie"),
     ]
     assert rows[0][0].api_kwargs == {"style": "danger"}
     picker = leisure_novelty.genre_picker(CID, "movie", back="nov_card_movie").inline_keyboard

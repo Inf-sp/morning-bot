@@ -329,11 +329,10 @@ def _movie_kb(i, category=None, kind="movie"):
     """
     prefix = "tv" if kind == "tv" else "movie"
     rows = [
-        # «Не нравится» — первой: в чёрный список, сразу следующая рекомендация.
-        [InlineKeyboardButton("Не нравится", callback_data=f"{prefix}_no_{i}", api_kwargs={"style": "danger"})],
-        # «Другой фильм / сериал» меняет кнопки под карточкой на выбор жанра (*_pick_*).
-        [InlineKeyboardButton("✨ Другой сериал" if kind == "tv" else "✨ Другой фильм",
-                              callback_data=f"{prefix}_pick_{i}")],
+        # «Не интересно» — первой: в чёрный список, сразу следующая рекомендация.
+        [InlineKeyboardButton("Не интересно", callback_data=f"{prefix}_no_{i}", api_kwargs={"style": "danger"})],
+        # «По жанру» меняет кнопки под карточкой на выбор жанра (*_pick_*).
+        [InlineKeyboardButton("По жанру", callback_data=f"{prefix}_pick_{i}")],
     ]  # «Настроить» на карточке нет — библиотека настраивается из хаба
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
@@ -353,7 +352,7 @@ _TV_GENRE_MENU = [
 ]
 
 def _movie_genre_menu_kb(back="m_leisure", kind="movie"):
-    """Выбор после «Другой фильм / сериал»: жанры (стандартные, без цвета); у фильмов — ещё зелёная новинка."""
+    """Выбор после «По жанру»: жанры (стандартные, без цвета); у фильмов — ещё зелёная новинка."""
     if kind == "tv":
         rows = [[InlineKeyboardButton(label, callback_data=f"tv_g_{gid}")] for label, gid in _TV_GENRE_MENU]
         rows.append(nav_row(back))
@@ -741,7 +740,7 @@ async def send_current_movie(bot, cid, status=None, kind="movie"):
     """«Фильмы» / «Сериалы»: готовая карточка дня своего типа из ночного прогрева.
 
     Без кэша — обычный живой подбор, который сам кэширует карточку на день.
-    «✨ Другой фильм / сериал» (movie_next / tv_next) всегда идёт живым путём ``send_recos``.
+    Старые кнопки movie_next / tv_next из истории чата всегда идёт живым путём ``send_recos``.
     """
     kind = "tv" if kind == "tv" else "movie"
     cached = _cached_movie(cid, kind)

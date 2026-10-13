@@ -33,9 +33,9 @@ def test_wardrobe_card_uses_current_outfit_labels():
         "how_to_wear": ["Подверни рукава, чтобы образ выглядел легче"],
     })
 
-    assert _bold_fragments(message) == ["🧥 Надень сегодня · Скандинавский"]
+    assert _bold_fragments(message) == ["👖 Надень сегодня · Повседневный"]  # заголовок — группа стиля
     assert "Образ на сегодня" not in message.text
-    assert "🧥 Надень сегодня · Скандинавский\n\n- Белая рубашка\n- Синие брюки" in message.text
+    assert "👖 Надень сегодня · Повседневный\n\n- Белая рубашка\n- Синие брюки" in message.text
     assert "Как носить:" not in message.text
     assert "Главный акцент" not in message.text
 

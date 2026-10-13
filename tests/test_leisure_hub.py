@@ -419,7 +419,7 @@ def test_old_series_list_without_genres_is_rebuilt():
 
 def test_series_card_and_genre_menu_stay_in_series():
     card = leisure_movies._movie_kb(3, kind="tv")
-    assert _labels(card)[:2] == [["Не нравится"], ["✨ Другой сериал"]]
+    assert _labels(card)[:2] == [["Не интересно"], ["По жанру"]]
     assert _callbacks(card)[:2] == ["tv_no_3", "tv_pick_3"]
     menu = leisure_movies._movie_genre_menu_kb(back="tv_card_3", kind="tv")
     assert _callbacks(menu) == ["tv_g_35", "tv_g_18", "tv_g_10765", "tv_g_9648", "tv_g_80", "tv_g_10759",
@@ -485,8 +485,7 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
         "Фильм на вечер:\n"
-        "Восставший · история · драма · 1 ч 52 мин\n"
-        "Историческая драма о восстании. Второе.\n"
+        "Восставший · история · драма · 1 ч 52 мин • Историческая драма о восстании. Второе.\n"
         "Похоже на «Гладиатор» из твоих любимых.\n\n"
         "Если не хочется кино:\n"
         "Сериал — Нили · Prime Video · драма · серия 45 мин\n"
@@ -502,18 +501,19 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
     assert [e.type for e in msg.entities][-1] == "italic"
 
 
-def test_another_option_rotates_main_and_rain_hides_outing(monkeypatch):
+def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
     data = _today_picks(monkeypatch, rain=True)
     assert data["outing"] is None  # вечером дождь — прогулку не советуем
 
-    msg = leisure_ui.leisure_today_screen(data["picks"], main=1, city="Alkmaar")
+    # Без фильма главной становится первая карточка — без описания строка не ломается.
+    msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
     assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · Prime Video")
-    assert "Другие варианты:\nФильм — Восставший" in msg.text
+    assert "Другие варианты:\nКнига — Under Story" in msg.text
 
-    kb = leisure_ui.leisure_hub_kb(next_main=2)
-    assert _labels(kb)[0] == ["✨ Другой вариант"] and _callbacks(kb)[0] == "lz_today_2"
-    assert routing.resolve_callback_handler("lz_today_2")["handled"]
-    assert _labels(leisure_ui.leisure_hub_kb())[0] == ["🎬 Фильмы", "📺 Сериалы"]  # одна карточка — без «Другого»
+    kb = leisure_ui.leisure_hub_kb()
+    assert _labels(kb)[:2] == [["🆕 Премьеры"], ["🎬 Фильмы", "📺 Сериалы"]] and _callbacks(kb)[0] == "lz_prem"
+    assert "✨ Другой вариант" not in sum(_labels(kb), [])
+    assert routing.resolve_callback_handler("lz_today_2")["handled"]  # старая кнопка из истории — хаб
 
 
 def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
@@ -524,11 +524,11 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     monkeypatch.setattr(local_events, "events", lambda _cid, fetch=True: [])
     bot = RecordingBot()
 
-    asyncio.run(leisure_hub.send_hub(bot, "42", main=5))  # main по кругу: 5 % 4 = 1 — сериал
+    asyncio.run(leisure_hub.send_hub(bot, "42"))
 
-    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:")
+    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nФильм на вечер:")
     assert "Если захочется выйти" not in bot.sent[0]["text"]
-    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_today_2"
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_prem"
 
 
 def test_runtime_label_and_weekday_limit():

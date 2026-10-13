@@ -204,7 +204,6 @@ def learning_menu(home: dict):
             [("#️⃣ Главная", "m_menu")],
         ]))
     return b.build_stripped(reply_markup=ikb([
-        *([[("✨ Новая тема", "a_learning_refresh")]] if topic else []),  # следующая тема грамматики
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
@@ -347,8 +346,15 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
         b.italic(tip)  # финальная подсказка экрана — курсивом
         b.newline()
 
-    rows = [[InlineKeyboardButton("✨ Другой рецепт", callback_data="food_mine_new")]] if from_fridge else []
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*rows, nav_row("m_food")]))
+    return b.build_stripped(reply_markup=mine_recipe_kb() if from_fridge else InlineKeyboardMarkup([nav_row("m_food")]))
+
+
+def mine_recipe_kb():
+    """Под рецептом «Из моих продуктов»: «Другой рецепт» открывает выбор кухни (food_mine_pick)."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Другой рецепт", callback_data="food_mine_pick")],
+        nav_row("m_food"),
+    ])
 
 
 def fridge_empty_for_mine():
@@ -364,13 +370,10 @@ def fridge_empty_for_mine():
 
 
 def food_card_kb(meals=None, show_mine=True):
-    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Другое меню на сегодня»
-    (выбор кухни → новое меню на месте прежнего), «Из моих продуктов» (кроме отпуска)."""
+    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Из моих продуктов» (кроме отпуска)."""
     meals = meals or [meal for meal, _label in _MEAL_NAMES]
     rows = [
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
-        # «Другое меню на сегодня»: выбор кухни, затем новое меню на день на месте прежнего.
-        [InlineKeyboardButton("✨ Другое меню на сегодня", callback_data="food_pick")],
     ]
     if show_mine:
         # Рецепт из отмеченных продуктов холодильника под время суток (меню дня — из любых продуктов).
@@ -380,10 +383,11 @@ def food_card_kb(meals=None, show_mine=True):
     return InlineKeyboardMarkup(rows)
 
 
-def food_cuisine_kb(cuisines):
-    """«Другое меню на сегодня»: кухня нового меню на день; cuisines — [(код, подпись)]."""
-    rows = [[InlineKeyboardButton(label, callback_data=f"food_go_day_{key}")]
+def food_cuisine_kb(cuisines, prefix="food_go_day_", back="food_card"):
+    """Выбор кухни; cuisines — [(код, подпись)]. По умолчанию — старая «Другое меню на сегодня» из истории
+    чата; «Другой рецепт» из моих продуктов — prefix food_mine_go_, back food_mine_card."""
+    rows = [[InlineKeyboardButton(label, callback_data=f"{prefix}{key}")]
             for key, label in cuisines]
-    rows.append(nav_row("food_card"))
+    rows.append(nav_row(back))
     return InlineKeyboardMarkup(rows)
 

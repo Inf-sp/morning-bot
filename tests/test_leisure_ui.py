@@ -36,17 +36,17 @@ def test_recommendation_cards_have_no_refresh_label():
     assert "✨ Обновить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
     assert "✨ Обновить" not in sum(_labels(leisure_books._book_kb(0)), [])
     assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
-    # «✨ Другой …» открывает выбор жанра под карточкой; кнопки «Выбрать жанр» нет.
+    # «По жанру» открывает выбор жанра под карточкой; кнопки «Выбрать жанр» нет.
     for keyboard, other, callback in (
-        (leisure_movies._movie_kb(0), "✨ Другой фильм", "movie_pick_0"),
-        (leisure_books._book_kb(0), "✨ Другая книга", "book_pick_0"),
-        (leisure_music._listen_kb(), "✨ Другой артист", "music_pick"),
+        (leisure_movies._movie_kb(0), "По жанру", "movie_pick_0"),
+        (leisure_books._book_kb(0), "По жанру", "book_pick_0"),
+        (leisure_music._listen_kb(), "По жанру", "music_pick"),
     ):
         second = keyboard.inline_keyboard[1][0]
         assert (second.text, second.callback_data) == (other, callback)
-        assert all("жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
+        assert all("Выбрать жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
-    # «Не нравится» — красная, первой строкой, вместо «Добавить в Моё…».
+    # «Не интересно» — красная, первой строкой, вместо «Добавить в Моё…».
     for keyboard, callback in (
         (leisure_movies._movie_kb(3), "movie_no_3"),
         (leisure_movies._movie_kb(3, kind="tv"), "tv_no_3"),
@@ -55,7 +55,7 @@ def test_recommendation_cards_have_no_refresh_label():
     ):
         dislike = keyboard.inline_keyboard[0][0]
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
-            "Не нравится", callback, {"style": "danger"},
+            "Не интересно", callback, {"style": "danger"},
         )
         # «Настроить» на карточках нет — библиотека настраивается из хаба.
         assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)

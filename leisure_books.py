@@ -328,8 +328,8 @@ def _book_matches_preferences(item, cid):
 
 def _book_kb(i):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Не нравится", callback_data=f"book_no_{i}", api_kwargs={"style": "danger"})],
-        [InlineKeyboardButton("✨ Другая книга", callback_data=f"book_pick_{i}")],
+        [InlineKeyboardButton("Не интересно", callback_data=f"book_no_{i}", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("По жанру", callback_data=f"book_pick_{i}")],
         nav_row("m_leisure"),
     ])
 
@@ -1399,7 +1399,7 @@ async def show_book_premiere_page(q, page):
 
 
 def _book_genre_menu_kb(back="m_leisure"):
-    """Выбор после «Другая книга»: зелёная новинка и жанры (стандартные, без цвета)."""
+    """Выбор после «По жанру»: зелёная новинка и жанры (стандартные, без цвета)."""
     rows = [
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_book")],
         *[[InlineKeyboardButton(label, callback_data=f"book_g_{key}")]
@@ -1945,7 +1945,7 @@ def _current_book(cid) -> dict:
 
 
 async def book_dislike(bot, cid, i):
-    """«Не нравится»: книга больше не показывается ни под одним из своих названий."""
+    """«Не интересно»: книга больше не показывается ни под одним из своих названий."""
     rec = store.last_recos.get(str(cid)) or {}
     items = rec.get("items") or [] if rec.get("kind") == "book" else []
     title = items[i] if i < len(items) else ""

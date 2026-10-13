@@ -2,7 +2,7 @@
 
 Данные — только из реальных источников, которые уже собирает бот (TMDB,
 книжная витрина премьер) и Apple Music для музыки. Показанные новинки
-идут по кругу без повторов; «Не нравится» убирает новинку навсегда.
+идут по кругу без повторов; «Не интересно» убирает новинку навсегда.
 """
 import asyncio
 import logging
@@ -25,10 +25,6 @@ from ui.navigation import nav_row
 _log = logging.getLogger(__name__)
 
 KINDS = ("movie", "book", "music")
-_OTHER_LABEL = {
-    "movie": "✨ Другой фильм", "book": "✨ Другая книга",
-    "music": "✨ Другой артист",
-}
 
 
 def genre_picker(cid, kind, back="m_leisure"):
@@ -100,9 +96,9 @@ _CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сер�
 def card_keyboard(kind):
     """«Другой…» открывает выбор жанра под карточкой (там же следующая «Новинка»)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Не нравится", callback_data=f"nov_no_{kind}",
+        [InlineKeyboardButton("Не интересно", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
-        [InlineKeyboardButton(_OTHER_LABEL[kind], callback_data=f"nov_pick_{kind}")],
+        [InlineKeyboardButton("По жанру", callback_data=f"nov_pick_{kind}")],
         [InlineKeyboardButton(_CONFIGURE_LABEL.get(kind, "🎚️ Настроить"), callback_data=f"lz_cfg_{kind}")],
         nav_row("m_leisure"),
     ])
@@ -164,7 +160,7 @@ async def send_novelty(bot, cid, kind, *, status=None):
 
 
 async def dislike_novelty(bot, cid, kind, *, status=None):
-    """«Не нравится»: новинка уходит в стоп-лист, сразу показывается следующая."""
+    """«Не интересно»: новинка уходит в стоп-лист, сразу показывается следующая."""
     rec = store.last_recos.get(str(cid))
     if kind in KINDS and isinstance(rec, dict) and rec.get("kind") == f"novelty_{kind}" and rec.get("items"):
         recommendation_stoplist.add(cid, _STOP_KIND[kind], rec["items"][0], "hidden")

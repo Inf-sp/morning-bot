@@ -327,8 +327,8 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
-        [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
+        [InlineKeyboardButton("Не интересно", callback_data="listen_no", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("По жанру", callback_data="music_pick")],
         nav_row("m_leisure"),
     ])
 
@@ -410,7 +410,7 @@ def _music_genre(key):
 
 
 def _music_genre_menu_kb(cid, back="m_leisure"):
-    """Выбор после «Другой артист»: зелёная новинка или стиль (стандартный, без цвета)."""
+    """Выбор после «По жанру»: зелёная новинка или стиль (стандартный, без цвета)."""
     selected = set(_music_styles(cid))
     rows = [
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_music")],
@@ -511,7 +511,7 @@ async def listen_dislike(bot, cid, *, status=None):
     rec = store.last_recos.get(str(cid))
     category = rec.get("category") if isinstance(rec, dict) else None
     # store.last_recos живёт в памяти и пустеет после перезапуска (автообновление каждые 5 минут) —
-    # текущий артист берётся и из сохранённой карточки дня, иначе «Не нравится» ничего не скрывало.
+    # текущий артист берётся и из сохранённой карточки дня, иначе «Не интересно» ничего не скрывало.
     artist = (rec["items"][0] if isinstance(rec, dict) and rec.get("kind") == "listen" and rec.get("items")
               else str((_cached_artist(cid) or {}).get("artist") or ""))
     if artist:
@@ -520,7 +520,7 @@ async def listen_dislike(bot, cid, *, status=None):
     await send_listen(bot, cid, category=category, force=bool(category), status=status)
 
 async def listen_next(bot, cid, *, status=None):
-    """«✨ Другой артист»: новый живой подбор без скрытия текущего артиста."""
+    """music_next (старые кнопки из истории чата): новый живой подбор без скрытия текущего артиста."""
     rec = store.last_recos.get(str(cid))
     category = rec.get("category") if isinstance(rec, dict) else None
     await send_listen(bot, cid, category=category, force=True, status=status)

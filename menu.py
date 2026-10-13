@@ -113,12 +113,14 @@ async def _with_food_status(bot, cid, status, q, build):
             await status.stop(delete=True)
 
 
-async def send_mine_recipe(bot, cid, status=None, refresh=False):
-    """«Из моих продуктов»: рецепт только из отмеченных продуктов, приём пищи — по времени суток."""
+async def send_mine_recipe(bot, cid, status=None, refresh=False, cuisine=None):
+    """«Из моих продуктов»: рецепт только из отмеченных продуктов, приём пищи — по времени суток.
+    cuisine — кухня из «Другого рецепта»; без неё — кухня меню дня."""
     import recipe_generation
     from datetime import datetime
     from fridge_model import _fridge_available
     import config
+    import settings
 
     if not _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid))):
         msg = menu_ui.fridge_empty_for_mine()
@@ -129,10 +131,11 @@ async def send_mine_recipe(bot, cid, status=None, refresh=False):
         import day_menu
         meal = recipe_generation._home_meal_for_hour(datetime.now(config.TZ).hour)
         # Кухня — как у меню дня на главном экране Готовки (кухня страны отпуска — без строгого выбора).
-        menu_cuisine = (day_menu.get_cached_day_menu(cid) or {}).get("cuisine") or \
+        known = cuisine in dict(settings.CUISINE_OPTIONS)  # кухня из callback — только из списка
+        menu_cuisine = (cuisine if known else None) or (day_menu.get_cached_day_menu(cid) or {}).get("cuisine") or \
             day_menu.day_cuisine(cid, day_menu._today())
-        cuisine = None if str(menu_cuisine).startswith(day_menu.LOCAL_PREFIX) else menu_cuisine
-        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, cuisine)
+        picked = None if str(menu_cuisine).startswith(day_menu.LOCAL_PREFIX) else menu_cuisine
+        idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, picked)
         msg = menu_ui.food_menu(idea, meal=meal, from_fridge=True)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 

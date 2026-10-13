@@ -612,8 +612,8 @@ async def show_purchase_card(bot, cid, item_id, q=None):
         return
     msg = wardrobe_ui.purchase_card(purchase_logic.card(wardrobe, candidate, state["facts"]))
     kb = InlineKeyboardMarkup([
-        # «Не нравится» убирает вещь навсегда, на её место встаёт следующая.
-        [InlineKeyboardButton("Не нравится", callback_data=f"w_buy_no:{item_id}",
+        # «Не интересно» убирает вещь навсегда, на её место встаёт следующая.
+        [InlineKeyboardButton("Не интересно", callback_data=f"w_buy_no:{item_id}",
                               api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("⬅️ Назад", callback_data="w_buy_back"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -644,7 +644,7 @@ async def buy_purchase(bot, cid, item_id, q=None):
 
 
 async def reject_purchase(bot, cid, item_id, q=None):
-    """«Не нравится»: вещь навсегда уходит в историю отказов, её место занимает следующая."""
+    """«Не интересно»: вещь навсегда уходит в историю отказов, её место занимает следующая."""
     wardrobe = store.load_wardrobe(cid)
     _state, candidate = _purchase_candidate_by_id(cid, wardrobe, item_id)
     if candidate:

@@ -10,6 +10,7 @@ import config
 import day_menu
 import menu
 import recipe_generation
+import routing
 from ui import menu as menu_ui
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=config.TZ)
@@ -112,7 +113,6 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("✨ Другое меню на сегодня", "food_pick")],
         [("🧊 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -302,7 +302,17 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     # Кухня — как у меню дня на главном экране.
     assert calls == [(True, "french")] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
     assert "Не хватает:\nзелень" in text
-    assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_new"], ["m_food", "m_menu"]]
+    assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_pick"], ["m_food", "m_menu"]]
+
+    # «Другой рецепт» → кухня → новый рецепт из тех же продуктов в этой кухне; чужой код — кухня меню дня.
+    kb = menu_ui.food_cuisine_kb([("italian", "🍕 Итальянская")], prefix="food_mine_go_", back="food_mine_card")
+    assert [row[0].callback_data for row in kb.inline_keyboard] == ["food_mine_go_italian", "food_mine_card"]
+    for data in ("food_mine_pick", "food_mine_card", "food_mine_go_italian"):
+        assert routing.resolve_callback_handler(data)["handled"]
+    calls.clear()
+    asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True, cuisine="italian"))
+    asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True, cuisine="<bad>"))
+    assert calls == [(True, "italian"), (True, "french")]
 
 
 def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
