@@ -42,6 +42,13 @@ async def handle(update, context, remove_reply_keyboard):
         await wardrobe.ingest(bot, cid, text)
         return
 
+    # «Добавь книги / музыку / фильмы X» — явная команда библиотеки: раньше словаря, который иначе
+    # принял бы «книги X» за слово; прежний ввод снимается, как у словаря.
+    if assistant._detect_love_add(text):
+        store.pending_input.pop(cid, None)
+        await assistant.try_add_love_from_chat(bot, cid, text)
+        return
+
     # Сбрасываем только прежний pending: обработчик словаря может открыть новый
     # шаг уточнения перевода.
     previous_kind = store.pending_input.get(cid)
@@ -60,8 +67,6 @@ async def handle(update, context, remove_reply_keyboard):
     pending_kind = store.pending_input.get(cid)
     if pending_kind is None:
         if await fridge.try_add_fridge_from_chat(bot, cid, text):
-            return
-        if await assistant.try_add_love_from_chat(bot, cid, text):
             return
 
     # Pending-ввод

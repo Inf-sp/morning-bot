@@ -43,12 +43,13 @@ def test_add_and_delete_lose_emoji_get_colors_and_add_goes_first(sent):
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [[button["text"] for button in row] for row in rows]
     assert texts == [
-        ["Ещё один вариант"], ["Добавить слово"], ["Комедия", "Не добавлять"],
+        ["Добавить слово"], ["Ещё один вариант"], ["Комедия", "Не добавлять"],
         ["Удалить", "2/5"], ["Назад"],
     ]
     styles = {button["text"]: button.get("style") for row in rows for button in row}
     assert styles["Добавить слово"] == "success" and styles["Удалить"] == "danger"
-    assert styles["Ещё один вариант"] == "success" and styles["Комедия"] == "success"
+    # Новая кнопка не из списка зелёных — стандартного цвета и на своём месте.
+    assert styles["Ещё один вариант"] is None and styles["Комедия"] == "success"
     assert styles["Назад"] == "primary"
     assert rows[3][1] == {"text": "2/5", "disabled": {}}
 
@@ -116,17 +117,17 @@ def test_refresh_buttons_are_green_without_emoji_and_on_top(sent):
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Разное", callback_data="cat")],
         [InlineKeyboardButton("✨ Обновить", callback_data="w_look")],
-        [InlineKeyboardButton("✨ Подобрать новые слова", callback_data="seed")],
+        [InlineKeyboardButton("✨ Подобрать новое задание", callback_data="seed")],
+        [InlineKeyboardButton("✨ Другой сериал", callback_data="tv_pick_0")],
     ])
     asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": markup}))
 
     rows = sent[0]["reply_markup"]["inline_keyboard"]
     texts = [row[0]["text"] for row in rows]
-    assert texts == [
-        "Обновить", "Подобрать новые слова", "Разное",
-    ]
+    # Зелёные — только явный список, наверху; «Другой сериал» — стандартный, на своём месте.
+    assert texts == ["Обновить", "Подобрать новое задание", "Разное", "Другой сериал"]
     assert all(row[0].get("style") == "success" for row in rows[:2])
-    assert "style" not in rows[2][0]
+    assert "style" not in rows[2][0] and "style" not in rows[3][0]
 
 
 def test_meaningful_emoji_stay_and_main_menu_is_untouched():
@@ -236,7 +237,7 @@ def test_cancel_button_is_red():
 
 def test_main_section_actions_have_standard_color():
     labels = ("✨ Новый образ", "💳 Что докупить", "✨ Новый рецепт", "✨ Другое меню на сегодня", "✨ Другой рецепт", "✨ Другой фильм",
-              "✨ Другая книга", "✨ Другой артист", "🎯 Запустить тренировку", "✨ Новая тема",
+              "✨ Другая книга", "✨ Другой артист", "✨ Другой сериал", "🎯 Запустить тренировку", "✨ Новая тема",
               "🕵️ Угадай слово", "🎬 Фильмы и сериалы", "📚 Книги", "🎧 Музыка",
               "🔄 Обновить карточки")
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"x{i}")]
@@ -247,9 +248,11 @@ def test_main_section_actions_have_standard_color():
     # «Ещё загадка» тоже стандартная; остальные «Другой … / Ещё …» по-прежнему зелёные.
     other = telegram_runtime._enhance_markup(InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Ещё загадка", callback_data="m")],
-        [InlineKeyboardButton("✨ Ещё один вариант", callback_data="v")]]))["inline_keyboard"]
+        [InlineKeyboardButton("✨ Ещё один вариант", callback_data="v")],
+        [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")]]))["inline_keyboard"]
     styles = {row[0]["text"]: row[0].get("style") for row in other}
-    assert styles == {"Ещё загадка": None, "Ещё один вариант": "success"}
+    # Любая новая «Другой … / Ещё …» — стандартная; зелёные — только явный список.
+    assert styles == {"Новинка": "success", "Ещё загадка": None, "Ещё один вариант": None}
 
 
 def test_leisure_dislike_row_goes_above_other_recommendation():

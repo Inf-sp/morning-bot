@@ -167,20 +167,23 @@ _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|о
 # «Добавь сериал X» — глагол сразу перед категорией: слово «любимые» не обязательно.
 _DIRECT_ADD_RE = re.compile(
     r"^\s*(?:добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\s+(?:мне\s+)?"
-    r"(?:фильм|сериал|кино|книг|книжк|музыкант|исполнител|артист|групп)",
+    r"(?:фильм|сериал|кино|книг|книжк|музык|музыкант|исполнител|артист|групп)",
     re.I,
 )
 
-# (regex категории, config-ключ хранилища, человекочитаемая папка для подтверждения)
+# (regex категории, config-ключ хранилища, вкладка «Моей библиотеки» для подтверждения)
 _LOVE_CATEGORIES = [
-    (re.compile(r"\b(фильм|сериал|кино)\b", re.I), "movies", "Кино"),
-    (re.compile(r"\b(книг[ауи]?|книжк[ауи]?)\b", re.I), "books", "Мои книги"),
-    (re.compile(r"\b(музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b", re.I), "artists", "Мои музыканты"),
+    (re.compile(r"\b(фильм[а-я]*|сериал[а-я]*|кино)\b", re.I), "movies", "Фильмы и сериалы"),
+    (re.compile(r"\b(книг[а-я]*|книжк[а-я]*)\b", re.I), "books", "Книги"),
+    (re.compile(r"\b(музык[а-я]*|музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b", re.I),
+     "artists", "Музыка"),
 ]
 
+# Слово категории вместе с «фильмы или сериалы» убирается из названия целиком.
+_MOVIE_WORD = r"(?:фильм[а-я]*|сериал[а-я]*|кино)"
 _LOVE_CATEGORY_KEY_RE = re.compile(
-    r"\b(?:фильм[а-я]*|сериал[а-я]*|кино|книг[а-я]*|книжк[а-я]*|"
-    r"музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b",
+    rf"\b(?:{_MOVIE_WORD}(?:\s+(?:или|и)\s+{_MOVIE_WORD})?|книг[а-я]*|книжк[а-я]*|"
+    r"музык[а-я]*|музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b",
     re.I,
 )
 
@@ -190,6 +193,8 @@ def _detect_love_add(text: str):
     Триггер строго требует и глагол добавления, и слово «любим*» — иначе
     «люблю фильмы про космос» не должно случайно матчиться."""
     text = text or ""
+    if re.search(r"словар", text, re.I):  # «добавь книгу в словарь» — это словарь, не библиотека
+        return None
     loved = _LOVE_ADD_VERB_RE.search(text) and _LOVE_WORD_RE.search(text)
     if not loved and not _DIRECT_ADD_RE.search(text):
         return None
@@ -203,59 +208,67 @@ def _detect_love_add(text: str):
     payload = _LOVE_ADD_VERB_RE.sub(" ", text, count=1)
     payload = _LOVE_WORD_RE.sub(" ", payload, count=1)
     payload = _LOVE_CATEGORY_KEY_RE.sub(" ", payload, count=1)
-    payload = re.sub(r"\s+", " ", payload).strip(" \t\n\r:;,.-–—")
-    if not payload:
-        return None
-    return store_key, folder_label, payload
+    payload = re.sub(r"[ \t]+", " ", payload).strip(" \t\n\r:;,.-–—")
+    return store_key, folder_label, payload  # пустое название — открыть добавление этой вкладки
 
 
 async def try_add_love_from_chat(bot, cid, text):
-    """Перехватывает «добавь в любимые фильм/книгу/музыканта X» из чата."""
+    """«Добавь книги / музыку / фильмы или сериалы X, Y» из чата — в нужную вкладку «Моей библиотеки».
+
+    Несколько названий — через запятую или с новой строки. Без названия — обычное добавление вкладки.
+    """
     import config
+    import personal_collections
     import store as _store
     detected = _detect_love_add(text)
     if not detected:
         return False
-    store_key, folder_label, title = detected
+    store_key, folder_label, payload = detected
+    if not payload:
+        await personal_collections.love_add_start(bot, cid, store_key, origin="leisure")
+        return True
     from leisure_collection import (
         _resolve_movie_label, canonical_movie_label, movie_title_for_lookup, plain_label,
     )
+    list_key = {"movies": config.FAVORITE_MOVIES_KEY, "books": config.FAVORITE_BOOKS_KEY,
+                "artists": config.FAVORITE_ARTISTS_KEY}[store_key]
 
-    if store_key == "movies":
-        # Тот же строгий поиск, что при ручном добавлении: чужой фильм не сохраняется.
-        try:
-            metadata = await asyncio.wait_for(
-                asyncio.to_thread(_resolve_movie_label, movie_title_for_lookup(title), allow_ai=True),
-                timeout=12.0,
-            )
-        except asyncio.TimeoutError:
-            metadata = None
-        if not metadata:
-            await bot.send_message(
-                chat_id=cid,
-                text=f"Не нашёл «{plain_label(title)}» среди фильмов и сериалов. Уточни название — "
-                     "можно оригинальное.",
-            )
-            return True
-        title = canonical_movie_label(title, metadata)
-    else:
-        title = plain_label(title)
-    key_map = {
-        "movies": config.FAVORITE_MOVIES_KEY,
-        "books": config.FAVORITE_BOOKS_KEY,
-        "artists": config.FAVORITE_ARTISTS_KEY,
-    }
-    existing = {
-        (movie_title_for_lookup(x) if store_key == "movies" else
-         (x.get("value", "") if isinstance(x, dict) else str(x))).strip().lower()
-        for x in _store.get_list(key_map[store_key], cid)
-    }
-    comparison_title = movie_title_for_lookup(title) if store_key == "movies" else title
-    if comparison_title.strip().lower() in existing:
-        await bot.send_message(chat_id=cid, text=f"❤️ «{title}» уже в любимых ({folder_label}).")
-        return True
-    _store.add_to_list(key_map[store_key], cid, title)
-    await bot.send_message(chat_id=cid, text=f"❤️ «{title}» — добавил в любимые ({folder_label}).")
+    def comparable(value):
+        value = value.get("value", "") if isinstance(value, dict) else str(value)
+        return (movie_title_for_lookup(value) if store_key == "movies" else value).strip().lower()
+
+    existing = {comparable(item) for item in _store.get_list(list_key, cid)}
+    added, already, missing = [], [], []
+    for raw in dict.fromkeys(part.strip() for part in re.split(r"[,;\n]+", payload) if part.strip()):
+        title = plain_label(raw)
+        if store_key == "movies":
+            # Тот же строгий поиск, что при ручном добавлении: чужой фильм не сохраняется.
+            try:
+                metadata = await asyncio.wait_for(
+                    asyncio.to_thread(_resolve_movie_label, movie_title_for_lookup(raw), allow_ai=True),
+                    timeout=12.0,
+                )
+            except asyncio.TimeoutError:
+                metadata = None
+            if not metadata:
+                missing.append(title)
+                continue
+            title = canonical_movie_label(raw, metadata)
+        if comparable(title) in existing:
+            already.append(title)
+            continue
+        _store.add_to_list(list_key, cid, title)
+        existing.add(comparable(title))
+        added.append(title)
+    quoted = lambda titles: ", ".join(f"«{title}»" for title in titles)  # noqa: E731
+    lines = []
+    if added:
+        lines.append(f"❤️ Добавил в библиотеку · {folder_label}: {quoted(added)}.")
+    if already:
+        lines.append(f"Уже в библиотеке: {quoted(already)}.")
+    if missing:
+        lines.append(f"Не нашёл {quoted(missing)} среди фильмов и сериалов. Уточни название — можно оригинальное.")
+    await bot.send_message(chat_id=cid, text="\n".join(lines))
     return True
 
 

@@ -93,7 +93,7 @@ def _remember(cid, kind, item):
     store.mutate_profile(cid, change)
 
 
-_CONFIGURE_LABEL = {"movie": "🎚️ Настроить кино", "book": "🎚️ Настроить книги",
+_CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сериалы", "book": "🎚️ Настроить книги",
                     "music": "🎚️ Настроить музыку"}
 
 

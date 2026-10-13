@@ -334,9 +334,7 @@ def _movie_kb(i, category=None, kind="movie"):
         # «Другой фильм / сериал» меняет кнопки под карточкой на выбор жанра (*_pick_*).
         [InlineKeyboardButton("✨ Другой сериал" if kind == "tv" else "✨ Другой фильм",
                               callback_data=f"{prefix}_pick_{i}")],
-        # «Настроить» — «Моё кино» новым сообщением, карточка остаётся.
-        [InlineKeyboardButton("🎚️ Настроить кино", callback_data="lz_cfg_movie")],
-    ]
+    ]  # «Настроить» на карточке нет — библиотека настраивается из хаба
     rows.append(nav_row("m_leisure"))
     return InlineKeyboardMarkup(rows)
 

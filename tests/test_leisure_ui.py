@@ -49,6 +49,7 @@ def test_recommendation_cards_have_no_refresh_label():
     # «Не нравится» — красная, первой строкой, вместо «Добавить в Моё…».
     for keyboard, callback in (
         (leisure_movies._movie_kb(3), "movie_no_3"),
+        (leisure_movies._movie_kb(3, kind="tv"), "tv_no_3"),
         (leisure_books._book_kb(3), "book_no_3"),
         (leisure_music._listen_kb(), "listen_no"),
     ):
@@ -56,9 +57,8 @@ def test_recommendation_cards_have_no_refresh_label():
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
             "Не нравится", callback, {"style": "danger"},
         )
-        # Над навигацией — синяя «Настроить» своего раздела, затем «Назад | Главная».
-        assert keyboard.inline_keyboard[-2][0].text.startswith("🎚️ Настроить ")  # «… кино / книги / музыку»
-        assert keyboard.inline_keyboard[-2][0].callback_data.startswith("lz_cfg_")
+        # «Настроить» на карточках нет — библиотека настраивается из хаба.
+        assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
     assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 

@@ -1186,7 +1186,7 @@ def leisure_library_menu() -> MessageSpec:
     b.title("🎚️ Моя библиотека")
     b.line("Любимое кино, книги и артисты — по ним подбираю рекомендации.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
-        ("🎬 Кино", "movie_favorites"),
+        ("🎬 Фильмы и сериалы", "movie_favorites"),
         ("📚 Книги", "book_favorites"),
         ("🎧 Музыка", "artist_favorites"),
         ("🎫 Концерты", "a_concerts_find"),

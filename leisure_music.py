@@ -329,7 +329,6 @@ def _listen_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Не нравится", callback_data="listen_no", api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("✨ Другой артист", callback_data="music_pick")],
-        [InlineKeyboardButton("🎚️ Настроить музыку", callback_data="lz_cfg_music")],
         nav_row("m_leisure"),
     ])
 

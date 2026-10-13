@@ -19,7 +19,7 @@ class Bot:
 
 
 def test_add_series_without_word_favorites_is_an_add_not_a_recommendation():
-    assert assistant._detect_love_add("Добавить сериал Шитс крик") == ("movies", "Кино", "Шитс крик")
+    assert assistant._detect_love_add("Добавить сериал Шитс крик") == ("movies", "Фильмы и сериалы", "Шитс крик")
     assert assistant._detect_love_add("люблю фильмы про космос") is None
 
 
@@ -44,6 +44,65 @@ def test_chat_add_saves_verified_title_or_asks_to_clarify(monkeypatch):
     monkeypatch.setattr(leisure_collection, "_resolve_movie_label", lambda *_a, **_k: None)
     assert asyncio.run(assistant.try_add_love_from_chat(bot, "42", "Добавь сериал Абвгд"))
     assert saved == ["Шиттс Крик (сериал, 2015)"] and bot.sent[-1].startswith("Не нашёл «Абвгд»")
+
+
+def test_library_add_commands_reach_the_right_tab():
+    detect = assistant._detect_love_add
+    assert detect("Добавить книги Мастер и Маргарита") == ("books", "Книги", "Мастер и Маргарита")
+    assert detect("Добавить музыку Radiohead") == ("artists", "Музыка", "Radiohead")
+    assert detect("добавить фильмы Дюна") == ("movies", "Фильмы и сериалы", "Дюна")
+    assert detect("Добавить фильмы или сериалы Матрица") == ("movies", "Фильмы и сериалы", "Матрица")
+    assert detect("Добавить книги") == ("books", "Книги", "")  # без названия — открыть добавление
+    assert detect("добавь книгу в словарь") is None  # это словарь
+    assert detect("люблю фильмы про космос") is None
+
+
+def test_library_add_saves_a_list_and_reports_once(monkeypatch):
+    saved = []
+    monkeypatch.setattr(assistant.store, "get_list", lambda *_a: ["Placebo"])
+    monkeypatch.setattr(assistant.store, "add_to_list", lambda _key, _cid, value: saved.append(value))
+    bot = Bot()
+
+    assert asyncio.run(assistant.try_add_love_from_chat(bot, "42", "добавить музыку: Muse, Placebo\nRadiohead"))
+    assert saved == ["Muse", "Radiohead"]
+    assert bot.sent == ["❤️ Добавил в библиотеку · Музыка: «Muse», «Radiohead».\nУже в библиотеке: «Placebo»."]
+
+
+def test_library_add_without_title_opens_the_tab_add_flow(monkeypatch):
+    import personal_collections
+    started = []
+
+    async def start(_bot, cid, key, origin="base"):
+        started.append((cid, key, origin))
+
+    monkeypatch.setattr(personal_collections, "love_add_start", start)
+    assert asyncio.run(assistant.try_add_love_from_chat(Bot(), "42", "Добавить книги"))
+    assert started == [("42", "books", "leisure")]
+
+
+def test_library_command_is_not_taken_by_dictionary(monkeypatch):
+    import bot_text
+    from types import SimpleNamespace
+    handled = []
+
+    async def love(_bot, _cid, text):
+        handled.append(text)
+        return True
+
+    async def dictionary(*_args):
+        raise AssertionError("dictionary must not see library commands")
+
+    monkeypatch.setattr(bot_text.access, "is_allowed", lambda _cid: True)
+    monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
+    monkeypatch.setattr(bot_text.assistant, "try_add_love_from_chat", love)
+    monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", dictionary)
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id="42"), message=SimpleNamespace(text="Добавить книги Дюна"))
+
+    async def nothing(*_args):
+        return None
+
+    asyncio.run(bot_text.handle(update, SimpleNamespace(bot=Bot()), nothing))
+    assert handled == ["Добавить книги Дюна"]
 
 
 def test_do_not_add_button_is_red():

@@ -158,10 +158,13 @@ JSON: {{"items":[{{"id":0,"about":""}}]}}
 
 
 async def _warm_details(cid):
-    """Страна, студия сериала, страна автора и артиста — для сегодняшних и завтрашних пунктов хаба."""
+    """Страна, студия сериала, страна автора и артиста — для хаба на сегодня и завтра и для всех пунктов недели
+    во «Всех премьерах»."""
     today, _cc = _today_and_cc(cid)
     for day in (today, today + timedelta(days=1)):
         await asyncio.to_thread(hub_data, cid, day, True)
+    for kind in _WEEK_POOLS:
+        await asyncio.to_thread(week_data, cid, kind, None, True)
 
 
 def weekly_music(cid, cc, day) -> list[dict]:
@@ -263,10 +266,11 @@ _WEEK_POOLS = {"movie": ("movies", "movies"), "series": ("series", "movies"),
                "book": ("books", "books"), "music": ("music", "music")}  # вкладка → (пул, поле подписей)
 
 
-def week_data(cid, kind, day=None) -> list[tuple[str, dict]]:
+def week_data(cid, kind, day=None, fetch=False) -> list[tuple[str, dict]]:
     """Вкладка «Всех премьер»: [(день, пункт)] — те же пункты, что хаб показывает в каждый день недели.
 
     kind — movie, series, book (с понедельника) или music (с пятницы, Пт…Чт). Без данных — пустой список.
+    fetch=True — догрузить страну автора / артиста / фильма из сети (ночной прогрев, фон), иначе — из кэшей.
     """
     today = day or _today_and_cc(cid)[0]
     pool_key, field = _WEEK_POOLS[kind]
@@ -276,7 +280,7 @@ def week_data(cid, kind, day=None) -> list[tuple[str, dict]]:
         current = _week_start(today, first) + timedelta(days=offset)
         picked = _daily(pool, current, 1, popularity, first)
         if picked:
-            rows.append((_WEEKDAYS[current.weekday()], _with_labels({field: picked})[field][0]))
+            rows.append((_WEEKDAYS[current.weekday()], _with_labels({field: picked}, fetch)[field][0]))
     return rows
 
 
@@ -337,6 +341,8 @@ async def send_week_premieres(bot, cid, kind="movie", q=None):
     missing = [item for _day, item in rows if kind == "music" and not item.get("about")]
     if missing:  # описание альбома — в фоне; появится при следующем открытии
         util.background(describe_albums(missing), "album notes")
+    if any(not item.get("country_label") for _day, item in rows):  # страна — в фоне, к следующему открытию
+        util.background(asyncio.to_thread(week_data, cid, kind, None, True), "week premiere countries")
 
 
 async def send_library_menu(bot, cid, q=None):

@@ -347,7 +347,7 @@ def test_premieres_and_library_submenus():
     library = leisure_ui.leisure_library_menu()
 
     assert _labels(library.reply_markup) == [
-        ["🎬 Кино"], ["📚 Книги"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Фильмы и сериалы"], ["📚 Книги"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(library.reply_markup) == [
         "movie_favorites", "book_favorites", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
@@ -572,3 +572,26 @@ def test_series_card_and_genre_menu_stay_in_series():
                                 "tv_card_3", "m_menu"]
     for data in _callbacks(card) + _callbacks(menu):
         assert routing.resolve_callback_handler(data)["handled"], data
+
+
+def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
+    import leisure_hub
+    calls = []
+
+    def week(_cid, kind, _day=None, fetch=False):
+        calls.append((kind, fetch))
+        return [("Пн", {"title": "Книга", "author": "Автор"})]
+
+    async def show(*_args):
+        return None
+
+    monkeypatch.setattr(leisure_hub, "week_data", week)
+    monkeypatch.setattr(leisure_hub, "_show", show)
+
+    async def main():
+        await leisure_hub.send_week_premieres(None, "42", "book")
+        for _ in range(5):
+            await asyncio.sleep(0.01)
+
+    asyncio.run(main())
+    assert calls == [("book", False), ("book", True)]  # открытие — из кэша, страна — догрузка в фоне
