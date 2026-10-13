@@ -85,7 +85,11 @@ def test_rejected_disabled_field_keeps_colors_and_no_emoji(sent, monkeypatch):
     buttons = {button["text"]: button for row in rows for button in row}
     assert buttons["Удалить"]["style"] == "danger"
     assert buttons["2/5"]["callback_data"] == "noop"
-    assert telegram_runtime._button_level == 1
+    # Отказ касается только этого запроса: следующий снова с неактивными кнопками.
+    assert telegram_runtime._button_level == 2
+    calls.clear()
+    asyncio.run(bot._post("sendMessage", {"chat_id": 1, "reply_markup": _markup()}))
+    assert any("disabled" in button for row in calls[0]["reply_markup"]["inline_keyboard"] for button in row)
 
 
 def test_non_keyboard_error_goes_straight_to_original_request(sent):

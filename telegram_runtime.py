@@ -120,7 +120,8 @@ _PAGER_ARROWS = {"◀️": "←", "◀": "←", "⬅️": "←", "⬅": "←", "
 # Индикатор ожидания («Подбираю рецепт...») продолжает зелёное действие — тоже зелёный.
 _WAIT_RE = re.compile(r"(?:\.\.\.|…)$")
 # Уровни оформления: 2 — цвет + disabled, 1 — только цвет, 0 — только текст без
-# эмодзи. Если Telegram отклонил поле, бот спускается на уровень ниже до рестарта.
+# эмодзи. Если Telegram отклонил поле, этот запрос повторяется уровнем ниже; следующие снова
+# начинают с полного оформления — один отказ не делает неактивные кнопки нажимаемыми во всём боте.
 _KEYBOARD_ERRORS = ("button", "keyboard", "reply markup", "reply_markup", "style", "disabled")
 _buttons_enhanced = True  # совместимость: False — уже только текстовый уровень
 _button_level = 2
@@ -330,7 +331,6 @@ class MenuCleanupBot(ExtBot):
     """Telegram delivery wrapper that keeps previously sent inline controls usable."""
 
     async def _post(self, endpoint, data=None, *, api_kwargs=None, **kwargs):
-        global _buttons_enhanced, _button_level
         data = {**(data or {}), **(api_kwargs or {})}
         _count_edit(endpoint, data)
         if "reply_markup" in data:
@@ -351,11 +351,8 @@ class MenuCleanupBot(ExtBot):
                     break  # ошибка не про кнопки — сразу исходный запрос
                 continue
             if level < start:
-                _button_level = level
-                _log.warning(
-                    "Telegram rejected button fields; button level %s until restart: %s",
-                    level, last_error,
-                )
+                _log.warning("Telegram rejected button fields in %s; sent with button level %s: %s",
+                             endpoint, level, last_error)
             return result
         # Даже текстовый уровень не прошёл — ошибка не в кнопках: исходный запрос.
         return await super()._post(endpoint, data, **kwargs)

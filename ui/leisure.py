@@ -1155,7 +1155,7 @@ def week_premieres_screen(kind, rows) -> MessageSpec:
     kind = kind if kind in WEEK_PAGES else "movie"
     emoji, tab = _WEEK_TABS[kind]
     b = MessageBuilder()
-    b.title(f"{emoji} Премьеры недели · {tab.lower()}")
+    b.title(f"{emoji} Премьеры недели · {tab}")
     seen = set()
     for _weekday, item in rows:
         name, url, meta, about = _week_item(item, kind)

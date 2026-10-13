@@ -170,7 +170,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
 
     screen = leisure_ui.week_premieres_screen("movie", films)
     # Каждый фильм — абзац как в хабе: имя, жанр, страна, описание; дни не подписываются.
-    assert screen.text.startswith("🎬 Премьеры недели · фильмы\n\nФильм 0 · Описание.\n\nФильм 1 · Описание.")
+    assert screen.text.startswith("🎬 Премьеры недели · Фильмы\n\nФильм 0 · Описание.\n\nФильм 1 · Описание.")
     assert screen.text.count("Фильм ") == 7 and "Пн" not in screen.text
     raw = screen.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in screen.entities]
@@ -182,7 +182,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Сериалы — своя вкладка; без жанра или страны не попадают.
     series_rows = leisure_hub.week_data("42", "series", day=monday)
     tab = leisure_ui.week_premieres_screen("series", series_rows)
-    assert tab.text == "📺 Премьеры недели · сериалы\n\nСуд · драма · 🇺🇸 USA · HBO · Описание."
+    assert tab.text == "📺 Премьеры недели · Сериалы\n\nСуд · драма · 🇺🇸 USA · HBO · Описание."
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
@@ -194,7 +194,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert album.text.endswith("\n\nAlvvays — «Blue Rev» · Инди · 🇨🇦 CA · Мечтательный инди-поп.")  # сначала исполнитель
     assert _callbacks(album.reply_markup)[:3] == ["lz_prem_book", "noop", "lz_prem_movie"]
     empty = leisure_ui.week_premieres_screen("book", [])
-    assert empty.text == "📚 Премьеры недели · книги\n\nПремьер на эту неделю пока нет."
+    assert empty.text == "📚 Премьеры недели · Книги\n\nПремьер на эту неделю пока нет."
 
 
 def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
