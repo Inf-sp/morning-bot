@@ -164,8 +164,19 @@ def hub_data(cid, day=None, fetch=False) -> dict:
     Страна, студия сериала, страна автора и артиста — из кэшей (fetch=False); ночной прогрев
     (fetch=True) заранее догружает их для сегодняшних и завтрашних пунктов.
     """
-    today, cc = _today_and_cc(cid)
+    today, _cc = _today_and_cc(cid)
     today = day or today
+    pools = _pools(cid, today, fetch, music=True)
+    one = leisure_ui.LEISURE_HUB_FEATURED
+    picked = {kind: _daily(pool, today, one, popularity) for kind, (pool, popularity) in pools.items()}
+    # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
+    return _with_labels({"movies": picked["movies"] + picked["series"], "books": picked["books"],
+                         "music": picked["music"]}, fetch)
+
+
+def _pools(cid, today, fetch=False, *, music=False) -> dict:
+    """Пулы недели из кэшей с фильтрами хаба: {kind: (items, popularity)}; music=True — лента Apple Music."""
+    _today, cc = _today_and_cc(cid)
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
     books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
     books = leisure_books.trip_local_books(cid, books, fetch) or books  # в отпуске — авторы страны поездки
@@ -174,22 +185,56 @@ def hub_data(cid, day=None, fetch=False) -> dict:
     off = movie_recommendation.regions_off(cid)
     movies = [item for item in movies if countries.allowed(item, off)]
     series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)]
-    one = leisure_ui.LEISURE_HUB_FEATURED
-    notes = _album_notes()
-    album = [{**item, "about": notes.get(_album_key(item), "")}
-             for item in _daily(new_music(cid, cc, today), today, one)]
-    picked_movies = (_daily([m for m in movies if m.get("overview")] or movies, today, one, _popularity)
-                     + _daily([s for s in series if s.get("overview")] or series, today, one, _popularity))
-    picked_books = _daily([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)]
-                          or books, today, one, _popularity)
-    return {
-        # Кино — фильм и сериал (новинка или новый сезон), книги и музыка — по одной; всё меняется каждый день.
-        "movies": [{**item, **countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)}
-                   for item in picked_movies],
-        "books": [{**item, "country_label": countries.author_label(item.get("author"), fetch)}
-                  for item in picked_books],
-        "music": [{**item, "country_label": countries.artist_label(item.get("artist"), fetch)} for item in album],
+    pools = {
+        "movies": ([m for m in movies if m.get("overview")] or movies, _popularity),
+        "series": ([s for s in series if s.get("overview")] or series, _popularity),
+        "books": ([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)] or books, _popularity),
     }
+    if music:
+        notes = _album_notes()
+        pools["music"] = ([{**item, "about": notes.get(_album_key(item), "")}
+                           for item in new_music(cid, cc, today)], None)
+    return pools
+
+
+def _with_labels(data, fetch=False) -> dict:
+    """Страна, студия, страна автора и артиста — из кэшей (fetch=False)."""
+    import countries
+    return {
+        "movies": [{**item, **countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)}
+                   for item in data.get("movies") or []],
+        "books": [{**item, "country_label": countries.author_label(item.get("author"), fetch)}
+                  for item in data.get("books") or []],
+        "music": [{**item, "country_label": countries.artist_label(item.get("artist"), fetch)}
+                  for item in data.get("music") or []],
+    }
+
+
+_WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def week_data(cid, kind, day=None) -> list[tuple[str, list]]:
+    """«Премьеры недели»: блоки [(подпись, [пн…вс])] — те же пункты, что хаб показывает в каждый день недели.
+
+    kind — movie (фильмы и сериалы), book, music. Без данных — пустой список.
+    """
+    today = day or _today_and_cc(cid)[0]
+    monday = today - timedelta(days=today.weekday())
+    pools = _pools(cid, today, music=kind == "music")
+    keys = {"movie": (("Фильмы", "movies"), ("Сериалы", "series")),
+            "book": (("", "books"),), "music": (("", "music"),)}[kind]
+    blocks = []
+    for label, key in keys:
+        pool, popularity = pools[key]
+        field = "movies" if key == "series" else key
+        rows = []
+        for index, weekday in enumerate(_WEEKDAYS):
+            picked = _daily(pool, monday + timedelta(days=index), 1, popularity)
+            if picked:
+                rows.append((weekday, _with_labels({field: picked})[field][0]))
+        if rows:
+            blocks.append((label, rows))
+    return blocks
 
 
 async def _show(bot, cid, msg, q=None):
@@ -243,6 +288,12 @@ async def send_concerts(bot, cid, q=None):
 
 async def send_premieres_menu(bot, cid, q=None):
     await _show(bot, cid, leisure_ui.leisure_premieres_menu(), q)
+
+
+async def send_week_premieres(bot, cid, kind, q=None):
+    """«Премьеры → Кино / Книги / Музыка»: список недели, по одной премьере на день."""
+    blocks = await asyncio.to_thread(week_data, cid, kind)
+    await _show(bot, cid, leisure_ui.week_premieres_screen(kind, blocks), q)
 
 
 async def send_library_menu(bot, cid, q=None):

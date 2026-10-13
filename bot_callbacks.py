@@ -68,7 +68,7 @@ def _status_stages(data):
         return progress("👕 Открываю шкаф...", "🌦️ Смотрю на погоду...", "🎨 Подбираю цвета...", "🧩 Собираю образ...")
     if data.startswith("w_buy"):
         return progress("🛍️ Смотрю шкаф...", "🧮 Считаю сочетания...", "🔎 Ищу пробелы...", "📝 Готовлю список...")
-    if data in ("m_leisure", "lz_more", "watch", "read", "listen"):
+    if data in ("m_leisure", "lz_more", "watch", "read", "listen") or data.startswith("lz_prem_"):
         return progress("🎬 Смотрю афиши кинотеатров...", "📚 Листаю новые книги...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")
     if data == "lz_concerts" or data.startswith(("a_concerts", "concerts_")):
@@ -506,6 +506,7 @@ ROUTES = (
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
     R("lz_prem", lambda c: leisure_hub.send_premieres_menu(c.bot, c.cid, q=c.q)),
+    R("lz_prem_*", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, c.data.removeprefix("lz_prem_"), q=c.q)),
     # «Новых премьер» больше нет: старая кнопка из истории чата открывает хаб.
     R("lz_more", lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),

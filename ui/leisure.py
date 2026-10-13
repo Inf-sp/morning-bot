@@ -1101,11 +1101,12 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже широкая «Концерты»."""
+    """Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже широкие «Премьеры» и «Концерты»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
          InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
+        [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -1120,14 +1121,58 @@ def no_month_concerts(title="🎫 Ближайшие концерты") -> Messa
 
 
 def leisure_premieres_menu() -> MessageSpec:
+    """«Премьеры»: кино, книги и музыка недели — по одной на каждый день, как в хабе."""
     b = MessageBuilder()
-    b.title("🆕 Премьеры и концерты")
-    b.line("Свежие релизы и ближайшие концерты любимых артистов.")
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
-        ("🎟️ Премьеры кино", "movie_premieres"),
-        ("🆕 Премьеры книг", "book_premieres"),
-        ("🎫 Концерты", "a_concerts_find"),
-    )).inline_keyboard, nav_row("m_leisure")]))
+    b.title("🆕 Премьеры недели")
+    b.line("По одной на каждый день — сегодняшняя есть на главном экране Досуга.")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Кино", callback_data="lz_prem_movie"),
+         InlineKeyboardButton("📚 Книги", callback_data="lz_prem_book"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="lz_prem_music")],
+        nav_row("m_leisure"),
+    ]))
+
+
+_WEEK_TITLES = {"movie": "🎬 Премьеры недели · кино", "book": "📚 Премьеры недели · книги",
+                "music": "🎧 Премьеры недели · музыка"}
+
+
+def _week_line(item, kind) -> str:
+    """««Восставший» · драма · 🇩🇪 DE» — пункт недели одной строкой, без описания."""
+    if kind == "music":
+        parts = [f"«{item.get('title')}» — {item['artist']}", item.get("genre_label"), item.get("country_label")]
+    elif item.get("kind") == "tv":
+        season = int(item.get("season_number") or 0)
+        parts = [f"«{item.get('name')}»", f"{season}-й сезон" if season > 1 else "", item.get("network"),
+                 item.get("country_label")]
+    elif kind == "book":
+        parts = [f"«{_item_value(item, 'title', '')}»", _book_premiere_genres(item),
+                 _weekly_rating(_item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5),
+                 item.get("country_label")]
+    else:
+        parts = [f"«{_item_value(item, 'title', '')}»", _movie_genres_for_line(item).replace(", ", " · "),
+                 item.get("country_label")]
+    return " · ".join(" ".join(str(part).split()) for part in parts if str(part or "").strip())
+
+
+def week_premieres_screen(kind, blocks) -> MessageSpec:
+    """Список недели: «Пн · «Название» · жанр · страна», с понедельника по воскресенье.
+
+    blocks — [(подпись блока или "", [(день, пункт)])]; у кино — «Фильмы» и «Сериалы».
+    """
+    b = MessageBuilder()
+    b.title(_WEEK_TITLES.get(kind, "🆕 Премьеры недели"))
+    if not blocks:
+        b.line("Премьер на эту неделю пока нет.")
+    for index, (label, rows) in enumerate(blocks):
+        if index:
+            b.spacer()
+        if label:
+            b.bold(f"{label}:")
+            b.newline()
+        for weekday, item in rows:
+            b.line(f"{weekday} · {_week_line(item, kind)}")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("lz_prem")]))
 
 
 def leisure_library_menu() -> MessageSpec:
