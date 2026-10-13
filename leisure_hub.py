@@ -80,12 +80,15 @@ def _popularity(item):
 
 
 _SERIES_TTL_DAYS = 7
+_SERIES_VERSION = 2  # v2 — с жанрами и популярностью
 _ALBUM_NOTES_TTL = 180 * 86400
 
 
 def _cached_series(cid, today):
     """Недельный список новых сериалов и сезонов из профиля (готовит ночной прогрев)."""
     saved = (store.get_profile(cid) or {}).get("hub_series") or {}
+    if saved.get("v") != _SERIES_VERSION:  # старый список без жанров — пересобирает ночной прогрев
+        return None
     try:
         fresh = (today - date.fromisoformat(str(saved.get("date") or ""))).days < _SERIES_TTL_DAYS
     except ValueError:
@@ -100,10 +103,10 @@ async def _warm_series(cid):
     import movie_discovery
     items = await movie_discovery.get_series_premieres(cid)
     keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating",
-            "origin_country", "original_language")
+            "origin_country", "original_language", "genres", "popularity")
     items = [{key: item.get(key) for key in keep} for item in items or []]
     store.mutate_profile(cid, lambda profile: (
-        {**profile, "hub_series": {"date": today.isoformat(), "items": items}}, None))
+        {**profile, "hub_series": {"v": _SERIES_VERSION, "date": today.isoformat(), "items": items}}, None))
 
 
 def _album_key(item) -> str:
@@ -216,7 +219,9 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     import movie_recommendation
     off = movie_recommendation.regions_off(cid)
     movies = [item for item in movies if countries.allowed(item, off)]
-    series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)]
+    # Сериал без жанра или страны не попадает ни в хаб, ни в «Все премьеры».
+    series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)
+              and item.get("genres") and countries.title_countries(item)]
     pools = {
         "movies": ([m for m in movies if m.get("overview")] or movies, _popularity, 0),
         "series": ([s for s in series if s.get("overview")] or series, _popularity, 0),
@@ -234,13 +239,19 @@ def _with_labels(data, fetch=False) -> dict:
     """Страна, студия, страна автора и артиста — из кэшей (fetch=False)."""
     import countries
     return {
-        "movies": [{**item, **countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)}
-                   for item in data.get("movies") or []],
+        "movies": [_title_labels(item, fetch) for item in data.get("movies") or []],
         "books": [{**item, "country_label": countries.author_label(item.get("author"), fetch)}
                   for item in data.get("books") or []],
         "music": [{**item, "country_label": countries.artist_label(item.get("artist"), fetch)}
                   for item in data.get("music") or []],
     }
+
+
+def _title_labels(item, fetch=False) -> dict:
+    """Страна и студия из деталей TMDb; без них — страна происхождения сериала из самого пункта."""
+    import countries
+    info = countries.title_info(item.get("kind") or "movie", item.get("id"), fetch)
+    return {**item, **info, "country_label": info.get("country_label") or countries.title_label(item)}
 
 
 _WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
@@ -319,12 +330,9 @@ async def send_concerts(bot, cid, q=None):
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
 
-async def send_premieres_menu(bot, cid, q=None):
-    await _show(bot, cid, leisure_ui.leisure_premieres_menu(), q)
-
-
-async def send_week_premieres(bot, cid, kind, q=None):
-    """«Премьеры → Кино / Книги / Музыка»: список недели, по одной премьере на день."""
+async def send_week_premieres(bot, cid, kind="movie", q=None):
+    """«Все премьеры»: страницы кино → книги → музыка со стрелками; список недели, по одной премьере на день."""
+    kind = kind if kind in leisure_ui.WEEK_PAGES else "movie"
     blocks = await asyncio.to_thread(week_data, cid, kind)
     await _show(bot, cid, leisure_ui.week_premieres_screen(kind, blocks), q)
 

@@ -114,8 +114,8 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
         "https://t.example", "https://y.example", "https://b.example",
     }
     assert _labels(msg.reply_markup) == [
+        ["🆕 Все премьеры"],  # выше всех кнопок, стандартного цвета
         ["🎬 Кино", "📚 Книги", "🎧 Музыка"],
-        ["🆕 Премьеры"],  # над «Концертами», стандартного цвета
         ["🎫 Концерты"],
         ["🎚️ Настроить библиотеку", "#️⃣ Главная"],
     ]
@@ -149,7 +149,10 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     from datetime import date, timedelta
 
     movies = [{"title": f"Фильм {i}", "overview": "Описание.", "popularity": 10 - i} for i in range(9)]
-    series = [{"kind": "tv", "name": "Суд", "network": "HBO", "overview": "Описание."}]
+    series = [{"kind": "tv", "name": "Суд", "network": "HBO", "overview": "Описание.", "genres": "Драма",
+               "origin_country": ["US"], "url": "https://tmdb.example/tv/1"},
+              {"kind": "tv", "name": "Без жанра", "overview": "Описание.", "origin_country": ["US"]},
+              {"kind": "tv", "name": "Без страны", "overview": "Описание.", "genres": "Драма"}]
     monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
     monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
     monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: series)
@@ -167,11 +170,21 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert leisure_hub.week_data("42", "book", day=monday) == []
 
     screen = leisure_ui.week_premieres_screen("movie", blocks)
-    assert screen.text.startswith("🎬 Премьеры недели · кино\n\nФильмы:\n«Фильм 0»\n«Фильм 1»")
-    assert screen.text.endswith("\n\nСериалы:\n«Суд» · HBO")  # один сериал — одна строка, без повторов по дням
-    assert "Пн" not in screen.text
-    assert len(screen.entities) == 3  # жирные только заголовок, «Фильмы:», «Сериалы:» — сегодняшняя строка обычная
-    assert _callbacks(screen.reply_markup) == ["lz_prem", "m_menu"]
+    assert screen.text.startswith("🎬 Премьеры недели · кино\n\nФильмы:\nФильм 0\nФильм 1")
+    # Один сериал — одна строка; без жанра или страны не попадает; жанр, страна, студия.
+    assert screen.text.endswith("\n\nСериалы:\nСуд · драма · 🇺🇸 USA · HBO")
+    assert "Пн" not in screen.text and "Без " not in screen.text
+    raw = screen.text.encode("utf-16-le")
+    marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in screen.entities]
+    assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
+    assert ("bold", "Фильм 0") in marked
+    assert _labels(screen.reply_markup) == [["◀️", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]  # без номера страницы
+    assert _callbacks(screen.reply_markup) == ["lz_prem_music", "lz_prem_book", "m_leisure", "m_menu"]
+    album = leisure_ui.week_premieres_screen("music", [("", [("Пт", {
+        "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
+        "url": "https://music.example/a"})])])
+    assert album.text.endswith("\n\nAlvvays — «Blue Rev» · Инди · 🇨🇦 CA")  # сначала исполнитель
+    assert _callbacks(album.reply_markup)[:2] == ["lz_prem_book", "lz_prem_movie"]
     empty = leisure_ui.week_premieres_screen("book", [])
     assert empty.text == "📚 Премьеры недели · книги\n\nПремьер на эту неделю пока нет."
 
@@ -319,15 +332,8 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
 
 
 def test_premieres_and_library_submenus():
-    premieres = leisure_ui.leisure_premieres_menu()
     library = leisure_ui.leisure_library_menu()
 
-    assert _labels(premieres.reply_markup) == [
-        ["🎬 Кино", "📚 Книги", "🎧 Музыка"], ["⬅️ Назад", "#️⃣ Главная"],
-    ]
-    assert _callbacks(premieres.reply_markup) == [
-        "lz_prem_movie", "lz_prem_book", "lz_prem_music", "m_leisure", "m_menu",
-    ]
     assert _labels(library.reply_markup) == [
         ["🎬 Кино"], ["📚 Книги"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -341,7 +347,7 @@ def test_premieres_and_library_submenus():
 def test_every_hub_and_submenu_button_has_a_route():
     markups = (
         leisure_ui.leisure_hub_kb(),
-        leisure_ui.leisure_premieres_menu().reply_markup,
+        leisure_ui.week_premieres_screen("movie", []).reply_markup,
         leisure_ui.leisure_library_menu().reply_markup,
     )
     for data in {data for markup in markups for data in _callbacks(markup)}:
@@ -381,7 +387,7 @@ def _dispatch(monkeypatch, data, module, name):
 
 @pytest.mark.parametrize("data, module, name", [
     ("m_leisure", leisure_hub, "send_hub"),
-    ("lz_prem", leisure_hub, "send_premieres_menu"),
+    ("lz_prem", leisure_hub, "send_week_premieres"),
     ("lz_prem_movie", leisure_hub, "send_week_premieres"),
     ("lz_lib", leisure_hub, "send_library_menu"),
     ("movie_reco", leisure_movies, "send_current_movie"),
@@ -527,3 +533,15 @@ def test_hub_shows_most_popular_on_monday_then_next_each_day():
     picks = [leisure_hub._daily(movies, date.fromordinal(monday.toordinal() + d), 1, leisure_hub._popularity)[0]["title"]
              for d in range(7)]
     assert picks == [f"Фильм {i}" for i in (9, 8, 7, 6, 5, 4, 3)]  # топ-7 недели по популярности
+
+
+def test_old_series_list_without_genres_is_rebuilt():
+    import leisure_hub
+    from datetime import date
+
+    today = date(2026, 10, 13)
+    old = {"date": today.isoformat(), "items": [{"name": "Суд"}]}
+    leisure_hub.store.set_profile("series-v", {"hub_series": old})
+    assert leisure_hub._cached_series("series-v", today) is None
+    leisure_hub.store.set_profile("series-v", {"hub_series": {**old, "v": leisure_hub._SERIES_VERSION}})
+    assert leisure_hub._cached_series("series-v", today) == [{"name": "Суд"}]
