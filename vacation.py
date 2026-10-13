@@ -23,6 +23,7 @@ import ai
 import config
 import secure
 import store
+import util
 from ui import vacation as vacation_ui
 
 _log = logging.getLogger(__name__)
@@ -268,7 +269,7 @@ async def _finish(bot, cid, until):
     import myday
     await myday.send_plany(bot, cid)
     # Концерты твоих артистов в стране поездки, премьеры и новинки страны — фоном, не дожидаясь ночи.
-    asyncio.create_task(_warm_trip_leisure(cid))
+    util.background(_warm_trip_leisure(cid), "vacation trip leisure warm")
 
 
 async def _warm_trip_leisure(cid):
@@ -408,6 +409,9 @@ def _cached(key, cc, loader, ttl=_FACTS_TTL):
     entry = data.get(cc) if isinstance(data, dict) else None
     if isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < ttl:
         return entry.get("value")
+    if util.on_event_loop():  # не качаем справочник в обработчике: фоном, пока — прошлые данные
+        util.build_off_loop(("vacation_facts", key, cc), _cached, key, cc, loader, ttl)
+        return entry.get("value") if isinstance(entry, dict) else None
     try:
         value = loader()
     except Exception:
@@ -519,6 +523,9 @@ def guide(cid) -> dict:
     saved = current.get("guide")
     if isinstance(saved, dict) and saved.get("v") == _GUIDE_VERSION:
         return saved
+    if util.on_event_loop():  # сеть и AI не ждём в обработчике: собираем фоном, пока — обычный режим
+        util.build_off_loop(("vacation_guide", str(cid)), guide, cid)
+        return {}
     place = store.get_settings(cid)
     try:
         record = _cached(config.COUNTRY_FACTS_KEY, current.get("cc", ""),

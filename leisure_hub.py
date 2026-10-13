@@ -21,6 +21,7 @@ import leisure_movies
 import leisure_music
 import secure
 import store
+import util
 from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
@@ -312,7 +313,7 @@ async def send_hub(bot, cid, q=None):
     await _show(bot, cid, msg, q)
     missing = [item for item in data.get("music") or [] if not item.get("about")]
     if missing:  # описание альбома — в фоне, хаб не ждёт AI; появится при следующем открытии
-        asyncio.create_task(describe_albums(missing))
+        util.background(describe_albums(missing), "album notes")
 
 
 async def send_concerts(bot, cid, q=None):

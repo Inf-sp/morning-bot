@@ -27,6 +27,52 @@ def loading_phrase() -> str:
     return random.choice(LOADING_PHRASES)
 
 
+_BACKGROUND_TASKS = set()
+_OFF_LOOP_STARTED = {}
+OFF_LOOP_RETRY_SECONDS = 600
+
+
+def background(coro, name="background"):
+    """Фоновая задача со ссылкой (без неё loop держит weakref и GC может её собрать) и логом ошибки."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+
+    def done(finished):
+        _BACKGROUND_TASKS.discard(finished)
+        if not finished.cancelled() and finished.exception() is not None:
+            _log.warning("%s failed", name, exc_info=finished.exception())
+
+    task.add_done_callback(done)
+    return task
+
+
+def on_event_loop() -> bool:
+    """True — код идёт в потоке событий бота: синхронная сеть или AI здесь заморозят всех пользователей."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def build_off_loop(key, func, *args) -> None:
+    """Из потока событий: запускает func(*args) в отдельном потоке, не дожидаясь результата.
+
+    Один запуск на key; после неудачи следующий — не раньше OFF_LOOP_RETRY_SECONDS.
+    """
+    now = time.monotonic()
+    started = _OFF_LOOP_STARTED.get(key)
+    if started is not None and now - started < OFF_LOOP_RETRY_SECONDS:
+        return
+    _OFF_LOOP_STARTED[key] = now
+
+    def done(future):
+        if not future.cancelled() and future.exception() is not None:
+            _log.warning("off-loop build %s failed", key, exc_info=future.exception())
+
+    asyncio.get_running_loop().run_in_executor(None, func, *args).add_done_callback(done)
+
+
 class StatusManager:
     """Редактируемый индикатор ожидания для долгих операций."""
 

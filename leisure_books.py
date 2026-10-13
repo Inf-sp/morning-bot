@@ -28,6 +28,7 @@ import store
 import tracking
 import wikidata_books
 from util import _MONTHS
+import util
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
 import rich_delivery
@@ -963,10 +964,8 @@ def _schedule_russian_titles(cid):
             await _fill_russian_titles(cid)
         except Exception:
             _log.warning("russian book titles failed cid=%s", cid, exc_info=True)
-    try:
-        asyncio.get_running_loop().create_task(run())
-    except RuntimeError:
-        pass
+    if util.on_event_loop():
+        util.background(run(), "russian book titles")
 
 
 async def send_favorite_books(bot, cid, q=None):

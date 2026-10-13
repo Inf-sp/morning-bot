@@ -48,6 +48,9 @@ def _table() -> dict:
     saved = store._load(config.COUNTRIES_TABLE_KEY) or {}
     if isinstance(saved, dict) and time.time() - float(saved.get("ts") or 0) < _TABLE_TTL:
         return saved.get("value") or {}
+    if util.on_event_loop():  # не качаем справочник в обработчике: фоном, пока — прошлая таблица
+        util.build_off_loop("countries_table", _table)
+        return (saved or {}).get("value") or {}
     try:
         rows = requests.get(_DATASET_URL, timeout=_TIMEOUT).json()
     except Exception:
