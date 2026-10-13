@@ -115,7 +115,8 @@ def test_hub_renders_all_blocks_with_links_and_three_column_buttons():
     }
     assert _labels(msg.reply_markup) == [
         ["🆕 Все премьеры"],  # выше всех кнопок, стандартного цвета
-        ["🎬 Кино", "📚 Книги", "🎧 Музыка"],
+        ["🎬 Фильмы", "📺 Сериалы"],  # в два столбца
+        ["📚 Книги", "🎧 Музыка"],
         ["🎫 Концерты"],
         ["🎚️ Настроить библиотеку", "#️⃣ Главная"],
     ]
@@ -159,32 +160,39 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: [])
     monday = date(2026, 10, 12)
 
-    blocks = leisure_hub.week_data("42", "movie", day=monday + timedelta(days=2))
+    films = leisure_hub.week_data("42", "movie", day=monday + timedelta(days=2))
 
-    assert [label for label, _rows in blocks] == ["Фильмы", "Сериалы"]
-    films = blocks[0][1]
     assert [weekday for weekday, _item in films] == ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     for offset, (_weekday, item) in enumerate(films):
         monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid, day=monday + timedelta(days=offset): (day, "NL"))
         assert leisure_hub.hub_data("42")["movies"][0]["title"] == item["title"]
     assert leisure_hub.week_data("42", "book", day=monday) == []
 
-    screen = leisure_ui.week_premieres_screen("movie", blocks)
-    assert screen.text.startswith("🎬 Премьеры недели · кино\n\nФильмы:\nФильм 0\nФильм 1")
-    # Один сериал — одна строка; без жанра или страны не попадает; жанр, страна, студия.
-    assert screen.text.endswith("\n\nСериалы:\nСуд · драма · 🇺🇸 USA · HBO")
-    assert "Пн" not in screen.text and "Без " not in screen.text
+    screen = leisure_ui.week_premieres_screen("movie", films)
+    # Каждый фильм — абзац как в хабе: имя, жанр, страна, описание; дни не подписываются.
+    assert screen.text.startswith("🎬 Премьеры недели · фильмы\n\nФильм 0 · Описание.\n\nФильм 1 · Описание.")
+    assert screen.text.count("Фильм ") == 7 and "Пн" not in screen.text
     raw = screen.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in screen.entities]
-    assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
     assert ("bold", "Фильм 0") in marked
-    assert _labels(screen.reply_markup) == [["◀️", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]  # без номера страницы
-    assert _callbacks(screen.reply_markup) == ["lz_prem_music", "lz_prem_book", "m_leisure", "m_menu"]
-    album = leisure_ui.week_premieres_screen("music", [("", [("Пт", {
+    # Между стрелками — неактивная кнопка вкладки вместо номера страницы.
+    assert _labels(screen.reply_markup) == [["◀️", "Фильмы", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert _callbacks(screen.reply_markup) == ["lz_prem_music", "noop", "lz_prem_series", "m_leisure", "m_menu"]
+
+    # Сериалы — своя вкладка; без жанра или страны не попадают.
+    series_rows = leisure_hub.week_data("42", "series", day=monday)
+    tab = leisure_ui.week_premieres_screen("series", series_rows)
+    assert tab.text == "📺 Премьеры недели · сериалы\n\nСуд · драма · 🇺🇸 USA · HBO · Описание."
+    raw = tab.text.encode("utf-16-le")
+    marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
+    assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
+    assert _callbacks(tab.reply_markup)[:3] == ["lz_prem_movie", "noop", "lz_prem_book"]
+
+    album = leisure_ui.week_premieres_screen("music", [("Пт", {
         "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
-        "url": "https://music.example/a"})])])
-    assert album.text.endswith("\n\nAlvvays — «Blue Rev» · Инди · 🇨🇦 CA")  # сначала исполнитель
-    assert _callbacks(album.reply_markup)[:2] == ["lz_prem_book", "lz_prem_movie"]
+        "url": "https://music.example/a", "about": "Мечтательный инди-поп."})])
+    assert album.text.endswith("\n\nAlvvays — «Blue Rev» · Инди · 🇨🇦 CA · Мечтательный инди-поп.")  # сначала исполнитель
+    assert _callbacks(album.reply_markup)[:3] == ["lz_prem_book", "noop", "lz_prem_movie"]
     empty = leisure_ui.week_premieres_screen("book", [])
     assert empty.text == "📚 Премьеры недели · книги\n\nПремьер на эту неделю пока нет."
 
@@ -223,7 +231,7 @@ def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
     monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: [])
     monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
     monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: [])
-    rows = leisure_hub.week_data(cid, "music")[0][1]
+    rows = leisure_hub.week_data(cid, "music")
     assert [day for day, _item in rows] == ["Пт", "Сб", "Вс", "Пн", "Вт", "Ср", "Чт"]
     assert [item["title"] for _day, item in rows] == [f"Альбом {i}" for i in range(7)]
     assert leisure_hub.hub_data(cid)["music"][0]["title"] == "Альбом 2"
@@ -321,14 +329,18 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_concerts", step("concerts", fail=True))
     monkeypatch.setattr(leisure_hub, "_warm_movie_premieres", step("movies"))
     monkeypatch.setattr(leisure_books, "get_book_premieres", step("books"))
-    monkeypatch.setattr(leisure_movies, "get_current_movie", step("movie_reco"))
+    async def current(_cid, kind="movie"):
+        calls.append("movie_reco" if kind == "movie" else "tv_reco")
+
+    monkeypatch.setattr(leisure_movies, "get_current_movie", current)
     monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
     monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
     monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "series", "album_notes", "details"]
+    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "tv_reco", "series", "album_notes",
+                     "details"]
 
 
 def test_premieres_and_library_submenus():
@@ -388,6 +400,10 @@ def _dispatch(monkeypatch, data, module, name):
 @pytest.mark.parametrize("data, module, name", [
     ("m_leisure", leisure_hub, "send_hub"),
     ("lz_prem", leisure_hub, "send_week_premieres"),
+    ("tv_reco", leisure_movies, "send_current_movie"),
+    ("tv_next", leisure_movies, "send_recos"),
+    ("tv_g_10765", leisure_movies, "send_movie_by_genre"),
+    ("tv_no_0", leisure_movies, "movie_dislike"),
     ("lz_prem_movie", leisure_hub, "send_week_premieres"),
     ("lz_lib", leisure_hub, "send_library_menu"),
     ("movie_reco", leisure_movies, "send_current_movie"),
@@ -415,10 +431,10 @@ def test_old_section_callbacks_open_the_hub(monkeypatch, data):
 def test_what_to_watch_opens_cached_daily_card_without_new_pick(monkeypatch):
     sent = []
 
-    async def card(_bot, _cid, it, _i, tm=None, status=None):
+    async def card(_bot, _cid, it, _i, tm=None, status=None, **_kwargs):
         sent.append((it["title"], tm["name"]))
 
-    monkeypatch.setattr(leisure_movies, "_cached_movie", lambda _cid: ({"title": "Дюна"}, {"name": "Dune"}))
+    monkeypatch.setattr(leisure_movies, "_cached_movie", lambda *_args: ({"title": "Дюна"}, {"name": "Dune"}))
     monkeypatch.setattr(leisure_movies, "send_recos", _boom)
     monkeypatch.setattr(leisure_movies, "_send_movie_card", card)
     monkeypatch.setattr(leisure_movies.movie_engine, "mark_shown", lambda *_args: None)
@@ -545,3 +561,14 @@ def test_old_series_list_without_genres_is_rebuilt():
     assert leisure_hub._cached_series("series-v", today) is None
     leisure_hub.store.set_profile("series-v", {"hub_series": {**old, "v": leisure_hub._SERIES_VERSION}})
     assert leisure_hub._cached_series("series-v", today) == [{"name": "Суд"}]
+
+
+def test_series_card_and_genre_menu_stay_in_series():
+    card = leisure_movies._movie_kb(3, kind="tv")
+    assert _labels(card)[:2] == [["Не нравится"], ["✨ Другой сериал"]]
+    assert _callbacks(card)[:2] == ["tv_no_3", "tv_pick_3"]
+    menu = leisure_movies._movie_genre_menu_kb(back="tv_card_3", kind="tv")
+    assert _callbacks(menu) == ["tv_g_35", "tv_g_18", "tv_g_10765", "tv_g_9648", "tv_g_80", "tv_g_10759",
+                                "tv_card_3", "m_menu"]
+    for data in _callbacks(card) + _callbacks(menu):
+        assert routing.resolve_callback_handler(data)["handled"], data

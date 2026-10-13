@@ -167,10 +167,39 @@ def test_movie_preferences_are_used_without_favourite_films(monkeypatch):
     monkeypatch.setattr(leisure_movies.tmdb, "discover", discover)
     monkeypatch.setattr(leisure_movies, "_send_movie_card", deliver)
 
-    asyncio.run(leisure_movies.send_recos(object(), "42", "movie"))
+    asyncio.run(leisure_movies.send_recos(object(), "42", "tv"))  # «Сериалы» — строго сериалы
 
     assert requested == {"kind": "tv", "min_rating": 8.0, "year": 2000}
     assert delivered[0][0]["title"] == "Новый сериал"
+
+
+def test_films_never_get_a_series_and_series_never_get_a_film(monkeypatch):
+    asked, delivered = [], []
+
+    async def deliver(_bot, _cid, item, _index, tm=None, **kwargs):
+        delivered.append((tm["kind"], kwargs.get("kind")))
+
+    def discover(kind, *_args, **_kwargs):
+        asked.append(kind)
+        return [{"id": 1 if kind == "movie" else 2, "name": f"Новый {kind}", "kind": kind, "rating": 8.0,
+                 "vote_count": 500, "popularity": 20}]
+
+    monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
+    monkeypatch.setattr(leisure_movies.movie_engine, "mark_shown", lambda *_args: None)
+    monkeypatch.setattr(movie_recommendation, "_movie_prefs", lambda _cid: {"min_rating": None})
+    monkeypatch.setattr(leisure_movies.vacation, "trip_cc", lambda _cid: "")
+    monkeypatch.setattr(leisure_movies.inclusive_recommendations, "is_due", lambda *_args: False)
+    monkeypatch.setattr(leisure_movies, "_cache_movie", lambda *_args: None)
+    monkeypatch.setattr(leisure_movies.tmdb, "discover", discover)
+    monkeypatch.setattr(leisure_movies, "_send_movie_card", deliver)
+
+    asyncio.run(leisure_movies.send_recos(object(), "42", "movie"))
+    asyncio.run(leisure_movies.send_recos(object(), "42", "tv"))
+
+    assert set(asked) == {"movie", "tv"} and asked[0] == "movie"
+    assert delivered == [("movie", "movie"), ("tv", "tv")]
+    assert leisure_movies._rec_key("42", "tv") != leisure_movies._rec_key("42", "movie")
 
 
 def test_first_movie_recommendation_keeps_poster_with_inline_status():
@@ -241,7 +270,7 @@ def test_movie_recommendation_replaces_localized_poster_with_english_one(monkeyp
 
 
 def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch):
-    monkeypatch.setattr(leisure_movies, "_cached_movie", lambda _cid: None)
+    monkeypatch.setattr(leisure_movies, "_cached_movie", lambda *_args: None)
     monkeypatch.setattr(leisure_movies.store, "get_list", lambda *_args: [])
     monkeypatch.setattr(leisure_movies.movie_engine, "_excluded_norms", lambda _cid, **_kwargs: set())
     monkeypatch.setattr(leisure_movies, "_movie_prefs", lambda _cid: {})
@@ -253,10 +282,8 @@ def test_movie_home_falls_back_when_tmdb_is_temporarily_unavailable(monkeypatch)
     )
     monkeypatch.setattr(leisure_movies, "_cache_movie", lambda *_args: None)
 
-    item, tm = asyncio.run(leisure_movies.get_current_movie("42"))
-
-    assert item["title"] == "Решение уйти"
-    assert tm is None
+    # Без TMDb тип не проверить — карточка дня не кэшируется, открытие пойдёт живым подбором.
+    assert asyncio.run(leisure_movies.get_current_movie("42")) == (None, None)
 
 
 def test_movie_cache_serializes_tmdb_anchors(monkeypatch):

@@ -38,6 +38,21 @@ def _movie_prefs(cid):
     }
 
 
+def _kind_prefs(cid, kind="movie"):
+    """Предпочтения подбора строго одного типа: «Фильмы» — только фильмы, «Сериалы» — только сериалы."""
+    kind = "tv" if kind == "tv" else "movie"
+    return {**_movie_prefs(cid), "type_pref": kind, "only": kind}
+
+
+def _rec_key(cid, kind="movie"):
+    """Ключ last_recos и карточки дня: у сериалов свой, чтобы открытые карточки фильма и сериала не мешали."""
+    return f"{cid}|tv" if kind == "tv" else str(cid)
+
+
+def _of_kind(tm, kind) -> bool:
+    return bool(tm) and (tm.get("kind") or "movie") == kind
+
+
 def regions_off(cid) -> list:
     """Выключенные регионы кино: [asia, africa…]; по умолчанию включены все."""
     import countries
@@ -100,6 +115,8 @@ async def _tmdb_engine_pick(cid, prefs=None, timeout=None):
         )
     except Exception:
         return None, None
+    if prefs.get("only"):  # «Фильмы» / «Сериалы» — строго свой тип
+        cands = [c for c in cands if (c.get("kind") or "movie") == prefs["only"]]
     if not cands:
         return None, None
     return _first_allowed_card(cid, cands, prefs)
@@ -206,14 +223,14 @@ async def _llm_movie_pick(cid, used):
             return fallbacks[0], None
     return None, None
 
-async def movie_dislike(bot, cid, i):
-    rec = store.last_recos.get(str(cid))
+async def movie_dislike(bot, cid, i, kind="movie"):
+    rec = store.last_recos.get(_rec_key(cid, kind))
     if rec and i < len(rec["items"]):
         title = rec["items"][i]
         recommendation_stoplist.add(cid, "movie", title, "hidden")
-    await _advance_movie(bot, cid)
+    await _advance_movie(bot, cid, kind)
 
-async def _advance_movie(bot, cid):
+async def _advance_movie(bot, cid, kind="movie"):
     """Загрузить следующую рекомендацию кино и показать карточку.
 
     Если текущая сессия рекомендаций привязана к жанру (last_recos["category"],
@@ -221,21 +238,23 @@ async def _advance_movie(bot, cid):
     «Другое кино»/«В любимые»/«Уже видел» внутри «Комедии» не должны сбрасывать
     подбор на общий алгоритм. Без category — обычный путь Recommendations/Similar по любимым.
     """
-    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    rec = store.last_recos.get(_rec_key(cid, kind), {"kind": kind, "items": []})
     category = rec.get("category")
     if category:
-        it, tm = await _advance_in_category(cid, category)
+        it, tm = await _advance_in_category(cid, category, kind)
         if not it:
             label = category["reason"]["label"]
             text = f"В этом жанре «{label}» пока не нашёл нового. Попробуй другой."
-            kb = leisure_movies._movie_genre_menu_kb()
+            kb = leisure_movies._movie_genre_menu_kb(kind=kind)
             await bot.send_message(chat_id=cid, text=text, reply_markup=kb)
             return
     else:
-        it, tm = await _tmdb_engine_pick(cid)
+        it, tm = await _tmdb_engine_pick(cid, _kind_prefs(cid, kind))
         if it is None:
             used = leisure_movies._movie_used(cid) | {str(x).lower() for x in rec["items"]}
             it, tm = await _llm_movie_pick(cid, used)
+            if not _of_kind(tm, kind):  # резерв AI не знает о типе — чужой тип не показываем
+                it, tm = None, None
     if not it:
         await bot.send_message(
             chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
@@ -243,16 +262,16 @@ async def _advance_movie(bot, cid):
     disp = leisure_movies._display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     rec["items"].append(disp)
-    store.last_recos[str(cid)] = rec
+    store.last_recos[_rec_key(cid, kind)] = rec
     ni = len(rec["items"]) - 1
-    await leisure_movies._send_movie_card(bot, cid, it, ni, tm=tm, category=category)
+    await leisure_movies._send_movie_card(bot, cid, it, ni, tm=tm, category=category, kind=kind)
 
 
-async def _advance_in_category(cid, category):
+async def _advance_in_category(cid, category, kind="movie"):
     """Следующий кандидат внутри выбранного жанра с тем же обязательным фильтром."""
     genre_id = category["value"]
     return await asyncio.to_thread(
-        _discover_pick, cid, [genre_id], _movie_prefs(cid),
+        _discover_pick, cid, [genre_id], _kind_prefs(cid, kind),
         require_genre_ids=[genre_id], reason=category["reason"])
 
 async def send_movie_genre_menu(bot, cid, q=None):
@@ -315,11 +334,12 @@ async def toggle_movie_pref(bot, cid, data, q=None):
 
 
 def _genre_label(genre_id):
-    raw_label = dict((gid, lbl) for lbl, gid in leisure_movies._GENRE_MENU).get(genre_id) or tmdb.GENRES.get(genre_id, "")
+    menus = [*leisure_movies._GENRE_MENU, *leisure_movies._TV_GENRE_MENU]
+    raw_label = dict((gid, lbl) for lbl, gid in menus).get(genre_id) or tmdb.GENRES.get(genre_id, "")
     return re.sub(r"^\S+\s+", "", raw_label) if raw_label else raw_label  # без ведущего эмодзи кнопки
 
 
-async def send_movie_by_genre(bot, cid, genre_id):
+async def send_movie_by_genre(bot, cid, genre_id, kind="movie"):
     """Рекомендация внутри жанра: TMDb discover + учёт вкуса пользователя.
 
     Жанр — обязательный фильтр (не подсказка): показанный тайтл ОБЯЗАН иметь этот
@@ -331,19 +351,19 @@ async def send_movie_by_genre(bot, cid, genre_id):
     category = {"kind": "genre", "value": genre_id, "reason": reason}
     try:
         it, tm = await asyncio.to_thread(
-            _discover_pick, cid, [genre_id], _movie_prefs(cid),
+            _discover_pick, cid, [genre_id], _kind_prefs(cid, kind),
             require_genre_ids=[genre_id], reason=reason)
     except Exception as e:
         await verify.safe_error(bot, cid, e, back="m_leisure")
         return
     if not it:
         await bot.send_message(chat_id=cid, text="В этом жанре пока не нашёл нового. Попробуй другой.",
-                               reply_markup=leisure_movies._movie_genre_menu_kb())
+                               reply_markup=leisure_movies._movie_genre_menu_kb(kind=kind))
         return
-    await _show_discovered(bot, cid, it, tm, category=category)
+    await _show_discovered(bot, cid, it, tm, category=category, kind=kind)
 
 
-async def _show_discovered(bot, cid, it, tm, category=None):
+async def _show_discovered(bot, cid, it, tm, category=None, kind="movie"):
     """category — контекст жанра, из которого пришла карточка: сохраняем его
     в last_recos, чтобы «Другое кино»/«В любимые»/«Уже видел» (через _advance_movie)
     брали СЛЕДУЮЩУЮ рекомендацию из той же категории, а не сбрасывались на общий подбор,
@@ -351,12 +371,12 @@ async def _show_discovered(bot, cid, it, tm, category=None):
     tm = dict(tm or {})
     disp = leisure_movies._display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
-    rec = store.last_recos.get(str(cid), {"kind": "movie", "items": []})
+    rec = store.last_recos.get(_rec_key(cid, kind), {"kind": kind, "items": []})
     rec["items"].append(disp)
     rec["category"] = category
-    store.last_recos[str(cid)] = rec
-    store.last_source[str(cid)] = "Кино"
-    await leisure_movies._send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm, category=category)
+    store.last_recos[_rec_key(cid, kind)] = rec
+    store.last_source[str(cid)] = "Сериалы" if kind == "tv" else "Кино"
+    await leisure_movies._send_movie_card(bot, cid, it, len(rec["items"]) - 1, tm=tm, category=category, kind=kind)
 
 
 def _passes_genre_gate(c, require_genre_ids=None):
@@ -385,7 +405,7 @@ def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
     steps = [r for r in movie_engine.RATING_STEPS if r <= min_rating] or [movie_engine.RATING_STEPS[-1]]
     for mr in steps:
         pool = {}
-        for kind in ("movie", "tv"):
+        for kind in ((prefs or {}).get("only"),) if (prefs or {}).get("only") else ("movie", "tv"):
             for c in tmdb.discover(
                 kind, genre_ids=genre_ids, min_rating=mr, year_gte=2000,
             ):

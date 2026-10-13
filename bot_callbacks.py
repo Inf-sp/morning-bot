@@ -76,7 +76,7 @@ def _status_stages(data):
                         "📝 Собираю концерты...")
     if data.startswith("nov_"):
         return progress("🆕 Ищу свежие релизы...", "🌍 Смотрю страну...", "📝 Пишу описание...", "✨ Почти готово...")
-    if data.startswith(("movie_", "a_watch", "mfi:", "m_movie")):
+    if data.startswith(("movie_", "a_watch", "mfi:", "m_movie", "tv_")):
         return progress("🎬 Перебираю фильмы...", "🍿 Сверяю с твоим вкусом...", "⭐ Смотрю оценки...",
                         "🎞️ Ищу трейлер...")
     if data.startswith(("book_", "a_read", "bfi:")):
@@ -582,6 +582,18 @@ ROUTES = (
         lambda status: leisure_movies.send_series_premieres(c.bot, c.cid, status=status))),
     R("series_premiere_page:*", _acked(lambda c: leisure_movies.show_series_premiere_page(
         c.cid, c.q, int(c.data.rsplit(":", 1)[1])))),
+    # «Сериалы» в хабе: тот же подбор строго по сериалам, свои кнопки tv_*.
+    R("tv_reco", lambda c: c.status(
+        lambda status: leisure_movies.send_current_movie(c.bot, c.cid, status=status, kind="tv"))),
+    R("tv_next", _picked(lambda c: c.status(
+        lambda status: leisure_movies.send_recos(c.bot, c.cid, "tv", status=status)))),
+    R("tv_pick_*", _swap_kb(lambda c: leisure_movies._movie_genre_menu_kb(
+        back=f"tv_card_{_tail_int(c)}", kind="tv"))),
+    R("tv_card_*", _swap_kb(lambda c: leisure_movies._movie_kb(_tail_int(c), kind="tv"))),
+    R("tv_g_*", _picked(lambda c: c.status(
+        lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("tv_g_"):], kind="tv")))),
+    R("tv_no_*", _replaced(lambda c: c.status(
+        lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c), kind="tv")))),
     R("movie_genre_menu", _acked(lambda c: leisure_movies.send_movie_genre_menu(c.bot, c.cid, c.q))),
     R("movie_g_*", _picked(lambda c: c.status(
         lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("movie_g_"):])))),

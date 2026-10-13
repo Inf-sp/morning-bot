@@ -1101,11 +1101,12 @@ def _column_kb(rows):
 
 
 def leisure_hub_kb():
-    """«Все премьеры» — выше всех; Кино | Книги | Музыка одной строкой — в порядке блоков хаба; ниже «Концерты»."""
+    """«Все премьеры» — выше всех; Фильмы | Сериалы и Книги | Музыка в два столбца; ниже «Концерты»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Все премьеры", callback_data="lz_prem")],  # стандартного цвета
-        [InlineKeyboardButton("🎬 Кино", callback_data="movie_reco"),
-         InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
+        [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
+         InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco")],
+        [InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
@@ -1120,60 +1121,62 @@ def no_month_concerts(title="🎫 Ближайшие концерты") -> Messa
     return b.build_stripped()
 
 
-WEEK_PAGES = ("movie", "book", "music")  # «Все премьеры»: кино → книги → музыка, стрелки по кругу
-_WEEK_TITLES = {"movie": "🎬 Премьеры недели · кино", "book": "📚 Премьеры недели · книги",
-                "music": "🎧 Премьеры недели · музыка"}
+WEEK_PAGES = ("movie", "series", "book", "music")  # «Все премьеры»: вкладки по кругу стрелками
+_WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "book": ("📚", "Книги"), "music": ("🎧", "Музыка")}
 
 
-def _week_line(item, kind) -> tuple:
-    """(имя жирным, ссылка, остаток строки): «**Восставший** · драма · 🇩🇪 DE», у альбома — сначала исполнитель."""
+def _week_item(item, kind) -> tuple:
+    """(имя, ссылка, метаданные, описание) пункта вкладки — как блок хаба; у альбома сначала исполнитель."""
     if kind == "music":
-        name, url = item.get("artist"), item.get("url")
-        parts = [f"— «{item.get('title')}»", item.get("genre_label"), item.get("country_label")]
-    elif item.get("kind") == "tv":
+        return (item.get("artist"), item.get("url"),
+                (f"— «{item.get('title')}»", item.get("genre_label"), item.get("country_label")), item.get("about"))
+    if kind == "series":
         season = int(item.get("season_number") or 0)
-        name, url = item.get("name"), item.get("url")
-        parts = [_movie_genres_for_line(item).replace(", ", " · "), f"{season}-й сезон" if season > 1 else "",
-                 item.get("country_label"), item.get("network")]
-    elif kind == "book":
-        name, url = _item_value(item, "title", ""), _item_value(item, "url", "")
-        parts = [_book_premiere_genres(item),
+        return (item.get("name"), item.get("url"),
+                (_movie_genres_for_line(item).replace(", ", " · "), f"{season}-й сезон" if season > 1 else "",
+                 item.get("country_label"), item.get("network")), item.get("overview"))
+    if kind == "book":
+        return (_item_value(item, "title", ""), _item_value(item, "url", ""),
+                (_book_premiere_genres(item),
                  _weekly_rating(_item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5),
-                 item.get("country_label")]
-    else:
-        movie_id = _item_value(item, "id", "")
-        name = _item_value(item, "title", "")
-        url = _item_value(item, "trailer_url", "") or (f"https://www.themoviedb.org/movie/{movie_id}" if movie_id else "")
-        parts = [_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")]
-    rest = [" ".join(str(part).split()) for part in parts if str(part or "").strip()]
-    separator = " " if kind == "music" else " · "
-    return " ".join(str(name or "").split()), str(url or "").strip(), (separator + " · ".join(rest)) if rest else ""
+                 item.get("country_label")), _item_value(item, "summary", ""))
+    movie_id = _item_value(item, "id", "")
+    url = _item_value(item, "trailer_url", "") or (f"https://www.themoviedb.org/movie/{movie_id}" if movie_id else "")
+    return (_item_value(item, "title", ""), url,
+            (_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")), _item_value(item, "overview", ""))
 
 
-def week_premieres_screen(kind, blocks) -> MessageSpec:
-    """Страница «Все премьеры»: «**Название** · жанр · страна» в порядке дней, без подписей дней и повторов.
+def week_premieres_screen(kind, rows) -> MessageSpec:
+    """Вкладка «Всех премьер»: каждый пункт — абзац как в хабе: «**Имя** · жанр · страна · описание».
 
-    blocks — [(подпись блока или "", [(день, пункт)])]; у кино — «Фильмы» и «Сериалы».
-    Имя — жирная ссылка, как в хабе. Стрелки ← → листают кино → книги → музыка по кругу.
+    rows — [(день, пункт)] в порядке дней; дни не подписываются, повторы не выводятся.
+    Стрелки листают фильмы → сериалы → книги → музыка по кругу, между ними — неактивная кнопка вкладки.
     """
+    kind = kind if kind in WEEK_PAGES else "movie"
+    emoji, tab = _WEEK_TABS[kind]
     b = MessageBuilder()
-    b.title(_WEEK_TITLES.get(kind, "🆕 Премьеры недели"))
-    if not blocks:
+    b.title(f"{emoji} Премьеры недели · {tab.lower()}")
+    seen = set()
+    for _weekday, item in rows:
+        name, url, meta, about = _week_item(item, kind)
+        name = " ".join(str(name or "").split())
+        values = [" ".join(str(value).split()) for value in (*meta, _hub_about(about)) if str(value or "").strip()]
+        key = (name, *values[:1])
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        b.spacer()
+        b.bold_link(name, str(url).strip()) if str(url or "").strip() else b.bold(name)
+        if values:
+            first, *rest = values
+            joined = (f" {first}" if kind == "music" else f" · {first}") + "".join(f" · {value}" for value in rest)
+            b.text_line(joined)
+        b.newline()
+    if not seen:
         b.line("Премьер на эту неделю пока нет.")
-    for index, (label, rows) in enumerate(blocks):
-        if index:
-            b.spacer()
-        if label:
-            b.bold(f"{label}:")
-            b.newline()
-        for name, url, rest in dict.fromkeys(_week_line(item, kind) for _weekday, item in rows):
-            if not name:
-                continue
-            b.bold_link(name, url) if url else b.bold(name)
-            b.text_line(rest)
-            b.newline()
-    page = WEEK_PAGES.index(kind) if kind in WEEK_PAGES else 0
+    page = WEEK_PAGES.index(kind)
     arrows = [InlineKeyboardButton("◀️", callback_data=f"lz_prem_{WEEK_PAGES[(page - 1) % len(WEEK_PAGES)]}"),
+              InlineKeyboardButton(tab, callback_data="noop"),  # где пользователь — вместо номера страницы
               InlineKeyboardButton("▶️", callback_data=f"lz_prem_{WEEK_PAGES[(page + 1) % len(WEEK_PAGES)]}")]
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([arrows, nav_row("m_leisure")]))
 

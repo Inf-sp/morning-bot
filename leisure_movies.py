@@ -322,16 +322,18 @@ async def delete_favorite_movie(bot, cid, token, short_id, genre_index=None, pag
     await send_favorite_movies(bot, cid, q=q)
 
 
-def _movie_kb(i, category=None):
+def _movie_kb(i, category=None, kind="movie"):
     """Клавиатура карточки кино с быстрым подбором по жанру.
 
-    category используется только для контекста подбора.
+    category используется только для контекста подбора; kind="tv" — карточка «Сериалов» (tv_*).
     """
+    prefix = "tv" if kind == "tv" else "movie"
     rows = [
         # «Не нравится» — первой: в чёрный список, сразу следующая рекомендация.
-        [InlineKeyboardButton("Не нравится", callback_data=f"movie_no_{i}", api_kwargs={"style": "danger"})],
-        # «Другой фильм» меняет кнопки под карточкой на выбор жанра (movie_pick_*).
-        [InlineKeyboardButton("✨ Другой фильм", callback_data=f"movie_pick_{i}")],
+        [InlineKeyboardButton("Не нравится", callback_data=f"{prefix}_no_{i}", api_kwargs={"style": "danger"})],
+        # «Другой фильм / сериал» меняет кнопки под карточкой на выбор жанра (*_pick_*).
+        [InlineKeyboardButton("✨ Другой сериал" if kind == "tv" else "✨ Другой фильм",
+                              callback_data=f"{prefix}_pick_{i}")],
         # «Настроить» — «Моё кино» новым сообщением, карточка остаётся.
         [InlineKeyboardButton("🎚️ Настроить кино", callback_data="lz_cfg_movie")],
     ]
@@ -345,9 +347,19 @@ _GENRE_MENU = [
     ("Фантастика", 878), ("Триллер", 53),
     ("Романтика", 10749), ("Драма", 18),
 ]
+# У сериалов в TMDb свои жанры: ужасов, триллеров и мелодрам нет, фантастика — 10765.
+_TV_GENRE_MENU = [
+    ("Комедия", 35), ("Драма", 18),
+    ("Фантастика", 10765), ("Детектив", 9648),
+    ("Криминал", 80), ("Боевик", 10759),
+]
 
-def _movie_genre_menu_kb(back="m_leisure"):
-    """Выбор после «Другой фильм»: жанры (стандартные, без цвета) и зелёная новинка."""
+def _movie_genre_menu_kb(back="m_leisure", kind="movie"):
+    """Выбор после «Другой фильм / сериал»: жанры (стандартные, без цвета); у фильмов — ещё зелёная новинка."""
+    if kind == "tv":
+        rows = [[InlineKeyboardButton(label, callback_data=f"tv_g_{gid}")] for label, gid in _TV_GENRE_MENU]
+        rows.append(nav_row(back))
+        return InlineKeyboardMarkup(rows)
     rows = [
         # Новинка — первой, как в книгах, музыке и играх.
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")],
@@ -440,7 +452,7 @@ def _pick_good_movie(items, used_titles, prefs=None):
     _score, item, tm = max(accepted, key=lambda row: row[0])
     return item, tm
 
-async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, status=None):
+async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, status=None, kind="movie"):
     it = it if isinstance(it, dict) else {"title": str(it)}
     if tm == "__lookup__":
         try:
@@ -469,7 +481,7 @@ async def _send_movie_card(bot, cid, it, i, tm="__lookup__", category=None, stat
             tm["countries"] = (details or {}).get("countries") or []
         tm["country_label"] = await asyncio.to_thread(countries.title_label, tm)
     title, msg = _movie_card(it, tm)
-    kb = _movie_kb(i, category=category)
+    kb = _movie_kb(i, category=category, kind=kind)
     if tm and tm.get("poster"):
         try:
             await bot.send_photo(chat_id=cid, photo=tm["poster"], caption=msg.text, caption_entities=msg.entities, reply_markup=kb)
@@ -493,25 +505,28 @@ def _movie_cache_signature(cid):
     }
 
 
-def _cached_movie(cid):
-    entry = (store._load(config.MOVIE_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
+def _cached_movie(cid, kind="movie"):
+    """Карточка дня своего типа: у «Фильмов» и «Сериалов» — разные (_rec_key)."""
+    entry = (store._load(config.MOVIE_RECO_CACHE_KEY) or {}).get(_rec_key(cid, kind)) or {}
     today = datetime.now(config.TZ).date().isoformat()
     item = entry.get("item")
     if (entry.get("date") != today or entry.get("signature") != _movie_cache_signature(cid)
             or not isinstance(item, dict) or not str(item.get("title") or "").strip()):
         return None
     tm = entry.get("tm")
-    return dict(item), dict(tm) if isinstance(tm, dict) else None
+    if not _of_kind(tm, kind):  # старая общая карточка могла быть сериалом
+        return None
+    return dict(item), dict(tm)
 
 
-def _cache_movie(cid, it, tm):
+def _cache_movie(cid, it, tm, kind="movie"):
     cached_tm = dict(tm or {})
     if isinstance(cached_tm.get("anchors"), set):
         cached_tm["anchors"] = sorted(cached_tm["anchors"])
 
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[str(cid)] = {
+        data[_rec_key(cid, kind)] = {
             "date": datetime.now(config.TZ).date().isoformat(),
             "signature": _movie_cache_signature(cid),
             "item": dict(it or {}),
@@ -522,20 +537,17 @@ def _cache_movie(cid, it, tm):
     store.mutate_kv(config.MOVIE_RECO_CACHE_KEY, mutate)
 
 
-async def get_current_movie(cid):
-    """Возвращает подготовленную рекомендацию дня, не отмечая её просмотренной."""
-    cached = _cached_movie(cid)
+async def get_current_movie(cid, kind="movie"):
+    """Возвращает подготовленную рекомендацию дня своего типа, не отмечая её просмотренной."""
+    cached = _cached_movie(cid, kind)
     if cached:
         return cached
 
     seen = store.get_list(config.FAVORITE_MOVIES_KEY, cid)
+    prefs = _kind_prefs(cid, kind)
     if not seen:
-        prefs = _movie_prefs(cid)
-        requested_kind = prefs.get("type_pref") or "movie"
         excluded = movie_engine._excluded_norms(cid)
-        requested_kinds = [requested_kind]
-        if prefs.get("type_pref"):
-            requested_kinds.append("tv" if requested_kind == "movie" else "movie")
+        requested_kinds = [kind]
         candidates = []
         for candidate_kind in requested_kinds:
             try:
@@ -554,20 +566,19 @@ async def get_current_movie(cid):
             "genres": {}, "countries": {}, "kind_pref": None,
         }, prefs)
         tm = candidates[0] if candidates else None
-        it = {"title": (tm or {}).get("name", ""),
-              "hook": "Свежий фильм с хорошими оценками — можно начать с него."} if tm else None
-        if it is None:
-            fallbacks = _fallback_movie_items(cid)
-            it = fallbacks[0] if fallbacks else None
-            tm = None
+        it = {"title": (tm or {}).get("name", ""), "hook": _FRESH_HOOK[kind]} if tm else None
     else:
-        it, tm = await _tmdb_engine_pick(cid)
+        it, tm = await _tmdb_engine_pick(cid, prefs)
         if it is None:
             it, tm = await _llm_movie_pick(cid, _movie_used(cid))
-    if not it:
+    if not it or not _of_kind(tm, kind):
         return None, None
-    _cache_movie(cid, it, tm)
+    _cache_movie(cid, it, tm, kind)
     return it, tm
+
+
+_FRESH_HOOK = {"movie": "Свежий фильм с хорошими оценками — можно начать с него.",
+               "tv": "Свежий сериал с хорошими оценками — можно начать с него."}
 
 async def _discover_movie_pick(cid, prefs, region=None):
     """Свежий качественный фильм из TMDb discover без AI.
@@ -579,7 +590,7 @@ async def _discover_movie_pick(cid, prefs, region=None):
     excluded = movie_engine._excluded_norms(cid)
     hard_excluded = movie_engine._excluded_norms(cid, include_shown=False)
     requested_kinds = [requested_kind]
-    if prefs.get("type_pref"):
+    if prefs.get("type_pref") and not prefs.get("only"):  # «Фильмы» / «Сериалы» — без подмены типа
         requested_kinds.append("tv" if requested_kind == "movie" else "movie")
     min_rating = max(MIN_TMDB_RATING, float(prefs.get("min_rating") or MIN_TMDB_RATING))
     repeats = []
@@ -616,8 +627,7 @@ async def _discover_movie_pick(cid, prefs, region=None):
         tm = min(repeats, key=lambda movie: order.get(movie_engine._norm(movie.get("name")), -1))
     if not tm:
         return None, None
-    return {"title": tm.get("name", ""),
-            "hook": "Свежий фильм с хорошими оценками — можно начать с него."}, tm
+    return {"title": tm.get("name", ""), "hook": _FRESH_HOOK.get(tm.get("kind") or "movie", _FRESH_HOOK["movie"])}, tm
 
 
 async def _lookup_movie_tm(it):
@@ -642,7 +652,8 @@ async def send_recos(bot, cid, kind, status=None):
         import leisure_books
         await leisure_books.send_books_reco(bot, cid, status=status)
         return
-    prefs = _movie_prefs(cid)
+    kind = "tv" if kind == "tv" else "movie"  # «Фильмы» и «Сериалы» — строго свой тип
+    prefs = _kind_prefs(cid, kind)
     inclusive_pick = (
         await _inclusive_movie_pick(cid, prefs)
         if inclusive_recommendations.is_due(cid, "movie") else None
@@ -662,7 +673,7 @@ async def send_recos(bot, cid, kind, status=None):
     else:
         remaining = tracking.remaining_action_seconds()
         engine_timeout = max(1.0, remaining - _RESERVE_SECONDS) if remaining is not None else None
-        it, tm = await _tmdb_engine_pick(cid, timeout=engine_timeout)
+        it, tm = await _tmdb_engine_pick(cid, prefs, timeout=engine_timeout)
         if it is None:
             # Быстрый TMDB-резерв до медленного LLM-пути.
             it, tm = await _discover_movie_pick(cid, prefs)
@@ -670,8 +681,9 @@ async def send_recos(bot, cid, kind, status=None):
         it, tm = await _llm_movie_pick(cid, _movie_used(cid))
         if it and not tm:
             tm = await _lookup_movie_tm(it)
-    # Без данных TMDb карточка выходит пустой («Название» + сырой hook) — не показываем.
-    if not it or not tm:
+    # Без данных TMDb карточка выходит пустой («Название» + сырой hook) — не показываем;
+    # чужой тип (сериал в «Фильмах») — тоже.
+    if not it or not _of_kind(tm, kind):
         _log.warning(
             "movie reco: no TMDb-backed pick (tmdb_key=%s, llm_item=%s)",
             bool(config.TMDB_API_KEY), bool(it),
@@ -681,36 +693,40 @@ async def send_recos(bot, cid, kind, status=None):
             reply_markup=_movie_home_only_kb()); return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
-    store.last_recos[str(cid)] = {"kind": kind, "items": [disp]}
-    store.last_source[str(cid)] = "Кино"
+    store.last_recos[_rec_key(cid, kind)] = {"kind": kind, "items": [disp]}
+    store.last_source[str(cid)] = _SOURCE[kind]
     store.last_answer[str(cid)] = f"{disp} - {it.get('hook','')}"
-    _cache_movie(cid, it, tm)
+    _cache_movie(cid, it, tm, kind)
     inclusive = inclusive_recommendations.is_inclusive(
         "movie", it.get("title"), (tm or {}).get("name"), (tm or {}).get("name_en"),
     )
     if tm is not None and inclusive:
         tm = {**tm, "lgbt": True}
     inclusive_recommendations.record(cid, "movie", inclusive)
-    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
+    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status, kind=kind)
 
 
-async def send_current_movie(bot, cid, status=None):
-    """«Что посмотреть»: готовая карточка дня из ночного прогрева.
+_SOURCE = {"movie": "Кино", "tv": "Сериалы"}
+
+
+async def send_current_movie(bot, cid, status=None, kind="movie"):
+    """«Фильмы» / «Сериалы»: готовая карточка дня своего типа из ночного прогрева.
 
     Без кэша — обычный живой подбор, который сам кэширует карточку на день.
-    «✨ Другой фильм» (movie_next) всегда идёт живым путём ``send_recos``.
+    «✨ Другой фильм / сериал» (movie_next / tv_next) всегда идёт живым путём ``send_recos``.
     """
-    cached = _cached_movie(cid)
+    kind = "tv" if kind == "tv" else "movie"
+    cached = _cached_movie(cid, kind)
     it, tm = cached if cached else (None, None)
     if not it or not tm:
-        await send_recos(bot, cid, "movie", status=status)
+        await send_recos(bot, cid, kind, status=status)
         return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
-    store.last_recos[str(cid)] = {"kind": "movie", "items": [disp]}
-    store.last_source[str(cid)] = "Кино"
+    store.last_recos[_rec_key(cid, kind)] = {"kind": kind, "items": [disp]}
+    store.last_source[str(cid)] = _SOURCE[kind]
     store.last_answer[str(cid)] = f"{disp} - {it.get('hook', '')}"
-    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status)
+    await _send_movie_card(bot, cid, it, 0, tm=tm, status=status, kind=kind)
 
 
 # Daily rebus and premieres live in movie_discovery.py.
@@ -719,6 +735,9 @@ from movie_recommendation import (  # noqa: E402 — movie_recommendation uses n
     _INCLUSIVE_MOVIE_TITLES,
     _PREF_RATING,
     _movie_prefs,
+    _kind_prefs,
+    _rec_key,
+    _of_kind,
     _inclusive_movie_pick,
     _as_float,
     _tmdb_engine_pick,

@@ -184,11 +184,12 @@ def weekly_music(cid, cc, day) -> list[dict]:
 
 
 async def _warm_album_notes(cid):
-    """Описания альбомов на сегодня и завтра — заранее, чтобы хаб не ждал AI."""
+    """Описания всех альбомов выпуска недели (и завтрашнего, если завтра пятница) — хаб и «Все премьеры» не ждут AI."""
     today, cc = _today_and_cc(cid)
-    days = (today, today + timedelta(days=1))
-    albums = [await asyncio.to_thread(weekly_music, cid, cc, day) for day in days]
-    await describe_albums([item for day, pool in zip(days, albums) for item in _daily(pool, day, 1, first=_FRIDAY)])
+    albums = []
+    for day in (today, today + timedelta(days=1)):
+        albums.extend(item for item in await asyncio.to_thread(weekly_music, cid, cc, day) if item not in albums)
+    await describe_albums(albums)
 
 
 def hub_data(cid, day=None, fetch=False) -> dict:
@@ -258,28 +259,25 @@ def _title_labels(item, fetch=False) -> dict:
 _WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
-def week_data(cid, kind, day=None) -> list[tuple[str, list]]:
-    """«Премьеры недели»: блоки [(подпись, [(день, пункт)])] — те же пункты, что хаб показывает в каждый день.
+_WEEK_POOLS = {"movie": ("movies", "movies"), "series": ("series", "movies"),
+               "book": ("books", "books"), "music": ("music", "music")}  # вкладка → (пул, поле подписей)
 
-    kind — movie (фильмы и сериалы), book — с понедельника; music — с пятницы (Пт…Чт). Без данных — пустой список.
+
+def week_data(cid, kind, day=None) -> list[tuple[str, dict]]:
+    """Вкладка «Всех премьер»: [(день, пункт)] — те же пункты, что хаб показывает в каждый день недели.
+
+    kind — movie, series, book (с понедельника) или music (с пятницы, Пт…Чт). Без данных — пустой список.
     """
     today = day or _today_and_cc(cid)[0]
-    pools = _pools(cid, today, music=kind == "music")
-    keys = {"movie": (("Фильмы", "movies"), ("Сериалы", "series")),
-            "book": (("", "books"),), "music": (("", "music"),)}[kind]
-    blocks = []
-    for label, key in keys:
-        pool, popularity, first = pools[key]
-        field = "movies" if key == "series" else key
-        rows = []
-        for offset in range(7):
-            current = _week_start(today, first) + timedelta(days=offset)
-            picked = _daily(pool, current, 1, popularity, first)
-            if picked:
-                rows.append((_WEEKDAYS[current.weekday()], _with_labels({field: picked})[field][0]))
-        if rows:
-            blocks.append((label, rows))
-    return blocks
+    pool_key, field = _WEEK_POOLS[kind]
+    pool, popularity, first = _pools(cid, today, music=kind == "music")[pool_key]
+    rows = []
+    for offset in range(7):
+        current = _week_start(today, first) + timedelta(days=offset)
+        picked = _daily(pool, current, 1, popularity, first)
+        if picked:
+            rows.append((_WEEKDAYS[current.weekday()], _with_labels({field: picked})[field][0]))
+    return rows
 
 
 async def _show(bot, cid, msg, q=None):
@@ -332,10 +330,13 @@ async def send_concerts(bot, cid, q=None):
 
 
 async def send_week_premieres(bot, cid, kind="movie", q=None):
-    """«Все премьеры»: страницы кино → книги → музыка со стрелками; список недели, по одной премьере на день."""
+    """«Все премьеры»: вкладки фильмы → сериалы → книги → музыка со стрелками; премьеры недели с описанием."""
     kind = kind if kind in leisure_ui.WEEK_PAGES else "movie"
-    blocks = await asyncio.to_thread(week_data, cid, kind)
-    await _show(bot, cid, leisure_ui.week_premieres_screen(kind, blocks), q)
+    rows = await asyncio.to_thread(week_data, cid, kind)
+    await _show(bot, cid, leisure_ui.week_premieres_screen(kind, rows), q)
+    missing = [item for _day, item in rows if kind == "music" and not item.get("about")]
+    if missing:  # описание альбома — в фоне; появится при следующем открытии
+        util.background(describe_albums(missing), "album notes")
 
 
 async def send_library_menu(bot, cid, q=None):
@@ -366,6 +367,7 @@ async def warm_hub_cache(cid):
         ("book_premieres", lambda: leisure_books.get_book_premieres(refresh=True)),
         ("new_music", lambda: asyncio.to_thread(apple_music._feed, _today_and_cc(cid)[1].lower())),
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
+        ("tv_reco", lambda: leisure_movies.get_current_movie(cid, "tv")),
         ("series", lambda: _warm_series(cid)),
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
