@@ -70,28 +70,22 @@ def test_full_forecast_uses_morning_periods_sun_and_practical_advice():
     assert "Завтра будет часто идти дождь" in message.text
 
 
-def test_full_forecast_at_23_has_no_remaining_daytime_parts():
+def test_full_forecast_at_23_keeps_the_rest_of_the_evening():
     parts = weather._full_forecast_parts(datetime(2026, 8, 25, 23, 0, tzinfo=weather.TZ))
 
-    assert parts == []
+    assert parts == [("Вечером", 18, 24)]
 
 
-def test_full_forecast_in_the_morning_starts_with_the_daytime_block():
+def test_full_forecast_in_the_morning_starts_with_the_current_morning():
     parts = weather._full_forecast_parts(datetime(2026, 8, 25, 9, 0, tzinfo=weather.TZ))
 
-    assert parts == [("Днём", 12, 18), ("Вечером", 18, 24)]
+    assert parts == [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
 
 
-def test_full_forecast_at_noon_starts_with_the_evening_block():
+def test_full_forecast_at_noon_starts_with_the_daytime_block():
     parts = weather._full_forecast_parts(datetime(2026, 8, 25, 12, 0, tzinfo=weather.TZ))
 
-    assert parts == [("Вечером", 18, 24)]
-
-
-def test_full_forecast_in_the_evening_skips_the_daytime_block():
-    parts = weather._full_forecast_parts(datetime(2026, 8, 25, 17, 43, tzinfo=weather.TZ))
-
-    assert parts == [("Вечером", 18, 24)]
+    assert parts == [("Днём", 12, 18), ("Вечером", 18, 24)]
 
 
 def test_full_forecast_after_midnight_starts_with_the_coming_morning():
@@ -104,10 +98,58 @@ def test_full_forecast_after_midnight_starts_with_the_coming_morning():
     ]
 
 
-def test_period_with_zero_rain_probability_uses_cloud_without_rain():
+def test_daily_rain_code_without_real_rain_gives_no_rain_icon():
+    # OWM ставит суточный код «дождь», даже если капнет только ночью.
+    assert weather.weather_icon(61, 19, 0, 5, 0) == "☁️"
+    assert weather.weather_icon(95, 19, 20, 5, 0) == "☁️"
+    assert weather.weather_icon(61, 19, 0, 5, 0, clouds=10) == "☀️"
+    assert weather.weather_icon(61, 19, 0, 5, 0, clouds=50) == "🌤️"
+    assert weather.weather_icon(61, 19, 80, 5, 2) == "🌧️"
+    assert weather._week_icon(95, 19, 20, 5, 0) == "☁️"
+
+
+def test_period_icon_follows_period_rain_and_clouds():
     assert weather._period_weather_icon("Днём", 61, 20, 0, 6, 0) == "☁️"
-    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "☁️"
+    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌙"
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
+
+
+def test_sun_clock_keeps_provider_local_time():
+    assert weather._clock("2026-10-14T08:03") == "08:03"
+    assert weather._clock("2026-10-14T06:03:00+00:00") == "08:03"
+
+
+def _day_data(hours, temps, probs, mm, winds, clouds):
+    return {
+        "daily": {"time": ["2026-10-14", "2026-10-15"], "weathercode": [61, 3]},
+        "hourly": {
+            "time": [f"2026-10-14T{h:02d}:00" for h in hours] + ["2026-10-15T03:00"],
+            "temperature_2m": temps + [12],
+            "precipitation_probability": probs + [90],
+            "precipitation": mm + [3],
+            "windspeed_10m": winds + [9],
+            "cloudcover": clouds + [100],
+        },
+    }
+
+
+def test_today_outlook_matches_full_forecast_periods_and_skips_past_hours():
+    data = _day_data(
+        [7, 10, 13, 19], [19, 15, 16, 14], [80, 0, 10, 0], [2, 0, 0, 0], [9, 4, 5, 3], [100, 90, 90, 80],
+    )
+    now = datetime(2026, 10, 14, 10, 30, tzinfo=weather.TZ)
+
+    labels = [p["label"] for p in weather.forecast_periods(data, now)]
+    outlook = weather.today_outlook(data, now)
+
+    assert labels == ["Утром", "Днём", "Вечером", "Ночью"]
+    # 07:00 уже прошёл, ночь следующего дня в сводку дня не входит.
+    assert outlook["tmax"] == 16
+    assert outlook["wind_ms"] == 5
+    assert outlook["rain_periods"] == []
+    assert weather.weather_icon(61, outlook["tmax"], outlook["rain"], outlook["wind_ms"],
+                                outlook["rain_mm"], outlook["clouds"]) == "☁️"
+    assert weather.sky_word(outlook["clouds"], 61) == "облачно"
 
 
 def test_weather_warning_lists_rain_periods_with_probabilities():
@@ -337,3 +379,50 @@ def test_forecast_shows_clear_message_when_weather_service_fails(monkeypatch):
 
     assert [m["text"].splitlines()[0] for m in sent] == ["🌦️ Прогноз сейчас недоступен — сервис погоды не ответил."] * 2
     assert "Что-то пошло не так" not in sent[0]["text"]
+
+
+def test_week_day_ignores_night_rain_when_daytime_hours_are_dry():
+    hours = list(range(24))
+    data = {
+        "daily": {
+            "time": ["2026-10-15"], "weathercode": [61], "temperature_2m_max": [17],
+            "temperature_2m_min": [9], "precipitation_probability_max": [90],
+            "precipitation_sum": [4], "windspeed_10m_max": [12],
+        },
+        "hourly": {
+            "time": [f"2026-10-15T{h:02d}:00" for h in hours],
+            "temperature_2m": [10 if h < 8 else 15 for h in hours],
+            # Дождь и ветер только ночью, днём сухо и малооблачно.
+            "precipitation_probability": [90 if h < 6 else 0 for h in hours],
+            "precipitation": [1 if h < 6 else 0 for h in hours],
+            "windspeed_10m": [12 if h < 6 else 4 for h in hours],
+            "cloudcover": [100 if h < 6 else 40 for h in hours],
+        },
+    }
+
+    day = weather.day_conditions(data, 0)
+
+    assert (day["tmax"], day["wind"], day["rain_real"], day["sky"]) == (15, 4, False, "partly")
+    assert weather._week_icon(day["code"], day["tmax"], day["rain"], day["wind"], day["rain_mm"], day["clouds"]) == "🌤️"
+
+
+def test_week_day_without_full_hourly_window_uses_daily_aggregate():
+    data = {
+        "daily": {
+            "time": ["2026-10-20"], "weathercode": [61], "temperature_2m_max": [14],
+            "temperature_2m_min": [8], "precipitation_probability_max": [80],
+            "precipitation_sum": [3], "windspeed_10m_max": [7],
+        },
+        "hourly": {"time": ["2026-10-20T08:00"], "temperature_2m": [30]},
+    }
+
+    day = weather.day_conditions(data, 0)
+
+    assert (day["tmax"], day["wind"], day["rain_real"]) == (14, 7, True)
+
+
+def test_week_overview_needs_real_precipitation_for_snow():
+    days = [{"code": 71, "rain_real": False, "wind": 3, "sky": "cloudy"} for _ in range(7)]
+
+    assert weather_weekly.week_overview(days) == "В основном облачно…"
+    assert "снег" not in weather_weekly.qualitative_outlook(days)

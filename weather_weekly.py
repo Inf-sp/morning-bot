@@ -3,10 +3,23 @@
 SNOW_CODES = (71, 73, 75, 77, 85, 86)
 
 
+def _snowy(day):
+    # Суточный код «снег» без реальных осадков — не снег.
+    return day.get("code") in SNOW_CODES and bool(day.get("rain_real"))
+
+
+def _sky(day):
+    """Небо дня: из почасовой облачности (`sky`), иначе по коду погоды."""
+    if day.get("sky"):
+        return day["sky"]
+    code = day.get("code")
+    return "sunny" if code in (0, 1) else "cloudy" if code in (3, 45, 48) else "partly"
+
+
 def qualitative_outlook(days, period="На следующей неделе"):
     """Describe expected weather in words, without exposing numeric values."""
     rainy = sum(bool(day.get("rain_real")) for day in days)
-    snowy = sum(day.get("code") in SNOW_CODES for day in days)
+    snowy = sum(_snowy(day) for day in days)
     windy = sum(float(day.get("wind") or 0) >= 8 for day in days)
     hot = sum(float(day.get("tmax") or 0) >= 30 for day in days)
     cold = sum(float(day.get("tmax") or 0) <= 10 for day in days)
@@ -34,9 +47,9 @@ def qualitative_outlook(days, period="На следующей неделе"):
 def week_overview(days):
     """Короткий текст недели: «Часто дождь, временами ветрено» — без значка и температур."""
     wet = sum(day["rain_real"] for day in days)
-    clear = sum(day["code"] in (0, 1) and not day["rain_real"] for day in days)
-    cloudy = sum(day["code"] in (3, 45, 48) for day in days)
-    snow = sum(day["code"] in SNOW_CODES for day in days)
+    clear = sum(_sky(day) == "sunny" and not day["rain_real"] for day in days)
+    cloudy = sum(_sky(day) == "cloudy" and not day["rain_real"] for day in days)
+    snow = sum(_snowy(day) for day in days)
     max_wind = max(day["wind"] for day in days)
     avg_wind = sum(day["wind"] for day in days) / len(days)
 

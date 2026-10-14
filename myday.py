@@ -549,11 +549,19 @@ def _build_day_text(cid, *, refresh_current=False):
         rain = daytime["rain_prob"]
         rain_mm = daytime["rain_mm"]
         display_wind_ms = daytime.get("wind_ms") or wind_ms
+        rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
+        clouds = weather._mean(weather._daytime_values(data, day_str, "cloudcover"))
+        # Те же периоды, что в «Полном прогнозе»: оставшаяся часть дня, а не всё окно 08–20.
+        outlook = weather.today_outlook(data, datetime.now(config.TZ))
+        if outlook:
+            tmax, rain, rain_mm = outlook["tmax"], outlook["rain"], outlook["rain_mm"]
+            display_wind_ms, rain_p, clouds = outlook["wind_ms"], outlook["rain_periods"], outlook["clouds"]
         current_code = (data.get("current") or {}).get("weathercode")
         current_precipitation = weather.current_precipitation_text(current_code)
-        display_code = current_code if current_precipitation else code
-        icon = weather.weather_icon(display_code, tmax, rain, display_wind_ms, rain_mm)
-        rain_p = weather._periods(data, day_str, "precipitation_probability", weather.RAIN_PROB_MIN)
+        if current_precipitation:  # осадки идут сейчас — значок по текущему коду
+            icon = weather.weather_icon(current_code, tmax, 100, display_wind_ms)
+        else:
+            icon = weather.weather_icon(code, tmax, rain, display_wind_ms, rain_mm, clouds)
         if len(rain_p) > 1:
             rain_when = ", ".join(rain_p[:-1]) + " и " + rain_p[-1]
         else:
@@ -568,7 +576,9 @@ def _build_day_text(cid, *, refresh_current=False):
         else:
             rain_part = ""
         wind_part = _day_wind_text(display_wind_ms)
-        weather_line = f"до {tmax:+.0f}°C" + (f" · {rain_part}" if rain_part else "") + f" · {wind_part}"
+        sky_part = "" if rain_part else f" и {weather.sky_word(clouds, code)}"
+        weather_line = (f"до {tmax:+.0f}°C{sky_part}" + (f" · {rain_part}" if rain_part else "")
+                        + f" · {wind_part}")
         golden = (sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
                   if on("golden") else "")
         if golden:

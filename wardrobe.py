@@ -27,6 +27,7 @@ from wardrobe_outfit import (
     build_sock_recommendation,
     build_style_tip,
     choose_outfit_style,
+    fresh_outfits,
     is_urban_2026_base_top,
     outfit_display_order,
     save_outfit_feedback,
@@ -712,6 +713,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         return
 
     # ИИ-стилист выбирает из уже проверенных кодом комплектов; без ИИ — лучший по коду.
+    if not anchor_id:
+        outfits = fresh_outfits(outfits, wardrobe_history)
     trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles))
     pick = await asyncio.to_thread(
         wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends)

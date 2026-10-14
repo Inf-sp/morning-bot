@@ -193,12 +193,8 @@ def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
 
 
 def test_outfit_header_uses_emoji_of_selected_style():
-    assert outfit_header("Минимализм") == "👕 Надень сегодня · Минимализм"
-    assert outfit_header("Городской") == "🧢 Надень сегодня · Городской"
-    assert outfit_header("Повседневный") == "👖 Надень сегодня · Повседневный"
-    assert outfit_header("Скандинавский") == "🧥 Надень сегодня · Скандинавский"
-    assert outfit_header("Классический") == "👔 Надень сегодня · Классический"
-    assert outfit_header("Спортивный") == "👟 Надень сегодня · Спортивный"
+    assert outfit_header("Повседневный") == "🧢 Надень сегодня · Повседневный"
+    assert outfit_header("Классический") == "🧥 Надень сегодня · Классический"
 
     # Карточка показывает группу стиля: выбранную кнопкой, иначе по стилю образа (старые образы тоже).
     assert outfit_group({"primary_style": "Минимализм", "style_group": "Классический"}) == "Классический"
@@ -222,7 +218,7 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
     monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {"look_data": look})
     summary = wardrobe.get_cached_outfit_summary("42")
 
-    assert summary["emoji"] == outfit_emoji(outfit_group(look)) == "👖"
+    assert summary["emoji"] == outfit_emoji(outfit_group(look)) == "🧢"
     assert summary["items"] == outfit_item_names(look) == [
         "Белая футболка", "Чёрные брюки", "Белые кеды", "Серые часы",
     ]
@@ -230,7 +226,7 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
         "Вт, 1 сентября", "Алкмар",
         outfit_items=summary["items"], outfit_emoji=summary["emoji"],
     )
-    assert "👖 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
+    assert "🧢 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
     assert "носки" not in message.text.casefold()
 
 

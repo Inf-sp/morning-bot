@@ -53,10 +53,6 @@ def light_windows(lat, lon, day, tz):
     }
 
 
-def _span(window):
-    return f"{window[0]:%H:%M}–{window[1]:%H:%M}" if window else ""
-
-
 def golden_hour_line(lat, lon, day: date, tz) -> str:
     """«Золотой час будет с 18:05 по 18:55» — только вечернее окно, без эмодзи и синего часа."""
     span = evening_golden_range(lat, lon, day, tz)

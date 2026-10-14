@@ -879,21 +879,6 @@ def _weekly_rating(value, count, scale) -> str:
 _ABOUT_MAX = 160
 
 
-def _short_about(text) -> str:
-    """Первое предложение описания, до _ABOUT_MAX символов."""
-    text = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
-    sentence = re.split(r"(?<=[.!?…])\s+", text, maxsplit=1)[0]
-    if len(sentence) > _ABOUT_MAX:
-        sentence = sentence[:_ABOUT_MAX].rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
-    return sentence
-
-
-def _about_line(b: MessageBuilder, text) -> None:
-    about = _short_about(text)
-    if re.search(r"[а-яё]", about, re.I):  # только русский текст: английское описание не показываем
-        b.line(about)
-
-
 _HUB_ABOUT_MAX = 260  # описание в хабе — до двух предложений
 
 

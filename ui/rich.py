@@ -31,10 +31,6 @@ def paragraph(text):
     return {"type": "paragraph", "text": _text(text)}
 
 
-def divider():
-    return {"type": "divider"}
-
-
 def footer(text):
     return {"type": "footer", "text": _text(text)}
 

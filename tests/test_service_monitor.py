@@ -149,7 +149,6 @@ def test_only_a_provider_response_can_mark_a_rate_limit(monkeypatch):
 def test_local_groq_counter_is_usage_not_provider_quota(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
-    monkeypatch.setattr(service_monitor.config, "GROQ_MODEL_DAILY_LIMIT", 5)
     model = "openai/gpt-oss-20b"
     provider_runtime.record_result("groq", True)
     for _ in range(5):

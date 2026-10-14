@@ -277,6 +277,10 @@ def select_outfit_candidates(w, weather_ctx):
         if zone not in CLOTHING_ZONES:
             continue  # аксессуары не подбираются из шкафа — советом по погоде в строке-причине
         items = [it for _s, items in (w.get("zones", {}).get(zone, {}) or {}).items() for it in items]
+        # Ротация: в пул перебора (топ-3 зоны) сначала идут давно не надетые вещи, иначе
+        # четвёртая и дальше вещь шкафа не попадала в образ никогда. Погодные сортировки
+        # ниже стабильны и сохраняют этот порядок внутри своих групп.
+        items = sorted(items, key=lambda it: str(it.get("last_used") or ""))
         # Жёсткие правила погоды: шорты в дождь и ветер, тёплое в жару и т. п. — исключаются.
         items = [it for it in items if not _temp_conflicts(it, weather_ctx) and rules.allowed(it, weather_ctx)]
         if zone == "Обувь" and weather_ctx.get("has_rain"):
@@ -536,6 +540,24 @@ def _top_candidates(items, limit=3, selected_styles=None):
 
 
 TOP_OUTFITS = 6  # столько разных комплектов видит ИИ-стилист
+
+
+FRESH_DAYS = 2           # образы этих дней ИИ-стилист не повторяет
+FRESH_MAX_SHARED = 1     # столько общих вещей с недавним образом ещё не считается повтором
+
+
+def fresh_outfits(outfits, wardrobe_history, today=None):
+    """Комплекты без повтора образов последних FRESH_DAYS дней; маленькому шкафу — все.
+
+    ИИ-стилист выбирает «самый стильный» и без этого фильтра каждый день брал бы
+    один и тот же любимый комплект, игнорируя антиповтор скоринга.
+    """
+    today = today or datetime.now(config.TZ).date()
+    cutoff = (today - timedelta(days=FRESH_DAYS)).isoformat()
+    recent = [set(e.get("item_ids") or []) for e in wardrobe_history or [] if e.get("date", "") >= cutoff]
+    fresh = [o for o in outfits
+             if all(len({it.get("id") for it in o} & worn) <= FRESH_MAX_SHARED for worn in recent)]
+    return fresh or list(outfits)
 
 
 def pick_best_outfit(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=None,

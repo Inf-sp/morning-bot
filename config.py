@@ -32,12 +32,9 @@ def _env_first(*names, default=""):
 
 WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
-WEATHER_WARNING_LIMIT = _env_int("WEATHER_WARNING_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.7))
-WEATHER_CRITICAL_LIMIT = _env_int("WEATHER_CRITICAL_LIMIT", int(WEATHER_HARD_DAILY_LIMIT * 0.9))
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
 GEMINI_DAILY_LIMIT = _env_int("GEMINI_DAILY_LIMIT", 0)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL_DAILY_LIMIT = _env_int("GROQ_MODEL_DAILY_LIMIT", 1000)
 GROQ_SIMPLE_MODEL = os.environ.get("GROQ_SIMPLE_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
 GROQ_STANDARD_MODEL = os.environ.get("GROQ_STANDARD_MODEL", "qwen/qwen3.8-27b").strip() or "qwen/qwen3.8-27b"
 GROQ_COMPLEX_MODEL = os.environ.get("GROQ_COMPLEX_MODEL", "openai/gpt-oss-120b").strip() or "openai/gpt-oss-120b"
@@ -61,17 +58,12 @@ CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b").strip() or "gp
 # GitHub Models: токен GitHub с правом models:read.
 GITHUB_API_KEY = os.environ.get("GITHUB_API_KEY", "").strip()
 GITHUB_MODEL = os.environ.get("GITHUB_MODEL", "openai/gpt-4.1-mini").strip() or "openai/gpt-4.1-mini"
-OPENROUTER_DICTIONARY_MODEL = os.environ.get(
-    "OPENROUTER_DICTIONARY_MODEL", "openai/gpt-oss-120b",
-).strip() or "openai/gpt-oss-120b"
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openrouter/free").strip() or "openrouter/free"
 OPENROUTER_MODELS = tuple(dict.fromkeys([
     OPENROUTER_MODEL,
     *(model.strip() for model in os.environ.get("OPENROUTER_MODELS", "").split(",")
       if model.strip()),
 ]))
-OPENROUTER_DAILY_LIMIT = _env_int("OPENROUTER_DAILY_LIMIT", 50)
-CF_NEURON_DAILY_LIMIT = _env_int("CF_NEURON_DAILY_LIMIT", 10000)
 TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 NS_API_KEY = os.environ.get("NS_API_KEY", "").strip()  # сбои поездов NS
 # Публикации авиадилов (ошибочные тарифы, распродажи): «Название|RSS-URL» через запятую.

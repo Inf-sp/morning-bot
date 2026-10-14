@@ -1034,10 +1034,6 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
     )
 
 
-async def _deliver_book_view(bot, cid, msg, markup, q=None):
-    await rich_delivery.show(bot, cid, msg, reply_markup=markup, query=q)
-
-
 def _favorite_book_from_view(cid, token, short_id):
     view = _favorite_book_view(cid, token)
     if view is None:

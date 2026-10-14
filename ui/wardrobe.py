@@ -1,5 +1,3 @@
-import re
-
 from .builder import MessageBuilder
 from .text import ru_plural
 from wardrobe_model import public_zone_name, zone_of
@@ -28,14 +26,8 @@ def _finish_dot(value):
     return value
 
 
-_STYLE_EMOJI = {
-    "Минимализм": "👕",
-    "Городской": "🧢",
-    "Повседневный": "👖",
-    "Скандинавский": "🧥",
-    "Классический": "👔",
-    "Спортивный": "👟",
-}
+# Эмодзи заголовка — по группе стиля (`outfit_group`), тонкие стили его не меняют.
+_STYLE_EMOJI = {"Повседневный": "🧢", "Классический": "🧥"}
 
 # Финальная строка образа о стиле — запасная, когда нет статистики шкафа.
 _STYLE_ABOUT = {
@@ -85,7 +77,7 @@ def outfit_group(look_data) -> str:
 
 def outfit_emoji(primary_style=""):
     """Тот же эмодзи стиля для карточки гардероба и кратких сводок."""
-    return _STYLE_EMOJI.get(_clean_text(primary_style), "👕")
+    return _STYLE_EMOJI.get(_clean_text(primary_style), "🧢")
 
 
 def empty_wardrobe():
@@ -189,34 +181,6 @@ def _pluralize_items(n):
     if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
         return "вещи"
     return "вещей"
-
-
-def entity_card(title, summary="", quote="", bullets=None, final="", bullet_label="Что важно:"):
-    b = MessageBuilder()
-    b.section(_clean_text(title).rstrip(".:"))
-
-    summary = _finish_dot(summary)
-    if summary:
-        b.spacer()
-        b.line(summary)
-
-    quote = _finish_dot(quote)
-    if quote:
-        b.spacer()
-        b.quote(quote)
-        b.newline()
-
-    clean_bullets = [_finish_dot(x) for x in (bullets or []) if _clean_text(x)]
-    if clean_bullets:
-        b.section(_clean_text(bullet_label).rstrip(":") + ":")
-        b.line("\n".join(f"- {x}" for x in clean_bullets))
-
-    final = _finish_dot(final)
-    if final:
-        b.spacer()
-        b.line(final)
-
-    return b.build_stripped()
 
 
 _VERDICT_LABELS = {"брать": "Брать", "брать только со скидкой": "Брать со скидкой", "не брать": "Не брать",
@@ -379,13 +343,6 @@ def purchase_added(name, added=True):
     else:
         b.line("Такая вещь уже есть в шкафу.")
     return b.build_stripped()
-
-
-def _pluralize_dative_items(n):
-    n = abs(int(n))
-    if n % 10 == 1 and n % 100 != 11:
-        return "вещи"
-    return "вещам"
 
 
 def wardrobe_home_screen(total):

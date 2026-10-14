@@ -44,7 +44,7 @@ RAIN_MM_MIN = 0.1
 # Сильный дождь/ливень: мм осадков за сутки (или пик за час в дневном окне)
 HEAVY_RAIN_MM_DAY = 4.0
 HEAVY_RAIN_MM_HOUR = 2.0
-# Сильный ветер (м/с): согласовано с wind_scale («Сильный ветер» начинается с 8)
+# Сильный ветер (м/с)
 STRONG_WIND_MS = 8
 # Дневное окно «когда пользователь обычно выходит из дома» (часы)
 DAYTIME_START_H = 8
@@ -78,16 +78,6 @@ def current_precipitation_text(code):
 # расход всё равно на порядок ниже бесплатного потолка 1000/день - есть запас на более
 # частое обновление ради точности текущих условий.
 # ---------- ветер ----------
-def wind_scale(ms):
-    if ms < 3:
-        return "🌬️", "Почти без ветра"
-    if ms < 5:
-        return "💨", "Лёгкий ветер"
-    if ms < 8:
-        return "🌪️", "Умеренный ветер"
-    if ms < 11:
-        return "⚠️", "Сильный ветер"
-    return "⚠️", "Очень сильный ветер"
 
 
 def _rain_real(rain, rain_mm=None):
@@ -115,12 +105,31 @@ def _rain_description(rain, rain_mm, periods=()):
 
 
 # ---------- иконка ----------
-def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
-    if code in (95, 96, 99):
+# Средняя облачность (%) по часам: ниже SUNNY — солнечно, ниже PARTLY — малооблачно.
+SUNNY_CLOUDS_MAX = 30
+PARTLY_CLOUDS_MAX = 70
+_SKY_WORDS = {"sunny": "солнечно", "partly": "малооблачно", "cloudy": "облачно"}
+
+
+def _sky(clouds, code):
+    """Небо по почасовой облачности; без неё — по коду погоды."""
+    if clouds is not None:
+        return "sunny" if clouds < SUNNY_CLOUDS_MAX else "partly" if clouds < PARTLY_CLOUDS_MAX else "cloudy"
+    return "sunny" if code in (0, 1) else "partly" if code == 2 else "cloudy"
+
+
+def sky_word(clouds, code):
+    return _SKY_WORDS[_sky(clouds, code)]
+
+
+def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
+    # Суточный код «дождь/гроза/снег» ставится, даже если капнет только ночью:
+    # осадочные значки — только когда осадки реальны в показанном окне.
+    wet = _rain_real(rain, rain_mm)
+    if wet and code in (95, 96, 99):
         return "🌩️"
-    if code in (71, 73, 75, 77, 85, 86):
+    if wet and code in SNOW_CODES:
         return "❄️"
-    wet = code in RAIN_WEATHER_CODES or _rain_real(rain, rain_mm)
     if temp is not None and temp > 30 and wet:
         return "☀️🌧️"
     if wet:
@@ -129,19 +138,25 @@ def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None):
         return "💨"
     if temp is not None and temp >= 30:
         return "🥵"
-    if code in (0, 1) or (temp is not None and temp >= 28):
+    sky = _sky(clouds, code)
+    if sky == "sunny" or (clouds is None and temp is not None and temp >= 28):
         return "☀️"
-    return "☁️"
+    return "🌤️" if sky == "partly" else "☁️"
 
 
-def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None):
+def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
     """Одна иконка преобладающей погоды дня без составных эмодзи."""
-    if code in (95, 96, 99):
+    wet = _rain_real(rain, rain_mm)
+    if wet and code in (95, 96, 99):
         return "🌩️"
-    if code in (71, 73, 75, 77, 85, 86):
+    if wet and code in SNOW_CODES:
         return "❄️"
-    if _rain_real(rain, rain_mm):
+    if wet:
         return "🌧️"
+    if code in (45, 48):
+        return "🌫️"
+    if clouds is not None:
+        return {"sunny": "☀️", "partly": "🌤️"}.get(_sky(clouds, code), "☁️")
     if code == 0:
         return "☀️"
     if code in (1, 2):
@@ -186,18 +201,56 @@ def _compact_forecast_line(icon, tmax, rain, rain_mm, rain_periods, wind_ms):
     return f"{icon} Погода: " + " · ".join(parts)
 
 
-def _daytime_max(data, day_str, key):
-    """Максимум hourly-показателя в дневном окне DAYTIME_START_H..DAYTIME_END_H."""
+def _daytime_values(data, day_str, key):
+    """Значения hourly-показателя в дневном окне DAYTIME_START_H..DAYTIME_END_H."""
     try:
         hours = data["hourly"]["time"]
         vals = data["hourly"][key]
     except (KeyError, TypeError):
-        return None
-    day_vals = [v for t, v in zip(hours, vals)
-                if t.startswith(day_str)
-                and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H
-                and v is not None]
+        return []
+    return [v for t, v in zip(hours, vals)
+            if t.startswith(day_str)
+            and DAYTIME_START_H <= int(t[11:13]) < DAYTIME_END_H
+            and v is not None]
+
+
+def _daytime_max(data, day_str, key):
+    """Максимум hourly-показателя в дневном окне DAYTIME_START_H..DAYTIME_END_H."""
+    day_vals = _daytime_values(data, day_str, key)
     return max(day_vals) if day_vals else None
+
+
+def _mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def day_conditions(data, idx):
+    """Погода дня d["time"][idx] для недели и «Завтра…» — по окну 08–20, как и температура.
+
+    Почасовые данные берутся, только если покрывают всё окно (у OpenWeather часы есть
+    на ~48 ч); иначе — суточный агрегат провайдера целиком, без смешивания источников.
+    """
+    d = data["daily"]
+    day_str = d["time"][idx]
+    code = d["weathercode"][idx]
+    temps = _daytime_values(data, day_str, "temperature_2m")
+    if len(temps) >= DAYTIME_END_H - DAYTIME_START_H:
+        tmin, tmax = min(temps), max(temps)
+        rain = max(_daytime_values(data, day_str, "precipitation_probability"), default=0)
+        rain_mm = sum(_daytime_values(data, day_str, "precipitation"))
+        wind = max(_daytime_values(data, day_str, "windspeed_10m"), default=0)
+        clouds = _mean(_daytime_values(data, day_str, "cloudcover"))
+    else:
+        tmin, tmax = d["temperature_2m_min"][idx], d["temperature_2m_max"][idx]
+        rain = d["precipitation_probability_max"][idx] or 0
+        rain_mm = (d.get("precipitation_sum") or [None] * (idx + 1))[idx]
+        wind = d["windspeed_10m_max"][idx] or 0
+        clouds = None
+    return {
+        "day_str": day_str, "code": code, "tmin": tmin, "tmax": tmax,
+        "rain": rain, "rain_mm": rain_mm, "rain_real": _rain_real(rain, rain_mm),
+        "wind": wind, "clouds": clouds, "sky": _sky(clouds, code),
+    }
 
 
 def _daytime_temperature_range(data, day_str, fallback_min=None, fallback_max=None):
@@ -318,31 +371,80 @@ def _speed_range(values):
 
 def _clock(value):
     try:
-        return datetime.fromisoformat(str(value)).astimezone(TZ).strftime("%H:%M")
+        parsed = datetime.fromisoformat(str(value))
     except (TypeError, ValueError):
         return ""
+    # Провайдер отдаёт наивное время уже в TZ; astimezone() считал бы его временем сервера (UTC на VM).
+    return (parsed.astimezone(TZ) if parsed.tzinfo else parsed).strftime("%H:%M")
 
 
-def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None):
-    # Код погоды приходит суточным агрегатом и может означать дождь в другом
-    # периоде. При нулевой вероятности в этом периоде не показываем дождь.
-    if not float(rain or 0):
-        return "☁️"
-    icon = weather_icon(code, temp, rain, wind_ms, rain_mm)
+def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
+    icon = weather_icon(code, temp, rain, wind_ms, rain_mm, clouds)
     return "🌙" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
 
 
 def _full_forecast_parts(now):
-    """Возвращает будущие дневные периоды без ночного блока."""
-    hour = int(now.hour)
+    """Текущий (по оставшимся часам) и следующие дневные периоды без ночного блока."""
     parts = [("Утром", 8, 12), ("Днём", 12, 18), ("Вечером", 18, 24)]
-    if hour < 8:
-        return parts
-    return [
-        (label, start, end)
-        for label, start, end in parts
-        if start > hour
-    ]
+    return [(label, start, end) for label, start, end in parts if end > now.hour]
+
+
+def forecast_periods(data, now):
+    """Периоды полного прогноза — единый источник для экрана прогноза и строки «Моего дня».
+
+    Сегодняшние периоды считаются только по часам с текущего (Open-Meteo отдаёт и прошедшие),
+    плюс «Ночью» — 00–08 следующего дня.
+    """
+    d = data.get("daily") or {}
+    days = d.get("time") or []
+    hourly = data.get("hourly") or {}
+    hours = hourly.get("time") or []
+    if not days:
+        return []
+    parts = [(label, max(start, now.hour), end, days[0], 0) for label, start, end in _full_forecast_parts(now)]
+    if len(days) > 1:
+        parts.append(("Ночью", 0, 8, days[1], 1))
+
+    def column(key, rows):
+        values = hourly.get(key) or []
+        return [values[i] for i in rows if i < len(values) and values[i] is not None]
+
+    periods = []
+    for label, start, end, day, index in parts:
+        rows = [i for i, ts in enumerate(hours) if ts.startswith(day) and start <= int(ts[11:13]) < end]
+        temps = column("temperature_2m", rows)
+        if not temps:
+            continue
+        winds = column("windspeed_10m", rows)
+        rain = max(column("precipitation_probability", rows), default=0)
+        rain_mm = sum(float(value) for value in column("precipitation", rows))
+        clouds = _mean(column("cloudcover", rows))
+        code = (d.get("weathercode") or [None] * (index + 1))[index]
+        tmax = max(temps)
+        periods.append({
+            "label": label, "tmax": tmax, "rain": rain, "rain_mm": rain_mm,
+            "winds": winds, "clouds": clouds, "code": code,
+            "icon": _period_weather_icon(label, code, tmax, rain, max(winds, default=0), rain_mm, clouds),
+        })
+    return periods
+
+
+def today_outlook(data, now):
+    """Оставшаяся часть сегодняшнего дня из тех же периодов, что и «Полный прогноз»; None — нет часов."""
+    periods = [p for p in forecast_periods(data, now) if p["label"] != "Ночью"]
+    if not periods:
+        return None
+    wet = [p for p in periods if _rain_real(p["rain"], p["rain_mm"])]
+    clouds = [p["clouds"] for p in periods if p["clouds"] is not None]
+    return {
+        "tmax": max(p["tmax"] for p in periods),
+        "wind_ms": max((w for p in periods for w in p["winds"]), default=0),
+        # Дождь — только по периодам, где он реален: иконка и текст не расходятся.
+        "rain": max((p["rain"] for p in wet), default=0),
+        "rain_mm": sum(p["rain_mm"] for p in wet),
+        "rain_periods": [p["label"].lower() for p in wet],
+        "clouds": _mean(clouds),
+    }
 
 
 # ---------- отправка ----------
@@ -370,47 +472,17 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         flag = flag_from_cc(cc) or ""
         place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"
         header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
-        hourly = data.get("hourly") or {}
-        try:
-            hours = hourly["time"]
-            temps = hourly.get("temperature_2m") or []
-            probs = hourly.get("precipitation_probability") or []
-            precs = hourly.get("precipitation") or []
-            winds = hourly.get("windspeed_10m") or []
-        except Exception:
-            hours = temps = probs = precs = winds = []
-        day_str = d["time"][0]
-        periods = []
-        parts = [(label, h1, h2, day_str, 0) for label, h1, h2 in _full_forecast_parts(dt)]
-        if len(d.get("time") or []) > 1:
-            parts.append(("Ночью", 0, 8, d["time"][1], 1))
-        for label, h1, h2, period_day, daily_index in parts:
-            t_vals, p_vals, w_vals, mm_vals = [], [], [], []
-            for i, ts in enumerate(hours):
-                if ts.startswith(period_day) and h1 <= int(ts[11:13]) < h2:
-                    if i < len(temps): t_vals.append(temps[i] or 0)
-                    if i < len(probs): p_vals.append(probs[i] or 0)
-                    if i < len(winds): w_vals.append(winds[i] or 0)
-                    if i < len(precs): mm_vals.append(precs[i] or 0)
-            if not t_vals:
-                continue
-            tmx = max(t_vals); rn = max(p_vals) if p_vals else 0; wd = max(w_vals) if w_vals else 0
-            mm = sum(float(value or 0) for value in mm_vals)
-            icon = _period_weather_icon(
-                label, d["weathercode"][daily_index], tmx, rn, wd, mm,
-            )
-            lines = [
-                f"Температура до {tmx:+.0f}°C",
-                f"Ветер {_speed_range(w_vals)} м/с",
-            ]
-            lines.append(f"Дождь {rn:.0f}%")
-            periods.append({
-                "title": f"{icon} {label}",
-                "lines": lines,
-            })
-        _tmin, daytime_tmax = _daytime_temperature_range(
-            data, day_str, d["temperature_2m_min"][0], d["temperature_2m_max"][0],
-        )
+        periods = [
+            {
+                "title": f"{p['icon']} {p['label']}",
+                "lines": [
+                    f"Температура до {p['tmax']:+.0f}°C",
+                    f"Ветер {_speed_range(p['winds'])} м/с",
+                    f"Дождь {p['rain']:.0f}%",
+                ],
+            }
+            for p in forecast_periods(data, dt)
+        ]
         sunrise = _clock((d.get("sunrise") or [""])[0])
         sunset = _clock((d.get("sunset") or [""])[0])
         sunrise_line = (
@@ -422,16 +494,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         # Вечерний золотой час — по координатам города, без внешних API; идёт в «Полезно».
         golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(TZ).date(), TZ)
         sunset_line = ""
-        tomorrow = {
-            "code": d["weathercode"][1],
-            "tmax": d["temperature_2m_max"][1],
-            "rain_real": _rain_real(
-                d["precipitation_probability_max"][1] or 0,
-                (d.get("precipitation_sum") or [None, None])[1],
-            ),
-            "wind": d["windspeed_10m_max"][1] or 0,
-        }
-        advice = _qualitative_outlook([tomorrow], "Завтра")
+        advice = _qualitative_outlook([day_conditions(data, 1)], "Завтра")
         if golden:
             # Золотой час — последним предложением строки «Полезно».
             advice = str(advice or "").strip()
@@ -467,7 +530,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         rain = day_weather["rain_prob"]
         rain_mm = day_weather["rain_mm"]
         wind_ms = day_weather["wind_ms"] or 0
-        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm,
+                            _mean(_daytime_values(data, day_str, "cloudcover")))
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         main_lines = [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
         alert = ""
@@ -514,7 +578,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         rain = day_weather["rain_prob"]
         rain_mm = day_weather["rain_mm"]
         wind_ms = day_weather["wind_ms"] or 0
-        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm)
+        icon = weather_icon(code, tmax, rain, wind_ms, rain_mm,
+                            _mean(_daytime_values(data, day_str, "cloudcover")))
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
@@ -557,30 +622,17 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         idx = _SKIP + i
         if idx >= len(d["weathercode"]):
             break
-        day_str = d["time"][idx]
-        dt_i = datetime.fromisoformat(day_str)
-        code = d["weathercode"][idx]
-        tmin, tmax = _daytime_temperature_range(
-            data, day_str, d["temperature_2m_min"][idx], d["temperature_2m_max"][idx],
-        )
-        if tmax is None or tmin is None:
+        day = day_conditions(data, idx)
+        if day["tmax"] is None or day["tmin"] is None:
             continue
-        rain = d["precipitation_probability_max"][idx] or 0
-        rain_mm = (d.get("precipitation_sum") or [None] * 10)[idx]
-        wind_max = d["windspeed_10m_max"][idx] or 0
+        dt_i = datetime.fromisoformat(day["day_str"])
         day_data.append({
+            **day,
             "index": i,
             "abbrev": _WEEKDAY_SHORT[dt_i.weekday()],
             "name": _WEEKDAYS[dt_i.weekday()].lower(),
             "date": dt_i,
-            "icon": _week_icon(code, tmax, rain, wind_max, rain_mm),
-            "tmax": tmax,
-            "tmin": tmin,
-            "code": code,
-            "rain": rain,
-            "rain_mm": rain_mm,
-            "rain_real": _rain_real(rain, rain_mm),
-            "wind": wind_max,
+            "icon": _week_icon(day["code"], day["tmax"], day["rain"], day["wind"], day["rain_mm"], day["clouds"]),
         })
 
     if len(day_data) != 7:

@@ -137,7 +137,6 @@ async def seed_start(bot, cid, lang=None, kind="word", q=None):
         )
         await rich_delivery.show(bot, cid, text, reply_markup=back_menu_keyboard(f"a_dictlang_{code}"), query=q)
         return
-        return
     st = {
         "lang": code,
         "level": level,

@@ -62,93 +62,6 @@ _WDF_CACHE = {}   # name -> (ts, dict[str,str])
 _WDF_TTL = 86400
 
 
-def _wd_qid(name_clean: str) -> str:
-    """QID города из Wikidata по имени (поиск по ru+en)."""
-    for lang in ("ru", "en"):
-        try:
-            r = requests.get("https://www.wikidata.org/w/api.php", params={
-                "action": "wbsearchentities", "search": name_clean,
-                "language": lang, "type": "item", "limit": 3, "format": "json"
-            }, headers=_WIKI_UA, timeout=tracking.bounded_timeout(8))
-            items = r.json().get("search", [])
-            # берём первый результат у которого description содержит city/municipality/город
-            for it in items:
-                desc = (it.get("description") or "").lower()
-                if any(w in desc for w in ("city", "town", "municipality", "город", "gemeente", "stad")):
-                    return it["id"]
-            if items:
-                return items[0]["id"]
-        except Exception:
-            _log.debug("_wd_qid: ignored error", exc_info=True)
-    return ""
-
-
-def wikidata_city_facts(name: str) -> dict:
-    """Структурированные факты о городе из Wikidata: {тип: предложение}.
-
-    Без LLM, без ключей. Типы: founded, population, area.
-    """
-    name_clean = (name or "").strip()
-    if not name_clean:
-        return {}
-    key = name_clean.lower()
-    hit = _WDF_CACHE.get(key)
-    if hit and time.time() - hit[0] < _WDF_TTL:
-        return hit[1]
-    qid = _wd_qid(name_clean)
-    facts: dict = {}
-    if not qid:
-        _WDF_CACHE[key] = (time.time(), facts)
-        return facts
-    try:
-        r = requests.get(f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
-                         headers=_WIKI_UA, timeout=tracking.bounded_timeout(12))
-        claims = r.json().get("entities", {}).get(qid, {}).get("claims", {})
-
-        # P571 — год основания
-        p571 = claims.get("P571", [])
-        if p571:
-            tstr = (p571[0].get("mainsnak", {}).get("datavalue", {})
-                    .get("value", {}).get("time", ""))
-            year = tstr.lstrip("+").split("-")[0]
-            if year.isdigit() and int(year) > 0:
-                facts["founded"] = f"{name_clean} основан в {year} году."
-
-        # P1082 — население (берём последнее/наибольшее значение)
-        p1082 = claims.get("P1082", [])
-        if p1082:
-            amounts = []
-            for c in p1082:
-                amt = (c.get("mainsnak", {}).get("datavalue", {})
-                       .get("value", {}).get("amount", ""))
-                try:
-                    amounts.append(int(float(amt)))
-                except (ValueError, TypeError):
-                    pass
-            if amounts:
-                pop = max(amounts)
-                if pop > 500:
-                    facts["population"] = f"Население {name_clean} — {pop:,} человек.".replace(",", " ")
-
-        # P2046 — площадь (км²)
-        p2046 = claims.get("P2046", [])
-        if p2046:
-            amt = (p2046[0].get("mainsnak", {}).get("datavalue", {})
-                   .get("value", {}).get("amount", ""))
-            try:
-                area = float(amt)
-                if area > 0:
-                    facts["area"] = f"Площадь {name_clean} — {area:.0f} км²."
-            except (ValueError, TypeError):
-                pass
-
-    except Exception as e:
-        _log.warning("research: wikidata_city_facts(%s/%s) failed: %s", name_clean, qid, e)
-
-    _WDF_CACHE[key] = (time.time(), facts)
-    return facts
-
-
 # ================= TAVILY =================
 
 _TV_CACHE: dict = {}    # query -> (ts, results)
@@ -298,20 +211,6 @@ def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general"
         api_usage.record_request("firecrawl", ok=False, error=type(e).__name__)
         _log.warning("firecrawl_search failed: %s", str(e)[:120])
         return []
-
-
-def firecrawl_snippet(query: str, max_chars: int = 1200) -> str:
-    """Top-3 Firecrawl сниппета, склеенные для LLM-промпта. Пустая строка если ключа нет."""
-    results = firecrawl_search(query, max_results=3)
-    parts, total = [], 0
-    for r in results:
-        chunk = (r.get("content") or "").strip()
-        if chunk and total + len(chunk) < max_chars:
-            parts.append(chunk)
-            total += len(chunk)
-    return "\n---\n".join(parts)
-
-
 
 
 def serpapi_search(query: str, max_results: int = 5, **_unused) -> list:

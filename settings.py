@@ -1056,18 +1056,6 @@ def wardrobe_prefs_context(cid):
     return "\n".join(parts)
 
 
-def _wardrobe_style_state(cid):
-    raw = _all().get(str(cid), {})
-    palette = raw.get("wardrobe_palette", [])
-    avoid = raw.get("wardrobe_style_avoid", [])
-    return {
-        "styles": _normalize_wardrobe_styles(raw.get("style", [])),
-        "fit": raw.get("wardrobe_fit", ""),
-        "palette": _normalize_palette(palette),
-        "avoid": [value for value in avoid if value in STYLE_AVOID_OPTIONS] if isinstance(avoid, list) else [],
-    }
-
-
 def _wardrobe_style_kb(cid, raw=None):
     selected = set(style_groups(cid, raw))
     rows = [[InlineKeyboardButton(("✅ " if key in selected else "□ ") + label, callback_data=f"set_stgroup_{i}")]
