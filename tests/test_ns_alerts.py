@@ -53,8 +53,8 @@ def test_alert_card_is_russian_with_section_cause_and_time():
                                              "cause": "неисправный поезд", "situation": "меньше поездов",
                                              "extra": "до 30 минут дольше в пути"}).text
 
-    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal: меньше поездов\n"
-                    "Причина: неисправный поезд\n\nОжидается до 18:30 · до 30 минут дольше в пути")
+    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal: меньше поездов\n\n"
+                    "Причина: Неисправный поезд.\n\nОжидается до 18:30 · до 30 минут дольше в пути")
 
 
 def test_alert_card_skips_section_and_cause_already_in_the_text():
@@ -98,7 +98,7 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
     asyncio.run(ns_alerts.check_user(bot, "42"))
     assert bot.sent[-1]["text"].startswith(
         "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal: поезда снова ходят.")
-    assert bot.sent[-1]["text"].endswith("Причина: defecte trein.")
+    assert "\n\nПричина: Defecte trein." in bot.sent[-1]["text"]
     assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить рассылку", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
 
@@ -237,8 +237,12 @@ def test_translation_without_cyrillic_is_rejected(monkeypatch):
     assert not captured["validator"]({"cause": "defecte trein"})
 
 
-def test_restored_card_shows_route_duration_and_cause_on_own_lines():
-    text = transport_ui.ns_restored("Alkmaar - Hoorn", since="2026-10-12T12:40:00+0200",
-                                    until="2026-10-12T16:05", cause="повреждённый железнодорожный мост").text
-    assert text == ("✅ Движение восстановлено\n\nAlkmaar - Hoorn: поезда снова ходят.\n"
-                    "Сбой длился с 12:40 до 16:05\nПричина: повреждённый железнодорожный мост.")
+def test_restored_card_has_blocks_with_bold_route_and_cause():
+    message = transport_ui.ns_restored("Alkmaar - Den Helder", since="2026-10-14T08:29", until="2026-10-14T11:47",
+                                       cause="неисправный железнодорожный мост")
+    bold = [message.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+            for e in message.entities if e.type == "bold"]
+
+    assert message.text == ("✅ Движение восстановлено\n\nAlkmaar - Den Helder: поезда снова ходят.\n\n"
+                            "Причина: Неисправный железнодорожный мост.\n\nСбой длился с 08:29 до 11:47")
+    assert bold == ["✅ Движение восстановлено", "Alkmaar - Den Helder:", "Причина:"]

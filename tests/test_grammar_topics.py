@@ -2,7 +2,7 @@ from datetime import datetime
 
 import live_language
 
-FIELDS = {"id", "level", "topic", "meaning", "explain", "example", "translation"}
+FIELDS = {"id", "level", "topic", "meaning", "explain", "details", "example", "translation"}
 
 
 def test_each_language_has_300_unique_complete_topics():
@@ -14,6 +14,9 @@ def test_each_language_has_300_unique_complete_topics():
             assert set(topic) == FIELDS and all(str(topic[key]).strip() for key in FIELDS), topic["id"]
             assert topic["level"] in ("A1", "A2", "B1", "B2")
             assert topic["example"] not in topic["explain"]  # пример — отдельной строкой, не в объяснении
+            # Подробное объяснение — 2–4 непустых пункта, пример карточки в них не повторяется.
+            assert 2 <= len(topic["details"]) <= 4 and all(str(point).strip() for point in topic["details"]), topic["id"]
+            assert not any(topic["example"].rstrip(".!?") in point for point in topic["details"]), topic["id"]
 
 
 def _profile(monkeypatch, level="simple"):

@@ -16,7 +16,7 @@ _LANGUAGE_NAMES = {"nl": "нидерландский", "en": "английски
 
 @functools.lru_cache(maxsize=None)
 def grammar_topics(language) -> tuple:
-    """Темы грамматики языка (300+ на nl и en): {id, level, topic, meaning, explain, example, translation}."""
+    """Темы грамматики языка (300+ на nl и en): {id, level, topic, meaning, explain, details, example, translation}."""
     try:
         data = json.loads(_TOPICS_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -61,8 +61,10 @@ def grammar_of_day(cid, language="nl", renew=False) -> dict:
 
 
 def _as_card(topic) -> dict:
-    """Поля карточки «Обучения»: тема → значение, объяснение (цитатой), пример → перевод (курсивом)."""
+    """Поля карточки «Обучения»: тема → значение, объяснение по пунктам (details, цитатой; без них — explain),
+    пример → перевод."""
     return {"topic": topic["topic"], "meaning": topic["meaning"], "explain": topic["explain"],
+            "details": list(topic.get("details") or []),
             "more": topic["example"], "more_translation": topic["translation"], "level": topic["level"]}
 
 

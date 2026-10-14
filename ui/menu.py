@@ -169,11 +169,13 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Грамматика: тема → значение, объяснение цитатой, пример → перевод курсивом последней строкой
+    # Грамматика: тема → значение, объяснение пунктами в цитате, пример → перевод
     # (фраза дня — в «Моём дне», строка «Тренажер»).
     phrase = home.get("live_language") or {}
     if phrase.get("topic") and phrase.get("explain"):
-        topic, explanation = phrase["topic"], _with_period(phrase["explain"])
+        # Подробное объяснение — пунктами через пустую строку в одной цитате; без пунктов — краткое.
+        details = [_with_period(point) for point in phrase.get("details") or [] if str(point).strip()]
+        topic, explanation = phrase["topic"], "\n\n".join(details) or _with_period(phrase["explain"])
         if phrase.get("meaning"):
             topic += f" → {phrase['meaning']}"
     else:  # прежний краткий формат правила (уроки страны отпуска)

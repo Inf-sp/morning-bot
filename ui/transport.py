@@ -19,8 +19,21 @@ def _mentions(text, phrase, *, min_len) -> bool:
     return bool(words) and all(word[:min_len] in text for word in words)
 
 
+def _route_line(b, route, text):
+    """«**Alkmaar – Den Helder:** текст» — участок жирным."""
+    b.bold(f"{route}:")
+    b.line(f" {text}")
+
+
+def _cause_line(b, cause):
+    """Отдельный блок «**Причина:** Неисправный мост.» — с заглавной и точкой."""
+    cause = str(cause or "").strip().rstrip(".")
+    b.spacer()
+    b.labeled_line("Причина:", f"{cause[:1].upper()}{cause[1:]}.", lowercase=False)
+
+
 def ns_alert(city, disruption) -> MessageSpec:
-    """Предупреждение о сбое NS: что случилось, пустая строка, «Ожидается до …».
+    """Предупреждение о сбое NS: что случилось, причина, «Ожидается до …» — блоками через пустую строку.
 
     Участок («Alkmaar - Hoorn:») и «Причина:» не повторяются, если текст NS их уже называет.
     """
@@ -31,11 +44,12 @@ def ns_alert(city, disruption) -> MessageSpec:
     title_line, situation = disruption.get("title") or "", disruption.get("situation") or ""
     stations = [part.strip() for part in re.split(r"\s+[-–—]\s+", title_line) if part.strip()]
     if situation and title_line and not any(station.casefold() in situation.casefold() for station in stations):
-        situation = f"{title_line}: {situation}"
-    b.line(situation or title_line)
+        _route_line(b, title_line, situation)
+    else:
+        b.line(situation or title_line)
     cause = disruption.get("cause") or ""
     if cause and not _mentions(situation, cause, min_len=5):
-        b.line(f"Причина: {cause}")
+        _cause_line(b, cause)
     tail = [part for part in (
         f"ожидается до {_time_label(disruption.get('until'))}" if _time_label(disruption.get("until")) else "",
         disruption.get("extra") or "",
@@ -48,17 +62,20 @@ def ns_alert(city, disruption) -> MessageSpec:
 
 
 def ns_restored(title, *, since="", until="", cause="") -> MessageSpec:
-    """«✅ Движение восстановлено», участок, сколько длился сбой и его причина — каждое своей строкой."""
+    """«✅ Движение восстановлено», участок, причина и сколько длился сбой — блоками через пустую строку."""
     b = MessageBuilder()
     b.section("✅ Движение восстановлено")
     b.spacer()
-    b.line(f"{title}: поезда снова ходят." if title else "Поезда снова ходят.")
+    if title:
+        _route_line(b, title, "поезда снова ходят.")
+    else:
+        b.line("Поезда снова ходят.")
+    if str(cause or "").strip():
+        _cause_line(b, cause)
     start, end = _time_label(since), _time_label(until)
     if start and end and start != end:
+        b.spacer()
         b.line(f"Сбой длился с {start} до {end}")
-    cause = str(cause or "").strip().rstrip(".")
-    if cause:
-        b.line(f"Причина: {cause}.")
     return b.build_stripped()
 
 
