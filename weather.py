@@ -435,16 +435,23 @@ def today_outlook(data, now):
     if not periods:
         return None
     wet = [p for p in periods if _rain_real(p["rain"], p["rain_mm"])]
-    clouds = [p["clouds"] for p in periods if p["clouds"] is not None]
+    current = periods[0]
     return {
         "tmax": max(p["tmax"] for p in periods),
-        "wind_ms": max((w for p in periods for w in p["winds"]), default=0),
-        # Дождь — только по периодам, где он реален: иконка и текст не расходятся.
+        # Небо и ветер — текущего периода: строка совпадает с его блоком в «Полном прогнозе».
+        "wind_ms": max(current["winds"], default=0),
+        # Дождь — по всем оставшимся периодам, где он реален: иконка и текст не расходятся.
         "rain": max((p["rain"] for p in wet), default=0),
         "rain_mm": sum(p["rain_mm"] for p in wet),
         "rain_periods": [p["label"].lower() for p in wet],
-        "clouds": _mean(clouds),
+        "clouds": current["clouds"],
     }
+
+
+def current_period_label(now):
+    """Текущий период дня («Утром / Днём / Вечером»), с которым сверяется строка погоды «Моего дня»."""
+    parts = _full_forecast_parts(now)
+    return parts[0][0] if parts else "Ночью"
 
 
 # ---------- отправка ----------

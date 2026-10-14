@@ -143,9 +143,11 @@ def test_today_outlook_matches_full_forecast_periods_and_skips_past_hours():
     outlook = weather.today_outlook(data, now)
 
     assert labels == ["Утром", "Днём", "Вечером", "Ночью"]
-    # 07:00 уже прошёл, ночь следующего дня в сводку дня не входит.
+    # 07:00 уже прошёл, ночь следующего дня в сводку дня не входит; «до» — максимум оставшегося дня.
     assert outlook["tmax"] == 16
-    assert outlook["wind_ms"] == 5
+    # Ветер и небо — текущего периода («Утром» 10–12), как его блок в «Полном прогнозе».
+    assert outlook["wind_ms"] == 4
+    assert weather.current_period_label(now) == "Утром"
     assert outlook["rain_periods"] == []
     assert weather.weather_icon(61, outlook["tmax"], outlook["rain"], outlook["wind_ms"],
                                 outlook["rain_mm"], outlook["clouds"]) == "☁️"
@@ -426,3 +428,14 @@ def test_week_overview_needs_real_precipitation_for_snow():
 
     assert weather_weekly.week_overview(days) == "В основном облачно…"
     assert "снег" not in weather_weekly.qualitative_outlook(days)
+
+
+def test_today_outlook_sky_follows_current_period_not_day_average():
+    # Днём малооблачно, вечером пасмурно: строка «Моего дня» в 13:00 — как блок «Днём».
+    data = _day_data([13, 14, 19, 20], [17, 17, 16, 15], [0, 0, 0, 0], [0, 0, 0, 0], [4, 4, 3, 4], [40, 50, 95, 95])
+    outlook = weather.today_outlook(data, datetime(2026, 10, 14, 13, 5, tzinfo=weather.TZ))
+
+    assert (outlook["tmax"], round(outlook["wind_ms"])) == (17, 4)
+    assert weather.sky_word(outlook["clouds"], 61) == "малооблачно"
+    assert weather.weather_icon(61, outlook["tmax"], outlook["rain"], outlook["wind_ms"],
+                                outlook["rain_mm"], outlook["clouds"]) == "🌤️"

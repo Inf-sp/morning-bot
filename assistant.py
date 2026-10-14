@@ -269,6 +269,11 @@ async def try_add_love_from_chat(bot, cid, text):
     if missing:
         lines.append(f"Не нашёл {quoted(missing)} среди фильмов и сериалов. Уточни название — можно оригинальное.")
     await bot.send_message(chat_id=cid, text="\n".join(lines))
+    shown = added + already
+    if store_key == "movies" and len(shown) == 1:
+        # Один фильм — сразу его карточка в «Моём кино», без лишнего нажатия.
+        import leisure_movies
+        await leisure_movies.open_favorite_movie(bot, cid, shown[0])
     return True
 
 

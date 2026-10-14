@@ -38,12 +38,23 @@ def test_chat_add_saves_verified_title_or_asks_to_clarify(monkeypatch):
                         if allow_ai else None)
     bot = Bot()
 
+    opened = []
+
+    async def open_card(_bot, cid, title):
+        opened.append((cid, title))
+        return True
+
+    import leisure_movies
+    monkeypatch.setattr(leisure_movies, "open_favorite_movie", open_card)
     assert asyncio.run(assistant.try_add_love_from_chat(bot, "42", "Добавить сериал Шитс крик"))
     assert saved == ["Шиттс Крик (сериал, 2015)"]
+    # Один фильм — сразу после подтверждения открывается его карточка в «Моём кино».
+    assert opened == [("42", "Шиттс Крик (сериал, 2015)")]
 
     monkeypatch.setattr(leisure_collection, "_resolve_movie_label", lambda *_a, **_k: None)
     assert asyncio.run(assistant.try_add_love_from_chat(bot, "42", "Добавь сериал Абвгд"))
     assert saved == ["Шиттс Крик (сериал, 2015)"] and bot.sent[-1].startswith("Не нашёл «Абвгд»")
+    assert len(opened) == 1  # не нашли — карточки нет
 
 
 def test_library_add_commands_reach_the_right_tab():

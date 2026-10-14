@@ -28,8 +28,9 @@ _MOVIE_PREMIERES_CACHE_VERSION = 5
 _FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
 _favorite_movie_views = {}
 _FAVORITE_MOVIE_GENRES = (
-    "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма",
+    "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма", "Анимация",
 )
+_ANIMATION_GENRE_ID = 16  # TMDb: «Анимация» у фильмов и у сериалов
 
 
 def _favorite_movie_genre(metadata):
@@ -38,11 +39,15 @@ def _favorite_movie_genre(metadata):
         for part in str((metadata or {}).get("genres") or "").split(",")
         if part.strip()
     ]
+    # Аниме и мультфильмы — в «Анимацию», даже если TMDb ставит её не первым жанром («комедия, анимация»).
+    if (_ANIMATION_GENRE_ID in ((metadata or {}).get("genre_ids") or [])
+            or any(genre in ("анимация", "animation", "мультфильм", "аниме", "anime") for genre in genres)):
+        return "Анимация"
     aliases = {
         "комедия": "Комедия", "comedy": "Комедия",
         "ужасы": "Ужасы", "horror": "Ужасы",
         "фантастика": "Фантастика", "фэнтези": "Фантастика",
-        "science fiction": "Фантастика", "fantasy": "Фантастика", "анимация": "Фантастика",
+        "science fiction": "Фантастика", "fantasy": "Фантастика",
         "триллер": "Триллер", "детектив": "Триллер", "криминал": "Триллер",
         "боевик": "Триллер", "thriller": "Триллер", "mystery": "Триллер",
         "crime": "Триллер", "action": "Триллер",
@@ -76,20 +81,35 @@ def _favorite_movie_added_kb(open_callback=None):
     return InlineKeyboardMarkup(rows)
 
 
-async def _added_movie_open_callback(cid, title):
-    """Колбэк карточки только что добавленного фильма внутри «Моего кино» (жанр + позиция)."""
+async def _favorite_movie_position(cid, title):
+    """(token, жанр, позиция) фильма внутри «Моего кино»; None — его там нет."""
     try:
         records = await _favorite_movie_records(cid)
     except Exception:
-        _log.debug("_added_movie_open_callback: ignored error", exc_info=True)
+        _log.debug("_favorite_movie_position: ignored error", exc_info=True)
         return None
     token, view = _new_favorite_movie_view(cid, records)
     wanted = movie_title_for_lookup(title).casefold()
     for genre_index, (_genre, items) in enumerate(view["genres"]):
         for page, item in enumerate(items):
             if movie_title_for_lookup(item.get("value") or item["title"]).casefold() == wanted:
-                return f"mfg:{token}:{genre_index}:{page}"
+                return token, genre_index, page
     return None
+
+
+async def _added_movie_open_callback(cid, title):
+    """Колбэк карточки только что добавленного фильма внутри «Моего кино» (жанр + позиция)."""
+    position = await _favorite_movie_position(cid, title)
+    return "mfg:{}:{}:{}".format(*position) if position else None
+
+
+async def open_favorite_movie(bot, cid, title):
+    """Сразу карточка фильма из «Моего кино» (постер, описание, «Удалить»); False — его там нет."""
+    position = await _favorite_movie_position(cid, title)
+    if not position:
+        return False
+    await send_favorite_movie_genre(bot, cid, *position)
+    return True
 
 
 async def send_favorite_movies_added_card(bot, cid, titles):
@@ -338,17 +358,19 @@ def _movie_kb(i, category=None, kind="movie"):
     return InlineKeyboardMarkup(rows)
 
 
-# Шесть популярных жанров для быстрого меню «Выбрать жанр».
+# Популярные жанры для быстрого меню «Выбрать жанр»; «Анимация» — аниме и мультфильмы.
 _GENRE_MENU = [
     ("Комедия", 35), ("Ужасы", 27),
     ("Фантастика", 878), ("Триллер", 53),
     ("Романтика", 10749), ("Драма", 18),
+    ("Анимация", _ANIMATION_GENRE_ID),
 ]
 # У сериалов в TMDb свои жанры: ужасов, триллеров и мелодрам нет, фантастика — 10765.
 _TV_GENRE_MENU = [
     ("Комедия", 35), ("Драма", 18),
     ("Фантастика", 10765), ("Детектив", 9648),
     ("Криминал", 80), ("Боевик", 10759),
+    ("Анимация", _ANIMATION_GENRE_ID),
 ]
 
 def _movie_genre_menu_kb(back="m_leisure", kind="movie"):

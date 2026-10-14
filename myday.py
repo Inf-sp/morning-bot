@@ -363,18 +363,27 @@ def reset_day_cache(cid):
     store.mutate_profile(cid, change)
 
 
+def _weather_period():
+    # Строка погоды считается по текущему периоду дня: с началом нового периода сводка пересобирается.
+    return weather.current_period_label(datetime.now(TZ))
+
+
 def _load_day_cache(cid, today):
+    period = _weather_period()
     cached = _day_cache.get(str(cid))
-    if cached and cached.get("date") == today and cached.get("version") == _DAY_CACHE_VERSION:
+    if (cached and cached.get("date") == today and cached.get("version") == _DAY_CACHE_VERSION
+            and cached.get("period") == period):
         return cached
     prof = store.get_profile(cid)
     saved = prof.get("myday_home_cache")
     if (not isinstance(saved, dict) or saved.get("date") != today
-            or saved.get("version") != _DAY_CACHE_VERSION or not saved.get("text")):
+            or saved.get("version") != _DAY_CACHE_VERSION or not saved.get("text")
+            or saved.get("period") != period):
         return None
     cached = {
         "date": today,
         "version": _DAY_CACHE_VERSION,
+        "period": period,
         "text": saved["text"],
         "entities": util.entities_from_json(saved.get("entities")),
         "ts": saved.get("ts", 0),
@@ -416,11 +425,14 @@ def _daily_literary_quote(cid):
 
 
 def _save_day_cache(cid, today, text, entities, ts):
-    cached = {"date": today, "version": _DAY_CACHE_VERSION, "text": text, "entities": entities, "ts": ts}
+    period = _weather_period()
+    cached = {"date": today, "version": _DAY_CACHE_VERSION, "period": period,
+              "text": text, "entities": entities, "ts": ts}
     _day_cache[str(cid)] = cached
     saved = {
         "date": today,
         "version": _DAY_CACHE_VERSION,
+        "period": period,
         "text": text,
         "entities": util.entities_to_json(entities),
         "ts": ts,

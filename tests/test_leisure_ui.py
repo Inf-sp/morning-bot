@@ -493,11 +493,14 @@ def test_favorite_movie_genre_switches_posters_in_the_same_card():
     assert _labels(edited[0]["reply_markup"])[:2] == [["❌ Удалить"], ["◀️", "2/2", "▶️"]]
 
 
-def test_favorite_movies_use_only_six_main_genres():
+def test_favorite_movies_use_main_genres_with_animation():
     assert leisure_movies._FAVORITE_MOVIE_GENRES == (
-        "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма",
+        "Комедия", "Ужасы", "Фантастика", "Триллер", "Романтика", "Драма", "Анимация",
     )
-    assert leisure_movies._favorite_movie_genre({"genres": "анимация, семейный"}) == "Фантастика"
+    # Аниме и мультфильмы — в «Анимацию», даже если она не первый жанр.
+    assert leisure_movies._favorite_movie_genre({"genres": "анимация, семейный"}) == "Анимация"
+    assert leisure_movies._favorite_movie_genre({"genres": "комедия, анимация"}) == "Анимация"
+    assert leisure_movies._favorite_movie_genre({"genres": "фантастика", "genre_ids": [10765, 16]}) == "Анимация"
     assert leisure_movies._favorite_movie_genre({"genres": "криминал, боевик"}) == "Триллер"
 
 
@@ -781,7 +784,7 @@ def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
     ]
     assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
         ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
-        ["Триллер"], ["Романтика"], ["Драма"],
+        ["Триллер"], ["Романтика"], ["Драма"], ["Анимация"],
     ]
 
 

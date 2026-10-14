@@ -422,7 +422,7 @@ def test_series_card_and_genre_menu_stay_in_series():
     assert _labels(card)[:2] == [["Не интересно"], ["По жанру"]]
     assert _callbacks(card)[:2] == ["tv_no_3", "tv_pick_3"]
     menu = leisure_movies._movie_genre_menu_kb(back="tv_card_3", kind="tv")
-    assert _callbacks(menu) == ["tv_g_35", "tv_g_18", "tv_g_10765", "tv_g_9648", "tv_g_80", "tv_g_10759",
+    assert _callbacks(menu) == ["tv_g_35", "tv_g_18", "tv_g_10765", "tv_g_9648", "tv_g_80", "tv_g_10759", "tv_g_16",
                                 "tv_card_3", "m_menu"]
     for data in _callbacks(card) + _callbacks(menu):
         assert routing.resolve_callback_handler(data)["handled"], data
