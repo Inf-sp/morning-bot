@@ -53,8 +53,11 @@ def test_artist_tracks_link_to_youtube_music_and_keep_the_note(monkeypatch):
     links = [entity for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
 
     assert "• Sweater Weather — знаковый хит" in message.text
-    assert len(links) == 1
-    assert links[0].url == "https://music.youtube.com/watch?v=sweater123"
+    # Имя артиста — поиск на YouTube Music, трек — проверенная ссылка на YouTube Music.
+    assert [link.url for link in links] == [
+        "https://music.youtube.com/search?q=The+Neighbourhood",
+        "https://music.youtube.com/watch?v=sweater123",
+    ]
     assert "Полезно:" not in message.text
     assert "Первый альбом вышел в 2013 году." in message.text
 
@@ -309,3 +312,11 @@ def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_a
 
     assert calls and "Не удалось подобрать" not in calls[0]
     assert "Wednesday" in calls[0] and "«Bleeds» — вышел 9 октября" in calls[0]
+
+
+def test_music_premieres_and_novelty_link_to_youtube_music():
+    album = {"title": "Blue Rev", "artist": "Alvvays", "url": "https://music.apple.com/nl/album/1"}
+
+    for message in (leisure_ui.premiere_card("music", [album]), leisure_ui.novelty_card("music", album)):
+        links = [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
+        assert links == ["https://music.youtube.com/search?q=Alvvays+Blue+Rev"]  # не Apple Music

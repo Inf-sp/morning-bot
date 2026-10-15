@@ -304,7 +304,8 @@ def _music_pick(artist):
     labels = {key: label for key, label, _prompt in leisure_music._MUSIC_GENRES}
     why = artist.get("why")
     why = why[0] if isinstance(why, list) and why else why if isinstance(why, str) else ""
-    return {"kind": "music", "name": artist.get("artist") or "", "url": artist.get("url") or "",
+    return {"kind": "music", "name": artist.get("artist") or "",
+            "url": leisure_ui.youtube_music_link(artist.get("artist")),
             "meta": [labels.get(artist.get("genre"), ""), artist.get("country_label") or ""],
             "about": artist.get("desc") or "", "why": str(why or "").strip()}
 

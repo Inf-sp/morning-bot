@@ -288,7 +288,7 @@ def artist_card(data):
     artist = data.get("artist", "")
     b = MessageBuilder()
     b.text_line("🎸 ")
-    b.bold(artist)
+    b.bold_link(artist, youtube_music_link(artist)) if str(artist or "").strip() else b.bold(artist)
     b.newline()
     meta = [str(value).strip() for value in (data.get("genre_label"), data.get("country_label")) if value]
     if meta:
@@ -790,6 +790,12 @@ WEEK_PAGES = ("movie", "series", "music")  # «Премьеры недели»: 
 _WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "music": ("🎧", "Музыка")}
 
 
+def youtube_music_link(*parts) -> str:
+    """Поиск на YouTube Music: «артист», «артист альбом» или «трек артист»; без текста — ""."""
+    query = " ".join(" ".join(str(part).split()) for part in parts if str(part or "").strip())
+    return f"https://music.youtube.com/search?q={quote_plus(query)}" if query else ""
+
+
 def trailer_link(item) -> str:
     """Трейлер на YouTube: подтверждённый TMDb ролик, иначе поиск трейлера на YouTube по оригинальному названию
     и году. Страницы TMDb пользователю не даём."""
@@ -806,7 +812,7 @@ def trailer_link(item) -> str:
 def _week_item(item, kind) -> tuple:
     """(имя, ссылка, метаданные, описание) пункта вкладки — как блок хаба; у альбома сначала исполнитель."""
     if kind == "music":
-        return (item.get("artist"), item.get("url"),
+        return (item.get("artist"), youtube_music_link(item.get("artist"), item.get("title")),
                 (f"— «{item.get('title')}»", item.get("genre_label"), item.get("country_label")), item.get("about"))
     if kind == "series":
         season = int(item.get("season_number") or 0)
@@ -925,7 +931,7 @@ def novelty_card(kind, item) -> MessageSpec:
     b.newline()
     b.spacer()
     title = str(_item_value(item, "title", "") or "").strip()
-    url = trailer_link(item) if kind == "movie" else str(_item_value(item, "url", "") or "").strip()
+    url = trailer_link(item) if kind == "movie" else youtube_music_link(item.get("artist"), title)
     heading = f"«{title}»" + (f" — {item.get('artist')}" if kind == "music" and item.get("artist") else "")
     if url:
         b.link(heading, url)

@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from datetime import date, datetime
-from urllib.parse import quote_plus
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -343,11 +342,6 @@ def _track_parts(track):
     return title.strip(), note.strip() if separator else "", ""
 
 
-def _youtube_music_search_url(track, artist):
-    query = " ".join(part.strip() for part in (track, artist) if str(part or "").strip())
-    return f"https://music.youtube.com/search?q={quote_plus(query)}" if query else ""
-
-
 _TRACK_FALLBACK_NOTES = ("знаковый хит", "другая грань звучания", "для следующего шага")
 
 
@@ -371,7 +365,7 @@ async def _attach_track_links(data):
         return {
             "title": title,
             "note": note or _TRACK_FALLBACK_NOTES[min(index, len(_TRACK_FALLBACK_NOTES) - 1)],
-            "url": url or _youtube_music_search_url(title, artist),
+            "url": url or leisure_ui.youtube_music_link(title, artist),
         }
 
     linked = await asyncio.gather(*(link_track(track, index) for index, track in enumerate(tracks)))
@@ -701,7 +695,7 @@ async def _release_artist(cid, genres, known):
         for item in releases:
             if item["artist"].lower() not in known:
                 released = date.fromisoformat(item["date"])
-                return {"artist": item["artist"], "genre": genre, "url": item.get("url") or "",
+                return {"artist": item["artist"], "genre": genre,
                         "desc": f"Свежий альбом «{item['title']}» — вышел {released.day} {util._MONTHS[released.month - 1]}."}
     return None
 
