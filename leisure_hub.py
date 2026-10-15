@@ -292,11 +292,8 @@ def _movie_pick(kind, cached):
     it, tm = cached
     tm = tm or {}
     minutes = movie_recommendation.minutes_of(tm)
-    because = str(tm.get("because") or "").strip()
     limit = movie_recommendation.runtime_limit(kind)
-    if because:
-        why = f"Похоже на «{because}» из твоих любимых."
-    elif limit and minutes:
+    if limit and minutes:
         why = "Одна серия — как раз на будний вечер." if kind == "tv" else "Не слишком длинный — как раз на будний вечер."
     else:
         why = ""
