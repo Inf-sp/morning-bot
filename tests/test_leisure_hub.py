@@ -545,3 +545,17 @@ def test_day_cards_stay_a_week_as_reserve_when_refresh_fails(monkeypatch):
             "date": (today - timedelta(days=age)).isoformat(), "styles": ["indie"], "item": {"artist": "Wolf Alice"}}}
         assert leisure_hub.leisure_music._cached_artist("42") is None  # не сегодняшний — прогрев соберёт новый
         assert (leisure_hub.leisure_music._cached_artist("42", stale=True) or {}).get("artist") == expected
+
+
+def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
+    import countries
+    from datetime import date
+    albums = {"Focus Group": {"title": "Blue Rev", "date": "2022-10-07"}}
+    monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
+    data = _today_picks(monkeypatch)
+
+    assert "Музыка — Focus Group · Инди · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
+    this_year = date.today().replace(month=1, day=9).isoformat()
+    albums["Focus Group"] = {"title": "Signal", "date": this_year}
+    data = _today_picks(monkeypatch)
+    assert "· «Signal» · 9 января" in leisure_ui.leisure_today_screen(data["picks"]).text  # в этом году — дата

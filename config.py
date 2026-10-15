@@ -148,6 +148,7 @@ TMDB_TITLE_INFO_KEY = "tmdb_title_info.json"  # {kind:id: {ts, value: {countries
 COUNTRIES_TABLE_KEY = "countries_table.json"  # {ts, value: {cc: [название, регион]}} — mledoze, 90 дней
 ARTIST_COUNTRY_KEY = "artist_country.json"  # {артист: {ts, value: cc}} — MusicBrainz, полгода
 ARTIST_YEARS_KEY = "artist_years.json"  # {артист: {ts, value: «с 2011»}} — годы группы из MusicBrainz, полгода
+ARTIST_ALBUM_KEY = "artist_album.json"  # {артист: {ts, value: {title, date}}} — последний альбом, MusicBrainz, месяц
 GAME_CATALOG_KEY = "game_catalog.json"  # {язык: [загадки AI, прошедшие проверку]} — до 500 на язык
 PUBLIC_HOLIDAYS_KEY = "public_holidays.json"  # {cc|год: [праздники]} — резерв при сбое Nager.Date
 LOCAL_EVENTS_KEY = "local_events.json"  # {город|cc: {ts, events[{name, about, start, end, url}]}} — неделя

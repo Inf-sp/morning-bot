@@ -273,6 +273,15 @@ def _cache_artist(cid, item):
         }
         return data, None
     store.mutate_kv(config.MUSIC_RECO_CACHE_KEY, mutate)
+    _warm_latest_album(str((item or {}).get("artist") or ""))
+
+
+def _warm_latest_album(artist):
+    """Последний альбом артиста дня для строки «Досуга на сегодня» — в фоне: карточка не ждёт MusicBrainz."""
+    if not artist or not util.on_event_loop():
+        return
+    import countries
+    util.background(asyncio.to_thread(countries.artist_latest_album, artist), "artist album")
 
 
 def _invalidate_artist(cid):

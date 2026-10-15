@@ -642,6 +642,17 @@ def _hub_about(text) -> str:
     return about
 
 
+def album_meta(album) -> list:
+    """«Blue Rev» и дата выхода альбома: в этом году — «9 октября», раньше — год; нет альбома — []."""
+    title = " ".join(str((album or {}).get("title") or "").split())
+    released = str((album or {}).get("date") or "")
+    if not title or not released[:4].isdigit():
+        return []
+    day = _parse_event_date(released[:10]) if len(released) >= 10 else None
+    current = day and day.year == date.today().year
+    return [f"«{title}»", _format_date_label(day) if current else released[:4]]
+
+
 def _event_date_label(value) -> str:
     """Дата события в хабе — как у концертов: «16 октября», год только если не текущий."""
     day = _parse_event_date(str(value or "")[:10])

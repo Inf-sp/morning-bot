@@ -136,7 +136,7 @@ def title_label(tm) -> str:
 
 # ---------- страна артиста: MusicBrainz ----------
 
-def _person_cache(key, name, loader, fetch=True, keep_empty=False):
+def _person_cache(key, name, loader, fetch=True, keep_empty=False, ttl=_PERSON_TTL):
     """Значение из кэша; fetch=False — только кэш, без сети (экран Досуга не ждёт).
 
     keep_empty — пустой ответ тоже окончательный (у сольного артиста лет активности нет) и не перепроверяется."""
@@ -145,7 +145,7 @@ def _person_cache(key, name, loader, fetch=True, keep_empty=False):
         return ""
     saved = store._load(key) or {}
     entry = saved.get(norm) if isinstance(saved, dict) else None
-    fresh = isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < _PERSON_TTL
+    fresh = isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < ttl
     # «Не нашли» не держим полгода: прогрев и «Обновить карточки» (fetch=True) спрашивают снова.
     if fresh and (entry.get("value") or not fetch or keep_empty):
         return entry.get("value") or ""
@@ -166,6 +166,19 @@ def _person_cache(key, name, loader, fetch=True, keep_empty=False):
     return value or ""
 
 
+def _mb_get(path, params) -> dict:
+    """GET к MusicBrainz с паузой между запросами (их правила — не чаще запроса в секунду)."""
+    with _mb_lock:
+        wait = _MUSICBRAINZ_GAP - (time.monotonic() - _mb_last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _mb_last[0] = time.monotonic()
+    return requests.get(
+        f"https://musicbrainz.org/ws/2/{path}", params={**params, "fmt": "json"},
+        headers={"User-Agent": "morning-bot/1.0 ( https://github.com/ )"}, timeout=_TIMEOUT,
+    ).json()
+
+
 def _musicbrainz_artists(name) -> list:
     """Совпадения MusicBrainz по имени (без регистра, «the», знаков и диакритики, оценка от 90), лучшие первыми;
     иначе не угадываем. Страна и годы берут один запрос: ответ держится в памяти час, сбой — не держится."""
@@ -173,16 +186,7 @@ def _musicbrainz_artists(name) -> list:
     cached = util.ttl_get("musicbrainz_artists", wanted, 3600)
     if cached is not None:
         return cached
-    with _mb_lock:
-        wait = _MUSICBRAINZ_GAP - (time.monotonic() - _mb_last[0])
-        if wait > 0:
-            time.sleep(wait)
-        _mb_last[0] = time.monotonic()
-    data = requests.get(
-        "https://musicbrainz.org/ws/2/artist",
-        params={"query": f'artist:"{name}"', "fmt": "json", "limit": 3},
-        headers={"User-Agent": "morning-bot/1.0 ( https://github.com/ )"}, timeout=_TIMEOUT,
-    ).json()
+    data = _mb_get("artist", {"query": f'artist:"{name}"', "limit": 3})
     found = []
     for artist in data.get("artists") or []:
         names = [artist.get("name"), artist.get("sort-name"), *[a.get("name") for a in artist.get("aliases") or []]]
@@ -248,6 +252,34 @@ def _artist_country(name):
 def artist_label(name, fetch=True) -> str:
     """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
     return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _artist_country, fetch))
+
+
+_ALBUM_TTL = 30 * 86400  # новый альбом выходит нечасто, но и не раз в полгода
+
+
+def _latest_album(name) -> dict:
+    """Последний вышедший студийный альбом артиста из MusicBrainz: {"title", "date"}; без концертников,
+    сборников и ремиксов (у них есть secondary-types). Нет совпадения или альбомов — {}."""
+    matches = _musicbrainz_artists(name)
+    if not matches or not matches[0].get("id"):
+        return {}
+    today = time.strftime("%Y-%m-%d")
+    groups = _mb_get("release-group", {"artist": matches[0]["id"], "type": "album", "limit": 100})
+    albums = [group for group in groups.get("release-groups") or []
+              if group.get("primary-type") == "Album" and not group.get("secondary-types")
+              and str(group.get("first-release-date") or "")[:4].isdigit()
+              and str(group.get("first-release-date")) <= today]
+    if not albums:
+        return {}
+    latest = max(albums, key=lambda group: str(group["first-release-date"]))
+    return {"title": str(latest.get("title") or "").strip(), "date": str(latest["first-release-date"])}
+
+
+def artist_latest_album(name, fetch=True) -> dict:
+    """Последний альбом артиста ({"title", "date"} или {}); fetch=False — только кэш, без сети."""
+    album = _person_cache(config.ARTIST_ALBUM_KEY, main_artist(name), _latest_album, fetch,
+                          keep_empty=True, ttl=_ALBUM_TTL)
+    return album if isinstance(album, dict) else {}
 
 
 def artist_years(name, fetch=True) -> str:

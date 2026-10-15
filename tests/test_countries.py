@@ -127,3 +127,25 @@ def test_musicbrainz_match_ignores_case_the_and_diacritics_and_uses_area(monkeyp
     assert countries._musicbrainz_country("The Weeknd") == "CA"  # страна — из area, имя без «The»
     assert countries.main_artist("Doja Cat & SZA") == "Doja Cat"
     assert countries.main_artist("Alex Warren feat. Jelly Roll") == "Alex Warren"
+
+
+def test_latest_album_is_the_newest_released_studio_album(monkeypatch):
+    monkeypatch.setattr(countries, "_musicbrainz_artists", lambda _name: [{"id": "mbid-1", "type": "Group"}])
+    asked = []
+
+    def mb_get(path, params):
+        asked.append((path, params))
+        return {"release-groups": [
+            {"title": "Antisocialites", "primary-type": "Album", "first-release-date": "2017-09-08"},
+            {"title": "Blue Rev", "primary-type": "Album", "first-release-date": "2022-10-07"},
+            {"title": "Live at KEXP", "primary-type": "Album", "secondary-types": ["Live"],
+             "first-release-date": "2023-05-01"},
+            {"title": "Future Album", "primary-type": "Album", "first-release-date": "2999-01-01"},
+        ]}
+
+    monkeypatch.setattr(countries, "_mb_get", mb_get)
+
+    assert countries._latest_album("Alvvays") == {"title": "Blue Rev", "date": "2022-10-07"}
+    assert asked == [("release-group", {"artist": "mbid-1", "type": "album", "limit": 100})]
+    monkeypatch.setattr(countries, "_musicbrainz_artists", lambda _name: [])
+    assert countries._latest_album("Nobody") == {}
