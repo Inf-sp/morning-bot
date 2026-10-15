@@ -486,3 +486,31 @@ def search_results(query, items):
     return b.build_stripped()
 
 
+
+
+def suitcase_screen(data):
+    """«🧳 Чемодан · Кейптаун · 9 дней»: погода поездки, вещи шкафа по зонам («Футболки и рубашки: …»),
+    курсивом совет. Пустой data — кнопка вне отпуска."""
+    b = MessageBuilder()
+    if not data:
+        b.title("🧳 Чемодан")
+        b.line("Собираю чемодан для поездки — включи «✈️ В отпуске» в Настройках.")
+        return b.build_stripped()
+    days = int(data.get("days") or 0)
+    head = " · ".join(part for part in ("🧳 Чемодан", data.get("place"),
+                                       f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
+    b.title(head)
+    if data.get("weather"):
+        b.line(_upper_first(_finish_dot(data["weather"])))
+        b.spacer()
+    groups = data.get("groups") or []
+    for zone, names in groups:
+        b.labeled_line(public_zone_name(zone), ", ".join(_lower_first(_clean_text(name)) for name in names),
+                       lowercase=False)
+    if not groups:
+        b.line("В шкафу пока нет вещей — добавь их в «Настроить шкаф», и я соберу чемодан.")
+    if str(data.get("tip") or "").strip():
+        b.spacer()
+        b.italic(_finish_dot(data["tip"]))
+        b.newline()
+    return b.build_stripped()

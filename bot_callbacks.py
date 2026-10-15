@@ -34,6 +34,7 @@ import util
 import vacation
 import verify
 import wardrobe
+import wardrobe_suitcase
 import weather
 import yearly_tops
 from util import ack_loading as _ack
@@ -65,6 +66,9 @@ def _status_stages(data):
         return progress("⏳ Ищу рецепт...", "🥕 Сверяю продукты...", "🍳 Готовлю рецепт...", "📝 Пишу шаги...")
     if data in ("m_wardrobe", "w_look") or data.startswith(("w_lookst_", "w_with_")):
         return progress("👕 Открываю шкаф...", "🌦️ Смотрю на погоду...", "🎨 Подбираю цвета...", "🧩 Собираю образ...")
+    if data == "w_pack":
+        return progress("🌦️ Смотрю погоду в поездке...", "👕 Перебираю шкаф...", "🧳 Складываю чемодан...",
+                        "📝 Готовлю список...")
     if data.startswith("w_buy"):
         return progress("🛍️ Смотрю шкаф...", "🧮 Считаю сочетания...", "🔎 Ищу пробелы...", "📝 Готовлю список...")
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
@@ -434,7 +438,8 @@ ROUTES = (
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status))), sub="wardrobe"),
     # «Новый образ»: выбор направления под образом, затем новый образ в этом стиле.
     R("w_pick", _swap_kb(lambda c: wardrobe.style_picker_kb())),
-    R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard())),
+    R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard(c.cid))),
+    R("w_pack", lambda c: wardrobe_suitcase.send(c.bot, c.cid)),  # «Собрать чемодан» в отпуске
     R("w_lookst_*", _picked(lambda c: c.status(
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)))),
     R("w_*", lambda c: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data), sub="wardrobe"),

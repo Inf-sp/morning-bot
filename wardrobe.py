@@ -434,10 +434,13 @@ def _save_cached_look(cid, item_ids, look_data):
 
 
 # ---------- главный экран раздела (панель состояния) ----------
-def build_wardrobe_keyboard():
+def build_wardrobe_keyboard(cid=None):
+    import vacation
     rows = [
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
         [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
+        # В отпуске — «Собрать чемодан» из своего шкафа под погоду поездки.
+        *([[("🧳 Собрать чемодан", "w_pack")]] if cid is not None and vacation.active(cid) else []),
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -600,7 +603,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
                      previous_style=None, q=None, silent=False,
                      style=None, anchor_id=None):
-    result_kb = kb or _wardrobe_home_kb()
+    result_kb = kb or build_wardrobe_keyboard(cid)
     cached = None if previous_item_ids or anchor_id else _get_cached_look(cid)
     weather_now = (None, None)
     if cached:
@@ -632,7 +635,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             cached["text"] = text
             store.set_wardrobe_daylook(cid, cached)
         if kb is None:
-            result_kb = build_wardrobe_keyboard()
+            result_kb = build_wardrobe_keyboard(cid)
         if status is not None:
             await status.replace(
                 text, entities=entities, reply_markup=result_kb,
@@ -754,7 +757,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
     look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
     if kb is None:
-        result_kb = build_wardrobe_keyboard()
+        result_kb = build_wardrobe_keyboard(cid)
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе

@@ -379,10 +379,10 @@ def trip_key(cid) -> str:
     return f"{current.get('cc') or ''}|{place.get('city') or ''}|{current.get('until') or ''}"
 
 
-def trip_weather_summary(cid) -> str:
-    """«Кейптаун (ZA), до 20 октября; днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
+def trip_weather(cid) -> dict:
+    """Погода поездки по прогнозу (до 9 дней): {head, tmin, tmax, rainy, days, wind}; без прогноза — {head}."""
     if not active(cid):
-        return ""
+        return {}
     import weather
     place = store.get_settings(cid)
     head = f"{place.get('city') or ''} ({(state(cid) or {}).get('cc') or place.get('cc') or ''})"
@@ -391,16 +391,30 @@ def trip_weather_summary(cid) -> str:
         daily = weather.fetch_weather(place["lat"], place["lon"], 9)["daily"]
     except Exception:
         _log.debug("vacation: trip weather unavailable cid=%s", cid, exc_info=True)
-        return head
+        return {"head": head}
     until = (state(cid) or {}).get("until") or "9999-12-31"
     days = [index for index, day in enumerate(daily.get("time") or []) if day <= until]
     highs = [daily["temperature_2m_max"][i] for i in days if daily["temperature_2m_max"][i] is not None]
     if not highs:
-        return head
-    rainy = sum(1 for i in days if (daily["precipitation_probability_max"][i] or 0) >= 50)
-    wind = max(daily["windspeed_10m_max"][i] or 0 for i in days)
-    return (f"{head}; днём от {round(min(highs)):+d}° до {round(max(highs)):+d}°, "
-            f"дождь в {rainy} из {len(days)} дней, ветер до {round(wind)} м/с")
+        return {"head": head}
+    return {"head": head, "tmin": round(min(highs)), "tmax": round(max(highs)), "days": len(days),
+            "rainy": sum(1 for i in days if (daily["precipitation_probability_max"][i] or 0) >= 50),
+            "wind": round(max(daily["windspeed_10m_max"][i] or 0 for i in days))}
+
+
+def trip_weather_line(found) -> str:
+    """«днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
+    if "tmax" not in (found or {}):
+        return ""
+    return (f"днём от {found['tmin']:+d}° до {found['tmax']:+d}°, дождь в {found['rainy']} из {found['days']} дней, "
+            f"ветер до {found['wind']} м/с")
+
+
+def trip_weather_summary(cid) -> str:
+    """«Кейптаун (ZA), до 20 октября; днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
+    found = trip_weather(cid)
+    line = trip_weather_line(found)
+    return f"{found.get('head', '')}; {line}" if line else found.get("head", "")
 
 
 # ---------- факты о стране ----------
