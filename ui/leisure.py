@@ -766,13 +766,13 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
 
 
 def leisure_hub_kb():
-    """«Премьеры» — первой строкой; Фильмы | Сериалы — полные карточки; Музыка | Концерты."""
+    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
-         InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
-         InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
+         InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
+        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
