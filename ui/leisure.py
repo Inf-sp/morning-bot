@@ -716,9 +716,7 @@ def runtime_label(minutes, *, episode=False) -> str:
     return f"серия {label}" if episode else label
 
 
-_TODAY_MAIN = {"movie": "Фильм на вечер", "tv": "Сериал на вечер",
-               "music": "Музыка под настроение"}
-_TODAY_ALT = {"movie": "Фильм", "tv": "Сериал", "music": "Музыка"}
+_TODAY_KIND = {"movie": "фильм", "tv": "сериал", "music": "музыкальный альбом"}
 
 
 def _today_name(b: MessageBuilder, pick, meta=True) -> None:
@@ -732,32 +730,28 @@ def _today_name(b: MessageBuilder, pick, meta=True) -> None:
 
 
 def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка (первая, обычно фильм) — имя, метаданные и описание
-    одним абзацем через «•», ниже «почему»; остальные — строкой, событие рядом (если есть), статистика
-    библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
+    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка (первая, обычно фильм) без подписи — имя, метаданные,
+    длительность и описание одним абзацем через «•»; остальные — «- Имя · сериал · …», событие рядом (если есть),
+    статистика библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
         b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Сериалы» ниже.")
     else:
         first = picks[0]
-        b.bold(f"{_TODAY_MAIN.get(first['kind'], 'На сегодня')}:")
-        b.newline()
-        _today_name(b, first)
+        _today_name(b, {**first, "meta": [*first.get("meta", ()), first.get("runtime")]})
         about = _hub_about(first.get("about"))
         if about:
             b.text_line(f" • {about}")
         b.newline()
-        if str(first.get("why") or "").strip():
-            b.line(str(first["why"]).strip())
         rest = [pick for pick in picks if pick is not first]
         if rest:
             b.spacer()
             b.bold("Если не хочется кино:" if first["kind"] == "movie" else "Другие варианты:")
             b.newline()
-            for pick in rest:
-                b.text_line(f"{_TODAY_ALT.get(pick['kind'], '')} — ")
-                _today_name(b, pick)
+            for pick in rest:  # «- Колесо Времени · сериал · 2021 · Prime Video · фантастика · USA»
+                b.text_line("- ")
+                _today_name(b, {**pick, "meta": [_TODAY_KIND.get(pick["kind"], ""), *pick.get("meta", ())]})
                 b.newline()
     if outing:
         b.spacer()

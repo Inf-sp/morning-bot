@@ -286,11 +286,6 @@ def _movie_pick(kind, cached):
     it, tm = cached
     tm = tm or {}
     minutes = movie_recommendation.minutes_of(tm)
-    limit = movie_recommendation.runtime_limit(kind)
-    if limit and minutes:
-        why = "Одна серия — как раз на будний вечер." if kind == "tv" else "Не слишком длинный — как раз на будний вечер."
-    else:
-        why = ""
     url = leisure_ui.trailer_link({**it, **tm})  # YouTube-трейлер, без него — поиск трейлера на YouTube
     import countries
     year = str(tm.get("year") or tm.get("release_date") or "")[:4]
@@ -299,23 +294,18 @@ def _movie_pick(kind, cached):
     if kind == "tv":
         meta = [tm.get("network") or "", *meta]
     meta = [year if year.isdigit() else "", *meta]  # год — сразу после названия: «Восставший · 2026 · драма»
-    meta.append(leisure_ui.runtime_label(minutes, episode=kind == "tv"))
-    return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url,
-            "meta": meta, "about": tm.get("overview") or "", "why": why}
+    return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url, "meta": meta,
+            "runtime": leisure_ui.runtime_label(minutes, episode=kind == "tv"), "about": tm.get("overview") or ""}
 
 
 def _music_pick(artist):
     import countries
-    labels = {key: label for key, label, _prompt in leisure_music._MUSIC_GENRES}
     album = countries.artist_latest_album(artist.get("artist"), fetch=False)  # ищется в фоне при подборе
-    why = artist.get("why")
-    why = why[0] if isinstance(why, list) and why else why if isinstance(why, str) else ""
     return {"kind": "music", "name": artist.get("artist") or "",
             "url": leisure_ui.youtube_music_link(artist.get("artist")),
-            "meta": [labels.get(artist.get("genre"), ""),
-                     str(artist.get("country_label") or "").split(" ", 1)[-1],  # «🇨🇦 CA» → «CA», без флага
+            "meta": [str(artist.get("country_label") or "").split(" ", 1)[-1],  # «🇨🇦 CA» → «CA», без флага
                      *leisure_ui.album_meta(album)],
-            "about": artist.get("desc") or "", "why": str(why or "").strip()}
+            "about": artist.get("desc") or ""}
 
 
 def _evening_rain(cid, today) -> bool:
