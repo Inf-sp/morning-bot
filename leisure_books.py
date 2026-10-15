@@ -176,11 +176,11 @@ def _add_unique(key, cid, value):
         store.set_list(key, cid, [*items, value])
 
 
-def _cached_book(cid):
+def _cached_book(cid, stale=False):
+    """Книга дня; stale — резерв до недели, пока новую не собрать."""
     entry = (store._load(config.BOOK_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
     item = entry.get("item")
-    today = datetime.now(config.TZ).date().isoformat()
-    if (entry.get("date") != today or not isinstance(item, dict)
+    if (not util.reco_date_ok(entry.get("date"), stale) or not isinstance(item, dict)
             or entry.get("preferences") != _book_preferences(cid)):
         return None
     title = str(item.get("title") or _item_text(item)).strip()

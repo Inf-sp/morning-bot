@@ -377,13 +377,13 @@ def today_data(cid, day=None) -> dict:
     picks = []
     for kind in _TODAY_KINDS:
         if kind in ("movie", "tv"):
-            cached = leisure_movies._cached_movie(cid, kind)
+            cached = leisure_movies._cached_movie(cid, kind, stale=True)
             pick = _movie_pick(kind, cached) if cached else None
         elif kind == "book":
-            book = leisure_books._cached_book(cid)
+            book = leisure_books._cached_book(cid, stale=True)
             pick = _book_pick(book) if book else None
         else:
-            artist = leisure_music._cached_artist(cid)
+            artist = leisure_music._cached_artist(cid, stale=True)
             pick = _music_pick(artist) if artist else None
         if pick and pick["name"]:
             picks.append(pick)

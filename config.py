@@ -123,6 +123,7 @@ MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, 
 BOOK_PREMIERES_CACHE_KEY = "book_premieres_cache.json"  # {month: {expires, items}} — книги текущего месяца на неделю
 WARDROBE_TRENDS_CACHE_KEY = "wardrobe_trends_cache.json"  # {version, styles: {стили: {expires, items}}} — тренды сезона на неделю
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
+RECO_STALE_DAYS = 7  # карточка дня (фильм, сериал, книга, артист) — резерв неделю, если новую не собрать
 YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"
 BOOK_BLACKLIST_KEY = "book_blacklist.json"

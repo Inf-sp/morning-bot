@@ -13,6 +13,7 @@ import movie_engine
 import recommendation_stoplist
 import inclusive_recommendations
 import tracking
+import util
 import vacation
 import monthly_rebuses
 from ui import leisure as leisure_ui
@@ -524,12 +525,15 @@ def _movie_cache_signature(cid):
     }
 
 
-def _cached_movie(cid, kind="movie"):
-    """Карточка дня своего типа: у «Фильмов» и «Сериалов» — разные (_rec_key)."""
+def _cached_movie(cid, kind="movie", stale=False):
+    """Карточка дня своего типа: у «Фильмов» и «Сериалов» — разные (_rec_key).
+
+    stale — резерв, пока новую не собрать: карточка до недели, новые любимые её не сбрасывают."""
     entry = (store._load(config.MOVIE_RECO_CACHE_KEY) or {}).get(_rec_key(cid, kind)) or {}
-    today = datetime.now(config.TZ).date().isoformat()
     item = entry.get("item")
-    if (entry.get("date") != today or entry.get("signature") != _movie_cache_signature(cid)
+    signature, current = entry.get("signature") or {}, _movie_cache_signature(cid)
+    if (not util.reco_date_ok(entry.get("date"), stale)
+            or (signature.get("preferences") != current["preferences"] if stale else signature != current)
             or not isinstance(item, dict) or not str(item.get("title") or "").strip()):
         return None
     tm = entry.get("tm")
@@ -732,6 +736,8 @@ async def send_recos(bot, cid, kind, status=None):
     # чужой тип (сериал в «Фильмах») — тоже.
     if it and tm:
         tm = await _with_details(tm)
+    if not it or not _of_kind(tm, kind):
+        it, tm = _cached_movie(cid, kind, stale=True) or (it, tm)  # сбой подбора — последняя карточка недели
     if not it or not _of_kind(tm, kind):
         _log.warning(
             "movie reco: no TMDb-backed pick (tmdb_key=%s, llm_item=%s)",

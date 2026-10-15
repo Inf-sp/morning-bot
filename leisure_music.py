@@ -14,6 +14,7 @@ import recommendation_rotation as rotation
 import secure
 import settings
 import store
+import util
 import youtube_tracks
 from ui import leisure as leisure_ui
 from leisure_collection import plain_label
@@ -204,12 +205,13 @@ def _local_artist_fallback(known, category=None, *, recent=None):
     return dict(available[0]) if available else None
 
 
-def _cached_artist(cid):
+def _cached_artist(cid, stale=False):
+    """Артист дня; stale — резерв до недели, пока нового не подобрать."""
     entry = (store._load(config.MUSIC_RECO_CACHE_KEY) or {}).get(str(cid)) or {}
     item = entry.get("item")
-    today = datetime.now(config.TZ).date().isoformat()
     styles = sorted(_music_styles(cid))
-    if entry.get("date") != today or entry.get("styles") != styles or not isinstance(item, dict):
+    if (not util.reco_date_ok(entry.get("date"), stale) or entry.get("styles") != styles
+            or not isinstance(item, dict)):
         return None
     return dict(item)
 
@@ -642,6 +644,10 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         data = _local_artist_fallback(
             hard_blocked, fallback_category, recent=recent,
         )
+    if (not data or not data.get("artist")) and not category:
+        stale = _cached_artist(cid, stale=True)  # AI и резерв не дали нового — последний артист недели
+        if stale and str(stale.get("artist") or "").lower() not in hard_blocked:
+            data = stale
     if not data or not data.get("artist"):
         _log.info("send_listen: no data after retries cid=%s data=%r", cid, data)
         if preview:

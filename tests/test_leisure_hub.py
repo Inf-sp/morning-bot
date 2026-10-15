@@ -460,11 +460,11 @@ def _today_picks(monkeypatch, *, rain=False, concert=True):
     series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "genres": "драма", "network": "Prime Video",
                                  "episode_runtime": 45, "url": "https://tmdb.example/tv/2"})
     monkeypatch.setattr(leisure_hub.leisure_movies, "_cached_movie",
-                        lambda _cid, kind="movie": film if kind == "movie" else series)
+                        lambda _cid, kind="movie", stale=False: film if kind == "movie" else series)
     monkeypatch.setattr(leisure_hub.leisure_books, "_cached_book",
-                        lambda _cid: {"title": "Under Story", "author": "Chloe Benjamin", "genre": "проза"})
+                        lambda _cid, stale=False: {"title": "Under Story", "author": "Chloe Benjamin", "genre": "проза"})
     monkeypatch.setattr(leisure_hub.leisure_music, "_cached_artist",
-                        lambda _cid: {"artist": "Focus Group", "genre": "indie", "why": ["Как Bonobo, но теплее"]})
+                        lambda _cid, stale=False: {"artist": "Focus Group", "genre": "indie", "why": ["Как Bonobo, но теплее"]})
     monkeypatch.setattr(leisure_hub, "_evening_rain", lambda *_a: rain)
     events = [{"dates": {"start": {"localDate": "2026-10-13"}}, "name": "Muse", "url": "https://t.example/m",
                "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}] if concert else []
@@ -541,3 +541,14 @@ def test_runtime_label_and_weekday_limit():
     assert movie_recommendation.runtime_limit("tv", date(2026, 10, 16)) is None  # пятница — без ограничения
     assert movie_recommendation.fits_runtime({"runtime": 150}, 130) is False
     assert movie_recommendation.fits_runtime({}, 130) is True  # неизвестная длительность не отсекает
+
+
+def test_day_cards_stay_a_week_as_reserve_when_refresh_fails(monkeypatch):
+    memory = _memory_store(monkeypatch)
+    today = datetime.now(config.TZ).date()
+    monkeypatch.setattr(leisure_hub.leisure_music, "_music_styles", lambda _cid: ["indie"])
+    for age, expected in ((3, "Wolf Alice"), (config.RECO_STALE_DAYS, None)):
+        memory[config.MUSIC_RECO_CACHE_KEY] = {"42": {
+            "date": (today - timedelta(days=age)).isoformat(), "styles": ["indie"], "item": {"artist": "Wolf Alice"}}}
+        assert leisure_hub.leisure_music._cached_artist("42") is None  # не сегодняшний — прогрев соберёт новый
+        assert (leisure_hub.leisure_music._cached_artist("42", stale=True) or {}).get("artist") == expected

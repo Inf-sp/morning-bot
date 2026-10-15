@@ -275,6 +275,17 @@ class StatusManager:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
 
+def reco_date_ok(saved, stale=False) -> bool:
+    """Дата карточки дня: свежая — сегодняшняя; stale — до config.RECO_STALE_DAYS дней (резерв при сбое подбора)."""
+    from datetime import date, datetime
+    import config
+    try:
+        age = (datetime.now(config.TZ).date() - date.fromisoformat(str(saved or ""))).days
+    except ValueError:
+        return False
+    return age == 0 or (stale and 0 <= age < config.RECO_STALE_DAYS)
+
+
 def ttl_get(namespace: str, key: str, ttl: int):
     hit = _TTL_CACHE.get((namespace, key))
     if not hit:
