@@ -121,7 +121,7 @@ async def send_api_check(bot, cid, q=None):
 _REFRESH_CARDS = (
     ("myday", "☀️ Мой день"),
     ("wardrobe", "👔 Гардероб"),
-    ("cooking", "🥣 Готовка"),
+    ("cooking", "🥣 Кухня"),
     ("learning", "🧠 Обучение"),
     ("leisure", "🍿 Досуг"),
 )

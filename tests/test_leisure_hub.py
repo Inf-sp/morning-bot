@@ -72,7 +72,7 @@ def _seed_caches(monkeypatch):
 def test_main_menu_has_leisure_hub_instead_of_four_sections():
     assert _labels(menu.main_menu_kb()) == [
         ["☀️ Мой день"],
-        ["👔 Гардероб", "🥣 Готовка"],
+        ["👔 Гардероб", "🥣 Кухня"],
         ["🧠 Обучение", "🍿 Досуг"],
         ["🎚️ Настройки"],
     ]

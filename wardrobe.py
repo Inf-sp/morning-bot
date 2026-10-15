@@ -436,11 +436,16 @@ def _save_cached_look(cid, item_ids, look_data):
 # ---------- главный экран раздела (панель состояния) ----------
 def build_wardrobe_keyboard(cid=None):
     import vacation
+    if cid is not None and vacation.active(cid):
+        # В отпуске: «Ещё вариант» — новый образ дня из вещей чемодана по погоде поездки; без стилей и покупок.
+        return _kb([
+            [("Ещё вариант", "w_look")],
+            [("🧳 Собрать чемодан", "w_pack")],
+            [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
+        ])
     rows = [
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
         [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
-        # В отпуске — «Собрать чемодан» из своего шкафа под погоду поездки.
-        *([[("🧳 Собрать чемодан", "w_pack")]] if cid is not None and vacation.active(cid) else []),
         [("💳 Что докупить", "w_buy")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -690,6 +695,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     _rules, gap_note = _build_weather_rules(cid, w, flags)
 
     w = await migrate_item_attrs(cid, w)
+    import wardrobe_suitcase
+    w = wardrobe_suitcase.packed_wardrobe(cid, w)  # в отпуске — только вещи из чемодана, если он собран
     style_block = _settings.wardrobe_prefs_context(cid)
     # style — разовый выбор группы («Повседневный / Классический») или старого стиля; предпочтения не меняются.
     selected_styles = (list(style) if isinstance(style, (list, tuple)) else [style]) if style \

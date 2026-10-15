@@ -64,5 +64,27 @@ def test_pack_button_only_on_vacation(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
     assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard("42"))
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
-    assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[2] == "w_pack"  # под стилями, над «Что докупить»
+    # В отпуске нет стилей и «Что докупить»: «Ещё вариант» — новый образ дня, ниже «Собрать чемодан».
+    assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]
     assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard())  # без чата — как дома
+
+
+def test_vacation_look_uses_only_packed_items_when_suitcase_has_a_full_outfit(monkeypatch):
+    wardrobe_data = {"_v": 2, "zones": {
+        "Верх": {"Футболки": [{"name": "Белая футболка"}, {"name": "Чёрная футболка"}]},
+        "Низ": {"Джинсы": [{"name": "Джинсы"}, {"name": "Брюки"}]},
+        "Обувь": {"Кеды": [{"name": "Белые кеды"}]},
+    }}
+    profile = {"suitcase": {"key": "trip|abc", "result": {"groups": [
+        ["Верх", ["Белая футболка"]], ["Низ", ["Джинсы"]], ["Обувь", ["Белые кеды"]]]}}}
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "trip_key", lambda _cid: "trip")
+    monkeypatch.setattr(wardrobe_suitcase.store, "get_profile", lambda _cid: profile)
+
+    packed = wardrobe_suitcase.packed_wardrobe("42", wardrobe_data)
+    assert packed["zones"]["Верх"]["Футболки"] == [{"name": "Белая футболка"}]  # только из чемодана
+
+    profile["suitcase"]["result"]["groups"] = [["Верх", ["Белая футболка"]]]  # нет низа и обуви
+    assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
+    profile["suitcase"]["key"] = "other-trip|abc"  # чемодан прошлой поездки не в счёт
+    assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data

@@ -72,7 +72,7 @@ def test_admin_card_refresh_menu_has_all_cards():
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [row[0].text for row in markup[:-1]] == [
-        "☀️ Мой день", "👔 Гардероб", "🥣 Готовка", "🧠 Обучение", "🍿 Досуг",
+        "☀️ Мой день", "👔 Гардероб", "🥣 Кухня", "🧠 Обучение", "🍿 Досуг",
     ]
     assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
 

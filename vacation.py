@@ -34,7 +34,7 @@ _TIMEOUT = 12
 _COUNTRIES_URL = "https://raw.githubusercontent.com/mledoze/countries/master/countries.json"
 _SITUATIONS_TOTAL = 8  # ситуации «Обучения» в поездке: по одной в день по кругу
 _PHRASES_MIN, _PHRASES_MAX, _PHRASES_NO_DATE = 7, 60, 30  # фраз дня — по числу дней отпуска
-_GUIDE_VERSION = 4  # 4 — фразы на дни поездки, ситуации, факт о языке, памятка путешественника
+_GUIDE_VERSION = 5  # 5 — + описание местной кухни для меню дня; 4 — фразы, ситуации, факт о языке, памятка
 DAY_CHOICES = (("3 дня", 3), ("Неделя", 7), ("2 недели", 14), ("Без даты", 0))
 _MONTHS_GEN = ("январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр")
 _DATE_RE = re.compile(
@@ -577,9 +577,10 @@ def guide(cid) -> dict:
 5) tips — памятка путешественнику по-русски, только общеизвестные проверяемые факты, не уверен — пустая строка:
    emergency — единый экстренный номер («112» или «10111 — полиция, 10177 — скорая»), plugs — тип розеток и
    напряжение («тип M, 230 В»), tipping — чаевые («10–15% в кафе»), water — можно ли пить воду из-под крана.
-6) cuisine_ru — прилагательное кухни страны с заглавной буквы, как «Южноафриканская».
+6) cuisine_ru — прилагательное кухни страны с заглавной буквы, как «Южноафриканская»; cuisine_intro — одно-два
+   коротких предложения по-русски о характере этой кухни и за что её любят, без воды, только верное по сути.
 7) languages_ru — перевод названий языков из списка на русский, строчными: {{"Afrikaans": "африкаанс"}}.
-JSON: {{"language_ru":"","language_code":"","cuisine_ru":"","languages_ru":{{}},
+JSON: {{"language_ru":"","language_code":"","cuisine_ru":"","cuisine_intro":"","languages_ru":{{}},
 "phrases":[{{"text":"","ru":"","say":""}}],
 "situations":[{{"title":"","phrases":[{{"text":"","ru":"","say":""}}],"tip":""}}],
 "language_fact":"","tips":{{"emergency":"","plugs":"","tipping":"","water":""}}}}
@@ -631,6 +632,7 @@ def _clean_guide(data, days=_PHRASES_NO_DATE) -> dict:
         "language_ru": _text(data.get("language_ru"), 30),
         "language_code": _text(data.get("language_code"), 3).lower(),
         "cuisine_ru": _text(data.get("cuisine_ru"), 30),
+        "cuisine_intro": _text(data.get("cuisine_intro"), 300),
         "languages_ru": {str(k): str(v)[:30] for k, v in languages.items()},
         "phrases": phrases,
         "situations": situations[:_SITUATIONS_TOTAL],
@@ -860,3 +862,8 @@ def country_name_en(cid) -> str:
 
 def local_cuisine_label(cid) -> str:
     return guide(cid).get("cuisine_ru") or "Местная"
+
+
+def local_cuisine_intro(cid) -> str:
+    """Описание местной кухни под заголовком меню дня в отпуске — как у кухонь дома; нет — ""."""
+    return guide(cid).get("cuisine_intro") or ""

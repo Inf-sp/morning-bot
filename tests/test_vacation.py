@@ -100,7 +100,7 @@ def _guide(code="af"):
     situations = [{"title": f"ситуация {i}", "tip": "«g» читается как хриплое «х»",
                    "phrases": [{"text": "Een koffie, asseblief", "ru": "Кофе, пожалуйста", "say": "ин кофи, асэблиф"},
                                {"text": "Dankie!", "ru": "Спасибо!", "say": "данки"}]} for i in range(8)]
-    return {"v": 4, "language_code": code, "language_ru": "Африкаанс", "phrases": phrases, "situations": situations,
+    return {"v": 5, "language_code": code, "language_ru": "Африкаанс", "phrases": phrases, "situations": situations,
             "language_fact": "Африкаанс вырос из нидерландского XVII века",
             "tips": {"emergency": "112", "plugs": "тип M, 230 В", "tipping": "", "water": "можно"}}
 
@@ -148,7 +148,7 @@ def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
     saved, _places = _env(monkeypatch, CAPE)
     saved["vacation"] = {"home": HOME, "cc": "IT"}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "italian"
-    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 4, "cuisine_ru": "Южноафриканская"}}
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская"}}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "local_za"
     assert day_menu.cuisine_flag("local_za") == "🇿🇦"
 
@@ -432,3 +432,13 @@ def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
     for data in ("movie_reco", "tv_reco", "music_reco", "lz_prem", "lz_prem_movie_2", "lz_concerts"):
         assert bot_callbacks._legacy_alias(data, "42") == "m_leisure"
     assert bot_callbacks._legacy_alias("m_myday", "42") == "m_myday"
+
+
+def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
+    import menu
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская",
+                                                             "cuisine_intro": "Мясо на открытом огне и пряные карри."}}
+    text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
+                                        "dishes": {"lunch": {"name": "Брай", "note": "мясо на открытом огне"}}}, "42").text
+    assert text.startswith("🇿🇦 Меню на сегодня · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")

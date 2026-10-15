@@ -48,7 +48,7 @@ def ikb(rows):
 def main_menu_rows():
     return [
         [(ui_label("myday", "Мой день"), "m_myday")],
-        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Готовка"), "m_food")],
+        [(ui_label("wardrobe", "Гардероб"), "m_wardrobe"), (ui_label("food", "Кухня"), "m_food")],
         [(ui_label("learning", "Обучение"), "m_learn"), (ui_label("leisure", "Досуг"), "m_leisure")],
         [(ui_label("settings", "Настройки"), "m_settings")],
     ]
@@ -101,7 +101,7 @@ _SCREENS = {
     ),
     "m_food": (
         UI_FOOD,
-        "Готовка",
+        "Кухня",
         "Подберу блюдо из того, что есть дома, и покажу короткий понятный рецепт.",
         [
             [("🍳 Что приготовить", "m_food")],

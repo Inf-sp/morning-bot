@@ -120,6 +120,25 @@ def pack(cid) -> dict:
     return result
 
 
+_LOOK_ZONES = ("Верх", "Низ", "Обувь")  # без них образ не собрать — тогда весь шкаф
+
+
+def packed_wardrobe(cid, wardrobe) -> dict:
+    """В отпуске — шкаф только из вещей собранного чемодана этой поездки (образ дня «Ещё вариант»).
+    Чемодан не собран или в нём нет верха, низа или обуви — шкаф целиком."""
+    if not vacation.active(cid):
+        return wardrobe
+    saved = (store.get_profile(cid) or {}).get("suitcase") or {}
+    if not str(saved.get("key") or "").startswith(f"{vacation.trip_key(cid)}|"):
+        return wardrobe
+    names = {name for _zone, items in (saved.get("result") or {}).get("groups") or [] for name in items}
+    zones = {zone: {sub: [item for item in items if item.get("name") in names] for sub, items in subs.items()}
+             for zone, subs in (wardrobe or {}).get("zones", {}).items()}
+    if not all(any(zones.get(zone, {}).values()) for zone in _LOOK_ZONES):
+        return wardrobe
+    return {**wardrobe, "zones": zones}
+
+
 async def send(bot, cid):
     """Экран «🧳 Чемодан»; вне отпуска — подсказка, что кнопка для поездки."""
     import asyncio
