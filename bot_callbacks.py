@@ -612,15 +612,22 @@ LEGACY_ALIASES = (
 )
 
 
-def _legacy_alias(data):
-    return next((target for keys, target in LEGACY_ALIASES if _matches(keys, data)), data)
+# В отпуске у Досуга один экран — досуг страны: старые кнопки премьер, рекомендаций и концертов ведут в него.
+TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_lib")
+
+
+def _legacy_alias(data, cid=None):
+    data = next((target for keys, target in LEGACY_ALIASES if _matches(keys, data)), data)
+    if cid is not None and _matches(TRIP_LEISURE_KEYS, data) and vacation.active(cid):
+        return "m_leisure"
+    return data
 
 
 async def handle(update, context, remove_reply_keyboard):
     q = update.callback_query
     cid = str(q.message.chat_id)
     bot = context.bot
-    data = _legacy_alias(q.data)
+    data = _legacy_alias(q.data, cid)
 
     status_used = []
 

@@ -403,7 +403,11 @@ def premiere_of_day(cid, day=None):
 
 
 async def send_hub(bot, cid, q=None):
-    """«🍿 Досуг на сегодня»: главная карточка — фильм на вечер."""
+    """«🍿 Досуг на сегодня»: главная карточка — фильм на вечер; в отпуске — досуг страны поездки."""
+    import vacation
+    if vacation.active(cid):
+        await _show(bot, cid, await asyncio.to_thread(_trip_screen, cid, vacation.trip_leisure(cid)), q)
+        return
     # Плашка ожидания «🎬 Смотрю афиши кинотеатров...» — общий индикатор роутера (bot_callbacks).
     data = await asyncio.to_thread(today_data, cid)
     msg = leisure_ui.leisure_today_screen(
@@ -411,6 +415,21 @@ async def send_hub(bot, cid, q=None):
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
     await _show(bot, cid, msg, q)
+
+
+def _trip_screen(cid, data):
+    """Экран Досуга поездки из готовых кэшей: события города и концерты — только в даты отпуска, без сети."""
+    import local_events
+    import vacation
+    place = store.get_settings(cid) or {}
+    cc = str(place.get("cc") or "").upper()
+    until = (vacation.state(cid) or {}).get("until") or "9999-12-31"
+    today = _today_and_cc(cid)[0].isoformat()
+    events = [event for event in local_events.events(cid, fetch=False)
+              if event.get("end", "") >= today and event.get("start", "") <= until]
+    concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
+    title = " ".join(part for part in (place.get("country") or cc, util.flag_from_cc(cc)) if part)
+    return leisure_ui.trip_leisure_screen(title, data, events, concerts)
 
 
 async def send_concerts(bot, cid, q=None):

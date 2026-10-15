@@ -1,6 +1,6 @@
 """Местные события города — Pride, городские фестивали и праздники — для «Моего дня» и рассылки накануне.
 
-Раз в неделю на город: веб-поиск на английском (Tavily, иначе Firecrawl) на две недели вперёд,
+Раз в неделю на город: веб-поиск на английском (Tavily, иначе Firecrawl) на две недели вперёд (в отпуске — на время поездки, до 30 дней),
 AI выбирает только события, дата которых прямо написана в тексте найденных страниц (поле evidence
 сверяется с текстом кодом). Без подтверждённой даты событие не показывается; ничего не выдумываем.
 """
@@ -20,6 +20,7 @@ _log = logging.getLogger(__name__)
 
 _TTL = 7 * 86400
 _HORIZON_DAYS = 14
+_TRIP_HORIZON_DAYS = 30  # в отпуске — на время поездки, но не дальше месяца
 _MAX_EVENTS = 8
 _PAGE_CHARS = 1500
 
@@ -41,21 +42,33 @@ def _parse_day(value):
         return None
 
 
-def _search(city, country, today):
-    months = sorted({today.strftime("%B %Y"), (today + timedelta(days=_HORIZON_DAYS)).strftime("%B %Y")})
+def _horizon(cid) -> int:
+    """Дней вперёд: дома — 14; в отпуске — до даты возвращения, но не больше 30 (без даты — 30)."""
+    import vacation
+    if not vacation.active(cid):
+        return _HORIZON_DAYS
+    try:
+        until = date.fromisoformat((vacation.state(cid) or {}).get("until") or "")
+    except ValueError:
+        return _TRIP_HORIZON_DAYS
+    return max(1, min(_TRIP_HORIZON_DAYS, (until - datetime.now(config.TZ).date()).days))
+
+
+def _search(city, country, today, horizon=_HORIZON_DAYS):
+    months = sorted({today.strftime("%B %Y"), (today + timedelta(days=horizon)).strftime("%B %Y")})
     query = f"{city} {country} festivals local events pride parade city celebration {' '.join(months)}"
     return research.web_search(query, max_results=6, scenario="local_events", allow_tavily=True,
                                search_priority="tavily")
 
 
-def _extract(city, rows, today):
+def _extract(city, rows, today, horizon=_HORIZON_DAYS):
     """[{name, about, start, end, url}] — только события с датой, найденной в тексте страниц."""
     pages = [{"url": str(row.get("url") or ""), "text": " ".join(
         str(row.get(key) or "") for key in ("title", "content"))[:_PAGE_CHARS]} for row in rows]
     pages = [page for page in pages if page["url"] and page["text"].strip()]
     if not pages:
         return []
-    end = today + timedelta(days=_HORIZON_DAYS)
+    end = today + timedelta(days=horizon)
     prompt = (
         f"Найди в текстах ниже местные события в городе {city} между {today.isoformat()} и {end.isoformat()}: "
         "Pride, городские фестивали, ярмарки, городские и местные праздники, карнавалы. Концерты отдельных "
@@ -105,7 +118,8 @@ def events(cid, fetch=True) -> list:
     today = datetime.now(config.TZ).date()
     country = store.get_settings(cid).get("country") or cc
     try:
-        found = _extract(city, _search(city, country, today), today)
+        horizon = _horizon(cid)
+        found = _extract(city, _search(city, country, today, horizon), today, horizon)
     except Exception:
         _log.warning("local events: search failed city=%s", city, exc_info=True)
         return list(saved.get("events") or [])  # сбой сети не запоминаем

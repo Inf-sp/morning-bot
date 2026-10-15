@@ -390,3 +390,45 @@ def test_guide_keeps_phrases_for_the_trip_days_and_traveller_tips():
     assert guide["tips"] == {"emergency": "112", "plugs": "тип M", "tipping": "", "water": ""}
     lines = dict(vacation_ui.country_lines({}, guide))
     assert lines == {"Экстренный номер": "112", "Розетки": "тип M"}  # пустые пункты памятки не показываются
+
+
+def test_trip_leisure_keeps_only_verified_films_and_artists_of_the_country(monkeypatch):
+    import countries
+    import tmdb
+    films = {"District 9": {"id": 1, "name": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"},
+             "Inception": {"id": 2, "name": "Начало", "name_en": "Inception", "year": "2010"}}
+    monkeypatch.setattr(tmdb, "lookup_title", lambda title, *_a, **_k: films.get(title))
+    monkeypatch.setattr(tmdb, "detail", lambda movie_id, _kind: {"countries": ["ZA"] if movie_id == 1 else ["US"]})
+    monkeypatch.setattr(countries, "label", lambda cc: f"flag {cc}")
+    monkeypatch.setattr(countries, "artist_label", lambda name, fetch=True: "flag ZA" if name == "Miriam Makeba" else "flag US")
+
+    picked = vacation._verified_films([{"title": "District 9"}, {"title": "Inception"}, {"title": "Выдумка"}], "ZA")
+    assert [film["title"] for film in picked] == ["Район №9"]  # американский и несуществующий — отброшены
+    assert vacation._verified_artists(["Miriam Makeba", "Taylor Swift"], "ZA") == ["Miriam Makeba"]
+
+
+def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip():
+    from ui import leisure as leisure_ui
+    msg = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {
+        "films": [{"id": 1, "title": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"}],
+        "chart": ["Tyla", "Kabza De Small"], "legends": ["Miriam Makeba"],
+        "holidays": [("24 сентября", "Heritage Day — День наследия")],
+    }, events=[{"name": "Cape Town Jazz Festival", "start": "2026-09-26", "end": "2026-09-27"}],
+        concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
+
+    text = msg.text
+    assert text.startswith("🍿 Досуг · ЮАР 🇿🇦\n\nФильмы страны:\n- Район №9 · 2009 · фантастика")
+    assert "Слушают сейчас: Tyla · Kabza De Small\nЛегенды: Miriam Makeba" in text
+    assert "Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n🎪 Cape Town Jazz Festival — 26 сентября" in text
+    assert "🎫 Muse — 30 сентября, Cape Town Stadium" in text
+    assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["m_menu"]]
+
+
+def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
+    import bot_callbacks
+    saved, _places = _env(monkeypatch, CAPE)
+    assert bot_callbacks._legacy_alias("movie_reco", "42") == "movie_reco"  # дома — как обычно
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": ""}
+    for data in ("movie_reco", "tv_reco", "music_reco", "lz_prem", "lz_prem_movie_2", "lz_concerts"):
+        assert bot_callbacks._legacy_alias(data, "42") == "m_leisure"
+    assert bot_callbacks._legacy_alias("m_myday", "42") == "m_myday"

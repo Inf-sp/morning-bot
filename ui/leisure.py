@@ -769,6 +769,60 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
     return b.build_stripped(reply_markup=reply_markup)
 
 
+def _linked_names(b: MessageBuilder, label, names) -> None:
+    """«Слушают сейчас: Tyla · Kabza De Small» — имена ссылками на YouTube Music."""
+    names = [name for name in names or [] if str(name or "").strip()]
+    if not names:
+        return
+    b.label(label)
+    b.text_line(" ")
+    for index, name in enumerate(names):
+        b.text_line(" · ") if index else None
+        b.link(name, youtube_music_link(name))
+    b.newline()
+
+
+def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
+    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: фильмы страны, что слушают сейчас, легенды и что идёт во время отпуска —
+    праздники, фестивали и события города, концерты твоих артистов. Премьер и рекомендаций нет."""
+    b = MessageBuilder()
+    b.title(f"🍿 Досуг · {place}".rstrip(" ·"))
+    data = data or {}
+    films = data.get("films") or []
+    if films:
+        b.bold("Фильмы страны:")
+        b.newline()
+        for film in films:
+            b.text_line("- ")
+            b.bold_link(film["title"], trailer_link(film))
+            meta = [str(film.get("year") or ""), str(film.get("genres") or "").replace(", ", " · ")]
+            b.text_line("".join(f" · {value}" for value in meta if value.strip()))
+            b.newline()
+    if data.get("chart") or data.get("legends"):
+        b.spacer()
+        _linked_names(b, "Слушают сейчас", data.get("chart"))
+        _linked_names(b, "Легенды", data.get("legends"))
+    during = [("🎉", f"{day} — {name}", "") for day, name in data.get("holidays") or []]
+    for event in events or ():
+        start, end = _event_date_label(event.get("start")), _event_date_label(event.get("end"))
+        when = start if not end or end == start else f"{start} – {end}"
+        during.append(("🎪", event.get("name") or "", f" — {when}" if when else ""))
+    for concert in concerts or ():
+        place_name = concert.get("venue") or concert.get("city") or ""
+        tail = ", ".join(part for part in (_event_date_label(concert.get("date")), place_name) if part)
+        during.append(("🎫", concert.get("artist") or "", f" — {tail}" if tail else ""))
+    if during:
+        b.spacer()
+        b.bold("Во время отпуска:")
+        b.newline()
+        for emoji, name, tail in during:
+            b.line(f"{emoji} {name}{tail}")
+    if not films and not data.get("chart") and not during:
+        b.line("Собираю досуг страны — загляни чуть позже.")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
+                                                                                     callback_data="m_menu")]]))
+
+
 def leisure_hub_kb():
     """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»."""
     return InlineKeyboardMarkup([
