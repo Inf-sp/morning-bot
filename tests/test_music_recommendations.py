@@ -302,11 +302,10 @@ def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_a
     monkeypatch.setattr(leisure_music, "_deliver_artist_card",
                         lambda _bot, _cid, msg, _kb, status: status.replace(msg.text))
     monkeypatch.setattr(apple_music, "new_releases", lambda genre, _cc: [
-        {"title": "Fabric (DJ Mix)", "artist": "DJ Koze", "date": "2026-10-09", "url": ""},
         {"title": "Bleeds", "artist": "Wednesday", "date": "2026-10-09", "url": "https://music.example/a"},
     ] if genre == "electronic" else [])
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
     assert calls and "Не удалось подобрать" not in calls[0]
-    assert "Wednesday" in calls[0] and "«Bleeds» — вышел 9 октября" in calls[0] and "DJ Koze" not in calls[0]
+    assert "Wednesday" in calls[0] and "«Bleeds» — вышел 9 октября" in calls[0]

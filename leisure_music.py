@@ -699,7 +699,7 @@ async def _release_artist(cid, genres, known):
             _log.warning("send_listen: releases unavailable genre=%s", genre, exc_info=True)
             continue
         for item in releases:
-            if apple_music.not_mix(item) and item["artist"].lower() not in known:
+            if item["artist"].lower() not in known:
                 released = date.fromisoformat(item["date"])
                 return {"artist": item["artist"], "genre": genre, "url": item.get("url") or "",
                         "desc": f"Свежий альбом «{item['title']}» — вышел {released.day} {util._MONTHS[released.month - 1]}."}

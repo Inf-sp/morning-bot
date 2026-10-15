@@ -24,12 +24,20 @@ GENRE_IDS = {
 }
 
 
-_MIX_RE = re.compile(r"\b(?:dj[\s-]*mix|mixed|mix)\b|^dj\b", re.I)
+# Не актуальная новая музыка: DJ-миксы и диджеи, детские песни, переиздания, концертные записи, сборники.
+# ponytail: список слов по названию; Apple помечает часть детских альбомов просто «Pop» — дополнить по жалобам.
+_NOT_FRESH_RE = re.compile(
+    r"\b(?:dj[\s-]*mix|mixed|mix|kinder\w*|lullab\w*|nursery|slaapliedjes|anniversary|remaster\w*|"
+    r"super deluxe|live (?:at|in|from)|concert|greatest hits|best of|beste zangers)\b|^dj\b|\(live\)",
+    re.I,
+)
+_CHILDREN_GENRE = "4"  # «Children's Music» / «Kindermuziek» в ленте Apple
 
 
-def not_mix(item) -> bool:
-    """Без DJ-миксов и диджеев: «… (DJ Mix)», «Mixed by …», артист «DJ …»."""
-    return not (_MIX_RE.search(str(item.get("title") or "")) or _MIX_RE.search(str(item.get("artist") or "")))
+def is_fresh_album(item) -> bool:
+    """Современный новый альбом: без миксов, детской музыки, переизданий, концертов и сборников."""
+    return not (_NOT_FRESH_RE.search(str(item.get("title") or ""))
+                or _NOT_FRESH_RE.search(str(item.get("artist") or "")))
 
 
 def _feed(cc) -> list[dict]:
@@ -84,17 +92,19 @@ def _deezer_releases(genre_key, since) -> list[dict]:
 
 
 def new_releases(genre_key, cc="us", today=None) -> list[dict]:
-    """[{title, artist, date, cover, url, genre}] альбомов жанра за последние 90 дней, новые первыми."""
+    """[{title, artist, date, cover, url, genre}] альбомов жанра за последние 90 дней, новые первыми;
+    только современные новые альбомы (`is_fresh_album`, без детской музыки по жанру Apple)."""
     wanted = GENRE_IDS.get(genre_key)
     if not wanted:
         return []
     since = (today or date.today()) - timedelta(days=FRESH_DAYS)
     feed = _feed(str(cc or "us").lower())
     if not feed:
-        return sorted(_deezer_releases(genre_key, since), key=lambda item: item["date"], reverse=True)
+        return sorted(filter(is_fresh_album, _deezer_releases(genre_key, since)), key=lambda item: item["date"], reverse=True)
     items = []
     for row in feed:
-        if not isinstance(row, dict) or not wanted & {str(g.get("genreId")) for g in row.get("genres") or []}:
+        genres = {str(g.get("genreId")) for g in row.get("genres") or []} if isinstance(row, dict) else set()
+        if not wanted & genres or _CHILDREN_GENRE in genres:
             continue
         title = " ".join(str(row.get("name") or "").split())
         artist = " ".join(str(row.get("artistName") or "").split())
@@ -102,7 +112,7 @@ def new_releases(genre_key, cc="us", today=None) -> list[dict]:
             released = date.fromisoformat(str(row.get("releaseDate") or ""))
         except ValueError:
             continue
-        if title and artist and released >= since:
+        if title and artist and released >= since and is_fresh_album({"title": title, "artist": artist}):
             items.append({
                 "title": title, "artist": artist, "date": released.isoformat(),
                 "cover": str(row.get("artworkUrl100") or "").replace("100x100bb", "600x600bb"),

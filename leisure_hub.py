@@ -41,7 +41,7 @@ def new_music(cid, cc, today) -> list[dict]:
     )
     items, artists = [], set()
     for item in releases:
-        if item["artist"].casefold() in artists or not apple_music.not_mix(item):
+        if item["artist"].casefold() in artists:
             continue
         artists.add(item["artist"].casefold())
         items.append({**item, "genre_label": labels.get(item["genre"], "")})
@@ -172,11 +172,12 @@ def weekly_music(cid, cc, day) -> list[dict]:
     friday = _week_start(day, _FRIDAY)
     key = {"week": friday.isoformat(), "cc": cc, "styles": sorted(leisure_music._music_styles(cid) or [])}
     saved = (store.get_profile(cid) or {}).get("hub_music") or {}
-    if saved.get("items") and all(saved.get(name) == value for name, value in key.items()):
-        return [item for item in saved["items"] if apple_music.not_mix(item)]  # выпуск, сохранённый до фильтра миксов
+    kept = [item for item in saved.get("items") or [] if apple_music.is_fresh_album(item)]
+    if kept and len(kept) == len(saved["items"]) and all(saved.get(name) == value for name, value in key.items()):
+        return kept  # выпуск с отсеянным альбомом (детский, переиздание…) собирается заново
     items = new_music(cid, cc, day)[:_WEEK_TOP]
     if not items:
-        return list(saved.get("items") or [])
+        return kept
     if friday == _week_start(_today_and_cc(cid)[0], _FRIDAY):
         store.mutate_profile(cid, lambda profile: ({**profile, "hub_music": {**key, "items": items}}, None))
     return items

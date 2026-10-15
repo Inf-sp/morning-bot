@@ -60,7 +60,7 @@ async def _items(cid, kind) -> list[dict]:
     # Одна лента страны на все жанры: после первого запроса остальные берут её из кэша.
     lists = await asyncio.to_thread(lambda: [apple_music.new_releases(key, cc) for key in styles])
     # По очереди из каждого выбранного жанра, чтобы один жанр не забивал круг.
-    return [item for group in zip_longest(*lists) for item in group if item and apple_music.not_mix(item)]
+    return [item for group in zip_longest(*lists) for item in group if item]
 
 
 def _pick(cid, kind, items):

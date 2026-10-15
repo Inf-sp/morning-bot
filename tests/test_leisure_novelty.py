@@ -101,6 +101,16 @@ def test_apple_music_keeps_only_fresh_albums_of_the_genre(monkeypatch):
                  "genres": [{"genreId": "14"}], "artworkUrl100": "x/100x100bb.jpg", "url": "u"},
                 {"name": "Old", "artistName": "A", "releaseDate": "2025-01-01", "genres": [{"genreId": "14"}]},
                 {"name": "Rock", "artistName": "B", "releaseDate": "2026-10-01", "genres": [{"genreId": "21"}]},
+                # Детское и не новое не попадает: Apple помечает часть детских альбомов просто «Pop».
+                {"name": "47 - Spot aan", "artistName": "Kinderen Voor Kinderen", "releaseDate": "2026-10-03",
+                 "genres": [{"genreId": "14"}]},
+                {"name": "Slaapliedjes", "artistName": "C", "releaseDate": "2026-10-03",
+                 "genres": [{"genreId": "14"}, {"genreId": "4"}]},
+                {"name": "Fabric (DJ Mix)", "artistName": "D", "releaseDate": "2026-10-03", "genres": [{"genreId": "14"}]},
+                {"name": "Rubber Soul (Super Deluxe)", "artistName": "The Beatles", "releaseDate": "2026-10-03",
+                 "genres": [{"genreId": "14"}]},
+                {"name": "Live at Carnegie Hall", "artistName": "E", "releaseDate": "2026-10-03",
+                 "genres": [{"genreId": "14"}]},
             ]}}
 
     monkeypatch.setattr(apple_music.util, "ttl_get", lambda *_a: None)
