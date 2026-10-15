@@ -154,6 +154,30 @@ def test_today_outlook_matches_full_forecast_periods_and_skips_past_hours():
     assert weather.sky_word(outlook["clouds"], 61) == "облачно"
 
 
+def test_tomorrow_forecast_is_split_into_morning_day_and_evening():
+    data = {
+        "daily": {"time": ["2026-10-15", "2026-10-16"], "weathercode": [3, 61]},
+        "hourly": {
+            "time": ["2026-10-15T20:00", "2026-10-16T09:00", "2026-10-16T10:00", "2026-10-16T14:00",
+                     "2026-10-16T20:00"],
+            "temperature_2m": [11, 12, 14, 18, 15],
+            "precipitation_probability": [0, 10, 5, 70, 0],
+            "precipitation": [0, 0, 0, 2.5, 0],
+            "windspeed_10m": [2, 3, 5, 11, 4],
+            "cloudcover": [20, 30, 40, 100, 60],
+        },
+    }
+    late_evening = datetime(2026, 10, 15, 21, 0, tzinfo=weather.TZ)  # рассылка накануне вечером
+
+    lines = [weather._period_line(p) for p in weather.forecast_periods(data, late_evening, day=1)]
+
+    assert [line.split(":")[0].split(" ", 1)[1] for line in lines] == ["Утром", "Днём", "Вечером"]  # весь день
+    assert lines[0].endswith("Утром: до +14°C · Без дождя · Ветер 3–5 м/с")
+    assert lines[1].endswith("Днём: до +18°C · Дождь 70% · Сильный ветер 11 м/с")
+    assert lines[2].endswith("Вечером: до +15°C · Без дождя · Ветер 4 м/с")
+    assert weather.forecast_periods(data, late_evening, day=2) == []  # нет данных на этот день
+
+
 def test_weather_warning_lists_rain_periods_with_probabilities():
     data = {
         "hourly": {

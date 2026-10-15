@@ -389,21 +389,24 @@ def _full_forecast_parts(now):
     return [(label, start, end) for label, start, end in parts if end > now.hour]
 
 
-def forecast_periods(data, now):
-    """Периоды полного прогноза — единый источник для экрана прогноза и строки «Моего дня».
+def forecast_periods(data, now, day=0):
+    """Периоды полного прогноза — единый источник для экрана прогноза, строки «Моего дня» и прогноза на завтра.
 
-    Сегодняшние периоды считаются только по часам с текущего (Open-Meteo отдаёт и прошедшие),
-    плюс «Ночью» — 00–08 следующего дня.
+    Сегодня (day=0) периоды считаются только по часам с текущего (Open-Meteo отдаёт и прошедшие),
+    плюс «Ночью» — 00–08 следующего дня. Другой день — утро, день и вечер целиком.
     """
     d = data.get("daily") or {}
     days = d.get("time") or []
     hourly = data.get("hourly") or {}
     hours = hourly.get("time") or []
-    if not days:
+    if len(days) <= day:
         return []
-    parts = [(label, max(start, now.hour), end, days[0], 0) for label, start, end in _full_forecast_parts(now)]
-    if len(days) > 1:
-        parts.append(("Ночью", 0, 8, days[1], 1))
+    if day:
+        parts = [(label, start, end, days[day], day) for label, start, end in _full_forecast_parts(now.replace(hour=0))]
+    else:
+        parts = [(label, max(start, now.hour), end, days[0], 0) for label, start, end in _full_forecast_parts(now)]
+        if len(days) > 1:
+            parts.append(("Ночью", 0, 8, days[1], 1))
 
     def column(key, rows):
         values = hourly.get(key) or []
@@ -427,6 +430,14 @@ def forecast_periods(data, now):
             "icon": _period_weather_icon(label, code, tmax, rain, max(winds, default=0), rain_mm, clouds),
         })
     return periods
+
+
+def _period_line(period) -> str:
+    """«🌧️ Днём: до +18°C · Дождь 70% · Ветер 3–5 м/с» — строка части суток в прогнозе на завтра."""
+    rain = f"Дождь {period['rain']:.0f}%" if _rain_real(period["rain"], period["rain_mm"]) else "Без дождя"
+    wind = "Сильный ветер" if max(period["winds"], default=0) > 10 else "Ветер"
+    return (f"{period['icon']} {period['label']}: до {period['tmax']:+.0f}°C · {rain} · "
+            f"{wind} {_speed_range(period['winds'])} м/с")
 
 
 def today_outlook(data, now):
@@ -591,7 +602,9 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         desc = DESC.get(code, "")
         cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        main_lines = [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
+        # Утро, день и вечер отдельными строками; без почасовых данных — одна общая строка.
+        main_lines = [_period_line(p) for p in forecast_periods(data, now, day=1)] \
+            or [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
         fact = ""
         if alert:
             pass
