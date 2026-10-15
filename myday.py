@@ -522,7 +522,7 @@ class _BlockOff(Exception):
 
 
 def _vacation_blocks(cid) -> dict:
-    """В отпуске: факты о стране и слово дня на языке страны; дома — {}."""
+    """В отпуске: факты о стране с памяткой и фраза дня на языке страны; дома — {}."""
     import vacation
     if not vacation.active(cid):
         return {}
@@ -530,7 +530,7 @@ def _vacation_blocks(cid) -> dict:
     guide = vacation.guide(cid)
     return {
         "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
-        "word": vacation.word_today(cid) if vacation.replaces_learning(cid) else "",
+        "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
     }
 
 
@@ -626,9 +626,8 @@ def _build_day_text(cid, *, refresh_current=False):
     learning_enabled = store.learning_is_enabled(cid)
     trip = _vacation_blocks(cid)
     word_title = "Фраза дня"
-    if trip.get("word"):  # в отпуске — слово на языке страны поездки
+    if trip.get("word"):  # в отпуске — фраза путешественника на языке страны поездки
         word_line, word_lang = (trip["word"], "") if on("word") else ("", "")
-        word_title = "Слово дня"
     else:
         word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
     movie_rebus = {} if learning_enabled or trip.get("word") or not on("word") \

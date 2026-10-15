@@ -147,6 +147,8 @@ def learning_menu(home: dict):
             [("🎚️ Язык обучения", "set_learning")],
             [("#️⃣ Главная", "m_menu")],
         ]))
+    if home.get("vacation"):
+        return _trip_learning(home)
     code = home.get("lang_code", "nl")
     flag = home.get("flag") or LANGUAGE_EMOJI.get(code, LANGUAGE_EMOJI["nl"])
     title = home.get("language") or ("Английский" if code == "en" else "Нидерландский")
@@ -198,17 +200,39 @@ def learning_menu(home: dict):
         b.italic(learning_stats_line(title, stats.get("words"), stats.get("topics")))
         b.newline()
 
-    if home.get("vacation"):
-        # В отпуске: тренировка по базовым словам страны, свой словарь — после возвращения.
-        return b.build_stripped(reply_markup=ikb([
-            [("🎯 Запустить тренировку", "vac_train")],
-            [(ui_label("game", "Угадай слово"), "a_game")],
-            [("#️⃣ Главная", "m_menu")],
-        ]))
     return b.build_stripped(reply_markup=ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
+    ]))
+
+
+def _trip_learning(home: dict):
+    """«🇿🇦 Африкаанс в поездке»: ситуация дня — три фразы с произношением, совет о произношении, курсивом факт
+    о языке. Грамматики в поездке нет."""
+    b = MessageBuilder()
+    b.title(f"{home.get('flag') or '🌍'} {home.get('language') or 'Местный язык'} в поездке")
+    situation = home.get("situation") or {}
+    if situation.get("phrases"):
+        b.label("Ситуация", situation.get("title"))
+        b.newline()
+        for phrase in situation["phrases"]:
+            say = f" ({phrase['say']})" if phrase.get("say") else ""
+            b.line(f"{phrase['text']} → {phrase['ru']}{say}")
+    else:
+        b.line("Готовлю фразы для поездки — загляни чуть позже.")
+    if str(situation.get("tip") or "").strip():
+        b.spacer()
+        b.labeled_line("Произношение", _with_period(situation["tip"]), lowercase=False)
+    if str(home.get("language_fact") or "").strip():
+        b.spacer()
+        b.italic(_with_period(home["language_fact"]))
+        b.newline()
+    # В отпуске: тренировка по фразам страны, свой словарь — после возвращения.
+    return b.build_stripped(reply_markup=ikb([
+        [("🎯 Запустить тренировку", "vac_train")],
+        [(ui_label("game", "Угадай слово"), "a_game")],
+        [("#️⃣ Главная", "m_menu")],
     ]))
 
 

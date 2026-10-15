@@ -131,4 +131,9 @@ def country_lines(facts, guide=None) -> list:
         lines.append(("Время", _hours(facts.get("hours"))))
     if country.get("calling"):
         lines.append(("Телефонный код", country["calling"]))
+    tips = guide.get("tips") or {}  # памятка путешественника — только то, что AI знает наверняка
+    for label, key in (("Экстренный номер", "emergency"), ("Розетки", "plugs"), ("Чаевые", "tipping"),
+                       ("Вода из-под крана", "water")):
+        if str(tips.get(key) or "").strip():
+            lines.append((label, tips[key]))
     return lines

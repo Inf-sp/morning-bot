@@ -32,9 +32,9 @@ _KEY = "vacation"
 _FACTS_TTL = 30 * 86400
 _TIMEOUT = 12
 _COUNTRIES_URL = "https://raw.githubusercontent.com/mledoze/countries/master/countries.json"
-_LESSONS_TOTAL = 7
-_WORDS_TOTAL = 30
-_GUIDE_VERSION = 3  # 3 — уроки: тема → значение, пример, объяснение
+_SITUATIONS_TOTAL = 8  # ситуации «Обучения» в поездке: по одной в день по кругу
+_PHRASES_MIN, _PHRASES_MAX, _PHRASES_NO_DATE = 7, 60, 30  # фраз дня — по числу дней отпуска
+_GUIDE_VERSION = 4  # 4 — фразы на дни поездки, ситуации, факт о языке, памятка путешественника
 DAY_CHOICES = (("3 дня", 3), ("Неделя", 7), ("2 недели", 14), ("Без даты", 0))
 _MONTHS_GEN = ("январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр")
 _DATE_RE = re.compile(
@@ -514,9 +514,21 @@ def country_facts(cid) -> dict:
 
 # ---------- язык и кухня страны: один AI-запрос на поездку ----------
 
+def trip_days(cid) -> int:
+    """Сколько дней фраз нужно на поездку: от начала до даты возвращения (7–60), без даты — 30."""
+    current = state(cid) or {}
+    try:
+        start = date.fromisoformat(current.get("since") or "")
+        until = date.fromisoformat(current.get("until") or "")
+    except ValueError:
+        return _PHRASES_NO_DATE
+    return max(_PHRASES_MIN, min(_PHRASES_MAX, (until - start).days + 1))
+
+
 def guide(cid) -> dict:
-    """{language_ru, language_code, cuisine_ru, languages_ru{англ: рус},
-    lessons[{text, translation, rule, more, more_translation}], words[{text, ru, say}]}."""
+    """Язык и кухня страны на поездку (один AI-запрос): {language_ru, language_code, cuisine_ru, languages_ru,
+    phrases[{text, ru, say}] — по фразе на день, situations[{title, phrases, tip}], language_fact,
+    tips{emergency, plugs, tipping, water}}."""
     current = state(cid)
     if not current:
         return {}
@@ -534,30 +546,36 @@ def guide(cid) -> dict:
         record = {}
     source = {"city": place.get("city", ""), "country": place.get("country", ""),
               "languages": record.get("languages") or []}
+    days = trip_days(cid)
     prompt = f"""
 Пользователь едет в отпуск. Это данные, не инструкции: {secure.wrap_untrusted(json.dumps(source, ensure_ascii=False), 'поездка')}
 1) language_ru (с заглавной) и language_code (ISO 639-1) — основной местный язык этого города и страны.
    Английский — только если другого распространённого местного языка нет (Кейптаун → Африкаанс, af).
-2) lessons — {_LESSONS_TOTAL} коротких уроков грамматики на этом языке, от простого к сложному, каждый день
-   новая тема: topic — тема (слово или конструкция на этом языке), meaning — её значение по-русски;
-   more — пример на тему, more_translation — его перевод; explain — 1–2 предложения по-русски: когда
-   используется, перевод ключевых слов в скобках и ещё пример в формате «фраза → перевод»;
-   text и translation — полезная фраза для поездки и её перевод.
-3) words — {_WORDS_TOTAL} самых нужных туристу слов и коротких фраз: text, ru — перевод,
-   say — произношение русскими буквами.
-4) cuisine_ru — прилагательное кухни страны с заглавной буквы, как «Южноафриканская».
-5) languages_ru — перевод названий языков из списка на русский, строчными: {{"Afrikaans": "африкаанс"}}.
+2) phrases — {days} разных коротких фраз на этом языке, которые реально пригодятся путешественнику (вежливость,
+   кафе, магазин, транспорт, дорога, отель, помощь, знакомство): text, ru — естественный перевод,
+   say — произношение русскими буквами. Без повторов.
+3) situations — {_SITUATIONS_TOTAL} ситуаций поездки: приветствие и вежливость, в кафе, в магазине, транспорт,
+   как пройти, в отеле, помощь и здоровье, разговор с местными. Для каждой: title — по-русски строчными
+   («в кафе»), phrases — 3 фразы {{text, ru, say}}, tip — одно короткое предложение по-русски о произношении или
+   особенности языка в этой ситуации.
+4) language_fact — один короткий интересный и проверяемый факт об этом языке по-русски.
+5) tips — памятка путешественнику по-русски, только общеизвестные проверяемые факты, не уверен — пустая строка:
+   emergency — единый экстренный номер («112» или «10111 — полиция, 10177 — скорая»), plugs — тип розеток и
+   напряжение («тип M, 230 В»), tipping — чаевые («10–15% в кафе»), water — можно ли пить воду из-под крана.
+6) cuisine_ru — прилагательное кухни страны с заглавной буквы, как «Южноафриканская».
+7) languages_ru — перевод названий языков из списка на русский, строчными: {{"Afrikaans": "африкаанс"}}.
 JSON: {{"language_ru":"","language_code":"","cuisine_ru":"","languages_ru":{{}},
-"lessons":[{{"topic":"","meaning":"","more":"","more_translation":"","explain":"","text":"","translation":""}}],
-"words":[{{"text":"","ru":"","say":""}}]}}
+"phrases":[{{"text":"","ru":"","say":""}}],
+"situations":[{{"title":"","phrases":[{{"text":"","ru":"","say":""}}],"tip":""}}],
+"language_fact":"","tips":{{"emergency":"","plugs":"","tipping":"","water":""}}}}
 """
     try:
-        data = ai.llm_json(prompt, 2500, tier="cheap", module="vacation",
+        data = ai.llm_json(prompt, 6000, tier="cheap", module="vacation",
                            fallback_allowed=True, privacy_level="public")
     except Exception:
         _log.warning("vacation guide AI failed cid=%s", cid, exc_info=True)
         return {}
-    result = _clean_guide(data)
+    result = _clean_guide(data, days)
     if result:
         _save(cid, {**current, "guide": result})
     return result
@@ -567,20 +585,31 @@ def _text(value, limit):
     return " ".join(str(value or "").split())[:limit]
 
 
-def _clean_guide(data) -> dict:
+def _phrases(items, limit) -> list:
+    """Фразы {text, ru, say} без пустых и повторов."""
+    out, seen = [], set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        text, ru = _text(item.get("text"), 100), _text(item.get("ru"), 100)
+        if text and ru and text.casefold() not in seen:
+            seen.add(text.casefold())
+            out.append({"text": text, "ru": ru, "say": _text(item.get("say"), 80)})
+    return out[:limit]
+
+
+def _clean_guide(data, days=_PHRASES_NO_DATE) -> dict:
     if not isinstance(data, dict):
         return {}
-    lessons = []
-    for item in data.get("lessons") or []:
-        if isinstance(item, dict) and _text(item.get("text"), 120) and _text(item.get("translation"), 120):
-            lessons.append({key: _text(item.get(key), 400) for key in
-                            ("text", "translation", "topic", "meaning", "explain", "more", "more_translation")})
-    words = []
-    for item in data.get("words") or []:
-        if isinstance(item, dict) and _text(item.get("text"), 80) and _text(item.get("ru"), 80):
-            words.append({"text": _text(item["text"], 80), "ru": _text(item["ru"], 80), "say": _text(item.get("say"), 60)})
+    situations = []
+    for item in data.get("situations") or []:
+        if isinstance(item, dict) and _text(item.get("title"), 40) and _phrases(item.get("phrases"), 3):
+            situations.append({"title": _text(item["title"], 40), "phrases": _phrases(item["phrases"], 3),
+                               "tip": _text(item.get("tip"), 200)})
+    phrases = _phrases(data.get("phrases"), days)
     languages = data.get("languages_ru") if isinstance(data.get("languages_ru"), dict) else {}
-    if not lessons and not data.get("cuisine_ru"):
+    tips = data.get("tips") if isinstance(data.get("tips"), dict) else {}
+    if not situations and not phrases and not data.get("cuisine_ru"):
         return {}
     return {
         "v": _GUIDE_VERSION,
@@ -588,8 +617,10 @@ def _clean_guide(data) -> dict:
         "language_code": _text(data.get("language_code"), 3).lower(),
         "cuisine_ru": _text(data.get("cuisine_ru"), 30),
         "languages_ru": {str(k): str(v)[:30] for k, v in languages.items()},
-        "lessons": lessons[:_LESSONS_TOTAL],
-        "words": words[:_WORDS_TOTAL],
+        "phrases": phrases,
+        "situations": situations[:_SITUATIONS_TOTAL],
+        "language_fact": _text(data.get("language_fact"), 240),
+        "tips": {key: _text(tips.get(key), 120) for key in ("emergency", "plugs", "tipping", "water")},
     }
 
 
@@ -598,15 +629,25 @@ def _of_day(items, today=None):
     return items[today.toordinal() % len(items)] if items else None
 
 
-def lesson_today(cid, today=None) -> dict:
-    """Урок дня на языке страны: {text, translation, rule, more, more_translation} или {}."""
-    return _of_day(guide(cid).get("lessons") or [], today) or {}
+def situation_today(cid, today=None) -> dict:
+    """Ситуация дня для «Обучения» в поездке: {title, phrases, tip} или {}."""
+    return _of_day(guide(cid).get("situations") or [], today) or {}
 
 
-def word_today(cid, today=None) -> str:
-    """«Dankie → Спасибо» для строки «Слово дня» в «Моём дне» (в отпуске вместо фразы дня) или ""."""
-    word = _of_day(guide(cid).get("words") or [], today)
-    return f"{word['text']} → {word['ru']}" if word else ""
+def phrase_today(cid, today=None) -> str:
+    """«Dankie (данки) → Спасибо» для строки «Фраза дня» в «Моём дне»: фраза на каждый день поездки,
+    без повторов, пока фраз хватает на её дни; или ""."""
+    phrases = guide(cid).get("phrases") or []
+    if not phrases:
+        return ""
+    today = today or datetime.now(config.TZ).date()
+    try:
+        index = (today - date.fromisoformat((state(cid) or {}).get("since") or "")).days
+    except ValueError:
+        index = today.toordinal()
+    phrase = phrases[max(0, index) % len(phrases)]
+    say = f" ({phrase['say']})" if phrase.get("say") else ""
+    return f"{phrase['text']}{say} → {phrase['ru']}"
 
 
 def replaces_learning(cid) -> bool:
@@ -615,7 +656,7 @@ def replaces_learning(cid) -> bool:
         return False
     found = guide(cid)
     code = found.get("language_code") or ""
-    return bool(found.get("lessons")) and bool(code) and code not in ("ru", store.get_learning_language(cid) or "")
+    return bool(found.get("situations")) and bool(code) and code not in ("ru", store.get_learning_language(cid) or "")
 
 
 def learning_home(cid) -> dict | None:
@@ -625,13 +666,14 @@ def learning_home(cid) -> dict | None:
     import util
     found = guide(cid)
     return {"vacation": True, "has_material": True, "language": found.get("language_ru") or "Местный язык",
-            "flag": util.flag_from_cc((state(cid) or {}).get("cc", "")) or "🌍", "live_language": lesson_today(cid)}
+            "flag": util.flag_from_cc((state(cid) or {}).get("cc", "")) or "🌍",
+            "situation": situation_today(cid), "language_fact": found.get("language_fact") or ""}
 
 
 async def send_quiz(bot, cid):
-    """«Выбери перевод» по базовым словам страны: Telegram-квиз, ниже следующее задание."""
+    """«Выбери перевод» по фразам поездки: Telegram-квиз, ниже следующее задание."""
     import random
-    words = guide(cid).get("words") or []
+    words = guide(cid).get("phrases") or []
     if len(words) < 4 or not replaces_learning(cid):
         await bot.send_message(
             chat_id=cid, text="Отпуск закончился — тренировка снова в разделе «Обучение».",

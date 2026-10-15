@@ -96,10 +96,13 @@ def test_vacation_ends_on_return_day(monkeypatch):
 
 
 def _guide(code="af"):
-    lessons = [{"text": f"Les {i}", "translation": f"Урок {i}", "rule": "_Hoe_ → как.", "more": "Hoe laat?",
-                "more_translation": "Который час?"} for i in range(7)]
-    words = [{"text": f"Woord {i}", "ru": f"Слово {i}", "say": f"вурд {i}"} for i in range(30)]
-    return {"v": 3, "language_code": code, "language_ru": "Африкаанс", "lessons": lessons, "words": words}
+    phrases = [{"text": f"Frase {i}", "ru": f"Фраза {i}", "say": f"фразэ {i}"} for i in range(10)]
+    situations = [{"title": f"ситуация {i}", "tip": "«g» читается как хриплое «х»",
+                   "phrases": [{"text": "Een koffie, asseblief", "ru": "Кофе, пожалуйста", "say": "ин кофи, асэблиф"},
+                               {"text": "Dankie!", "ru": "Спасибо!", "say": "данки"}]} for i in range(8)]
+    return {"v": 4, "language_code": code, "language_ru": "Африкаанс", "phrases": phrases, "situations": situations,
+            "language_fact": "Африкаанс вырос из нидерландского XVII века",
+            "tips": {"emergency": "112", "plugs": "тип M, 230 В", "tipping": "", "water": "можно"}}
 
 
 def test_learning_switches_to_country_language_only_for_other_language(monkeypatch):
@@ -111,12 +114,13 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
 
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
-    assert msg.text.startswith("🇿🇦 Изучаем сегодня · Африкаанс")
-    assert "Грамматика: Hoe" in msg.text and "Пример:" not in msg.text
-    assert msg.text.endswith("Hoe laat? → Который час?") and "Фраза дня" not in msg.text
+    # Не грамматика, а что пригодится в поездке: ситуация дня, произношение, факт о языке курсивом.
+    assert msg.text.startswith("🇿🇦 Африкаанс в поездке\n\nСитуация: ")
+    assert "Een koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)" in msg.text
+    assert "Произношение: «g» читается как хриплое «х»." in msg.text and "Грамматика" not in msg.text
+    assert msg.text.endswith("Африкаанс вырос из нидерландского XVII века.")
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
-    assert vacation.lesson_today("42", date(2026, 10, 12)) != vacation.lesson_today("42", date(2026, 10, 13))
-    assert vacation.word_today("42", date(2026, 10, 12)).count(" → ") == 1
+    assert vacation.situation_today("42", date(2026, 10, 12)) != vacation.situation_today("42", date(2026, 10, 13))
 
     saved["vacation"]["guide"] = _guide("nl")  # Бельгия: учишь нидерландский — обычное обучение
     assert not vacation.replaces_learning("42") and vacation.learning_home("42") is None
@@ -137,14 +141,14 @@ def test_vacation_quiz_is_a_translation_poll(monkeypatch):
     poll = polls[0]
     assert poll["type"] == "quiz" and len(poll["options"]) == 4 and poll["question"].startswith("🎯 Выбери перевод")
     term = poll["question"].split("Что значит ", 1)[1].split(" [", 1)[0]
-    assert poll["options"][poll["correct_option_id"]] == "Слово " + term.split()[-1]
+    assert poll["options"][poll["correct_option_id"]] == "Фраза " + term.split()[-1]
 
 
 def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
     saved, _places = _env(monkeypatch, CAPE)
     saved["vacation"] = {"home": HOME, "cc": "IT"}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "italian"
-    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 3, "cuisine_ru": "Южноафриканская"}}
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 4, "cuisine_ru": "Южноафриканская"}}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "local_za"
     assert day_menu.cuisine_flag("local_za") == "🇿🇦"
 
@@ -179,10 +183,10 @@ def test_country_block_and_summary_lines():
         "Языки": "африкаанс, английский и ещё 1", "Валюта": "ZAR (R) · 1 € = 18,53 R",
         "Время": "на 1 ч больше, чем в Амстердаме", "Телефонный код": "+27",
     }
-    text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", word_title="Слово дня", vacation={
+    text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", vacation={
         "country_lines": [("Столица", "Pretoria")]}).text
     assert "В отпуске" not in text and "дома" not in text  # строку «✈️ В отпуске … · дома …» не пишем
-    assert "🌍 Страна:\nСтолица: Pretoria" in text and "💬 Слово дня: Dankie → Спасибо" in text  # в отпуске — слово страны
+    assert "🌍 Страна:\nСтолица: Pretoria" in text and "💬 Фраза дня: Dankie → Спасибо" in text  # в отпуске — фраза страны
     assert "Разговорник" not in text
 
 
@@ -357,3 +361,32 @@ def test_settings_on_vacation_keep_only_return_home_and_notifications(monkeypatc
     asyncio.run(settings.send_home(bot, "42"))
     trip = [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard]
     assert trip == [["set_vachome"], ["set_notif"], ["m_menu"]]  # без предпочтений, города и экспорта
+
+
+def test_trip_phrases_cover_every_day_of_the_trip_without_repeats(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "since": "2026-10-12", "until": "2026-10-21", "guide": _guide()}
+
+    assert vacation.trip_days("42") == 10  # 12–21 октября включительно
+    days = [vacation.phrase_today("42", date(2026, 10, 12 + i)) for i in range(10)]
+    assert len(set(days)) == 10 and days[0] == "Frase 0 (фразэ 0) → Фраза 0"
+    saved["vacation"]["until"] = ""
+    assert vacation.trip_days("42") == 30  # без даты возвращения
+    saved["vacation"]["until"] = "2027-06-01"
+    assert vacation.trip_days("42") == 60  # долгая поездка — не больше 60 фраз
+
+
+def test_guide_keeps_phrases_for_the_trip_days_and_traveller_tips():
+    data = {"language_ru": "Африкаанс", "language_code": "af",
+            "phrases": [{"text": f"F{i}", "ru": f"Ф{i}"} for i in range(12)] + [{"text": "F1", "ru": "дубль"}],
+            "situations": [{"title": "в кафе", "phrases": [{"text": "Dankie", "ru": "Спасибо"}], "tip": "Мягко."},
+                           {"title": "пусто", "phrases": []}],
+            "tips": {"emergency": "112", "plugs": "тип M"}}
+
+    guide = vacation._clean_guide(data, days=10)
+
+    assert len(guide["phrases"]) == 10 and guide["phrases"][1]["ru"] == "Ф1"  # по числу дней, без дублей
+    assert [item["title"] for item in guide["situations"]] == ["в кафе"]  # ситуация без фраз отброшена
+    assert guide["tips"] == {"emergency": "112", "plugs": "тип M", "tipping": "", "water": ""}
+    lines = dict(vacation_ui.country_lines({}, guide))
+    assert lines == {"Экстренный номер": "112", "Розетки": "тип M"}  # пустые пункты памятки не показываются
