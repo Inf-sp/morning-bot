@@ -76,14 +76,17 @@ def test_analysis_counts_items_outfits_and_uses_plurals():
         {"item": "Чёрные ботинки", "gain": 18, "priority": "Сначала", "why": "Обуви мало — новая пара даст сочетания"},
         {"item": "Белая льняная рубашка", "gain": 0, "priority": "Необязательно", "why": ""},
     ]}).text
-    assert text == ("💳 Что докупить\n\nПокупки, которые расширят твой гардероб\n\n"
-                    "- Чёрные ботинки · Сначала · +18 образов\nОбуви мало — новая пара даст сочетания.\n\n"
-                    "- Белая льняная рубашка · Необязательно\n\n"
-                    "Сильные и слабые стороны: 1 пара обуви на все случаи, нет тёплой куртки к зиме. "
+    assert text == ("💳 Что докупить\n\n"
+                    "• Чёрные ботинки · +18 — обуви мало\n"
+                    "• Белая льняная рубашка\n\n"
+                    "Пробелы: 1 пара обуви на все случаи, нет тёплой куртки к зиме. "
                     "Первым делом — чёрные ботинки.")
     calm = wardrobe_ui.purchase_screen({"strengths": ["много базового верха"], "weaknesses": [], "has_picks": False}).text
-    assert calm == ("💳 Что докупить\n\nЯвных пробелов нет — шкаф уже закрывает основные образы.\n\n"
-                    "Сильные и слабые стороны: много базового верха.")
+    assert calm == "💳 Что докупить\n\nЯвных пробелов нет — шкаф уже закрывает основные образы."
+    balanced = wardrobe_ui.purchase_screen({"weaknesses": [], "has_picks": True, "picks": [
+        {"item": "Бежевые брюки чинос", "gain": 92, "why": "Расширит вариативность низа, сочетается с темными верхами."}]}).text
+    assert balanced == ("💳 Что докупить\n\n• Бежевые брюки чинос · +92 — расширит вариативность низа\n\n"
+                        "Шкаф сбалансирован — покупки необязательны.")
     assert "присматриваешь" not in text
 
     two_shoes = purchase.analysis({**facts, "shoes": 2, "cold_season": False, "light": True})
@@ -197,7 +200,7 @@ def test_bought_item_is_added_and_screen_recomputed(monkeypatch):
     assert wardrobe._purchase_state(cid)["key"] != old_key
     # «Часы» в шкаф не попадают (только одежда и обувь): 8 вещей + кеды.
     assert wardrobe._purchase_state(cid)["analysis"]["total"] == 9  # пересчитано: 8 вещей + кеды
-    assert bot.sent[-1]["text"].startswith("💳 Что докупить\n\nПокупки, которые расширят твой гардероб\n\n- ") and "👔" not in bot.sent[-1]["text"]
+    assert bot.sent[-1]["text"].startswith("💳 Что докупить\n\n• ") and "👔" not in bot.sent[-1]["text"]
     assert "Белые кожаные кеды" not in bot.sent[-1]["text"]
     wardrobe.store.pending_input.pop(cid, None)
 
@@ -407,8 +410,7 @@ def test_purchase_screen_without_gaps_does_not_push_buying():
     text = wardrobe_ui.purchase_screen({"strengths": ["много базового верха"], "weaknesses": [], "has_picks": True,
                                         "picks": [{"item": "Белый лонгслив", "priority": "Необязательно"}]}).text
 
-    assert text.endswith("Сильные и слабые стороны: много базового верха.\n"
-                         "Явных пробелов нет — покупки необязательны.")
+    assert text.endswith("\n\nШкаф сбалансирован — покупки необязательны.")
 
 
 def test_purchase_check_extras_counts_outfit_gain():

@@ -4,6 +4,7 @@
 придумываются AI. Лента страны кэшируется на 6 часов в памяти процесса.
 """
 import logging
+import re
 from datetime import date, timedelta
 
 import requests
@@ -21,6 +22,14 @@ GENRE_IDS = {
     "indie": {"20"}, "pop": {"14"}, "electronic": {"7", "17"},
     "rnb": {"15"}, "rock": {"21"}, "hiphop": {"18"},
 }
+
+
+_MIX_RE = re.compile(r"\b(?:dj[\s-]*mix|mixed|mix)\b|^dj\b", re.I)
+
+
+def not_mix(item) -> bool:
+    """Без DJ-миксов и диджеев: «… (DJ Mix)», «Mixed by …», артист «DJ …»."""
+    return not (_MIX_RE.search(str(item.get("title") or "")) or _MIX_RE.search(str(item.get("artist") or "")))
 
 
 def _feed(cc) -> list[dict]:

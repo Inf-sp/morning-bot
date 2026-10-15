@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import quote_plus
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -644,6 +644,11 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         data = _local_artist_fallback(
             hard_blocked, fallback_category, recent=recent,
         )
+    if (not data or not data.get("artist")) and not category:  # свой список жанра кончился — списки других
+        data = next((found for style in selected_styles
+                     if (found := _local_artist_fallback(hard_blocked, {"value": style}, recent=recent))), None)
+    if not data or not data.get("artist"):
+        data = await _release_artist(cid, sorted(allowed_genres), known)
     if (not data or not data.get("artist")) and not category:
         stale = _cached_artist(cid, stale=True)  # AI и резерв не дали нового — последний артист недели
         if stale and str(stale.get("artist") or "").lower() not in hard_blocked:
@@ -680,6 +685,25 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await _deliver_artist_card(
         bot, cid, msg, _listen_kb(), status=status)
+
+
+async def _release_artist(cid, genres, known):
+    """Резерв без AI: реальный артист из свежих альбомов жанров (Apple Music, иначе Deezer) — не из любимых,
+    не скрытый и не показанный недавно, без DJ-миксов."""
+    import apple_music
+    cc = (store.get_settings(cid).get("cc") or "NL").lower()
+    for genre in genres:
+        try:
+            releases = await asyncio.to_thread(apple_music.new_releases, genre, cc)
+        except Exception:
+            _log.warning("send_listen: releases unavailable genre=%s", genre, exc_info=True)
+            continue
+        for item in releases:
+            if apple_music.not_mix(item) and item["artist"].lower() not in known:
+                released = date.fromisoformat(item["date"])
+                return {"artist": item["artist"], "genre": genre, "url": item.get("url") or "",
+                        "desc": f"Свежий альбом «{item['title']}» — вышел {released.day} {util._MONTHS[released.month - 1]}."}
+    return None
 
 
 async def _with_country(data):

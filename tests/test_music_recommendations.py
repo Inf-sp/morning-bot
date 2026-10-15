@@ -271,3 +271,42 @@ def test_music_task_returns_a_usable_track(monkeypatch):
         ("⬅️ Назад", "m_leisure"), ("#️⃣ Главная", "m_menu"),
     ]
 
+
+
+def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_are_exhausted(monkeypatch):
+    import apple_music
+    calls = []
+    every_local = [item["artist"] for items in leisure_music._LOCAL_ARTIST_FALLBACKS.values() for item in items]
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            calls.append(text)
+
+    async def unavailable(*_args, **_kwargs):
+        raise Exception("AI cooldown")
+
+    async def same(data):
+        return data
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", unavailable)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(leisure_music.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: every_local)
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "electronic"])
+    monkeypatch.setattr(leisure_music, "_with_country", same)
+    monkeypatch.setattr(leisure_music, "_attach_track_links", same)
+    monkeypatch.setattr(leisure_music, "_deliver_artist_card",
+                        lambda _bot, _cid, msg, _kb, status: status.replace(msg.text))
+    monkeypatch.setattr(apple_music, "new_releases", lambda genre, _cc: [
+        {"title": "Fabric (DJ Mix)", "artist": "DJ Koze", "date": "2026-10-09", "url": ""},
+        {"title": "Bleeds", "artist": "Wednesday", "date": "2026-10-09", "url": "https://music.example/a"},
+    ] if genre == "electronic" else [])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert calls and "Не удалось подобрать" not in calls[0]
+    assert "Wednesday" in calls[0] and "«Bleeds» — вышел 9 октября" in calls[0] and "DJ Koze" not in calls[0]

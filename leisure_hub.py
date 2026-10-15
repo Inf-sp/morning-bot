@@ -42,7 +42,7 @@ def new_music(cid, cc, today) -> list[dict]:
     )
     items, artists = [], set()
     for item in releases:
-        if item["artist"].casefold() in artists:
+        if item["artist"].casefold() in artists or not apple_music.not_mix(item):
             continue
         artists.add(item["artist"].casefold())
         items.append({**item, "genre_label": labels.get(item["genre"], "")})
@@ -105,7 +105,7 @@ async def _warm_series(cid):
     import movie_discovery
     items = await movie_discovery.get_series_premieres(cid)
     keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating",
-            "origin_country", "original_language", "genres", "popularity")
+            "origin_country", "original_language", "genres", "popularity", "poster")
     items = [{key: item.get(key) for key in keep} for item in items or []]
     store.mutate_profile(cid, lambda profile: (
         {**profile, "hub_series": {"v": _SERIES_VERSION, "date": today.isoformat(), "items": items}}, None))
@@ -174,7 +174,7 @@ def weekly_music(cid, cc, day) -> list[dict]:
     key = {"week": friday.isoformat(), "cc": cc, "styles": sorted(leisure_music._music_styles(cid) or [])}
     saved = (store.get_profile(cid) or {}).get("hub_music") or {}
     if saved.get("items") and all(saved.get(name) == value for name, value in key.items()):
-        return list(saved["items"])
+        return [item for item in saved["items"] if apple_music.not_mix(item)]  # выпуск, сохранённый до фильтра миксов
     items = new_music(cid, cc, day)[:_WEEK_TOP]
     if not items:
         return list(saved.get("items") or [])
@@ -441,9 +441,16 @@ async def send_week_premieres(bot, cid, kind="", q=None):
 
 async def _premiere_image(kind, item) -> str:
     """Постер фильма или сериала, обложка альбома; обложка книги — с ограничением по времени (кэш 30 дней)."""
-    if kind == "book":
-        return await leisure_books._cover_for(item, 4.0)
-    return str(item.get("cover" if kind == "music" else "poster") or "").strip()
+    image = str(item.get("cover" if kind == "music" else "poster") or "").strip()
+    if image or kind != "series" or not item.get("id"):
+        return image
+    import tmdb  # список недели, собранный до сохранения постеров, — постер сезона из TMDb
+    try:
+        return str(await asyncio.wait_for(asyncio.to_thread(
+            tmdb.english_poster, item["id"], "tv", item.get("season_number") or None), 4.0) or "").strip()
+    except Exception:
+        _log.debug("premieres: series poster unavailable", exc_info=True)
+        return ""
 
 
 async def _show_card(bot, cid, msg, image, q=None):
