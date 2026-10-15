@@ -579,10 +579,10 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     if mode == "tomorrow_plain":
         day = 1
         dt = now + timedelta(days=1)
-        header = (
-            f"Завтра · {_WEEKDAY_SHORT[dt.weekday()]}, "
-            f"{dt.day} {_MONTHS_SHORT[dt.month-1]} · {s['city']} 📍"
-        )
+        cc = str(s.get("cc") or "").upper()
+        flag = flag_from_cc(cc) or ""
+        place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"  # «Alkmaar, NL 🇳🇱»
+        header = f"Завтра · {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} · {place}"
         code = d["weathercode"][day]
         _tmin, tmax = _daytime_temperature_range(
             data, day_str := d["time"][day], d["temperature_2m_min"][day], d["temperature_2m_max"][day],
@@ -600,7 +600,6 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                             _mean(_daytime_values(data, day_str, "cloudcover")))
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         desc = DESC.get(code, "")
-        cc = s.get("cc", "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
         # Утро, день и вечер отдельными строками; без почасовых данных — одна общая строка.
         main_lines = [_period_line(p) for p in forecast_periods(data, now, day=1)] \
@@ -611,14 +610,14 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         else:
             try:
                 rain_desc = _rain_description(rain, rain_mm, rain_p)
-                summary = await ai.allm(
+                summary = (await ai.allm(
                     f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
                     f"ветер {wind_ms:.0f} м/с.\n\n"
                     "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
                     "Без слова 'зонт'. Без markdown. На русском.",
                     150, 0.6, tier="cheap", module="weather",
                     fallback_allowed=True, privacy_level="public", response_mode="plain_text"
-                ).strip()
+                ) or "").strip()  # скобки: .strip() — у ответа, а не у корутины
                 if summary:
                     fact = _finish_sentence(cap_sentence(summary))
             except Exception:

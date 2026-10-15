@@ -463,3 +463,30 @@ def test_today_outlook_sky_follows_current_period_not_day_average():
     assert weather.sky_word(outlook["clouds"], 61) == "малооблачно"
     assert weather.weather_icon(61, outlook["tmax"], outlook["rain"], outlook["wind_ms"],
                                 outlook["rain_mm"], outlook["clouds"]) == "🌤️"
+
+
+def test_tomorrow_notification_has_city_country_flag_and_three_periods(monkeypatch):
+    hours = ["2026-10-16T09:00", "2026-10-16T14:00", "2026-10-16T20:00"]
+    data = {
+        "daily": {"time": ["2026-10-15", "2026-10-16"], "weathercode": [3, 3], "temperature_2m_min": [8, 10],
+                  "temperature_2m_max": [15, 18], "windspeed_10m_max": [4, 5],
+                  "precipitation_probability_max": [0, 0], "precipitation_sum": [0, 0]},
+        "hourly": {"time": hours, "temperature_2m": [12, 18, 15], "precipitation_probability": [0, 0, 0],
+                   "precipitation": [0, 0, 0], "windspeed_10m": [3, 5, 4], "cloudcover": [60, 60, 60]},
+    }
+    sent = []
+
+    async def summary(*_args, **_kwargs):
+        return "Сухой облачный день, к вечеру прохладнее"
+
+    monkeypatch.setattr(weather.store, "get_settings",
+                        lambda _cid: {"lat": 52.6, "lon": 4.7, "city": "Alkmaar", "cc": "nl"})
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_args: data)
+    monkeypatch.setattr(weather.ai, "allm", summary)
+
+    asyncio.run(weather.send_weather(RecordingBot(sent), "42", "tomorrow_plain"))
+
+    lines = sent[0]["text"].split("\n")
+    assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0]
+    assert [line.split(":")[0].split(" ", 1)[1] for line in lines[2:5]] == ["Утром", "Днём", "Вечером"]
+    assert sent[0]["text"].endswith("Сухой облачный день, к вечеру прохладнее.")  # метео-итог доходит до текста
