@@ -344,3 +344,16 @@ def test_vacation_adds_trip_priority_rule_to_leisure(monkeypatch):
 
     rule = vacation.trip_priority_rule("42", "исполнителей")
     assert "ЮАР (ZA)" in rule and "Сначала предлагай исполнителей" in rule
+
+
+def test_settings_on_vacation_keep_only_return_home_and_notifications(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    bot = Bot()
+    asyncio.run(settings.send_home(bot, "42"))
+    home = [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard]
+    assert "set_vac" in sum(home, []) and "set_preferences" in sum(home, [])  # дома — всё
+
+    saved["vacation"] = {"home": HOME, "until": "", "cc": "ZA"}
+    asyncio.run(settings.send_home(bot, "42"))
+    trip = [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard]
+    assert trip == [["set_vachome"], ["set_notif"], ["m_menu"]]  # без предпочтений, города и экспорта

@@ -333,7 +333,8 @@ async def send_home(bot, cid, q=None):
     city = " · ".join(part for part in (data.get("city"), data.get("country")) if part)
     import vacation
     trip = vacation.state(cid)
-    if trip:
+    if trip:  # в отпуске — только то, что нужно в поездке: вернуться домой и уведомления
+        rows = [[vacation_button(cid)], rows[3], rows[-1]]
         home = (trip.get("home") or {}).get("city", "")
         city += " · ✈️ отпуск" + (f" {vacation.until_label(cid)}" if vacation.until_label(cid) else "") \
             + (f", дома {home}" if home else "")
