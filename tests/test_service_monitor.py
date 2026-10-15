@@ -596,3 +596,19 @@ def test_youtube_row_has_no_category(monkeypatch):
     row = service_monitor.format_row("youtube")
 
     assert row.split(" ", 1)[1].startswith("YouTube · ") and "Музыка" not in row
+
+
+def test_idle_line_lists_configured_services_without_real_requests_for_a_week(monkeypatch):
+    now = 1_800_000_000
+    usage = {"services": {
+        "tmdb": {"last_request_at": now - 3600},  # сегодня — в строку не попадает
+        "openrouter": {"last_request_at": now - 41 * 86400},
+        "groq_model:llama": {"last_request_at": now - 600},  # Groq считается по моделям
+    }}
+    monkeypatch.setattr(service_monitor.api_usage.store, "_load", lambda _key: usage)
+    monkeypatch.setattr(service_monitor, "_configured", lambda service: service in {"tmdb", "openrouter", "groq", "serpapi"})
+
+    assert service_monitor.idle_line(now) == "💤 Давно без запросов: OpenRouter · 41 дн. · SerpApi · ни разу"
+    usage["services"]["openrouter"]["last_request_at"] = now
+    usage["services"]["serpapi"] = {"last_request_at": now}
+    assert service_monitor.idle_line(now) == ""  # всё в работе — строки нет

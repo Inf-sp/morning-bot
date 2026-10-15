@@ -78,6 +78,20 @@ def estimate_cloudflare_neurons(prompt: str, output: str) -> int:
     return max(1, round(input_tokens * 18182 / 1_000_000 + output_tokens * 27273 / 1_000_000))
 
 
+def last_request_at(service: str) -> int | None:
+    """Unix-время последнего реального запроса бота к сервису; None — запросов не было (проверки монитора не в счёт)."""
+    try:
+        data = store._load(config.API_USAGE_KEY)
+        services = (data.get("services") or {}) if isinstance(data, dict) else {}
+    except Exception:
+        return None
+    # У Groq учёт ведётся и по моделям («groq_model:<модель>») — берём самый свежий запрос сервиса.
+    stamps = [int(svc.get("last_request_at")) for name, svc in services.items()
+              if (name == service or name.startswith(f"{service}_model:")) and isinstance(svc, dict)
+              and str(svc.get("last_request_at") or "").isdigit()]
+    return max(stamps) if stamps else None
+
+
 def service_usage(service: str) -> dict:
     """Фактический расход и последние rate-limit-заголовки без сетевых проверок."""
     try:

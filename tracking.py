@@ -155,7 +155,7 @@ _SERVICE_BY_MODULE = {
     "language_tool": "LanguageTool", "gtts": "gTTS",
     "dictionary_tts": "gTTS", "tmdb": "TMDB",
     "leisure_movies": "TMDB", "leisure_concerts": "Ticketmaster",
-    "rerank": "ZeroEntropy", "research": "Tavily", "ai": "несколько AI-сервисов",
+    "research": "Tavily", "ai": "несколько AI-сервисов",
     "travel_photos": "Pexels",
 }
 
@@ -164,7 +164,7 @@ _FALLBACK_BY_SERVICE = {
     "TheMealDB": "шаблон без AI", "LanguageTool": "проверка в коде",
     "gTTS": "текстовая карточка", "TMDB": "Gemini",
     "Ticketmaster": "Tavily",
-    "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
+    "Tavily": "Firecrawl",
     "Gemini": "Groq", "Groq": "Cloudflare AI",
 }
 

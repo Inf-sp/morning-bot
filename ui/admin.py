@@ -37,7 +37,7 @@ _STATUS_DOTS = ("🟢", "🟡", "🟠", "🔴", "⚪")
 def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
          notif_line=None, users_line=None, data_line=None, logs_line=None,
-         system_rows=None, error_rows=None, version_line=None):
+         system_rows=None, error_rows=None, version_line=None, idle_line=None):
     """Render the admin home screen.
 
     The compact metric form is used by the current screen.  The older
@@ -65,6 +65,9 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
                 b.newline()
             else:
                 b.line(row if row.startswith(_STATUS_DOTS) else f"⚪ {row}")  # нет данных
+        if idle_line:  # сервисы без реальных запросов от недели — видно, что давно не используется
+            b.spacer()
+            b.line(idle_line)
         return b.build_stripped()
     if system_dot is not None or system_text is not None:
         dot = system_dot if system_dot is not None else status_dot

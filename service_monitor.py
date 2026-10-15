@@ -241,6 +241,25 @@ def _safe_row(service, state):
         return f"{label} · нет данных"
 
 
+_IDLE_DAYS = 7
+
+
+def idle_line(now=None) -> str:
+    """«💤 Давно без запросов: SerpApi · 23 дн. · OpenRouter · ни разу» — настроенные сервисы без реальных запросов
+    бота от недели (`api_usage.last_request_at`; проверки монитора не в счёт). Все в работе — ""."""
+    now = float(now or time.time())
+    parts = []
+    for service in (*_AI_SERVICES, *_DATA_SERVICES, "serpapi"):
+        if not _configured(service):
+            continue
+        last = api_usage.last_request_at(service)
+        days = int((now - last) // 86400) if last else None
+        if days is None or days >= _IDLE_DAYS:
+            label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+            parts.append(f"{label} · {'ни разу' if days is None else f'{days} дн.'}")
+    return f"💤 Давно без запросов: {' · '.join(parts)}" if parts else ""
+
+
 def rows() -> list[str]:
     current = _load().get("services") or {}
     out = ["AI"]

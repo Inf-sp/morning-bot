@@ -78,8 +78,8 @@ SPECS = (
     ProviderSpec("gtts", "gTTS", ("Озвучка",), (), 86400),
     ProviderSpec("ticketmaster", "Ticketmaster", ("Концерты",), ("firecrawl",), 3600),
     ProviderSpec("ns", "NS", ("Поезда",), (), 3600),
-    ProviderSpec("serpapi", "SerpApi", ("Гардероб",), ("pexels",), role="Фото покупок"),
-    ProviderSpec("pexels", "Pexels", ("Гардероб", "Обучение"), ("unsplash",)),
+    ProviderSpec("serpapi", "SerpApi", ("Поиск",), (), role="Резерв поиска"),  # после Tavily и Firecrawl
+    ProviderSpec("pexels", "Pexels", ("Обучение",), ("unsplash",)),  # картинки «Детектива»
     ProviderSpec("unsplash", "Unsplash", ("Обучение",), ()),
     ProviderSpec("telegram", "Telegram", ("Мой день", "Питание", "Обучение"), ()),
     ProviderSpec("database", "База данных", ("Мой день", "Питание", "Обучение"), ()),

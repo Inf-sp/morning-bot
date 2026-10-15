@@ -4,10 +4,12 @@
 неожиданный ответ даёт пустой результат: рассылка просто ничего не присылает.
 """
 import logging
+import time
 from datetime import date
 
 import requests
 
+import api_usage
 import config
 import util
 
@@ -23,16 +25,23 @@ ALERT_TYPES = ("DISRUPTION", "CALAMITY")
 def _get(path, params=None):
     if not config.NS_API_KEY:
         return None
+    started = time.monotonic()
     try:
         response = requests.get(
             f"{_BASE}{path}", params=params or {},
             headers={"Ocp-Apim-Subscription-Key": config.NS_API_KEY}, timeout=_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return response.json()
+        data = response.json()
     except Exception as error:
         _log.warning("NS API unavailable path=%s: %r", path, error)
+        api_usage.record_request(  # учёт — для статуса и давности запросов в админке
+            "ns", False, error=type(error).__name__,
+            status_code=getattr(getattr(error, "response", None), "status_code", None),
+            latency_ms=int((time.monotonic() - started) * 1000))
         return None
+    api_usage.record_request("ns", True, latency_ms=int((time.monotonic() - started) * 1000))
+    return data
 
 
 def station_codes(city):
