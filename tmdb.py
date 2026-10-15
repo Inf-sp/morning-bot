@@ -426,9 +426,10 @@ def detail(tmdb_id, kind):
     base["cast"] = [c.get("name") for c in cast[:5] if c.get("name")]
     countries = [c.get("iso_3166_1") for c in (data.get("production_countries") or [])]
     base["countries"] = [c for c in countries if c]
+    companies = [c.get("name") for c in (data.get("production_companies") or []) if c.get("name")]
+    base["companies"] = companies  # студии — им доверяем как каналу официального трейлера
     if kind == "movie":
         base["runtime"] = data.get("runtime") or 0
-        companies = [c.get("name") for c in (data.get("production_companies") or [])]
         base["studio"] = companies[0] if companies else ""
     else:
         base["seasons"] = data.get("number_of_seasons") or 0
@@ -439,6 +440,7 @@ def detail(tmdb_id, kind):
         base["episode_runtime"] = rt[0] if rt else 0
         networks = [n.get("name") for n in (data.get("networks") or []) if n.get("name")]
         base["network"] = networks[0] if networks else ""  # студия/канал сериала: HBO, Netflix…
+        base["networks"] = networks
     util.ttl_set("tmdb_detail", ck, base)
     return base
 
@@ -455,13 +457,12 @@ def _pick_trailer(results):
             continue
         key = str(video.get("key") or "").strip()
         video_type = str(video.get("type") or "").casefold()
-        if key and video_type in ("trailer", "teaser"):
-            videos.append((bool(video.get("official")), video.get("iso_639_1") == "en",
+        if key and video_type in ("trailer", "teaser") and video.get("official"):
+            size = int(video.get("size") or 0) if str(video.get("size") or "").isdigit() else 0
+            videos.append((video.get("iso_639_1") == "en", size >= 720,
                            str(video.get("published_at") or ""), video_type == "trailer", key))
-    if not videos:
-        return ""
-    official = [video for video in videos if video[0]] or videos
-    return max(official, key=lambda video: video[1:4])[4]  # английский — раньше ролика на языке оригинала
+    # Только официальные ролики: английский — раньше языка оригинала, затем 720p+, затем самый свежий.
+    return max(videos, key=lambda video: video[:4])[4] if videos else ""
 
 
 def _videos(path, languages):
@@ -504,7 +505,8 @@ def trailer_url(tmdb_id, kind="movie"):
     if not url:
         import youtube_tracks
         url = youtube_tracks.find_trailer_url((_english_title(tmdb_id, kind), info.get("name_en")),
-                                              info.get("year") if kind == "movie" else "", season=seasons)
+                                              info.get("year") if kind == "movie" else "", season=seasons,
+                                              channels=(*info.get("companies", ()), *info.get("networks", ())))
     if url or not failed:
         util.ttl_set("tmdb_trailer", cache_key, url or False)
     return url

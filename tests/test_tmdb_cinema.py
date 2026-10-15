@@ -144,14 +144,15 @@ def test_trailer_url_asks_original_language_videos_and_falls_back_to_youtube_sea
     monkeypatch.setattr(tmdb.util, "ttl_get", lambda *_args: None)
     saved, requests, searched = {}, [], []
     monkeypatch.setattr(tmdb.util, "ttl_set", lambda _ns, key, value: saved.__setitem__(key, value))
-    monkeypatch.setattr(tmdb, "detail", lambda *_args: {"original_language": "nl", "name_en": "De Tatta's 2", "year": "2026"})
+    monkeypatch.setattr(tmdb, "detail", lambda *_args: {"original_language": "nl", "name_en": "De Tatta's 2", "year": "2026",
+                                                         "companies": ["BosBros"]})
 
     def get(path, params, timeout=12, language=None):
         requests.append((path, params.get("include_video_language"), language))
         return {"title": "The Tattas 2"} if path == "/movie/7" else {"results": []}
 
-    def find(titles, year, season=0):
-        searched.append((tuple(titles), year, season))
+    def find(titles, year, season=0, channels=()):
+        searched.append((tuple(titles), year, season, tuple(channels)))
         return "https://www.youtube.com/watch?v=official77"
 
     monkeypatch.setattr(tmdb, "_get", get)
@@ -160,7 +161,7 @@ def test_trailer_url_asks_original_language_videos_and_falls_back_to_youtube_sea
     # У местного фильма ролики ищутся и на языке оригинала; нет в TMDb — официальный трейлер из поиска YouTube.
     assert tmdb.trailer_url(7) == "https://www.youtube.com/watch?v=official77"
     assert requests[0] == ("/movie/7/videos", "en,null,nl", "en-US")
-    assert searched == [(("The Tattas 2", "De Tatta's 2"), "2026", 0)]
+    assert searched == [(("The Tattas 2", "De Tatta's 2"), "2026", 0, ("BosBros",))]  # студия — доверенный канал
     assert saved["trailer-v3|movie|7"] == "https://www.youtube.com/watch?v=official77"
 
 
@@ -187,3 +188,17 @@ def test_trailer_prefers_english_official_video():
     ]
 
     assert tmdb._pick_trailer(videos) == "english"
+
+
+def test_trailer_takes_only_official_videos_in_good_quality():
+    videos = [
+        {"site": "YouTube", "key": "fan", "type": "Trailer", "official": False, "published_at": "2026-06-01",
+         "iso_639_1": "en", "size": 1080},
+        {"site": "YouTube", "key": "low", "type": "Trailer", "official": True, "published_at": "2026-05-02",
+         "iso_639_1": "en", "size": 480},
+        {"site": "YouTube", "key": "hd", "type": "Trailer", "official": True, "published_at": "2026-05-01",
+         "iso_639_1": "en", "size": 1080},
+    ]
+
+    assert tmdb._pick_trailer(videos) == "hd"  # не фанатский, 720p+ раньше более свежего 480p
+    assert tmdb._pick_trailer(videos[:1]) == ""  # только неофициальный — нет трейлера (дальше поиск с проверкой)

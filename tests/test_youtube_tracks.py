@@ -129,18 +129,25 @@ def test_trailer_lookup_picks_the_official_trailer_and_keeps_a_youtube_link(monk
                  "snippet": {"title": "Dune: Part Two | Official Trailer 3", "publishedAt": "2023-12-18T00:00:00Z"}},
             ]}
 
+    class Details(_Response):
+        def json(self):
+            return {"items": [{"id": "official002", "contentDetails": {"definition": "hd"},
+                               "snippet": {"channelTitle": "Warner Bros. Pictures"}, "statistics": {"viewCount": "900"}}]}
+
     def fake_get(url, *, params, timeout):
-        calls.append(params)
-        return Response()
+        calls.append((url, params))
+        return Details() if url.endswith("/videos") else Response()
 
     monkeypatch.setattr(youtube_tracks.requests, "get", fake_get)
     monkeypatch.setattr(youtube_tracks.api_usage, "record_request", lambda *_args, **_kwargs: None)
 
-    first = youtube_tracks.find_trailer_url(["Dune: Part Two", "Dune: Part Two"], "2024")
+    first = youtube_tracks.find_trailer_url(["Dune: Part Two", "Dune: Part Two"], "2024",
+                                            channels=["Legendary Pictures", "Warner Bros. Pictures"])
     second = youtube_tracks.find_trailer_url(["Dune: Part Two"], "2024")
 
     assert first == second == "https://www.youtube.com/watch?v=official002"  # не YouTube Music, не реакция
-    assert len(calls) == 1 and calls[0]["q"] == "Dune: Part Two 2024 official trailer"
+    assert len(calls) == 2 and calls[0][1]["q"] == "Dune: Part Two 2024 official trailer"
+    assert calls[1][1]["id"] == "official002"  # проверяются только ролики, подошедшие по названию
 
 
 def test_trailer_lookup_rejects_videos_of_another_film(monkeypatch):
@@ -156,3 +163,17 @@ def test_trailer_lookup_rejects_videos_of_another_film(monkeypatch):
     monkeypatch.setattr(youtube_tracks.api_usage, "record_request", lambda *_args, **_kwargs: None)
 
     assert youtube_tracks.find_trailer_url(["De Tatta's 2"], "2026") == ""
+
+
+def test_trusted_trailer_needs_hd_and_a_studio_channel_or_many_views():
+    def video(definition="hd", channel="Some Uploader", views="500"):
+        return {"contentDetails": {"definition": definition}, "snippet": {"channelTitle": channel},
+                "statistics": {"viewCount": views}}
+
+    studios = ["Warner Bros. Pictures", "HBO"]
+    assert youtube_tracks._trusted_trailer(video(channel="Warner Bros. Pictures"), studios)
+    assert youtube_tracks._trusted_trailer(video(channel="HBO Max"), studios)  # канал телесети
+    assert not youtube_tracks._trusted_trailer(video(definition="sd", channel="HBO"), studios)  # не HD
+    assert not youtube_tracks._trusted_trailer(video(), studios)  # чужой канал, мало просмотров — перезалив
+    assert youtube_tracks._trusted_trailer(video(views="2500000"), studios)  # очень популярный ролик
+    assert not youtube_tracks._trusted_trailer(None, studios)

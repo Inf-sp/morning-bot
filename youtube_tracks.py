@@ -23,6 +23,7 @@ _log = logging.getLogger(__name__)
 
 
 _SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 _CACHE_TTL = 30 * 24 * 60 * 60
 _MEMORY_CACHE_TTL = 60 * 60
 _CACHE_LIMIT = 120
@@ -158,6 +159,11 @@ def _timeout() -> float:
 
 def _search(params) -> list | None:
     """Поиск YouTube Data API: результаты; None — сбой запроса (не кэшируется)."""
+    return _api(_SEARCH_URL, params)
+
+
+def _api(url, params) -> list | None:
+    """GET к YouTube Data API: items; None — сбой запроса (не кэшируется)."""
     started = time.monotonic()
 
     def record(ok, **kwargs):
@@ -165,7 +171,7 @@ def _search(params) -> list | None:
 
     try:
         response = requests.get(
-            _SEARCH_URL, params={"key": config.YOUTUBE_API_KEY, "part": "snippet", **params}, timeout=_timeout(),
+            url, params={"key": config.YOUTUBE_API_KEY, "part": "snippet", **params}, timeout=_timeout(),
         )
     except requests.exceptions.Timeout:
         record(False, error="timeout")
@@ -218,6 +224,21 @@ _TRAILER_MARKERS = ("trailer", "teaser", "трейлер")
 _TRAILER_UNWANTED = ("reaction", "review", "fan made", "fanmade", "concept", "explained", "breakdown",
                      "recap", "parody", "реакция", "обзор")
 _TRAILER_MIN_SCORE = 0.7
+_TRAILER_MIN_VIEWS = 100_000  # ролик не с канала студии — только если его посмотрели столько раз
+
+
+def _trusted_trailer(video: dict | None, channels) -> bool:
+    """Официальный и качественный: HD и канал студии, дистрибьютора или телеканала из TMDb — или столько
+    просмотров, сколько у перезалива и фанатского монтажа не бывает."""
+    if not video or (video.get("contentDetails") or {}).get("definition") != "hd":
+        return False
+    channel = f" {_norm((video.get('snippet') or {}).get('channelTitle'))} "
+    for name in channels or ():
+        name = _norm(name)
+        if len(name) >= 3 and (f" {name} " in channel or channel.strip() and channel in f" {name} "):
+            return True
+    views = str((video.get("statistics") or {}).get("viewCount") or "0")
+    return views.isdigit() and int(views) >= _TRAILER_MIN_VIEWS
 
 
 def _trailer_score(item: dict, titles: list, year) -> float:
@@ -237,9 +258,10 @@ def _trailer_score(item: dict, titles: list, year) -> float:
     return score + (0.05 if " official " in video or " officiele " in video else 0.0)
 
 
-def find_trailer_url(titles, year="", season: int = 0) -> str:
+def find_trailer_url(titles, year="", season: int = 0, channels=()) -> str:
     """Официальный трейлер на YouTube (youtube.com/watch) по английскому и оригинальному названию и году;
-    "" при сомнении. Кэш 30 дней, как у треков."""
+    "" при сомнении. Подходящие по названию ролики проверяются одним запросом videos.list (1 единица квоты):
+    HD и канал из channels (студии и телеканалы TMDb) или много просмотров. Кэш 30 дней, как у треков."""
     titles = [title for title in dict.fromkeys(" ".join(str(title or "").split()) for title in titles or ())
               if _norm(title)]
     if not config.YOUTUBE_API_KEY or not titles:
@@ -257,10 +279,16 @@ def find_trailer_url(titles, year="", season: int = 0) -> str:
         items = _search({"q": query, "type": "video", "maxResults": 5})
         if items is None:
             return ""
-        scored = [(_trailer_score(item, titles, year), str(((item or {}).get("id") or {}).get("videoId") or ""))
-                  for item in items]
-        score, video_id = max(((score, video_id) for score, video_id in scored
-                               if _VIDEO_ID_RE.fullmatch(video_id)), default=(0.0, ""))
-        url = f"https://www.youtube.com/watch?v={video_id}" if score >= _TRAILER_MIN_SCORE else ""
+        scored = sorted(((_trailer_score(item, titles, year), str(((item or {}).get("id") or {}).get("videoId") or ""))
+                         for item in items), reverse=True)
+        candidates = [video_id for score, video_id in scored
+                      if score >= _TRAILER_MIN_SCORE and _VIDEO_ID_RE.fullmatch(video_id)]
+        details = _api(_VIDEOS_URL, {"part": "snippet,contentDetails,statistics", "id": ",".join(candidates)}) \
+            if candidates else []
+        if details is None:
+            return ""
+        by_id = {str(video.get("id") or ""): video for video in details}
+        video_id = next((video_id for video_id in candidates if _trusted_trailer(by_id.get(video_id), channels)), "")
+        url = f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
         _cache_set(key, url)
         return url
