@@ -476,6 +476,16 @@ def _day_wind_text(wind_ms):
     label = "Сильный ветер" if value > 10 else "Ветер"
     return f"{label} до {value:.0f} м/с"
 
+def _premiere_of_day(cid):
+    """Премьера сегодня из кэшей Досуга (без сети); сбой не мешает сводке."""
+    try:
+        import leisure_hub
+        return leisure_hub.premiere_of_day(cid)
+    except Exception:
+        _log.warning("myday: premiere unavailable", exc_info=True)
+        return None
+
+
 def _holidays(settings_data, cid=None):
     """Праздники страны из Настроек (Nager.Date) и местные события города в день события
     (`local_events`, из недельного кэша, без сети); сбой — просто без строки."""
@@ -623,6 +633,7 @@ def _build_day_text(cid, *, refresh_current=False):
     outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     quote = _daily_literary_quote(cid) if on("quote") else {}
+    premiere = _premiere_of_day(cid) if on("premiere") else None
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -644,6 +655,7 @@ def _build_day_text(cid, *, refresh_current=False):
         rail_works=_rail_works(cid) if on("rail") else [],
         holidays=_holidays(s, cid) if on("holidays") else [],
         vacation=trip,
+        premiere=premiere,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя

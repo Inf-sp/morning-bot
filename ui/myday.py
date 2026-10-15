@@ -3,6 +3,7 @@ from telegram import MessageEntity
 
 from .text import finish_dot
 from .builder import MessageBuilder
+from .leisure import trailer_link, youtube_music_link
 from util import cap_sentence
 
 
@@ -53,6 +54,31 @@ def holidays_eve(city, lines):
     return b.build_stripped()
 
 
+_PREMIERE_EMOJI = {"movie": "🎬", "series": "📺", "music": "🎧"}
+
+
+def _premiere_line(b: MessageBuilder, item) -> None:
+    """«🎬 Премьера: **Название** · сегодня в кино» — ссылка на трейлер; у альбома — на YouTube Music."""
+    kind = item.get("kind")
+    if kind == "music":
+        name, url = item.get("artist"), youtube_music_link(item.get("artist"), item.get("title"))
+        tail = f" — «{item.get('title')}»" if item.get("title") else ""
+    else:
+        name, url = item.get("title") if kind == "movie" else item.get("name"), trailer_link(item)
+        season = int(item.get("season_number") or 0)
+        tail = " · сегодня в кино" if kind == "movie" else (f" · {season}-й сезон" if season > 1 else " · новый сериал")
+    name = " ".join(str(name or "").split())
+    if not name:
+        return
+    b.text_line(f"{_PREMIERE_EMOJI.get(kind, '🎬')} ")
+    b.label("Премьера")
+    b.text_line(" ")
+    b.bold_link(name, url) if url else b.bold(name)
+    b.text_line(tail)
+    b.newline()
+    b.spacer()
+
+
 def day_summary(
     header,
     city,
@@ -70,6 +96,7 @@ def day_summary(
     rail_works=None,
     holidays=None,
     vacation=None,
+    premiere=None,
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -141,6 +168,10 @@ def day_summary(
         b.text_line(f"{str(outfit_emoji or '👕').strip()} ")
         b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
         b.spacer()
+
+    # Премьера дня из Досуга — только сегодняшняя, одна строка.
+    if premiere:
+        _premiere_line(b, premiere)
 
     quote_text = str(quote_text or "").strip().strip("«»\"")
     quote_author = str(quote_author or "").strip()

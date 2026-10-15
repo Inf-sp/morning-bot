@@ -559,3 +559,41 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)
     assert "· «Signal» · 9 января" in leisure_ui.leisure_today_screen(data["picks"]).text  # в этом году — дата
+
+
+def test_premiere_of_day_picks_one_todays_premiere_by_personal_priority(monkeypatch):
+    import leisure_hub
+    from datetime import date
+    today = date(2026, 10, 16)
+    movies = [{"title": "Дюна", "date": "2026-10-16", "overview": "x"}, {"title": "Вчера", "date": "2026-10-15"}]
+    series = [{"name": "Медведь", "release_date": "2026-10-16", "season_number": 5, "favorite": True,
+               "genres": "драма", "origin_country": ["US"]}]
+    albums = [{"artist": "Alvvays", "title": "Blue Rev", "date": "2026-10-16"}]
+    monkeypatch.setattr(leisure_hub, "_pools", lambda *_a, **_k: {
+        "movies": (movies, None, 0), "series": (series, None, 0)})
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: {"hub_music": {"items": albums}})
+    monkeypatch.setattr(leisure_hub.leisure_music, "_ensure_artists", lambda _cid: ["Alvvays"])
+
+    # Новый сезон любимого сериала — важнее всего.
+    assert leisure_hub.premiere_of_day("42", today)["name"] == "Медведь"
+    series[0]["favorite"] = False
+    pick = leisure_hub.premiere_of_day("42", today)
+    assert (pick["kind"], pick["artist"]) == ("music", "Alvvays")  # затем альбом любимого артиста
+    monkeypatch.setattr(leisure_hub.leisure_music, "_ensure_artists", lambda _cid: [])
+    assert leisure_hub.premiere_of_day("42", today)["title"] == "Дюна"  # затем фильм в кино
+    assert leisure_hub.premiere_of_day("42", date(2026, 10, 20)) is None  # не сегодня — строки нет
+
+
+def test_premiere_line_in_my_day():
+    from ui import myday as myday_ui
+    movie = myday_ui.day_summary("Пт, 16 октября", "Alkmaar", premiere={
+        "kind": "movie", "title": "Дюна", "trailer_url": "https://www.youtube.com/watch?v=t"})
+    season = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "series", "name": "Медведь", "season_number": 5})
+    album = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "music", "artist": "Alvvays", "title": "Blue Rev"})
+
+    assert movie.text.endswith("🎬 Премьера: Дюна · сегодня в кино")
+    assert any(e.type == "text_link" and e.url == "https://www.youtube.com/watch?v=t" for e in movie.entities)
+    assert season.text.endswith("📺 Премьера: Медведь · 5-й сезон")
+    assert album.text.endswith("🎧 Премьера: Alvvays — «Blue Rev»")
+    assert any(e.type == "text_link" and "music.youtube.com" in e.url for e in album.entities)
+    assert "Премьера" not in myday_ui.day_summary("Пт", "Alkmaar").text

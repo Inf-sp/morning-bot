@@ -126,7 +126,7 @@ _NOTIF_TITLES = {
 MYDAY_BLOCKS = [
     ("weather", "Погода"), ("golden", "Золотой час"), ("outfit", "Образ дня"),
     ("word", "Слово дня"), ("rail", "Работы на ЖД"), ("holidays", "Праздники"),
-    ("quote", "Цитата"),
+    ("premiere", "Премьера дня"), ("quote", "Цитата"),
 ]
 
 

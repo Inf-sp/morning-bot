@@ -104,7 +104,7 @@ async def _warm_series(cid):
     import movie_discovery
     items = await movie_discovery.get_series_premieres(cid)
     keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating",
-            "origin_country", "original_language", "genres", "popularity", "poster", "trailer_url", "name_en")
+            "origin_country", "original_language", "genres", "popularity", "poster", "trailer_url", "name_en", "favorite")
     items = [{key: item.get(key) for key in keep} for item in items or []]
     store.mutate_profile(cid, lambda profile: (
         {**profile, "hub_series": {"v": _SERIES_VERSION, "date": today.isoformat(), "items": items}}, None))
@@ -379,6 +379,28 @@ def today_data(cid, day=None) -> dict:
         "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
                     "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
     }
+
+
+def premiere_of_day(cid, day=None):
+    """Премьера сегодня для «Моего дня» из кэшей Досуга, без сети и AI: новый сезон любимого сериала → альбом
+    любимого артиста → фильм в кино (трендовые первыми) → сериал → альбом недели. Нет сегодняшней — None."""
+    today = day or _today_and_cc(cid)[0]
+    iso = today.isoformat()
+    pools = _pools(cid, today)
+    movies = [item for item in pools["movies"][0] if str(item.get("date") or "")[:10] == iso]
+    series = [item for item in pools["series"][0] if str(item.get("release_date") or "")[:10] == iso]
+    saved = (store.get_profile(cid) or {}).get("hub_music") or {}
+    albums = [item for item in saved.get("items") or []
+              if str(item.get("date") or "")[:10] == iso and apple_music.is_fresh_album(item)]
+    loved = {name.casefold() for name in leisure_music._ensure_artists(cid)}
+    picks = (
+        ("series", next((item for item in series if item.get("favorite")), None)),
+        ("music", next((item for item in albums if str(item.get("artist") or "").casefold() in loved), None)),
+        ("movie", movies[0] if movies else None),
+        ("series", series[0] if series else None),
+        ("music", albums[0] if albums else None),
+    )
+    return next(({**item, "kind": kind} for kind, item in picks if item), None)
 
 
 async def send_hub(bot, cid, q=None):
