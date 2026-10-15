@@ -111,3 +111,48 @@ def test_old_youtube_cache_link_opens_in_youtube_music_without_a_request(monkeyp
         "https://music.youtube.com/watch?v=oldvideo123"
     )
 
+
+
+def test_trailer_lookup_picks_the_official_trailer_and_keeps_a_youtube_link(monkeypatch):
+    _memory_cache(monkeypatch)
+    monkeypatch.setattr(youtube_tracks.config, "YOUTUBE_API_KEY", "youtube-secret")
+    calls = []
+
+    class Response(_Response):
+        def json(self):
+            return {"items": [
+                {"id": {"videoId": "reaction001"},
+                 "snippet": {"title": "Dune Part Two Trailer REACTION", "publishedAt": "2024-01-02T00:00:00Z"}},
+                {"id": {"videoId": "olddune1984"},
+                 "snippet": {"title": "Dune (1984) Official Trailer", "publishedAt": "2011-05-02T00:00:00Z"}},
+                {"id": {"videoId": "official002"},
+                 "snippet": {"title": "Dune: Part Two | Official Trailer 3", "publishedAt": "2023-12-18T00:00:00Z"}},
+            ]}
+
+    def fake_get(url, *, params, timeout):
+        calls.append(params)
+        return Response()
+
+    monkeypatch.setattr(youtube_tracks.requests, "get", fake_get)
+    monkeypatch.setattr(youtube_tracks.api_usage, "record_request", lambda *_args, **_kwargs: None)
+
+    first = youtube_tracks.find_trailer_url(["Dune: Part Two", "Dune: Part Two"], "2024")
+    second = youtube_tracks.find_trailer_url(["Dune: Part Two"], "2024")
+
+    assert first == second == "https://www.youtube.com/watch?v=official002"  # не YouTube Music, не реакция
+    assert len(calls) == 1 and calls[0]["q"] == "Dune: Part Two 2024 official trailer"
+
+
+def test_trailer_lookup_rejects_videos_of_another_film(monkeypatch):
+    _memory_cache(monkeypatch)
+    monkeypatch.setattr(youtube_tracks.config, "YOUTUBE_API_KEY", "youtube-secret")
+
+    class Response(_Response):
+        def json(self):
+            return {"items": [{"id": {"videoId": "otherfilm12"},
+                               "snippet": {"title": "Another Movie Official Trailer", "publishedAt": "2026-01-01"}}]}
+
+    monkeypatch.setattr(youtube_tracks.requests, "get", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(youtube_tracks.api_usage, "record_request", lambda *_args, **_kwargs: None)
+
+    assert youtube_tracks.find_trailer_url(["De Tatta's 2"], "2026") == ""

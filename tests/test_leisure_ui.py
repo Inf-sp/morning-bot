@@ -655,7 +655,7 @@ def test_series_premiere_card_marks_favorite_season_without_rating():
     assert "драма · фантастика" in message.text
     assert any(
         entity.type == MessageEntity.TEXT_LINK
-        and entity.url == "https://www.youtube.com/results?search_query=%D0%A0%D0%B0%D0%B7%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5+2026+trailer"
+        and entity.url == "https://www.youtube.com/results?search_query=%D0%A0%D0%B0%D0%B7%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5+2026+official+trailer"
         for entity in message.entities
     )  # без подтверждённого трейлера — поиск трейлера на YouTube, не страница TMDb
 
@@ -666,7 +666,7 @@ def test_trailer_link_prefers_confirmed_youtube_trailer_then_search():
     ) == "https://www.youtube.com/watch?v=abc"
     assert leisure_movies.leisure_ui.trailer_link(
         {"name": "Восставший", "name_en": "The Rising", "year": "2026", "url": "https://www.themoviedb.org/movie/1"},
-    ) == "https://www.youtube.com/results?search_query=The+Rising+2026+trailer"
+    ) == "https://www.youtube.com/results?search_query=The+Rising+2026+official+trailer"
 
 
 def test_cinema_rebus_changes_with_calendar_day():

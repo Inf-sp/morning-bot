@@ -104,7 +104,7 @@ async def _warm_series(cid):
     import movie_discovery
     items = await movie_discovery.get_series_premieres(cid)
     keep = ("id", "name", "kind", "season_number", "release_date", "overview", "url", "rating",
-            "origin_country", "original_language", "genres", "popularity", "poster")
+            "origin_country", "original_language", "genres", "popularity", "poster", "trailer_url", "name_en")
     items = [{key: item.get(key) for key in keep} for item in items or []]
     store.mutate_profile(cid, lambda profile: (
         {**profile, "hub_series": {"v": _SERIES_VERSION, "date": today.isoformat(), "items": items}}, None))

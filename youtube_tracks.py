@@ -1,7 +1,6 @@
-"""Точные ссылки на музыкальные треки через YouTube Data API.
+"""Точные ссылки через YouTube Data API: треки (YouTube Music) и официальные трейлеры (YouTube).
 
-Модуль вызывается только для «Вайба дня». Удачные и пустые результаты
-кэшируются, поэтому одинаковый трек не создаёт запрос для каждого чата.
+Удачные и пустые результаты кэшируются, поэтому одинаковый запрос не повторяется для каждого чата.
 """
 from __future__ import annotations
 
@@ -53,10 +52,11 @@ def _music_url_from_cached(value: str) -> str:
     return _youtube_music_url(match.group(1)) if match else url
 
 
-def _cache_get(key: str):
+def _cache_get(key: str, music: bool = True):
+    convert = _music_url_from_cached if music else str  # трейлер остаётся ссылкой youtube.com
     cached = util.ttl_get("youtube_tracks", key, _MEMORY_CACHE_TTL)
     if cached is not None:
-        return _music_url_from_cached(str(cached))
+        return convert(str(cached))
     try:
         data = store._load(config.YOUTUBE_TRACK_CACHE_KEY)
     except Exception:
@@ -70,7 +70,7 @@ def _cache_get(key: str):
         fresh = False
     if not fresh:
         return None
-    url = _music_url_from_cached(str(item.get("url") or ""))
+    url = convert(str(item.get("url") or ""))
     util.ttl_set("youtube_tracks", key, url)
     return url
 
@@ -156,6 +156,36 @@ def _timeout() -> float:
     return timeout
 
 
+def _search(params) -> list | None:
+    """Поиск YouTube Data API: результаты; None — сбой запроса (не кэшируется)."""
+    started = time.monotonic()
+
+    def record(ok, **kwargs):
+        api_usage.record_request("youtube", ok, latency_ms=int((time.monotonic() - started) * 1000), **kwargs)
+
+    try:
+        response = requests.get(
+            _SEARCH_URL, params={"key": config.YOUTUBE_API_KEY, "part": "snippet", **params}, timeout=_timeout(),
+        )
+    except requests.exceptions.Timeout:
+        record(False, error="timeout")
+        return None
+    except requests.exceptions.RequestException:
+        record(False, error="network_error")
+        return None
+    if response.status_code != 200:
+        record(False, status_code=response.status_code,
+               error=provider_runtime.google_error_details(response), headers=response.headers)
+        return None
+    try:
+        items = response.json().get("items") or []
+    except (AttributeError, TypeError, ValueError):
+        record(False, error="invalid_json", headers=response.headers)
+        return None
+    record(True, headers=response.headers)
+    return items
+
+
 def find_track_url(track: str, artist: str) -> str:
     """Возвращает точную ссылку YouTube Music или пустую строку при сомнении."""
     if not config.YOUTUBE_API_KEY:
@@ -171,51 +201,66 @@ def find_track_url(track: str, artist: str) -> str:
         cached = _cache_get(key)
         if cached is not None:
             return cached
-        started = time.monotonic()
-        try:
-            response = requests.get(
-                _SEARCH_URL,
-                params={
-                    "key": config.YOUTUBE_API_KEY,
-                    "part": "snippet",
-                    "q": f"{artist} {track} official audio",
-                    "type": "video",
-                    "videoCategoryId": "10",
-                    "maxResults": 5,
-                },
-                timeout=_timeout(),
-            )
-        except requests.exceptions.Timeout:
-            api_usage.record_request(
-                "youtube", False, error="timeout",
-                latency_ms=int((time.monotonic() - started) * 1000),
-            )
+        items = _search({
+            "q": f"{artist} {track} official audio",
+            "type": "video",
+            "videoCategoryId": "10",
+            "maxResults": 5,
+        })
+        if items is None:
             return ""
-        except requests.exceptions.RequestException:
-            api_usage.record_request(
-                "youtube", False, error="network_error",
-                latency_ms=int((time.monotonic() - started) * 1000),
-            )
-            return ""
-        if response.status_code != 200:
-            api_usage.record_request(
-                "youtube", False, status_code=response.status_code,
-                error=provider_runtime.google_error_details(response), headers=response.headers,
-                latency_ms=int((time.monotonic() - started) * 1000),
-            )
-            return ""
-        try:
-            items = response.json().get("items") or []
-        except (AttributeError, TypeError, ValueError):
-            api_usage.record_request(
-                "youtube", False, error="invalid_json", headers=response.headers,
-                latency_ms=int((time.monotonic() - started) * 1000),
-            )
-            return ""
-        api_usage.record_request(
-            "youtube", True, headers=response.headers,
-            latency_ms=int((time.monotonic() - started) * 1000),
-        )
         url = _best_video_url(items, track, artist)
+        _cache_set(key, url)
+        return url
+
+
+_TRAILER_MARKERS = ("trailer", "teaser", "трейлер")
+_TRAILER_UNWANTED = ("reaction", "review", "fan made", "fanmade", "concept", "explained", "breakdown",
+                     "recap", "parody", "реакция", "обзор")
+_TRAILER_MIN_SCORE = 0.7
+
+
+def _trailer_score(item: dict, titles: list, year) -> float:
+    """Ролик — трейлер нужного фильма: название целиком в заголовке ролика, слово «trailer», не реакция и не
+    обзор, не старше года выхода (иначе это трейлер одноимённого старого фильма)."""
+    snippet = (item or {}).get("snippet") or {}
+    video = f" {_norm(snippet.get('title'))} "
+    if not any(f" {marker}" in video for marker in _TRAILER_MARKERS):
+        return 0.0
+    if any(marker in video for marker in _TRAILER_UNWANTED):
+        return 0.0
+    published = str(snippet.get("publishedAt") or "")[:4]
+    if str(year or "").isdigit() and published.isdigit() and int(published) < int(year) - 1:
+        return 0.0
+    score = max((0.95 if f" {_norm(title)} " in video else SequenceMatcher(None, _norm(title), video.strip()).ratio())
+                for title in titles)
+    return score + (0.05 if " official " in video or " officiele " in video else 0.0)
+
+
+def find_trailer_url(titles, year="", season: int = 0) -> str:
+    """Официальный трейлер на YouTube (youtube.com/watch) по английскому и оригинальному названию и году;
+    "" при сомнении. Кэш 30 дней, как у треков."""
+    titles = [title for title in dict.fromkeys(" ".join(str(title or "").split()) for title in titles or ())
+              if _norm(title)]
+    if not config.YOUTUBE_API_KEY or not titles:
+        return ""
+    key = f"trailer | {_norm(titles[0])} | {year or ''} | {season or ''}"
+    cached = _cache_get(key, music=False)
+    if cached is not None:
+        return cached
+    with _CACHE_LOCK:
+        cached = _cache_get(key, music=False)
+        if cached is not None:
+            return cached
+        query = " ".join(part for part in (
+            titles[0], f"season {season}" if season > 1 else "", str(year or ""), "official trailer") if part)
+        items = _search({"q": query, "type": "video", "maxResults": 5})
+        if items is None:
+            return ""
+        scored = [(_trailer_score(item, titles, year), str(((item or {}).get("id") or {}).get("videoId") or ""))
+                  for item in items]
+        score, video_id = max(((score, video_id) for score, video_id in scored
+                               if _VIDEO_ID_RE.fullmatch(video_id)), default=(0.0, ""))
+        url = f"https://www.youtube.com/watch?v={video_id}" if score >= _TRAILER_MIN_SCORE else ""
         _cache_set(key, url)
         return url

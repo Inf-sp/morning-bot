@@ -112,6 +112,7 @@ def _movie_premiere_item(movie, today):
     return {
         "id": getattr(movie, "id", None),
         "title": title,
+        "original_title": str(getattr(movie, "original_title", "") or "").strip(),  # для поиска трейлера
         "date": release.isoformat(),
         "date_label": date_label,
         "genres": ", ".join(getattr(movie, "genres", None) or [])[:70],
@@ -303,14 +304,16 @@ async def get_series_premieres(cid):
         -float(item.get("rating") or 0),
     ))
     result = result[:5]
-    posters = await asyncio.gather(*(
-        asyncio.to_thread(
+    posters, trailers = await asyncio.gather(
+        asyncio.gather(*(asyncio.to_thread(
             tmdb.english_poster, item.get("id"), "tv",
             item.get("season_number") if item.get("season_number") else None,
-        ) for item in result
-    ))
-    for item, poster in zip(result, posters):
+        ) for item in result)),
+        asyncio.gather(*(asyncio.to_thread(tmdb.trailer_url, item.get("id"), "tv") for item in result)),
+    )
+    for item, poster, trailer in zip(result, posters, trailers):
         item["poster"] = str(poster or "").strip()
+        item["trailer_url"] = str(trailer or "").strip()
     return [item for item in result if item.get("poster")]
 
 

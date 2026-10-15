@@ -136,3 +136,54 @@ def test_trailer_prefers_newest_official_video():
     ]
 
     assert tmdb._pick_trailer(videos) == "new"
+
+
+def test_trailer_url_asks_original_language_videos_and_falls_back_to_youtube_search(monkeypatch):
+    import youtube_tracks
+    monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "test")
+    monkeypatch.setattr(tmdb.util, "ttl_get", lambda *_args: None)
+    saved, requests, searched = {}, [], []
+    monkeypatch.setattr(tmdb.util, "ttl_set", lambda _ns, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(tmdb, "detail", lambda *_args: {"original_language": "nl", "name_en": "De Tatta's 2", "year": "2026"})
+
+    def get(path, params, timeout=12, language=None):
+        requests.append((path, params.get("include_video_language"), language))
+        return {"title": "The Tattas 2"} if path == "/movie/7" else {"results": []}
+
+    def find(titles, year, season=0):
+        searched.append((tuple(titles), year, season))
+        return "https://www.youtube.com/watch?v=official77"
+
+    monkeypatch.setattr(tmdb, "_get", get)
+    monkeypatch.setattr(youtube_tracks, "find_trailer_url", find)
+
+    # У местного фильма ролики ищутся и на языке оригинала; нет в TMDb — официальный трейлер из поиска YouTube.
+    assert tmdb.trailer_url(7) == "https://www.youtube.com/watch?v=official77"
+    assert requests[0] == ("/movie/7/videos", "en,null,nl", "en-US")
+    assert searched == [(("The Tattas 2", "De Tatta's 2"), "2026", 0)]
+    assert saved["trailer-v3|movie|7"] == "https://www.youtube.com/watch?v=official77"
+
+
+def test_trailer_url_failure_is_not_remembered_as_missing(monkeypatch):
+    import youtube_tracks
+    monkeypatch.setattr(tmdb.config, "TMDB_API_KEY", "test")
+    monkeypatch.setattr(tmdb.util, "ttl_get", lambda *_args: None)
+    saved = {}
+    monkeypatch.setattr(tmdb.util, "ttl_set", lambda _ns, key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(tmdb, "detail", lambda *_args: {})
+    monkeypatch.setattr(tmdb, "_get", lambda *_args, **_kwargs: None)  # сеть TMDb недоступна
+    monkeypatch.setattr(youtube_tracks, "find_trailer_url", lambda *_args, **_kwargs: "")
+
+    assert tmdb.trailer_url(8) == ""
+    assert "trailer-v3|movie|8" not in saved  # следующий запрос попробует снова
+
+
+def test_trailer_prefers_english_official_video():
+    videos = [
+        {"site": "YouTube", "key": "dutch", "type": "Trailer", "official": True, "published_at": "2026-05-02",
+         "iso_639_1": "nl"},
+        {"site": "YouTube", "key": "english", "type": "Trailer", "official": True, "published_at": "2026-05-01",
+         "iso_639_1": "en"},
+    ]
+
+    assert tmdb._pick_trailer(videos) == "english"

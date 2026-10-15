@@ -797,15 +797,15 @@ def youtube_music_link(*parts) -> str:
 
 
 def trailer_link(item) -> str:
-    """Трейлер на YouTube: подтверждённый TMDb ролик, иначе поиск трейлера на YouTube по оригинальному названию
-    и году. Страницы TMDb пользователю не даём."""
+    """Официальный трейлер на YouTube (`tmdb.trailer_url`: TMDb, иначе поиск YouTube API); не нашёлся — поиск
+    «название год official trailer» на YouTube по оригинальному названию. Страницы TMDb пользователю не даём."""
     url = str(_item_value(item, "trailer_url", "") or "").strip()
     if url:
         return url
     name = next((str(_item_value(item, key, "") or "").strip() for key in ("name_en", "original_title", "name", "title")
                  if str(_item_value(item, key, "") or "").strip()), "")
     year = str(_item_value(item, "year", "") or _item_value(item, "release_date", "") or _item_value(item, "date", "") or "")[:4]
-    query = " ".join(part for part in (name, year if year.isdigit() else "", "trailer") if part)
+    query = " ".join(part for part in (name, year if year.isdigit() else "", "official trailer") if part)
     return f"https://www.youtube.com/results?search_query={quote_plus(query)}" if name else ""
 
 

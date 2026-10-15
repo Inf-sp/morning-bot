@@ -443,37 +443,57 @@ def _pick_trailer(results):
         key = str(video.get("key") or "").strip()
         video_type = str(video.get("type") or "").casefold()
         if key and video_type in ("trailer", "teaser"):
-            videos.append((bool(video.get("official")), str(video.get("published_at") or ""),
-                           video_type == "trailer", key))
+            videos.append((bool(video.get("official")), video.get("iso_639_1") == "en",
+                           str(video.get("published_at") or ""), video_type == "trailer", key))
     if not videos:
         return ""
     official = [video for video in videos if video[0]] or videos
-    return max(official, key=lambda video: (video[1], video[2]))[3]
+    return max(official, key=lambda video: video[1:4])[4]  # английский — раньше ролика на языке оригинала
+
+
+def _videos(path, languages):
+    """Ролики TMDb на этих языках; None — сбой запроса (не запоминается как «трейлера нет»)."""
+    data = _get(path, {"include_video_language": languages}, timeout=10, language="en-US")
+    return None if data is None else data.get("results") or []
+
+
+def _english_title(tmdb_id, kind):
+    data = _get(f"/{kind}/{tmdb_id}", {}, timeout=8, language="en-US") or {}
+    return str(data.get("title") or data.get("name") or "").strip()
 
 
 def trailer_url(tmdb_id, kind="movie"):
-    """Точный YouTube-трейлер, подтверждённый карточкой TMDB.
+    """Официальный YouTube-трейлер (youtube.com/watch).
 
-    У сериала сначала ищем ролик последнего сезона: общий список видео сериала
-    часто начинается с трейлера первого сезона многолетней давности.
+    Сначала ролики карточки TMDb — английские, без языка и на языке оригинала: у местных фильмов трейлер
+    часто только на их языке. У сериала — сначала ролики последнего сезона: общий список видео часто
+    начинается с трейлера первого сезона многолетней давности. Нет в TMDb — официальный трейлер из поиска
+    YouTube по английскому и оригинальному названию (`youtube_tracks.find_trailer_url`). Сбой сети не
+    запоминается как «трейлера нет».
     """
     if not config.TMDB_API_KEY or not tmdb_id or kind not in ("movie", "tv"):
         return ""
-    cache_key = f"trailer-v2|{kind}|{tmdb_id}"
+    cache_key = f"trailer-v3|{kind}|{tmdb_id}"
     cached = util.ttl_get("tmdb_trailer", cache_key, 7 * 24 * 3600)
     if cached is not None:
         return str(cached or "")
-    key = ""
-    if kind == "tv":
-        seasons = int((detail(tmdb_id, "tv") or {}).get("seasons") or 0)
-        if seasons > 0:
-            data = _get(f"/tv/{tmdb_id}/season/{seasons}/videos", {}, timeout=10, language="en-US") or {}
-            key = _pick_trailer(data.get("results"))
-    if not key:
-        data = _get(f"/{kind}/{tmdb_id}/videos", {}, timeout=10, language="en-US") or {}
-        key = _pick_trailer(data.get("results"))
+    info = detail(tmdb_id, kind) or {}
+    languages = ",".join(dict.fromkeys(("en", "null", info.get("original_language") or "en")))
+    seasons = int(info.get("seasons") or 0) if kind == "tv" else 0
+    key, failed = "", False
+    for path in [f"/tv/{tmdb_id}/season/{seasons}/videos"] * bool(seasons) + [f"/{kind}/{tmdb_id}/videos"]:
+        videos = _videos(path, languages)
+        failed = failed or videos is None
+        key = _pick_trailer(videos)
+        if key:
+            break
     url = f"https://www.youtube.com/watch?v={key}" if key else ""
-    util.ttl_set("tmdb_trailer", cache_key, url or False)
+    if not url:
+        import youtube_tracks
+        url = youtube_tracks.find_trailer_url((_english_title(tmdb_id, kind), info.get("name_en")),
+                                              info.get("year") if kind == "movie" else "", season=seasons)
+    if url or not failed:
+        util.ttl_set("tmdb_trailer", cache_key, url or False)
     return url
 
 
