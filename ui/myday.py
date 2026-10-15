@@ -54,27 +54,35 @@ def holidays_eve(city, lines):
     return b.build_stripped()
 
 
-_PREMIERE_EMOJI = {"movie": "🎬", "series": "📺", "music": "🎧"}
+_PREMIERE_LABEL = {"movie": ("🎬", "Премьера в кино"), "series": ("📺", "Премьера сериала"),
+                   "music": ("🎧", "Новый альбом")}
 
 
 def _premiere_line(b: MessageBuilder, item) -> None:
-    """«🎬 Премьера: **Название** · сегодня в кино» — ссылка на трейлер; у альбома — на YouTube Music."""
+    """«🎬 Премьера в кино: Уличный боец · боевик · триллер · USA»: название — ссылка на трейлер (у альбома —
+    на YouTube Music), дальше жанры и страна кратко; у сериала — ещё сезон."""
     kind = item.get("kind")
+    emoji, label = _PREMIERE_LABEL.get(kind, _PREMIERE_LABEL["movie"])
+    country = str(item.get("country_label") or "").strip().partition(" ")[2]  # «🇺🇸 USA» → «USA»
     if kind == "music":
         name, url = item.get("artist"), youtube_music_link(item.get("artist"), item.get("title"))
-        tail = f" — «{item.get('title')}»" if item.get("title") else ""
+        meta = [f"«{item['title']}»" if item.get("title") else "", item.get("genre_label"), country]
     else:
         name, url = item.get("title") if kind == "movie" else item.get("name"), trailer_link(item)
         season = int(item.get("season_number") or 0)
-        tail = " · сегодня в кино" if kind == "movie" else (f" · {season}-й сезон" if season > 1 else " · новый сериал")
+        genres = str(item.get("genres") or "").replace(", ", " · ")
+        meta = [f"{season}-й сезон" if kind == "series" and season > 1 else "", genres, country]
     name = " ".join(str(name or "").split())
     if not name:
         return
-    b.text_line(f"{_PREMIERE_EMOJI.get(kind, '🎬')} ")
-    b.label("Премьера")
+    b.text_line(f"{emoji} ")
+    b.label(label)
     b.text_line(" ")
-    b.bold_link(name, url) if url else b.bold(name)
-    b.text_line(tail)
+    b.link(name, url) if url else b.text_line(name)
+    joiner = " — " if kind == "music" else " · "  # «Alvvays — «Blue Rev» · Инди · CA»
+    values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
+    if values:
+        b.text_line(joiner + values[0] + "".join(f" · {value}" for value in values[1:]))
     b.newline()
     b.spacer()
 

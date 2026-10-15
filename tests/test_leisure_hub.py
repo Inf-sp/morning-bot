@@ -587,13 +587,15 @@ def test_premiere_of_day_picks_one_todays_premiere_by_personal_priority(monkeypa
 def test_premiere_line_in_my_day():
     from ui import myday as myday_ui
     movie = myday_ui.day_summary("Пт, 16 октября", "Alkmaar", premiere={
-        "kind": "movie", "title": "Дюна", "trailer_url": "https://www.youtube.com/watch?v=t"})
+        "kind": "movie", "title": "Уличный боец", "genres": "боевик, триллер", "country_label": "🇺🇸 USA",
+        "trailer_url": "https://www.youtube.com/watch?v=t"})
     season = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "series", "name": "Медведь", "season_number": 5})
-    album = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "music", "artist": "Alvvays", "title": "Blue Rev"})
+    album = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "music", "artist": "Alvvays", "title": "Blue Rev",
+                                                            "genre_label": "Инди", "country_label": "🇨🇦 CA"})
 
-    assert movie.text.endswith("🎬 Премьера: Дюна · сегодня в кино")
+    assert movie.text.endswith("🎬 Премьера в кино: Уличный боец · боевик · триллер · USA")
     assert any(e.type == "text_link" and e.url == "https://www.youtube.com/watch?v=t" for e in movie.entities)
-    assert season.text.endswith("📺 Премьера: Медведь · 5-й сезон")
-    assert album.text.endswith("🎧 Премьера: Alvvays — «Blue Rev»")
+    assert season.text.endswith("📺 Премьера сериала: Медведь · 5-й сезон")
+    assert album.text.endswith("🎧 Новый альбом: Alvvays — «Blue Rev» · Инди · CA")
     assert any(e.type == "text_link" and "music.youtube.com" in e.url for e in album.entities)
     assert "Премьера" not in myday_ui.day_summary("Пт", "Alkmaar").text

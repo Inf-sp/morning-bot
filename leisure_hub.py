@@ -400,7 +400,13 @@ def premiere_of_day(cid, day=None):
         ("series", series[0] if series else None),
         ("music", albums[0] if albums else None),
     )
-    return next(({**item, "kind": kind} for kind, item in picks if item), None)
+    kind, item = next(((kind, item) for kind, item in picks if item), ("", None))
+    if item is None:
+        return None
+    import countries  # жанр и страна для строки — из кэшей, без сети
+    labeled = {**item, "country_label": countries.artist_label(item.get("artist"), fetch=False)} \
+        if kind == "music" else _title_labels(item)
+    return {**labeled, "kind": kind}
 
 
 async def send_hub(bot, cid, q=None):
