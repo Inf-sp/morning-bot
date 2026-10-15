@@ -476,17 +476,14 @@ def test_tomorrow_notification_has_city_country_flag_and_three_periods(monkeypat
     }
     sent = []
 
-    async def summary(*_args, **_kwargs):
-        return "Сухой облачный день, к вечеру прохладнее"
-
     monkeypatch.setattr(weather.store, "get_settings",
                         lambda _cid: {"lat": 52.6, "lon": 4.7, "city": "Alkmaar", "cc": "nl"})
     monkeypatch.setattr(weather, "fetch_weather", lambda *_args: data)
-    monkeypatch.setattr(weather.ai, "allm", summary)
+    monkeypatch.setattr(weather.ai, "allm", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no AI")))
 
     asyncio.run(weather.send_weather(RecordingBot(sent), "42", "tomorrow_plain"))
 
     lines = sent[0]["text"].split("\n")
     assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0]
     assert [line.split(":")[0].split(" ", 1)[1] for line in lines[2:5]] == ["Утром", "Днём", "Вечером"]
-    assert sent[0]["text"].endswith("Сухой облачный день, к вечеру прохладнее.")  # метео-итог доходит до текста
+    assert len(lines) == 5 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога

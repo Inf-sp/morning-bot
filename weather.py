@@ -96,14 +96,6 @@ def _finish_sentence(text):
     return text
 
 
-def _rain_description(rain, rain_mm, periods=()):
-    """Короткая фактическая фраза для AI-сводки без неинициализированных данных."""
-    if not _rain_real(rain, rain_mm):
-        return "без осадков"
-    when = ", ".join(str(period).strip() for period in (periods or []) if str(period).strip())
-    return f"дождь {rain:.0f}%" + (f" {when}" if when else "")
-
-
 # ---------- иконка ----------
 # Средняя облачность (%) по часам: ниже SUNNY — солнечно, ниже PARTLY — малооблачно.
 SUNNY_CLOUDS_MAX = 30
@@ -599,30 +591,11 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm,
                             _mean(_daytime_values(data, day_str, "cloudcover")))
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
-        desc = DESC.get(code, "")
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        # Утро, день и вечер отдельными строками; без почасовых данных — одна общая строка.
+        # Утро, день и вечер отдельными строками; без почасовых данных — одна общая строка. Метео-итога нет.
         main_lines = [_period_line(p) for p in forecast_periods(data, now, day=1)] \
             or [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
-        fact = ""
-        if alert:
-            pass
-        else:
-            try:
-                rain_desc = _rain_description(rain, rain_mm, rain_p)
-                summary = (await ai.allm(
-                    f"Погода завтра в {s['city']}: {desc}, до {tmax:+.0f}°C, {rain_desc}, "
-                    f"ветер {wind_ms:.0f} м/с.\n\n"
-                    "Напиши короткий метео-итог: 2-3 предложения — общая картина, что ждать. "
-                    "Без слова 'зонт'. Без markdown. На русском.",
-                    150, 0.6, tier="cheap", module="weather",
-                    fallback_allowed=True, privacy_level="public", response_mode="plain_text"
-                ) or "").strip()  # скобки: .strip() — у ответа, а не у корутины
-                if summary:
-                    fact = _finish_sentence(cap_sentence(summary))
-            except Exception:
-                _log.debug("send_weather: ignored error", exc_info=True)
-        msg = weather_ui.day_forecast(header, main_lines, alert=alert, fact_title="Метео-итог", fact=fact)
+        msg = weather_ui.day_forecast(header, main_lines, alert=alert)
         await bot.send_message(
             chat_id=cid,
             text=msg.text,
