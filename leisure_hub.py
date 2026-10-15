@@ -291,8 +291,7 @@ def _movie_pick(kind, cached):
         why = "Одна серия — как раз на будний вечер." if kind == "tv" else "Не слишком длинный — как раз на будний вечер."
     else:
         why = ""
-    url = tm.get("trailer_url") or tm.get("url") or (
-        f"https://www.themoviedb.org/{kind}/{tm['id']}" if tm.get("id") else "")
+    url = leisure_ui.trailer_link({**it, **tm})  # YouTube-трейлер, без него — поиск трейлера на YouTube
     meta = [str(tm.get("genres") or "").replace(", ", " · ")]
     if kind == "tv":
         meta = [tm.get("network") or "", *meta]
@@ -412,6 +411,8 @@ async def send_week_premieres(bot, cid, kind="", q=None):
     rows = await asyncio.to_thread(week_data, cid, kind)
     items = leisure_ui.week_items(kind, rows)
     index = int(index) % len(items) if items and index.isdigit() else 0
+    if items and kind != "music" and not items[index].get("trailer_url") and items[index].get("id"):
+        items[index] = {**items[index], "trailer_url": await _premiere_trailer(kind, items[index])}
     image = await _premiere_image(kind, items[index]) if items else ""
     await _show_card(bot, cid, leisure_ui.premiere_card(kind, items, index), image, q)
     missing = [item for _day, item in rows if kind == "music" and not item.get("about")]
@@ -419,6 +420,17 @@ async def send_week_premieres(bot, cid, kind="", q=None):
         util.background(describe_albums(missing), "album notes")
     if any(not item.get("country_label") for _day, item in rows):  # страна — в фоне, к следующему открытию
         util.background(asyncio.to_thread(week_data, cid, kind, None, True), "week premiere countries")
+
+
+async def _premiere_trailer(kind, item) -> str:
+    """YouTube-трейлер премьеры из TMDb (кэш неделю); не успели — поиск трейлера на YouTube в ссылке."""
+    import tmdb
+    try:
+        return str(await asyncio.wait_for(asyncio.to_thread(
+            tmdb.trailer_url, item["id"], "tv" if kind == "series" else "movie"), 4.0) or "")
+    except Exception:
+        _log.debug("premieres: trailer unavailable", exc_info=True)
+        return ""
 
 
 async def _premiere_image(kind, item) -> str:

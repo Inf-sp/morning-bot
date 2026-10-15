@@ -1,6 +1,7 @@
 import html
 import re
 from datetime import date, datetime
+from urllib.parse import quote_plus
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -83,7 +84,7 @@ def yearly_top_screen(kind, year, item):
         b.line("Пока не удалось загрузить проверенный список.")
         return b.build_stripped()
     title = str(item.get("title") or item.get("name") or "").strip()
-    url = str(item.get("url") or item.get("info_link") or "").strip()
+    url = trailer_link(item)  # трейлер на YouTube, не страница TMDb
     if url:
         b.link(title, url)
         b.newline()
@@ -490,7 +491,7 @@ def series_premiere_screen(item):
         b.line("Пока нет премьер с рейтингом выше 7.")
         return b.build_stripped()
     title = str(_item_value(item, "name", "") or "Сериал").strip()
-    url = str(_item_value(item, "url", "") or "").strip()
+    url = trailer_link(item)  # трейлер на YouTube, не страница TMDb
     if url:
         b.link(title, url)
     else:
@@ -789,6 +790,19 @@ WEEK_PAGES = ("movie", "series", "music")  # «Премьеры недели»: 
 _WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "music": ("🎧", "Музыка")}
 
 
+def trailer_link(item) -> str:
+    """Трейлер на YouTube: подтверждённый TMDb ролик, иначе поиск трейлера на YouTube по оригинальному названию
+    и году. Страницы TMDb пользователю не даём."""
+    url = str(_item_value(item, "trailer_url", "") or "").strip()
+    if url:
+        return url
+    name = next((str(_item_value(item, key, "") or "").strip() for key in ("name_en", "original_title", "name", "title")
+                 if str(_item_value(item, key, "") or "").strip()), "")
+    year = str(_item_value(item, "year", "") or _item_value(item, "release_date", "") or _item_value(item, "date", "") or "")[:4]
+    query = " ".join(part for part in (name, year if year.isdigit() else "", "trailer") if part)
+    return f"https://www.youtube.com/results?search_query={quote_plus(query)}" if name else ""
+
+
 def _week_item(item, kind) -> tuple:
     """(имя, ссылка, метаданные, описание) пункта вкладки — как блок хаба; у альбома сначала исполнитель."""
     if kind == "music":
@@ -796,12 +810,10 @@ def _week_item(item, kind) -> tuple:
                 (f"— «{item.get('title')}»", item.get("genre_label"), item.get("country_label")), item.get("about"))
     if kind == "series":
         season = int(item.get("season_number") or 0)
-        return (item.get("name"), item.get("url"),
+        return (item.get("name"), trailer_link(item),
                 (_movie_genres_for_line(item).replace(", ", " · "), f"{season}-й сезон" if season > 1 else "",
                  item.get("country_label"), item.get("network")), item.get("overview"))
-    movie_id = _item_value(item, "id", "")
-    url = _item_value(item, "trailer_url", "") or (f"https://www.themoviedb.org/movie/{movie_id}" if movie_id else "")
-    return (_item_value(item, "title", ""), url,
+    return (_item_value(item, "title", ""), trailer_link(item),
             (_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")), _item_value(item, "overview", ""))
 
 
@@ -913,9 +925,7 @@ def novelty_card(kind, item) -> MessageSpec:
     b.newline()
     b.spacer()
     title = str(_item_value(item, "title", "") or "").strip()
-    url = str(_item_value(item, "trailer_url", "") or _item_value(item, "url", "") or "").strip()
-    if kind == "movie" and not url and _item_value(item, "id", ""):
-        url = f"https://www.themoviedb.org/movie/{_item_value(item, 'id', '')}"
+    url = trailer_link(item) if kind == "movie" else str(_item_value(item, "url", "") or "").strip()
     heading = f"«{title}»" + (f" — {item.get('artist')}" if kind == "music" and item.get("artist") else "")
     if url:
         b.link(heading, url)

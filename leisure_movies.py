@@ -579,6 +579,11 @@ async def get_current_movie(cid, kind="movie"):
     if not it or not _of_kind(tm, kind):
         return None, None
     tm = await _with_details(tm)  # длительность и студия — для строки «Досуга на сегодня»
+    if tm.get("id") and not tm.get("trailer_url"):  # ссылка в «Досуге на сегодня» — трейлер на YouTube
+        try:
+            tm = {**tm, "trailer_url": await asyncio.to_thread(tmdb.trailer_url, tm["id"], kind) or ""}
+        except Exception:
+            _log.debug("movie home: trailer unavailable", exc_info=True)
     _cache_movie(cid, it, tm, kind)
     return it, tm
 
