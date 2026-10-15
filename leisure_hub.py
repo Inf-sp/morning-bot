@@ -419,16 +419,62 @@ async def send_concerts(bot, cid, q=None):
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
 
-async def send_week_premieres(bot, cid, kind="movie", q=None):
-    """«Премьеры»: вкладки фильмы → сериалы → книги → музыка со стрелками; премьеры недели с описанием."""
+async def send_week_premieres(bot, cid, kind="", q=None):
+    """«🆕 Премьеры»: меню «Новые фильмы / сериалы / книги / музыка»; вид (lz_prem_<вид>_<n>) — карточки недели
+    с постером или обложкой, ← n/N → по кругу в том же сообщении."""
+    if not kind:
+        await _show_card(bot, cid, leisure_ui.premieres_menu(), "", q)
+        return
+    kind, _sep, index = kind.partition("_")
     kind = kind if kind in leisure_ui.WEEK_PAGES else "movie"
     rows = await asyncio.to_thread(week_data, cid, kind)
-    await _show(bot, cid, leisure_ui.week_premieres_screen(kind, rows), q)
+    items = leisure_ui.week_items(kind, rows)
+    index = int(index) % len(items) if items and index.isdigit() else 0
+    image = await _premiere_image(kind, items[index]) if items else ""
+    await _show_card(bot, cid, leisure_ui.premiere_card(kind, items, index), image, q)
     missing = [item for _day, item in rows if kind == "music" and not item.get("about")]
     if missing:  # описание альбома — в фоне; появится при следующем открытии
         util.background(describe_albums(missing), "album notes")
     if any(not item.get("country_label") for _day, item in rows):  # страна — в фоне, к следующему открытию
         util.background(asyncio.to_thread(week_data, cid, kind, None, True), "week premiere countries")
+
+
+async def _premiere_image(kind, item) -> str:
+    """Постер фильма или сериала, обложка альбома; обложка книги — с ограничением по времени (кэш 30 дней)."""
+    if kind == "book":
+        return await leisure_books._cover_for(item, 4.0)
+    return str(item.get("cover" if kind == "music" else "poster") or "").strip()
+
+
+async def _show_card(bot, cid, msg, image, q=None):
+    """Экран премьер на месте: фото ↔ фото — правка медиа, текст ↔ текст — правка текста; смена вида
+    сообщения (меню ↔ карточка с постером) — новым сообщением, прежнее убирается — в чате одно актуальное."""
+    from telegram import InputMediaPhoto
+    if q is not None:
+        try:
+            if image:
+                await q.edit_message_media(
+                    media=InputMediaPhoto(media=image, caption=msg.text, caption_entities=msg.entities),
+                    reply_markup=msg.reply_markup)
+            else:
+                await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+                                          disable_web_page_preview=True)
+            return
+        except Exception:
+            _log.debug("premieres: edit in place failed", exc_info=True)
+    try:
+        if not image:
+            raise ValueError("no image")
+        await bot.send_photo(chat_id=cid, photo=image, caption=msg.text, caption_entities=msg.entities,
+                             reply_markup=msg.reply_markup)
+    except Exception:
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup,
+                               disable_web_page_preview=True)
+    if q is not None:
+        try:
+            await q.message.delete()
+        except Exception:
+            _log.debug("premieres: old message not deleted", exc_info=True)
 
 
 async def send_library_menu(bot, cid, q=None):

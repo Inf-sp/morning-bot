@@ -505,7 +505,7 @@ ROUTES = (
     R("leisure_prefs_music_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
-    R("lz_prem", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, q=c.q)),  # «Премьеры» — с кино
+    R("lz_prem", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, q=c.q)),  # меню «Новые фильмы / …»
     R("lz_prem_*", lambda c: leisure_hub.send_week_premieres(c.bot, c.cid, c.data.removeprefix("lz_prem_"), q=c.q)),
     # «Новых премьер» и «Другого варианта» больше нет: старые кнопки из истории чата открывают хаб.
     R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),

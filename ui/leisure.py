@@ -1057,7 +1057,7 @@ def no_month_concerts(title="🎫 Ближайшие концерты") -> Messa
     return b.build_stripped()
 
 
-WEEK_PAGES = ("movie", "series", "book", "music")  # «Все премьеры»: вкладки по кругу стрелками
+WEEK_PAGES = ("movie", "series", "book", "music")  # «Премьеры недели»: виды в меню по порядку
 _WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "book": ("📚", "Книги"), "music": ("🎧", "Музыка")}
 
 
@@ -1082,39 +1082,71 @@ def _week_item(item, kind) -> tuple:
             (_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")), _item_value(item, "overview", ""))
 
 
-def week_premieres_screen(kind, rows) -> MessageSpec:
-    """Вкладка «Всех премьер»: каждый пункт — абзац как в хабе: «**Имя** · жанр · страна · описание».
+_PREMIERE_LABELS = {"movie": "Новые фильмы", "series": "Новые сериалы", "book": "Новые книги", "music": "Новая музыка"}
+_PREMIERE_ABOUT_MAX = 700
 
-    rows — [(день, пункт)] в порядке дней; дни не подписываются, повторы не выводятся.
-    Стрелки листают фильмы → сериалы → книги → музыка по кругу, между ними — неактивная кнопка вкладки.
-    """
-    kind = kind if kind in WEEK_PAGES else "movie"
-    emoji, tab = _WEEK_TABS[kind]
+
+def premieres_menu() -> MessageSpec:
+    """«🆕 Премьеры недели»: четыре вида, каждый открывает карточки-журнал (lz_prem_<вид>)."""
     b = MessageBuilder()
-    b.title(f"{emoji} Премьеры недели · {tab}")
-    seen = set()
+    b.title("🆕 Премьеры недели")
+    b.line("Что вышло на этой неделе — листай карточками.")
+    rows = _column_kb([(_PREMIERE_LABELS[kind], f"lz_prem_{kind}") for kind in WEEK_PAGES]).inline_keyboard
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*rows, nav_row("m_leisure")]))
+
+
+def week_items(kind, rows) -> list:
+    """Пункты недели в порядке дней без повторов (одно имя и первая метка — один пункт)."""
+    seen, items = set(), []
     for _weekday, item in rows:
-        name, url, meta, about = _week_item(item, kind)
-        name = " ".join(str(name or "").split())
-        values = [" ".join(str(value).split()) for value in (*meta, _hub_about(about)) if str(value or "").strip()]
-        key = (name, *values[:1])
-        if not name or key in seen:
-            continue
-        seen.add(key)
-        b.spacer()
-        b.bold_link(name, str(url).strip()) if str(url or "").strip() else b.bold(name)
-        if values:
-            first, *rest = values
-            joined = (f" {first}" if kind == "music" else f" · {first}") + "".join(f" · {value}" for value in rest)
-            b.text_line(joined)
-        b.newline()
-    if not seen:
+        name, _url, meta, _about = _week_item(item, kind)
+        key = (" ".join(str(name or "").split()), *[str(value) for value in meta if str(value or "").strip()][:1])
+        if key[0] and key not in seen:
+            seen.add(key)
+            items.append(item)
+    return items
+
+
+def _premiere_about(text) -> str:
+    """Полное описание карточки премьеры: только русский текст, до ~700 символов по границе предложения."""
+    text = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
+    return clip(text, _PREMIERE_ABOUT_MAX) if re.search(r"[а-яё]", text, re.I) else ""
+
+
+def premiere_card(kind, items, index=0) -> MessageSpec:
+    """Карточка-журнал премьеры: «🎬 **Имя**» ссылкой, метаданные через «·», полное описание;
+    ← n/N → по кругу, «Назад» — в меню премьер. Картинку (постер, обложку) прикладывает обработчик."""
+    kind = kind if kind in WEEK_PAGES else "movie"
+    emoji, _tab = _WEEK_TABS[kind]
+    b = MessageBuilder()
+    if not items:
+        b.title(f"{emoji} {_PREMIERE_LABELS[kind]}")
         b.line("Премьер на эту неделю пока нет.")
-    page = WEEK_PAGES.index(kind)
-    arrows = [InlineKeyboardButton("◀️", callback_data=f"lz_prem_{WEEK_PAGES[(page - 1) % len(WEEK_PAGES)]}"),
-              InlineKeyboardButton(tab, callback_data="noop"),  # где пользователь — вместо номера страницы
-              InlineKeyboardButton("▶️", callback_data=f"lz_prem_{WEEK_PAGES[(page + 1) % len(WEEK_PAGES)]}")]
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([arrows, nav_row("m_leisure")]))
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("lz_prem")]))
+    index %= len(items)
+    name, url, meta, about = _week_item(items[index], kind)
+    name = " ".join(str(name or "").split())
+    b.text_line(f"{emoji} ")
+    b.bold_link(name, str(url).strip()) if str(url or "").strip() else b.bold(name)
+    values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
+    if kind == "music" and values:  # «Alvvays — «Blue Rev»» в заголовке, дальше жанр и страна
+        b.text_line(f" {values.pop(0)}")
+    b.newline()
+    if values:
+        b.line(" · ".join(values))
+    about = _premiere_about(about)
+    if about:
+        b.spacer()
+        b.line(about)
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"lz_prem_{kind}_{(index - 1) % len(items)}"),
+            InlineKeyboardButton(f"{index + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"lz_prem_{kind}_{(index + 1) % len(items)}"),
+        ])
+    rows.append(nav_row("lz_prem"))
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 
 def leisure_library_menu() -> MessageSpec:
