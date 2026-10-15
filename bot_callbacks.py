@@ -561,6 +561,7 @@ ROUTES = (
     R("mfdok:*", _delete_favorite_movie),
     R("book_favorites", lambda c: leisure_books.send_favorite_books(c.bot, c.cid, q=c.q)),
     R("bfg:*", lambda c: leisure_books.send_favorite_book_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
+    R("bfl:*", lambda c: leisure_books.send_favorite_book_list(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("bfi:*", lambda c: leisure_books.send_favorite_book_card(c.bot, c.cid, *_card_args(c))),
     R("bfd:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_card_args(c)[:2], q=c.q)),
     R("bfdok:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_token_id(c), q=c.q)),

@@ -205,7 +205,7 @@ async def send_favorite_movies(bot, cid, q=None):
     msg = leisure_ui.favorite_movies_home(len(records))
     rows = [[InlineKeyboardButton("✅ Добавить фильм", callback_data="as_loveadd_movies")]]
     rows.extend([
-        [InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"mfg:{token}:{index}:0")]
+        [InlineKeyboardButton(f"{genre} · {len(items)}", callback_data=f"mfl:{token}:{index}:0")]
         for index, (genre, items) in enumerate(view["genres"])
     ])
     rows.append([InlineKeyboardButton(
@@ -236,9 +236,8 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
     rows.insert(0, [InlineKeyboardButton(
         "❌ Удалить", callback_data=f"mfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    # Внутри категории добавления нет: «Удалить», листание, «Показать списком», навигация.
-    rows.append([InlineKeyboardButton("Показать списком", callback_data=f"mfl:{token}:{genre_index}:0")])
-    rows.append(nav_row("movie_favorites"))
+    # Внутри категории добавления нет: «Удалить», листание, навигация; «Назад» — в список жанра.
+    rows.append(nav_row(f"mfl:{token}:{genre_index}:{page // leisure_ui.FAVORITE_LIST_PAGE}"))
     kb = InlineKeyboardMarkup(rows)
     poster = str(item["tm"].get("poster") or "").strip()
     if q is not None and poster:
@@ -266,35 +265,18 @@ async def send_favorite_movie_genre(bot, cid, token, genre_index, page=0, q=None
     )
 
 
-_FAVORITE_LIST_PAGE = 12
-
-
 async def send_favorite_movie_list(bot, cid, token, genre_index, page=0, q=None):
-    """«Показать списком» как в «Моём словаре»: фильмы кнопками, нажатие открывает карточку."""
-    import rich_delivery
-
+    """Жанр «Моего кино» сначала списком, как «Мой словарь»: нажатие на название открывает карточку."""
     view = _favorite_movie_view(cid, token)
     if view is None or not 0 <= genre_index < len(view["genres"]):
         await send_favorite_movies(bot, cid, q=q)
         return
     genre, items = view["genres"][genre_index]
-    pages = max(1, (len(items) + _FAVORITE_LIST_PAGE - 1) // _FAVORITE_LIST_PAGE)
-    page = max(0, min(int(page), pages - 1))
-    start = page * _FAVORITE_LIST_PAGE
-    buttons = [
-        InlineKeyboardButton(item["title"][:24], callback_data=f"mfg:{token}:{genre_index}:{start + offset}")
-        for offset, item in enumerate(items[start:start + _FAVORITE_LIST_PAGE])
-    ]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    if pages > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"mfl:{token}:{genre_index}:{(page - 1) % pages}"),
-            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"mfl:{token}:{genre_index}:{(page + 1) % pages}"),
-        ])
-    rows.append(nav_row("movie_favorites"))
-    msg = leisure_ui.favorite_movie_list(genre, len(items))
-    await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
+    msg, kb = leisure_ui.favorite_genre_list(
+        "🎬", genre, [item["title"] for item in items], page, prompt="Выбери фильм.",
+        card_cb=lambda index: f"mfg:{token}:{genre_index}:{index}",
+        list_cb=lambda index: f"mfl:{token}:{genre_index}:{index}", back="movie_favorites")
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 def _favorite_movie_from_view(cid, token, short_id):

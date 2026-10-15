@@ -974,7 +974,7 @@ async def send_favorite_books(bot, cid, q=None):
     msg = leisure_ui.favorite_books_home(len(records))
     rows = [[InlineKeyboardButton("✅ Добавить книгу", callback_data="as_loveadd_books")],
             *[[InlineKeyboardButton(
-        f"{genre} · {len(items)}", callback_data=f"bfg:{token}:{index}:0",
+        f"{genre} · {len(items)}", callback_data=f"bfl:{token}:{index}:0",
     )] for index, (genre, items) in enumerate(view["genres"])] ]
     rows.append([InlineKeyboardButton(
         "📝 Выбрать предпочтения", callback_data="book_prefs",
@@ -1005,7 +1005,7 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
     rows.insert(0, [InlineKeyboardButton(
         "❌ Удалить", callback_data=f"bfd:{token}:{item['id'][:8]}:{genre_index}:{page}",
     )])
-    rows.append(nav_row("book_favorites"))
+    rows.append(nav_row(f"bfl:{token}:{genre_index}:{page // leisure_ui.FAVORITE_LIST_PAGE}"))  # «Назад» — в список
     kb = InlineKeyboardMarkup(rows)
     cover = await _cover_for(book, 6.0)
     if q is not None and cover:
@@ -1032,6 +1032,20 @@ async def send_favorite_book_genre(bot, cid, token, genre_index, page=0, q=None)
         chat_id=cid, text=msg.text, entities=msg.entities,
         reply_markup=kb, disable_web_page_preview=True,
     )
+
+
+async def send_favorite_book_list(bot, cid, token, genre_index, page=0, q=None):
+    """Жанр «Моих книг» сначала списком, как «Мой словарь»: нажатие на название открывает карточку."""
+    view = _favorite_book_view(cid, token)
+    if view is None or not 0 <= genre_index < len(view["genres"]):
+        await send_favorite_books(bot, cid, q=q)
+        return
+    genre, items = view["genres"][genre_index]
+    msg, kb = leisure_ui.favorite_genre_list(
+        "📚", genre, [item["title"] for item in items], page, prompt="Выбери книгу.",
+        card_cb=lambda index: f"bfg:{token}:{genre_index}:{index}",
+        list_cb=lambda index: f"bfl:{token}:{genre_index}:{index}", back="book_favorites")
+    await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
 def _favorite_book_from_view(cid, token, short_id):

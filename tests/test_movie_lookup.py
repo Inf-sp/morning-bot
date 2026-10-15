@@ -108,3 +108,24 @@ def test_movie_card_reason_never_says_because_you_liked():
     import movie_recommendation
 
     assert movie_recommendation._reason_text({"because": "Элита", "via": "recommendations"}) == ""
+
+
+def test_favorite_book_genre_opens_as_list_first(monkeypatch):
+    import asyncio
+    import leisure_books
+    import rich_delivery
+
+    view = {"cid": "42", "created_at": 10**12, "genres": [("Фантастика", [{"title": "Дюна"}, {"title": "Солярис"}])]}
+    monkeypatch.setattr(leisure_books, "_favorite_book_view", lambda _cid, _token: view)
+    shown = {}
+
+    async def show(_bot, _cid, msg, reply_markup=None, query=None):
+        shown.update(text=msg.text, markup=reply_markup)
+
+    monkeypatch.setattr(rich_delivery, "show", show)
+    asyncio.run(leisure_books.send_favorite_book_list(object(), "42", "tok", 0, 0))
+
+    rows = shown["markup"].inline_keyboard
+    assert shown["text"] == "📚 Фантастика · 2\n\nВыбери книгу."
+    assert [(b.text, b.callback_data) for b in rows[0]] == [("Дюна", "bfg:tok:0:0"), ("Солярис", "bfg:tok:0:1")]
+    assert rows[-1][0].callback_data == "book_favorites"

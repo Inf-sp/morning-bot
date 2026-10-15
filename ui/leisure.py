@@ -35,13 +35,30 @@ def _pluralize_titles(n):
     return ru_plural(n, "фильм/сериал", "фильма/сериала", "фильмов/сериалов")
 
 
-def favorite_movie_list(genre, total):
-    """Заголовок списка категории «Моего кино»; сами фильмы — кнопками, как в словаре."""
+FAVORITE_LIST_PAGE = 12  # названий на странице жанра «Моей библиотеки»
+
+
+def favorite_genre_list(icon, genre, titles, page, *, prompt, card_cb, list_cb, back):
+    """Жанр «Моей библиотеки» списком, как «Мой словарь»: названия кнопками в два столбца, нажатие открывает
+    карточку. card_cb(index) и list_cb(page) дают callback_data. Возвращает (MessageSpec, клавиатура)."""
+    pages = max(1, -(-len(titles) // FAVORITE_LIST_PAGE))
+    page = max(0, min(int(page), pages - 1))
+    start = page * FAVORITE_LIST_PAGE
+    buttons = [InlineKeyboardButton(title[:24], callback_data=card_cb(start + offset))
+               for offset, title in enumerate(titles[start:start + FAVORITE_LIST_PAGE])]
+    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
+    if pages > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=list_cb((page - 1) % pages)),
+            InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=list_cb((page + 1) % pages)),
+        ])
+    rows.append(nav_row(back))
     b = MessageBuilder()
-    b.section(f"🎬 {genre} · {int(total or 0)}")
+    b.section(f"{icon} {genre} · {len(titles)}")
     b.spacer()
-    b.line("Выбери фильм.")
-    return b.build_stripped()
+    b.line(prompt)
+    return b.build_stripped(), InlineKeyboardMarkup(rows)
 
 
 def favorite_movies_home(total):

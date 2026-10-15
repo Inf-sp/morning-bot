@@ -459,7 +459,7 @@ def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
     assert bot.photos[-1]["caption"].startswith("🎬 Патерсон")
     assert "Водитель автобуса пишет стихи." in bot.photos[-1]["caption"]
     assert _labels(bot.photos[-1]["reply_markup"]) == [
-        ["❌ Удалить"], ["Показать списком"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["❌ Удалить"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
