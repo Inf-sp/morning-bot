@@ -448,17 +448,18 @@ def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
 def _today_picks(monkeypatch, *, rain=False, concert=True):
     import leisure_hub
     from datetime import date
-    film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "year": "2026",
+    film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "year": "2026", "countries": ["DE"],
                                      "genres": "история, драма",
                                      "runtime": 112, "overview": "Историческая драма о восстании. Второе. Третье.",
                                      "because": "Гладиатор", "trailer_url": "https://y.example/t"})
-    series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "release_date": "2025-09-12",
+    series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "release_date": "2025-09-12", "origin_country": ["US"],
                                  "genres": "драма", "network": "Prime Video",
                                  "episode_runtime": 45, "url": "https://tmdb.example/tv/2"})
     monkeypatch.setattr(leisure_hub.leisure_movies, "_cached_movie",
                         lambda _cid, kind="movie", stale=False: film if kind == "movie" else series)
     monkeypatch.setattr(leisure_hub.leisure_music, "_cached_artist",
-                        lambda _cid, stale=False: {"artist": "Focus Group", "genre": "indie", "why": ["Как Bonobo, но теплее"]})
+                        lambda _cid, stale=False: {"artist": "Focus Group", "genre": "indie", "country_label": "🇬🇧 UK",
+                                                   "why": ["Как Bonobo, но теплее"]})
     monkeypatch.setattr(leisure_hub, "_evening_rain", lambda *_a: rain)
     events = [{"dates": {"start": {"localDate": "2026-10-13"}}, "name": "Muse", "url": "https://t.example/m",
                "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}] if concert else []
@@ -479,11 +480,11 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
         "Фильм на вечер:\n"
-        "Восставший · 2026 · история · драма · 1 ч 52 мин • Историческая драма о восстании. Второе.\n"
+        "Восставший · 2026 · история · драма · DE · 1 ч 52 мин • Историческая драма о восстании. Второе.\n"
         "Не слишком длинный — как раз на будний вечер.\n\n"
         "Если не хочется кино:\n"
-        "Сериал — Нили · 2025 · Prime Video · драма · серия 45 мин\n"
-        "Музыка — Focus Group · Инди\n\n"
+        "Сериал — Нили · 2025 · Prime Video · драма · USA · серия 45 мин\n"  # страна кратко, без флага
+        "Музыка — Focus Group · Инди · UK\n\n"
         "Если захочется выйти:\n"
         "Muse — сегодня, Ziggo Dome\n\n"
         "Твоя библиотека · 55 фильмов · 42 артиста"
@@ -501,7 +502,7 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
     # Без фильма главной становится первая карточка — без описания строка не ломается.
     msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
     assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · 2025 · Prime Video")
-    assert "Другие варианты:\nМузыка — Focus Group" in msg.text
+    assert "Другие варианты:\nМузыка — Focus Group · Инди · UK" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильмы", "📺 Сериалы", "🎧 Музыка"], ["🎫 Концерты"]] and _callbacks(kb)[0] == "lz_prem"
@@ -554,7 +555,7 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
     data = _today_picks(monkeypatch)
 
-    assert "Музыка — Focus Group · Инди · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
+    assert "Музыка — Focus Group · Инди · UK · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
     this_year = date.today().replace(month=1, day=9).isoformat()
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)
@@ -599,3 +600,10 @@ def test_premiere_line_in_my_day():
     assert album.text.endswith("🎧 Новый альбом: Alvvays — «Blue Rev» · Инди · CA")
     assert any(e.type == "text_link" and "music.youtube.com" in e.url for e in album.entities)
     assert "Премьера" not in myday_ui.day_summary("Пт", "Alkmaar").text
+
+
+def test_today_screen_shows_country_without_flag_emoji(monkeypatch):
+    data = _today_picks(monkeypatch)
+    text = leisure_ui.leisure_today_screen(data["picks"], city=data["city"]).text
+    assert "🇩🇪" not in text and "🇺🇸" not in text and "🇬🇧" not in text  # страна есть, флагов нет
+    assert "· DE ·" in text and "· USA ·" in text and "Инди · UK" in text

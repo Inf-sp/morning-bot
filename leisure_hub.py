@@ -292,8 +292,10 @@ def _movie_pick(kind, cached):
     else:
         why = ""
     url = leisure_ui.trailer_link({**it, **tm})  # YouTube-трейлер, без него — поиск трейлера на YouTube
+    import countries
     year = str(tm.get("year") or tm.get("release_date") or "")[:4]
-    meta = [str(tm.get("genres") or "").replace(", ", " · ")]
+    codes = countries.title_countries(tm)  # страна кратко, без флага: «USA»
+    meta = [str(tm.get("genres") or "").replace(", ", " · "), countries.short_label(codes[0]) if codes else ""]
     if kind == "tv":
         meta = [tm.get("network") or "", *meta]
     meta = [year if year.isdigit() else "", *meta]  # год — сразу после названия: «Восставший · 2026 · драма»
@@ -310,7 +312,8 @@ def _music_pick(artist):
     why = why[0] if isinstance(why, list) and why else why if isinstance(why, str) else ""
     return {"kind": "music", "name": artist.get("artist") or "",
             "url": leisure_ui.youtube_music_link(artist.get("artist")),
-            "meta": [labels.get(artist.get("genre"), ""), artist.get("country_label") or "",
+            "meta": [labels.get(artist.get("genre"), ""),
+                     str(artist.get("country_label") or "").split(" ", 1)[-1],  # «🇨🇦 CA» → «CA», без флага
                      *leisure_ui.album_meta(album)],
             "about": artist.get("desc") or "", "why": str(why or "").strip()}
 

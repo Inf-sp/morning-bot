@@ -87,6 +87,12 @@ def country_by_name(text) -> tuple:
 _SHORT_CODES = {"US": "USA", "GB": "UK", "AE": "UAE"}
 
 
+def short_label(cc) -> str:
+    """Страна кратко, без флага: «USA», «UK», «NL»; без кода — ""."""
+    cc = str(cc or "").upper()
+    return _SHORT_CODES.get(cc, cc) if util.flag_from_cc(cc) else ""
+
+
 def label(cc) -> str:
     """Страна в Досуге — флаг и сокращение: «🇷🇺 RU», «🇺🇸 USA», «🇬🇧 UK»; без кода — ""."""
     cc = str(cc or "").upper()
