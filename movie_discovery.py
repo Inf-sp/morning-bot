@@ -145,12 +145,13 @@ async def get_movie_premieres(cid, *, refresh=False):
         # дальше все открытия снова читают недельный кэш.
         refresh = True
     end = today + timedelta(days=13)
-    now_playing, upcoming = await asyncio.gather(
+    now_playing, upcoming, trending = await asyncio.gather(
         asyncio.to_thread(tmdb.get_now_playing, country_code, "ru-RU", 30),
         asyncio.to_thread(
             tmdb.get_upcoming_theatrical_releases,
             country_code, today, end, "ru-RU",
         ),
+        asyncio.to_thread(tmdb.trending, "movie"),
     )
     items, seen = [], set()
     for movie in [*(now_playing or []), *(upcoming or [])]:
@@ -168,7 +169,9 @@ async def get_movie_premieres(cid, *, refresh=False):
             continue
         seen.add(key)
         items.append(item)
+    trend = {str(item.get("id")): rank for rank, item in enumerate(trending or [])}
     items.sort(key=lambda item: (
+        trend.get(str(item.get("id")), len(trend)),  # тренд недели TMDb — первым: малоизвестное только добирает
         -float(item.get("popularity") or 0),
         -int(item.get("vote_count") or 0),
         item["date"],
@@ -256,8 +259,12 @@ async def show_movie_premiere_page(cid, q, page):
     )
 
 
+_TRENDING_SERIES = 10  # сериалов из тренда недели, у которых ищется премьера или новый сезон
+_MIN_SERIES_VOTES = 20  # не любимый сериал с меньшим числом голосов TMDb — малоизвестный
+
+
 async def get_series_premieres(cid):
-    """Новые сериалы и новые сезоны избранного с рейтингом выше 7."""
+    """Новые сериалы и новые сезоны: любимые — первыми, затем тренд недели TMDb и популярность; рейтинг выше 7."""
     today = datetime.now(config.TZ).date()
     new_series_start = today - timedelta(days=30)
     end = today + timedelta(days=60)
@@ -278,11 +285,21 @@ async def get_series_premieres(cid):
             item["favorite"] = True
         return seasons
 
-    favorite_groups, new_series = await asyncio.gather(
+    async def trending_seasons(item):
+        """Трендовый сериал: сама премьера в окне — как есть, иначе его новый сезон в окне (−30…+60 дней)."""
+        if new_series_start.isoformat() <= str(item.get("release_date") or "")[:10] <= end.isoformat():
+            return [item]
+        return await asyncio.to_thread(tmdb.upcoming_tv_seasons, item.get("id"), new_series_start, end)
+
+    favorite_groups, new_series, trending = await asyncio.gather(
         asyncio.gather(*(favorite_seasons(value) for value in favorites)),
         asyncio.to_thread(tmdb.upcoming_tv_releases, new_series_start, end),
+        asyncio.to_thread(tmdb.trending, "tv"),
     )
+    trend = {str(item.get("id")): rank for rank, item in enumerate(trending or [])}
+    trend_groups = await asyncio.gather(*(trending_seasons(item) for item in (trending or [])[:_TRENDING_SERIES]))
     candidates = [item for group in favorite_groups for item in group]
+    candidates.extend(item for group in trend_groups for item in group)
     candidates.extend(new_series or [])
     result, seen = [], set()
     favorite_ids = {
@@ -296,12 +313,14 @@ async def get_series_premieres(cid):
             continue
         if rating <= 7 or not item.get("poster") or not item.get("overview") or key in seen:
             continue
+        if not item.get("favorite") and int(item.get("vote_count") or 0) < _MIN_SERIES_VOTES:
+            continue  # малоизвестный сериал — не в новинки
         seen.add(key)
         result.append(item)
     result.sort(key=lambda item: (
-        not bool(item.get("favorite")),
-        str(item.get("release_date") or ""),
-        -float(item.get("rating") or 0),
+        not bool(item.get("favorite")),  # новые сезоны любимых — первыми
+        trend.get(str(item.get("id")), len(trend)),  # затем тренд недели TMDb
+        -float(item.get("popularity") or 0),
     ))
     result = result[:5]
     posters, trailers = await asyncio.gather(

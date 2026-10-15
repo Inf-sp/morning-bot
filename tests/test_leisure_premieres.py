@@ -178,7 +178,7 @@ def test_series_premieres_prioritize_favorite_seasons_and_require_rating_above_s
     }])
     monkeypatch.setattr(leisure_movies.tmdb, "upcoming_tv_releases", lambda *_args: [{
         "id": 20, "name": "Новый хит", "release_date": (today + timedelta(days=5)).isoformat(),
-        "rating": 7.8, "poster": "new.jpg", "overview": "Новая история.",
+        "rating": 7.8, "poster": "new.jpg", "overview": "Новая история.", "vote_count": 120,
     }, {
         "id": 21, "name": "Ровно семь", "release_date": (today + timedelta(days=2)).isoformat(),
         "rating": 7.0, "poster": "seven.jpg", "overview": "Не проходит фильтр.",
@@ -258,3 +258,50 @@ def test_movie_premieres_rebuild_an_empty_cache_on_first_open(monkeypatch):
     assert calls == ["now", "upcoming"]
 
 
+def test_movie_premieres_put_tmdb_weekly_trend_first(monkeypatch):
+    saved = {}
+    today = datetime.now(leisure_movies.config.TZ).date()
+
+    def movie(index):
+        return SimpleNamespace(id=index, title=f"Фильм {index}", release_date=today, genres=["Драма"],
+                               overview="Завязка.", poster_url="p.jpg", popularity=float(index), vote_count=10)
+
+    monkeypatch.setattr(leisure_movies.store, "get_settings", lambda _cid: {"cc": "NL"})
+    monkeypatch.setattr(leisure_movies.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(leisure_movies.store, "mutate_kv", lambda _key, fn: saved.update(fn(saved)[0]))
+    monkeypatch.setattr(leisure_movies.tmdb, "get_now_playing", lambda *_args: [movie(i) for i in range(1, 10)])
+    monkeypatch.setattr(leisure_movies.tmdb, "get_upcoming_theatrical_releases", lambda *_args: [])
+    monkeypatch.setattr(leisure_movies.tmdb, "trending", lambda kind: [{"id": 3}, {"id": 1}] if kind == "movie" else [])
+    monkeypatch.setattr(leisure_movies.tmdb, "trailer_url", lambda *_args: "")
+    monkeypatch.setattr(leisure_movies.tmdb, "english_poster", lambda *_args: "en.jpg")
+
+    items = asyncio.run(leisure_movies.get_movie_premieres("42", refresh=True))
+
+    # Тренд недели — первым (даже с низкой популярностью среди премьер страны), дальше — по популярности.
+    assert [item["id"] for item in items] == [3, 1, 9, 8, 7]
+
+
+def test_series_premieres_add_trending_new_seasons_and_skip_obscure(monkeypatch):
+    today = datetime.now(leisure_movies.config.TZ).date()
+    soon = (today + timedelta(days=3)).isoformat()
+    monkeypatch.setattr(leisure_movies.store, "get_list", lambda _key, _cid: [])
+    monkeypatch.setattr(leisure_movies.tmdb, "trending", lambda kind: [
+        {"id": 30, "name": "Медведь", "release_date": "2022-06-23"},  # давний сериал — ищем новый сезон
+    ] if kind == "tv" else [])
+    monkeypatch.setattr(leisure_movies.tmdb, "upcoming_tv_seasons", lambda tmdb_id, *_args: [{
+        "id": 30, "name": "Медведь", "season_number": 5, "release_date": soon, "rating": 8.2,
+        "poster": "bear.jpg", "overview": "Новый сезон.", "vote_count": 900, "popularity": 50,
+    }] if tmdb_id == 30 else [])
+    monkeypatch.setattr(leisure_movies.tmdb, "upcoming_tv_releases", lambda *_args: [
+        {"id": 40, "name": "Популярный", "release_date": soon, "rating": 7.9, "poster": "a.jpg",
+         "overview": "История.", "vote_count": 400, "popularity": 300},
+        {"id": 41, "name": "Безвестный", "release_date": soon, "rating": 9.5, "poster": "b.jpg",
+         "overview": "История.", "vote_count": 5, "popularity": 999},
+    ])
+    monkeypatch.setattr(leisure_movies.tmdb, "english_poster", lambda *_args: "en.jpg")
+    monkeypatch.setattr(leisure_movies.tmdb, "trailer_url", lambda *_args: "")
+
+    items = asyncio.run(leisure_movies.get_series_premieres("42"))
+
+    # Новый сезон трендового сериала — первым, затем по популярности; меньше 20 голосов — не новинка.
+    assert [(item["name"], item.get("season_number")) for item in items] == [("Медведь", 5), ("Популярный", None)]

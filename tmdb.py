@@ -354,6 +354,19 @@ def _clean(results, kind=None):
 
 
 # ---------- endpoints ----------
+def trending(kind):
+    """Тренд недели TMDb (фильмы или сериалы) в порядке тренда; кэш 6 часов, сбой — [] без кэша."""
+    if not config.TMDB_API_KEY or kind not in ("movie", "tv"):
+        return []
+    cached = util.ttl_get("tmdb_trending", kind, 21600)
+    if cached is not None:
+        return cached
+    data = _get(f"/trending/{kind}/week", {})
+    if data is None:
+        return []
+    return util.ttl_set("tmdb_trending", kind, _clean(data.get("results"), kind))
+
+
 def search_id(title, kind=None):
     """Резолв названия → нормализованный dict (с id/kind) или None."""
     if not config.TMDB_API_KEY or not title:
