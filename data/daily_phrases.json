@@ -1,0 +1,2734 @@
+{
+ "nl": [
+  {
+   "text": "Dat is de druppel!",
+   "translation": "Это последняя капля!"
+  },
+  {
+   "text": "Geen probleem.",
+   "translation": "Без проблем."
+  },
+  {
+   "text": "Komt goed.",
+   "translation": "Всё будет нормально."
+  },
+  {
+   "text": "Doe maar rustig aan.",
+   "translation": "Не торопись."
+  },
+  {
+   "text": "Ik zie wel.",
+   "translation": "Посмотрим."
+  },
+  {
+   "text": "Laat maar.",
+   "translation": "Ладно, забудь."
+  },
+  {
+   "text": "Het valt mee.",
+   "translation": "Всё не так плохо."
+  },
+  {
+   "text": "Ik ben er klaar mee.",
+   "translation": "С меня хватит."
+  },
+  {
+   "text": "Dat komt goed uit.",
+   "translation": "Это как раз кстати."
+  },
+  {
+   "text": "Daar heb ik geen zin in.",
+   "translation": "Мне совсем не хочется."
+  },
+  {
+   "text": "Hoe gaat het met je?",
+   "translation": "Как у тебя дела?"
+  },
+  {
+   "text": "Gaat wel.",
+   "translation": "Нормально, потихоньку."
+  },
+  {
+   "text": "Prima, en met jou?",
+   "translation": "Отлично, а у тебя?"
+  },
+  {
+   "text": "Lang niet gezien!",
+   "translation": "Сто лет не виделись!"
+  },
+  {
+   "text": "Leuk je te zien.",
+   "translation": "Рад тебя видеть."
+  },
+  {
+   "text": "Tot straks!",
+   "translation": "До скорого!"
+  },
+  {
+   "text": "Tot zo!",
+   "translation": "Скоро увидимся!"
+  },
+  {
+   "text": "Fijn weekend!",
+   "translation": "Хороших выходных!"
+  },
+  {
+   "text": "Insgelijks.",
+   "translation": "Взаимно."
+  },
+  {
+   "text": "Jij ook!",
+   "translation": "Тебе тоже!"
+  },
+  {
+   "text": "Sterkte!",
+   "translation": "Держись!"
+  },
+  {
+   "text": "Succes!",
+   "translation": "Удачи!"
+  },
+  {
+   "text": "Gefeliciteerd!",
+   "translation": "Поздравляю!"
+  },
+  {
+   "text": "Beterschap!",
+   "translation": "Выздоравливай!"
+  },
+  {
+   "text": "Eet smakelijk!",
+   "translation": "Приятного аппетита!"
+  },
+  {
+   "text": "Proost!",
+   "translation": "Будем здоровы!"
+  },
+  {
+   "text": "Graag gedaan.",
+   "translation": "Пожалуйста, не за что."
+  },
+  {
+   "text": "Geen dank.",
+   "translation": "Не за что."
+  },
+  {
+   "text": "Dank je wel!",
+   "translation": "Большое спасибо!"
+  },
+  {
+   "text": "Alsjeblieft.",
+   "translation": "Вот, держи."
+  },
+  {
+   "text": "Sorry, dat was niet de bedoeling.",
+   "translation": "Извини, я не хотел."
+  },
+  {
+   "text": "Excuses voor het wachten.",
+   "translation": "Извините за ожидание."
+  },
+  {
+   "text": "Het spijt me.",
+   "translation": "Мне жаль."
+  },
+  {
+   "text": "Geeft niks.",
+   "translation": "Ничего страшного."
+  },
+  {
+   "text": "Maakt niet uit.",
+   "translation": "Неважно."
+  },
+  {
+   "text": "Mij best.",
+   "translation": "Как хочешь, мне подходит."
+  },
+  {
+   "text": "Zeker weten!",
+   "translation": "Однозначно!"
+  },
+  {
+   "text": "Echt waar?",
+   "translation": "Правда?"
+  },
+  {
+   "text": "Meen je dat?",
+   "translation": "Ты серьёзно?"
+  },
+  {
+   "text": "Dat meen je niet!",
+   "translation": "Да ладно, не может быть!"
+  },
+  {
+   "text": "Wat leuk!",
+   "translation": "Как здорово!"
+  },
+  {
+   "text": "Wat jammer.",
+   "translation": "Как жаль."
+  },
+  {
+   "text": "Balen!",
+   "translation": "Облом!"
+  },
+  {
+   "text": "Pech gehad.",
+   "translation": "Не повезло."
+  },
+  {
+   "text": "Gelukkig wel.",
+   "translation": "К счастью, да."
+  },
+  {
+   "text": "Gelukkig niet.",
+   "translation": "К счастью, нет."
+  },
+  {
+   "text": "Dat klopt.",
+   "translation": "Верно."
+  },
+  {
+   "text": "Dat klopt niet.",
+   "translation": "Это не так."
+  },
+  {
+   "text": "Precies!",
+   "translation": "Именно!"
+  },
+  {
+   "text": "Helemaal mee eens.",
+   "translation": "Полностью согласен."
+  },
+  {
+   "text": "Daar ben ik het niet mee eens.",
+   "translation": "Я с этим не согласен."
+  },
+  {
+   "text": "Dat ligt eraan.",
+   "translation": "Смотря как."
+  },
+  {
+   "text": "Het hangt ervan af.",
+   "translation": "Это зависит от ситуации."
+  },
+  {
+   "text": "Goed idee!",
+   "translation": "Хорошая идея!"
+  },
+  {
+   "text": "Dat lijkt me leuk.",
+   "translation": "По-моему, будет здорово."
+  },
+  {
+   "text": "Dat zegt me niets.",
+   "translation": "Мне это ни о чём не говорит."
+  },
+  {
+   "text": "Geen idee.",
+   "translation": "Понятия не имею."
+  },
+  {
+   "text": "Ik heb geen flauw idee.",
+   "translation": "Не имею ни малейшего понятия."
+  },
+  {
+   "text": "Ik weet het niet zeker.",
+   "translation": "Я не уверен."
+  },
+  {
+   "text": "Dat weet ik nog niet.",
+   "translation": "Пока не знаю."
+  },
+  {
+   "text": "Ik twijfel nog.",
+   "translation": "Я ещё сомневаюсь."
+  },
+  {
+   "text": "Ik denk het wel.",
+   "translation": "Думаю, да."
+  },
+  {
+   "text": "Ik denk het niet.",
+   "translation": "Думаю, нет."
+  },
+  {
+   "text": "Misschien later.",
+   "translation": "Может, позже."
+  },
+  {
+   "text": "Volgens mij wel.",
+   "translation": "По-моему, да."
+  },
+  {
+   "text": "Volgens mij niet.",
+   "translation": "По-моему, нет."
+  },
+  {
+   "text": "Wat bedoel je?",
+   "translation": "Что ты имеешь в виду?"
+  },
+  {
+   "text": "Kun je dat herhalen?",
+   "translation": "Можешь повторить?"
+  },
+  {
+   "text": "Kun je wat langzamer praten?",
+   "translation": "Можешь говорить помедленнее?"
+  },
+  {
+   "text": "Hoe zeg je dat in het Nederlands?",
+   "translation": "Как это сказать по-нидерландски?"
+  },
+  {
+   "text": "Wat betekent dat?",
+   "translation": "Что это значит?"
+  },
+  {
+   "text": "Ik snap het.",
+   "translation": "Я понял."
+  },
+  {
+   "text": "Ik snap het niet.",
+   "translation": "Не понимаю."
+  },
+  {
+   "text": "O, nu snap ik het!",
+   "translation": "А, теперь понятно!"
+  },
+  {
+   "text": "Het is gelukt!",
+   "translation": "Получилось!"
+  },
+  {
+   "text": "Het lukt me niet.",
+   "translation": "У меня не получается."
+  },
+  {
+   "text": "Kan gebeuren.",
+   "translation": "Бывает."
+  },
+  {
+   "text": "Het is niet anders.",
+   "translation": "Ничего не поделаешь."
+  },
+  {
+   "text": "Het is wat het is.",
+   "translation": "Что есть, то есть."
+  },
+  {
+   "text": "Zo gaat dat.",
+   "translation": "Так всегда и бывает."
+  },
+  {
+   "text": "Eerlijk gezegd weet ik het niet.",
+   "translation": "Честно говоря, не знаю."
+  },
+  {
+   "text": "Ik heb er zin in!",
+   "translation": "Я в предвкушении!"
+  },
+  {
+   "text": "Ik kijk ernaar uit.",
+   "translation": "Жду с нетерпением."
+  },
+  {
+   "text": "Ik ben benieuwd.",
+   "translation": "Мне интересно, что будет."
+  },
+  {
+   "text": "Ik schrok me rot!",
+   "translation": "Я страшно испугался!"
+  },
+  {
+   "text": "Ik baal ervan.",
+   "translation": "Меня это расстраивает."
+  },
+  {
+   "text": "Ik ben het zat.",
+   "translation": "Мне это надоело."
+  },
+  {
+   "text": "Ik ben doodmoe.",
+   "translation": "Я смертельно устал."
+  },
+  {
+   "text": "Ik ben kapot.",
+   "translation": "Я без сил."
+  },
+  {
+   "text": "Ik heb het druk.",
+   "translation": "Я занят."
+  },
+  {
+   "text": "Ik heb het even druk.",
+   "translation": "Сейчас я немного занят."
+  },
+  {
+   "text": "Ik heb geen tijd.",
+   "translation": "У меня нет времени."
+  },
+  {
+   "text": "Heb je even?",
+   "translation": "Есть минутка?"
+  },
+  {
+   "text": "Momentje!",
+   "translation": "Секундочку!"
+  },
+  {
+   "text": "Ik kom eraan!",
+   "translation": "Уже иду!"
+  },
+  {
+   "text": "Ik ben er bijna.",
+   "translation": "Я почти на месте."
+  },
+  {
+   "text": "Ik ben iets later.",
+   "translation": "Я немного задержусь."
+  },
+  {
+   "text": "Ik sta in de file.",
+   "translation": "Я стою в пробке."
+  },
+  {
+   "text": "De trein heeft vertraging.",
+   "translation": "Поезд задерживается."
+  },
+  {
+   "text": "Waar spreken we af?",
+   "translation": "Где встречаемся?"
+  },
+  {
+   "text": "Hoe laat spreken we af?",
+   "translation": "Во сколько встречаемся?"
+  },
+  {
+   "text": "Zullen we iets afspreken?",
+   "translation": "Давай договоримся встретиться?"
+  },
+  {
+   "text": "Zullen we koffie drinken?",
+   "translation": "Выпьем кофе?"
+  },
+  {
+   "text": "Heb je zin om mee te gaan?",
+   "translation": "Хочешь пойти с нами?"
+  },
+  {
+   "text": "Ik ga mee!",
+   "translation": "Я с вами!"
+  },
+  {
+   "text": "Ik doe mee.",
+   "translation": "Я участвую."
+  },
+  {
+   "text": "Ik sla deze keer over.",
+   "translation": "В этот раз я пас."
+  },
+  {
+   "text": "Volgende keer beter.",
+   "translation": "В следующий раз получится."
+  },
+  {
+   "text": "Afgesproken!",
+   "translation": "Договорились!"
+  },
+  {
+   "text": "Dat is goed.",
+   "translation": "Хорошо, так и сделаем."
+  },
+  {
+   "text": "Prima!",
+   "translation": "Отлично!"
+  },
+  {
+   "text": "Top!",
+   "translation": "Супер!"
+  },
+  {
+   "text": "Lekker!",
+   "translation": "Вкусно!"
+  },
+  {
+   "text": "Gezellig!",
+   "translation": "Как уютно и душевно!"
+  },
+  {
+   "text": "Het was heel gezellig.",
+   "translation": "Было очень душевно."
+  },
+  {
+   "text": "Wat een gedoe.",
+   "translation": "Сколько возни."
+  },
+  {
+   "text": "Wat een weer!",
+   "translation": "Ну и погода!"
+  },
+  {
+   "text": "Het regent pijpenstelen.",
+   "translation": "Льёт как из ведра."
+  },
+  {
+   "text": "Het is hier stervenskoud.",
+   "translation": "Здесь жутко холодно."
+  },
+  {
+   "text": "Lekker weertje, hè?",
+   "translation": "Хорошая погодка, да?"
+  },
+  {
+   "text": "Ik heb het koud.",
+   "translation": "Мне холодно."
+  },
+  {
+   "text": "Ik heb het warm.",
+   "translation": "Мне жарко."
+  },
+  {
+   "text": "Ik heb honger.",
+   "translation": "Я голоден."
+  },
+  {
+   "text": "Ik heb dorst.",
+   "translation": "Хочу пить."
+  },
+  {
+   "text": "Ik rammel van de honger.",
+   "translation": "Умираю с голоду."
+  },
+  {
+   "text": "Ik zit vol.",
+   "translation": "Я наелся."
+  },
+  {
+   "text": "Wat eten we vanavond?",
+   "translation": "Что у нас на ужин?"
+  },
+  {
+   "text": "Mag ik de rekening?",
+   "translation": "Можно счёт?"
+  },
+  {
+   "text": "Mag ik pinnen?",
+   "translation": "Можно оплатить картой?"
+  },
+  {
+   "text": "Kan ik contant betalen?",
+   "translation": "Можно наличными?"
+  },
+  {
+   "text": "Ik wil graag bestellen.",
+   "translation": "Я хотел бы заказать."
+  },
+  {
+   "text": "Voor mij hetzelfde.",
+   "translation": "Мне то же самое."
+  },
+  {
+   "text": "Is deze plek nog vrij?",
+   "translation": "Это место свободно?"
+  },
+  {
+   "text": "Hebben jullie een tafel voor twee?",
+   "translation": "У вас есть столик на двоих?"
+  },
+  {
+   "text": "Zonder ijs, graag.",
+   "translation": "Без льда, пожалуйста."
+  },
+  {
+   "text": "Nog eentje, graag.",
+   "translation": "Ещё одну, пожалуйста."
+  },
+  {
+   "text": "Het was heerlijk.",
+   "translation": "Было восхитительно."
+  },
+  {
+   "text": "Ik kijk even rond.",
+   "translation": "Я просто смотрю."
+  },
+  {
+   "text": "Hoeveel kost dit?",
+   "translation": "Сколько это стоит?"
+  },
+  {
+   "text": "Dat is een koopje!",
+   "translation": "Это очень выгодно!"
+  },
+  {
+   "text": "Dat is te duur.",
+   "translation": "Это слишком дорого."
+  },
+  {
+   "text": "Heeft u dit ook in een andere maat?",
+   "translation": "Есть это в другом размере?"
+  },
+  {
+   "text": "Mag ik een tasje?",
+   "translation": "Можно пакет?"
+  },
+  {
+   "text": "Een bonnetje, graag.",
+   "translation": "Чек, пожалуйста."
+  },
+  {
+   "text": "Is dit in de aanbieding?",
+   "translation": "Это по акции?"
+  },
+  {
+   "text": "Waar is de wc?",
+   "translation": "Где туалет?"
+  },
+  {
+   "text": "Waar kan ik dat vinden?",
+   "translation": "Где я могу это найти?"
+  },
+  {
+   "text": "Kunt u me helpen?",
+   "translation": "Вы мне не поможете?"
+  },
+  {
+   "text": "Ik ben de weg kwijt.",
+   "translation": "Я заблудился."
+  },
+  {
+   "text": "Is het ver lopen?",
+   "translation": "Далеко идти пешком?"
+  },
+  {
+   "text": "Rechtdoor en dan links.",
+   "translation": "Прямо, а потом налево."
+  },
+  {
+   "text": "Het is om de hoek.",
+   "translation": "Это за углом."
+  },
+  {
+   "text": "Welk perron?",
+   "translation": "Какая платформа?"
+  },
+  {
+   "text": "Stopt deze trein in Alkmaar?",
+   "translation": "Этот поезд останавливается в Алкмаре?"
+  },
+  {
+   "text": "Ik moet overstappen.",
+   "translation": "Мне нужно пересесть."
+  },
+  {
+   "text": "Ik heb de bus gemist.",
+   "translation": "Я опоздал на автобус."
+  },
+  {
+   "text": "Ik pak de fiets.",
+   "translation": "Поеду на велосипеде."
+  },
+  {
+   "text": "Ik heb een lekke band.",
+   "translation": "У меня спустило колесо."
+  },
+  {
+   "text": "Zet je fiets op slot!",
+   "translation": "Пристегни велосипед!"
+  },
+  {
+   "text": "Pas op!",
+   "translation": "Осторожно!"
+  },
+  {
+   "text": "Kijk uit!",
+   "translation": "Смотри, осторожно!"
+  },
+  {
+   "text": "Rustig maar.",
+   "translation": "Спокойно, не волнуйся."
+  },
+  {
+   "text": "Maak je geen zorgen.",
+   "translation": "Не волнуйся."
+  },
+  {
+   "text": "Het komt wel goed.",
+   "translation": "Всё наладится."
+  },
+  {
+   "text": "Kop op!",
+   "translation": "Не вешай нос!"
+  },
+  {
+   "text": "Zet 'm op!",
+   "translation": "Давай, ты справишься!"
+  },
+  {
+   "text": "Je kunt het!",
+   "translation": "Ты сможешь!"
+  },
+  {
+   "text": "Goed gedaan!",
+   "translation": "Молодец!"
+  },
+  {
+   "text": "Petje af!",
+   "translation": "Снимаю шляпу!"
+  },
+  {
+   "text": "Ik werk vandaag thuis.",
+   "translation": "Сегодня я работаю из дома."
+  },
+  {
+   "text": "Ik zit in een vergadering.",
+   "translation": "У меня совещание."
+  },
+  {
+   "text": "Ik bel je zo terug.",
+   "translation": "Я тебе сейчас перезвоню."
+  },
+  {
+   "text": "Ik hoor je slecht.",
+   "translation": "Тебя плохо слышно."
+  },
+  {
+   "text": "Je valt weg.",
+   "translation": "Связь пропадает, тебя не слышно."
+  },
+  {
+   "text": "Stuur me even een berichtje.",
+   "translation": "Скинь мне сообщение."
+  },
+  {
+   "text": "Ik app je straks.",
+   "translation": "Напишу тебе позже."
+  },
+  {
+   "text": "Ik heb je mail gezien.",
+   "translation": "Я видел твоё письмо."
+  },
+  {
+   "text": "Ik kom erop terug.",
+   "translation": "Я вернусь к этому позже."
+  },
+  {
+   "text": "Kun je me even helpen?",
+   "translation": "Можешь мне помочь?"
+  },
+  {
+   "text": "Ik zoek het even uit.",
+   "translation": "Я выясню."
+  },
+  {
+   "text": "Ik regel het wel.",
+   "translation": "Я всё устрою."
+  },
+  {
+   "text": "Laat het me weten.",
+   "translation": "Дай мне знать."
+  },
+  {
+   "text": "Hou me op de hoogte.",
+   "translation": "Держи меня в курсе."
+  },
+  {
+   "text": "Het staat in de agenda.",
+   "translation": "Это есть в календаре."
+  },
+  {
+   "text": "Dat past me niet.",
+   "translation": "Мне это неудобно."
+  },
+  {
+   "text": "Komt dinsdag jou uit?",
+   "translation": "Тебе удобно во вторник?"
+  },
+  {
+   "text": "Kunnen we het verzetten?",
+   "translation": "Можем перенести?"
+  },
+  {
+   "text": "Ik ben er morgen niet.",
+   "translation": "Завтра меня не будет."
+  },
+  {
+   "text": "Ik heb vrij.",
+   "translation": "У меня выходной."
+  },
+  {
+   "text": "Ik ga op vakantie.",
+   "translation": "Я ухожу в отпуск."
+  },
+  {
+   "text": "Fijne vakantie!",
+   "translation": "Хорошего отпуска!"
+  },
+  {
+   "text": "Ik heb een deadline.",
+   "translation": "У меня дедлайн."
+  },
+  {
+   "text": "Het loopt uit.",
+   "translation": "Это затягивается."
+  },
+  {
+   "text": "We liggen op schema.",
+   "translation": "Мы укладываемся в график."
+  },
+  {
+   "text": "Dat is niet mijn pakkie-an.",
+   "translation": "Это не моя забота."
+  },
+  {
+   "text": "Even pauze.",
+   "translation": "Небольшой перерыв."
+  },
+  {
+   "text": "Wie wil er koffie?",
+   "translation": "Кто хочет кофе?"
+  },
+  {
+   "text": "Ik haal even koffie.",
+   "translation": "Схожу за кофе."
+  },
+  {
+   "text": "Lunchen we samen?",
+   "translation": "Пообедаем вместе?"
+  },
+  {
+   "text": "Hoe was je dag?",
+   "translation": "Как прошёл твой день?"
+  },
+  {
+   "text": "Druk, maar leuk.",
+   "translation": "Насыщенно, но интересно."
+  },
+  {
+   "text": "Wat heb je dit weekend gedaan?",
+   "translation": "Что ты делал на выходных?"
+  },
+  {
+   "text": "Niks bijzonders.",
+   "translation": "Ничего особенного."
+  },
+  {
+   "text": "Lekker niks gedaan.",
+   "translation": "Ничего не делал, и это было прекрасно."
+  },
+  {
+   "text": "Ik ben even weg.",
+   "translation": "Я ненадолго отойду."
+  },
+  {
+   "text": "Ik ga ervandoor.",
+   "translation": "Я убегаю."
+  },
+  {
+   "text": "Ik ga naar huis.",
+   "translation": "Я иду домой."
+  },
+  {
+   "text": "Ik ben thuis.",
+   "translation": "Я дома."
+  },
+  {
+   "text": "Doe de deur dicht.",
+   "translation": "Закрой дверь."
+  },
+  {
+   "text": "Doe het licht uit.",
+   "translation": "Выключи свет."
+  },
+  {
+   "text": "Wie doet de afwas?",
+   "translation": "Кто моет посуду?"
+  },
+  {
+   "text": "Ik doe boodschappen.",
+   "translation": "Я иду за продуктами."
+  },
+  {
+   "text": "We hebben geen melk meer.",
+   "translation": "У нас закончилось молоко."
+  },
+  {
+   "text": "Zet de wasmachine aan.",
+   "translation": "Включи стиральную машину."
+  },
+  {
+   "text": "Het is jouw beurt.",
+   "translation": "Твоя очередь."
+  },
+  {
+   "text": "Wie is er aan de beurt?",
+   "translation": "Чья очередь?"
+  },
+  {
+   "text": "Ik ben aan de beurt.",
+   "translation": "Моя очередь."
+  },
+  {
+   "text": "Ga je gang.",
+   "translation": "Пожалуйста, вперёд."
+  },
+  {
+   "text": "Na jou.",
+   "translation": "После тебя."
+  },
+  {
+   "text": "Kom binnen!",
+   "translation": "Заходи!"
+  },
+  {
+   "text": "Doe alsof je thuis bent.",
+   "translation": "Чувствуй себя как дома."
+  },
+  {
+   "text": "Wil je iets drinken?",
+   "translation": "Хочешь что-нибудь выпить?"
+  },
+  {
+   "text": "Ga lekker zitten.",
+   "translation": "Садись поудобнее."
+  },
+  {
+   "text": "Ik moet gaan.",
+   "translation": "Мне пора."
+  },
+  {
+   "text": "Het wordt laat.",
+   "translation": "Становится поздно."
+  },
+  {
+   "text": "Slaap lekker!",
+   "translation": "Сладких снов!"
+  },
+  {
+   "text": "Welterusten!",
+   "translation": "Доброй ночи!"
+  },
+  {
+   "text": "Goedemorgen allemaal!",
+   "translation": "Всем доброе утро!"
+  },
+  {
+   "text": "Heb je goed geslapen?",
+   "translation": "Хорошо спал?"
+  },
+  {
+   "text": "Ik heb me verslapen.",
+   "translation": "Я проспал."
+  },
+  {
+   "text": "Ik ben een ochtendmens.",
+   "translation": "Я жаворонок."
+  },
+  {
+   "text": "Ik ben geen ochtendmens.",
+   "translation": "Я не жаворонок."
+  },
+  {
+   "text": "Ik heb een kater.",
+   "translation": "У меня похмелье."
+  },
+  {
+   "text": "Ik voel me niet lekker.",
+   "translation": "Мне нехорошо."
+  },
+  {
+   "text": "Ik ben verkouden.",
+   "translation": "Я простудился."
+  },
+  {
+   "text": "Ik meld me ziek.",
+   "translation": "Я беру больничный."
+  },
+  {
+   "text": "Ik moet naar de huisarts.",
+   "translation": "Мне нужно к врачу."
+  },
+  {
+   "text": "Gaat het?",
+   "translation": "Ты в порядке?"
+  },
+  {
+   "text": "Alles goed?",
+   "translation": "Всё хорошо?"
+  },
+  {
+   "text": "Alles is onder controle.",
+   "translation": "Всё под контролем."
+  },
+  {
+   "text": "Wat is er aan de hand?",
+   "translation": "Что случилось?"
+  },
+  {
+   "text": "Wat is er gebeurd?",
+   "translation": "Что произошло?"
+  },
+  {
+   "text": "Vertel!",
+   "translation": "Рассказывай!"
+  },
+  {
+   "text": "Wat vind jij ervan?",
+   "translation": "Что ты об этом думаешь?"
+  },
+  {
+   "text": "Ik vind het prima.",
+   "translation": "Меня всё устраивает."
+  },
+  {
+   "text": "Het maakt mij niet uit.",
+   "translation": "Мне без разницы."
+  },
+  {
+   "text": "Zeg het maar.",
+   "translation": "Слушаю тебя."
+  },
+  {
+   "text": "Zeg maar je.",
+   "translation": "Можно на «ты»."
+  },
+  {
+   "text": "Wees eerlijk.",
+   "translation": "Будь честен."
+  },
+  {
+   "text": "Dat is niet eerlijk!",
+   "translation": "Это нечестно!"
+  },
+  {
+   "text": "Grapje!",
+   "translation": "Шучу!"
+  },
+  {
+   "text": "Ik maak maar een grapje.",
+   "translation": "Я просто шучу."
+  },
+  {
+   "text": "Je meent het!",
+   "translation": "Да ты что!"
+  },
+  {
+   "text": "Niet te geloven!",
+   "translation": "Невероятно!"
+  },
+  {
+   "text": "Wat een toeval!",
+   "translation": "Какое совпадение!"
+  },
+  {
+   "text": "Dat dacht ik al.",
+   "translation": "Я так и думал."
+  },
+  {
+   "text": "Zie je wel!",
+   "translation": "Ну вот, я же говорил!"
+  },
+  {
+   "text": "Eindelijk!",
+   "translation": "Наконец-то!"
+  },
+  {
+   "text": "Het is maar goed ook.",
+   "translation": "Ну и хорошо."
+  },
+  {
+   "text": "Dat scheelt een hoop.",
+   "translation": "Это сильно облегчает дело."
+  },
+  {
+   "text": "Dat kan geen kwaad.",
+   "translation": "Это не повредит."
+  },
+  {
+   "text": "Baat het niet, dan schaadt het niet.",
+   "translation": "Не поможет, так не навредит."
+  },
+  {
+   "text": "Oefening baart kunst.",
+   "translation": "Повторение — мать учения."
+  },
+  {
+   "text": "Beter laat dan nooit.",
+   "translation": "Лучше поздно, чем никогда."
+  },
+  {
+   "text": "Alle begin is moeilijk.",
+   "translation": "Лиха беда начало."
+  },
+  {
+   "text": "Wie niet waagt, wie niet wint.",
+   "translation": "Кто не рискует, тот не пьёт шампанского."
+  },
+  {
+   "text": "Haastige spoed is zelden goed.",
+   "translation": "Поспешишь — людей насмешишь."
+  },
+  {
+   "text": "Morgen is er weer een dag.",
+   "translation": "Завтра будет новый день."
+  },
+  {
+   "text": "Het is een fluitje van een cent.",
+   "translation": "Это проще простого."
+  },
+  {
+   "text": "Ik heb het onder de knie.",
+   "translation": "Я с этим освоился."
+  },
+  {
+   "text": "Ik zit met mijn handen in het haar.",
+   "translation": "Не знаю, что и делать."
+  },
+  {
+   "text": "Dat is koffiedik kijken.",
+   "translation": "Это гадание на кофейной гуще."
+  },
+  {
+   "text": "Nu komt de aap uit de mouw.",
+   "translation": "Вот и выяснилась правда."
+  },
+  {
+   "text": "Het is boter bij de vis.",
+   "translation": "Оплата сразу, на месте."
+  },
+  {
+   "text": "Dat is andere koek.",
+   "translation": "Это совсем другое дело."
+  },
+  {
+   "text": "Ik ga ervoor!",
+   "translation": "Я берусь за это!"
+  },
+  {
+   "text": "We zien wel.",
+   "translation": "Посмотрим по ситуации."
+  },
+  {
+   "text": "Het zit wel snor.",
+   "translation": "Всё в порядке."
+  },
+  {
+   "text": "Daar gaan we!",
+   "translation": "Поехали!"
+  },
+  {
+   "text": "Even geduld, alsjeblieft.",
+   "translation": "Минуту терпения, пожалуйста."
+  },
+  {
+   "text": "Ik ben zo terug.",
+   "translation": "Я скоро вернусь."
+  },
+  {
+   "text": "Waar was ik gebleven?",
+   "translation": "На чём я остановился?"
+  },
+  {
+   "text": "Waar hebben we het over?",
+   "translation": "О чём мы вообще говорим?"
+  },
+  {
+   "text": "Hoe heet je ook alweer?",
+   "translation": "Напомни, как тебя зовут?"
+  },
+  {
+   "text": "Het ligt op het puntje van mijn tong.",
+   "translation": "Вертится на языке."
+  },
+  {
+   "text": "Ik ben het vergeten.",
+   "translation": "Я забыл."
+  },
+  {
+   "text": "Vergeet het maar.",
+   "translation": "Даже не думай."
+  },
+  {
+   "text": "Denk eraan!",
+   "translation": "Не забудь!"
+  },
+  {
+   "text": "Wat een mooie dag.",
+   "translation": "Какой прекрасный день."
+  },
+  {
+   "text": "Zullen we een stukje fietsen?",
+   "translation": "Прокатимся немного на велосипеде?"
+  },
+  {
+   "text": "Ik ga even een frisse neus halen.",
+   "translation": "Пойду подышу свежим воздухом."
+  },
+  {
+   "text": "Ik ga hardlopen.",
+   "translation": "Я на пробежку."
+  },
+  {
+   "text": "Ik ben nog niet zo ver.",
+   "translation": "Я ещё не готов."
+  },
+  {
+   "text": "Ik ben er klaar voor.",
+   "translation": "Я готов."
+  },
+  {
+   "text": "Even kijken.",
+   "translation": "Сейчас посмотрю."
+  },
+  {
+   "text": "Dat zoek ik op.",
+   "translation": "Я поищу это."
+  },
+  {
+   "text": "Ik google het even.",
+   "translation": "Сейчас погуглю."
+  },
+  {
+   "text": "Mijn telefoon is leeg.",
+   "translation": "У меня сел телефон."
+  },
+  {
+   "text": "Heb je een oplader?",
+   "translation": "Есть зарядка?"
+  },
+  {
+   "text": "Wat is het wifi-wachtwoord?",
+   "translation": "Какой пароль от вайфая?"
+  },
+  {
+   "text": "Ik heb geen bereik.",
+   "translation": "У меня нет связи."
+  },
+  {
+   "text": "Het doet het niet.",
+   "translation": "Не работает."
+  },
+  {
+   "text": "Het werkt weer.",
+   "translation": "Снова работает."
+  },
+  {
+   "text": "Wie betaalt?",
+   "translation": "Кто платит?"
+  },
+  {
+   "text": "Ik trakteer!",
+   "translation": "Я угощаю!"
+  },
+  {
+   "text": "We doen het samen.",
+   "translation": "Сделаем это вместе."
+  },
+  {
+   "text": "Zullen we het delen?",
+   "translation": "Поделим?"
+  },
+  {
+   "text": "Ieder betaalt voor zich.",
+   "translation": "Каждый платит за себя."
+  },
+  {
+   "text": "Ik stuur je een Tikkie.",
+   "translation": "Я скину тебе запрос на оплату в Tikkie."
+  },
+  {
+   "text": "Ben je er klaar voor?",
+   "translation": "Ты готов?"
+  },
+  {
+   "text": "Hoe was het?",
+   "translation": "Ну как было?"
+  },
+  {
+   "text": "Het was super.",
+   "translation": "Было супер."
+  },
+  {
+   "text": "Het viel tegen.",
+   "translation": "Оказалось хуже, чем я думал."
+  },
+  {
+   "text": "Het was het waard.",
+   "translation": "Оно того стоило."
+  },
+  {
+   "text": "Ik heb er spijt van.",
+   "translation": "Я жалею об этом."
+  },
+  {
+   "text": "Dat had ik niet verwacht.",
+   "translation": "Этого я не ожидал."
+  },
+  {
+   "text": "Daar zit wat in.",
+   "translation": "В этом что-то есть."
+  },
+  {
+   "text": "Dat maakt het makkelijker.",
+   "translation": "Это упрощает дело."
+  },
+  {
+   "text": "Eerst zien, dan geloven.",
+   "translation": "Не поверю, пока не увижу."
+  },
+  {
+   "text": "Rustig aan, we hebben tijd.",
+   "translation": "Спокойно, у нас есть время."
+  },
+  {
+   "text": "Daar kan ik mee leven.",
+   "translation": "С этим я могу смириться."
+  },
+  {
+   "text": "Ik laat het aan jou over.",
+   "translation": "Оставляю это на твоё усмотрение."
+  },
+  {
+   "text": "Jij mag kiezen.",
+   "translation": "Выбирай ты."
+  },
+  {
+   "text": "Doe wat je niet laten kunt.",
+   "translation": "Делай как знаешь."
+  },
+  {
+   "text": "Niet zo zeuren!",
+   "translation": "Не ной!"
+  },
+  {
+   "text": "Ik heb er een goed gevoel over.",
+   "translation": "У меня хорошее предчувствие."
+  },
+  {
+   "text": "Ik heb er een slecht gevoel over.",
+   "translation": "У меня плохое предчувствие."
+  },
+  {
+   "text": "Hoe is het met de familie?",
+   "translation": "Как семья?"
+  },
+  {
+   "text": "Doe de groeten aan je moeder!",
+   "translation": "Передавай привет маме!"
+  },
+  {
+   "text": "Hartstikke bedankt!",
+   "translation": "Огромное спасибо!"
+  },
+  {
+   "text": "Het was me een genoegen.",
+   "translation": "Мне было приятно."
+  },
+  {
+   "text": "Ik ben benieuwd hoe het afloopt.",
+   "translation": "Интересно, чем всё закончится."
+  },
+  {
+   "text": "Daar heb ik geen verstand van.",
+   "translation": "Я в этом не разбираюсь."
+  },
+  {
+   "text": "Dat spreekt voor zich.",
+   "translation": "Это само собой разумеется."
+  },
+  {
+   "text": "Wat een opluchting!",
+   "translation": "Какое облегчение!"
+  },
+  {
+   "text": "Ik moet even nadenken.",
+   "translation": "Мне нужно немного подумать."
+  },
+  {
+   "text": "Ik slaap er een nachtje over.",
+   "translation": "Утро вечера мудренее."
+  },
+  {
+   "text": "Ik ben een en al oor.",
+   "translation": "Я весь внимание."
+  },
+  {
+   "text": "Hou het voor je.",
+   "translation": "Никому не говори."
+  },
+  {
+   "text": "Mijn lippen zijn verzegeld.",
+   "translation": "Я — могила."
+  },
+  {
+   "text": "Ik ben om.",
+   "translation": "Ты меня убедил."
+  },
+  {
+   "text": "Je hebt gelijk.",
+   "translation": "Ты прав."
+  },
+  {
+   "text": "Ik had ongelijk.",
+   "translation": "Я был неправ."
+  },
+  {
+   "text": "Dat kun je wel zeggen!",
+   "translation": "Это уж точно!"
+  },
+  {
+   "text": "Dat valt te bezien.",
+   "translation": "Это ещё вопрос."
+  },
+  {
+   "text": "Zo snel mogelijk.",
+   "translation": "Как можно скорее."
+  },
+  {
+   "text": "Geen haast.",
+   "translation": "Не спеши, это не срочно."
+  },
+  {
+   "text": "Op je gemak.",
+   "translation": "Не торопись, в своём темпе."
+  },
+  {
+   "text": "Het komt er niet op aan.",
+   "translation": "Это не так важно."
+  }
+ ],
+ "en": [
+  {
+   "text": "No worries.",
+   "translation": "Не переживай."
+  },
+  {
+   "text": "That makes sense.",
+   "translation": "Логично."
+  },
+  {
+   "text": "I'm in.",
+   "translation": "Я с вами."
+  },
+  {
+   "text": "Fair enough.",
+   "translation": "Справедливо."
+  },
+  {
+   "text": "It slipped my mind.",
+   "translation": "Совсем вылетело из головы."
+  },
+  {
+   "text": "Give me a sec.",
+   "translation": "Дай секунду."
+  },
+  {
+   "text": "That was close.",
+   "translation": "Было на волоске."
+  },
+  {
+   "text": "I'm not feeling it.",
+   "translation": "Мне не заходит."
+  },
+  {
+   "text": "Let's call it a day.",
+   "translation": "Давай на сегодня закончим."
+  },
+  {
+   "text": "I'm running late.",
+   "translation": "Я опаздываю."
+  },
+  {
+   "text": "How's it going?",
+   "translation": "Как дела?"
+  },
+  {
+   "text": "Not bad, you?",
+   "translation": "Неплохо, а ты?"
+  },
+  {
+   "text": "Long time no see!",
+   "translation": "Сто лет не виделись!"
+  },
+  {
+   "text": "Good to see you.",
+   "translation": "Рад тебя видеть."
+  },
+  {
+   "text": "What's up?",
+   "translation": "Как жизнь?"
+  },
+  {
+   "text": "Not much.",
+   "translation": "Да ничего особенного."
+  },
+  {
+   "text": "See you later!",
+   "translation": "До встречи!"
+  },
+  {
+   "text": "Catch you later!",
+   "translation": "Увидимся!"
+  },
+  {
+   "text": "Take care!",
+   "translation": "Береги себя!"
+  },
+  {
+   "text": "Have a good one!",
+   "translation": "Хорошего дня!"
+  },
+  {
+   "text": "Same to you!",
+   "translation": "И тебе того же!"
+  },
+  {
+   "text": "You too!",
+   "translation": "Тебе тоже!"
+  },
+  {
+   "text": "Good luck!",
+   "translation": "Удачи!"
+  },
+  {
+   "text": "Congrats!",
+   "translation": "Поздравляю!"
+  },
+  {
+   "text": "Get well soon!",
+   "translation": "Выздоравливай!"
+  },
+  {
+   "text": "Enjoy your meal!",
+   "translation": "Приятного аппетита!"
+  },
+  {
+   "text": "Cheers!",
+   "translation": "Будем здоровы!"
+  },
+  {
+   "text": "You're welcome.",
+   "translation": "Пожалуйста."
+  },
+  {
+   "text": "No problem.",
+   "translation": "Без проблем."
+  },
+  {
+   "text": "Thanks a lot!",
+   "translation": "Большое спасибо!"
+  },
+  {
+   "text": "I owe you one.",
+   "translation": "Я твой должник."
+  },
+  {
+   "text": "Sorry about that.",
+   "translation": "Извини за это."
+  },
+  {
+   "text": "My bad.",
+   "translation": "Моя вина."
+  },
+  {
+   "text": "Never mind.",
+   "translation": "Неважно, забудь."
+  },
+  {
+   "text": "It doesn't matter.",
+   "translation": "Это неважно."
+  },
+  {
+   "text": "Whatever works for you.",
+   "translation": "Как тебе удобно."
+  },
+  {
+   "text": "Sounds good!",
+   "translation": "Звучит отлично!"
+  },
+  {
+   "text": "Sounds like a plan.",
+   "translation": "Отличный план."
+  },
+  {
+   "text": "Deal!",
+   "translation": "Договорились!"
+  },
+  {
+   "text": "Count me in!",
+   "translation": "Я в деле!"
+  },
+  {
+   "text": "Count me out.",
+   "translation": "Без меня."
+  },
+  {
+   "text": "I'll pass.",
+   "translation": "Я пас."
+  },
+  {
+   "text": "Maybe next time.",
+   "translation": "Может, в следующий раз."
+  },
+  {
+   "text": "Can I take a rain check?",
+   "translation": "Можно перенесём на другой раз?"
+  },
+  {
+   "text": "Really?",
+   "translation": "Правда?"
+  },
+  {
+   "text": "Are you serious?",
+   "translation": "Ты серьёзно?"
+  },
+  {
+   "text": "No way!",
+   "translation": "Да ладно, не может быть!"
+  },
+  {
+   "text": "You're kidding!",
+   "translation": "Шутишь!"
+  },
+  {
+   "text": "Just kidding!",
+   "translation": "Шучу!"
+  },
+  {
+   "text": "I knew it!",
+   "translation": "Я так и знал!"
+  },
+  {
+   "text": "Told you so.",
+   "translation": "Я же говорил."
+  },
+  {
+   "text": "Finally!",
+   "translation": "Наконец-то!"
+  },
+  {
+   "text": "What a relief!",
+   "translation": "Какое облегчение!"
+  },
+  {
+   "text": "What a shame.",
+   "translation": "Как жаль."
+  },
+  {
+   "text": "Bummer.",
+   "translation": "Облом."
+  },
+  {
+   "text": "Bad luck.",
+   "translation": "Не повезло."
+  },
+  {
+   "text": "Oh well.",
+   "translation": "Ну что ж."
+  },
+  {
+   "text": "It is what it is.",
+   "translation": "Что есть, то есть."
+  },
+  {
+   "text": "It happens.",
+   "translation": "Бывает."
+  },
+  {
+   "text": "Exactly!",
+   "translation": "Именно!"
+  },
+  {
+   "text": "Totally.",
+   "translation": "Абсолютно."
+  },
+  {
+   "text": "I agree.",
+   "translation": "Согласен."
+  },
+  {
+   "text": "I'm not so sure.",
+   "translation": "Я не уверен."
+  },
+  {
+   "text": "I don't think so.",
+   "translation": "Не думаю."
+  },
+  {
+   "text": "I guess so.",
+   "translation": "Наверное, да."
+  },
+  {
+   "text": "It depends.",
+   "translation": "Смотря как."
+  },
+  {
+   "text": "Good point.",
+   "translation": "Справедливое замечание."
+  },
+  {
+   "text": "That's true.",
+   "translation": "Это правда."
+  },
+  {
+   "text": "Not exactly.",
+   "translation": "Не совсем."
+  },
+  {
+   "text": "I see what you mean.",
+   "translation": "Понимаю, о чём ты."
+  },
+  {
+   "text": "What do you mean?",
+   "translation": "Что ты имеешь в виду?"
+  },
+  {
+   "text": "Could you say that again?",
+   "translation": "Можешь повторить?"
+  },
+  {
+   "text": "Could you speak more slowly?",
+   "translation": "Можешь говорить помедленнее?"
+  },
+  {
+   "text": "What does that mean?",
+   "translation": "Что это значит?"
+  },
+  {
+   "text": "Got it.",
+   "translation": "Понял."
+  },
+  {
+   "text": "I don't get it.",
+   "translation": "Не понимаю."
+  },
+  {
+   "text": "Now I get it!",
+   "translation": "Теперь понятно!"
+  },
+  {
+   "text": "I have no idea.",
+   "translation": "Понятия не имею."
+  },
+  {
+   "text": "Beats me.",
+   "translation": "Без понятия."
+  },
+  {
+   "text": "Let me think.",
+   "translation": "Дай подумать."
+  },
+  {
+   "text": "I'll think about it.",
+   "translation": "Я подумаю."
+  },
+  {
+   "text": "I've changed my mind.",
+   "translation": "Я передумал."
+  },
+  {
+   "text": "I can't make up my mind.",
+   "translation": "Никак не могу решить."
+  },
+  {
+   "text": "It's up to you.",
+   "translation": "Решай сам."
+  },
+  {
+   "text": "Your call.",
+   "translation": "Тебе решать."
+  },
+  {
+   "text": "Go for it!",
+   "translation": "Давай, действуй!"
+  },
+  {
+   "text": "You can do it!",
+   "translation": "Ты сможешь!"
+  },
+  {
+   "text": "Hang in there!",
+   "translation": "Держись!"
+  },
+  {
+   "text": "Cheer up!",
+   "translation": "Не грусти!"
+  },
+  {
+   "text": "Don't worry about it.",
+   "translation": "Не беспокойся об этом."
+  },
+  {
+   "text": "Take it easy.",
+   "translation": "Не напрягайся."
+  },
+  {
+   "text": "Calm down.",
+   "translation": "Успокойся."
+  },
+  {
+   "text": "Keep it up!",
+   "translation": "Так держать!"
+  },
+  {
+   "text": "Well done!",
+   "translation": "Молодец!"
+  },
+  {
+   "text": "Nice one!",
+   "translation": "Отлично сработано!"
+  },
+  {
+   "text": "I'm proud of you.",
+   "translation": "Я горжусь тобой."
+  },
+  {
+   "text": "I made it!",
+   "translation": "У меня получилось!"
+  },
+  {
+   "text": "It worked!",
+   "translation": "Сработало!"
+  },
+  {
+   "text": "I can't get it to work.",
+   "translation": "Никак не могу заставить это работать."
+  },
+  {
+   "text": "It's not working.",
+   "translation": "Не работает."
+  },
+  {
+   "text": "It's working again.",
+   "translation": "Снова работает."
+  },
+  {
+   "text": "My phone died.",
+   "translation": "У меня сел телефон."
+  },
+  {
+   "text": "Do you have a charger?",
+   "translation": "Есть зарядка?"
+  },
+  {
+   "text": "What's the Wi-Fi password?",
+   "translation": "Какой пароль от вайфая?"
+  },
+  {
+   "text": "I have no signal.",
+   "translation": "У меня нет связи."
+  },
+  {
+   "text": "You're breaking up.",
+   "translation": "Связь пропадает, тебя не слышно."
+  },
+  {
+   "text": "I'll call you back.",
+   "translation": "Я перезвоню."
+  },
+  {
+   "text": "Text me when you're there.",
+   "translation": "Напиши, когда будешь на месте."
+  },
+  {
+   "text": "I'll text you later.",
+   "translation": "Напишу тебе позже."
+  },
+  {
+   "text": "Did you get my message?",
+   "translation": "Ты получил моё сообщение?"
+  },
+  {
+   "text": "Keep me posted.",
+   "translation": "Держи меня в курсе."
+  },
+  {
+   "text": "Let me know.",
+   "translation": "Дай знать."
+  },
+  {
+   "text": "I'll look into it.",
+   "translation": "Я разберусь."
+  },
+  {
+   "text": "I'll sort it out.",
+   "translation": "Я всё улажу."
+  },
+  {
+   "text": "Leave it to me.",
+   "translation": "Предоставь это мне."
+  },
+  {
+   "text": "Can you give me a hand?",
+   "translation": "Поможешь мне?"
+  },
+  {
+   "text": "Do you need a hand?",
+   "translation": "Тебе помочь?"
+  },
+  {
+   "text": "I'm on it.",
+   "translation": "Уже занимаюсь."
+  },
+  {
+   "text": "I'm in a meeting.",
+   "translation": "У меня совещание."
+  },
+  {
+   "text": "I'm working from home today.",
+   "translation": "Сегодня я работаю из дома."
+  },
+  {
+   "text": "I'm swamped.",
+   "translation": "Я завален работой."
+  },
+  {
+   "text": "I'm a bit busy right now.",
+   "translation": "Я сейчас немного занят."
+  },
+  {
+   "text": "Do you have a minute?",
+   "translation": "Есть минутка?"
+  },
+  {
+   "text": "Can it wait?",
+   "translation": "Это может подождать?"
+  },
+  {
+   "text": "It's urgent.",
+   "translation": "Это срочно."
+  },
+  {
+   "text": "Let's touch base tomorrow.",
+   "translation": "Давай сверимся завтра."
+  },
+  {
+   "text": "Let's get the ball rolling.",
+   "translation": "Давай уже начнём."
+  },
+  {
+   "text": "We're on track.",
+   "translation": "Мы идём по плану."
+  },
+  {
+   "text": "We're running behind.",
+   "translation": "Мы отстаём от графика."
+  },
+  {
+   "text": "It's taking longer than expected.",
+   "translation": "Это занимает больше времени, чем ожидалось."
+  },
+  {
+   "text": "Let's take a break.",
+   "translation": "Давай сделаем перерыв."
+  },
+  {
+   "text": "I'm off tomorrow.",
+   "translation": "Завтра у меня выходной."
+  },
+  {
+   "text": "I'm on holiday next week.",
+   "translation": "На следующей неделе я в отпуске."
+  },
+  {
+   "text": "Have a great holiday!",
+   "translation": "Хорошего отпуска!"
+  },
+  {
+   "text": "How was your weekend?",
+   "translation": "Как прошли выходные?"
+  },
+  {
+   "text": "Nothing special.",
+   "translation": "Ничего особенного."
+  },
+  {
+   "text": "Pretty quiet.",
+   "translation": "Довольно спокойно."
+  },
+  {
+   "text": "How was your day?",
+   "translation": "Как прошёл день?"
+  },
+  {
+   "text": "Busy but good.",
+   "translation": "Насыщенно, но хорошо."
+  },
+  {
+   "text": "I'm exhausted.",
+   "translation": "Я выжат как лимон."
+  },
+  {
+   "text": "I'm starving.",
+   "translation": "Умираю с голоду."
+  },
+  {
+   "text": "I'm full.",
+   "translation": "Я наелся."
+  },
+  {
+   "text": "I'm thirsty.",
+   "translation": "Хочу пить."
+  },
+  {
+   "text": "What's for dinner?",
+   "translation": "Что на ужин?"
+  },
+  {
+   "text": "Let's grab a bite.",
+   "translation": "Давай перекусим."
+  },
+  {
+   "text": "Let's grab a coffee.",
+   "translation": "Давай выпьем кофе."
+  },
+  {
+   "text": "My treat!",
+   "translation": "Я угощаю!"
+  },
+  {
+   "text": "Let's split the bill.",
+   "translation": "Давай разделим счёт."
+  },
+  {
+   "text": "Can we have the bill, please?",
+   "translation": "Можно счёт, пожалуйста?"
+  },
+  {
+   "text": "Can I pay by card?",
+   "translation": "Можно картой?"
+  },
+  {
+   "text": "Keep the change.",
+   "translation": "Сдачи не надо."
+  },
+  {
+   "text": "I'd like to order.",
+   "translation": "Я хотел бы заказать."
+  },
+  {
+   "text": "I'll have the same.",
+   "translation": "Мне то же самое."
+  },
+  {
+   "text": "Is this seat taken?",
+   "translation": "Это место занято?"
+  },
+  {
+   "text": "A table for two, please.",
+   "translation": "Столик на двоих, пожалуйста."
+  },
+  {
+   "text": "No ice, please.",
+   "translation": "Без льда, пожалуйста."
+  },
+  {
+   "text": "That was delicious.",
+   "translation": "Было очень вкусно."
+  },
+  {
+   "text": "I'm just looking.",
+   "translation": "Я просто смотрю."
+  },
+  {
+   "text": "How much is this?",
+   "translation": "Сколько это стоит?"
+  },
+  {
+   "text": "That's a bargain!",
+   "translation": "Это очень выгодно!"
+  },
+  {
+   "text": "That's a rip-off!",
+   "translation": "Это грабёж!"
+  },
+  {
+   "text": "Do you have this in another size?",
+   "translation": "Есть это в другом размере?"
+  },
+  {
+   "text": "Can I try it on?",
+   "translation": "Можно примерить?"
+  },
+  {
+   "text": "Where's the restroom?",
+   "translation": "Где туалет?"
+  },
+  {
+   "text": "I'm lost.",
+   "translation": "Я заблудился."
+  },
+  {
+   "text": "Is it far?",
+   "translation": "Это далеко?"
+  },
+  {
+   "text": "It's just around the corner.",
+   "translation": "Это прямо за углом."
+  },
+  {
+   "text": "Go straight and turn left.",
+   "translation": "Идите прямо и поверните налево."
+  },
+  {
+   "text": "Which platform?",
+   "translation": "Какая платформа?"
+  },
+  {
+   "text": "I missed my train.",
+   "translation": "Я опоздал на поезд."
+  },
+  {
+   "text": "I'm stuck in traffic.",
+   "translation": "Я застрял в пробке."
+  },
+  {
+   "text": "The train is delayed.",
+   "translation": "Поезд задерживается."
+  },
+  {
+   "text": "I'm almost there.",
+   "translation": "Я почти на месте."
+  },
+  {
+   "text": "On my way!",
+   "translation": "Уже еду!"
+  },
+  {
+   "text": "Be right there!",
+   "translation": "Сейчас буду!"
+  },
+  {
+   "text": "Sorry I'm late.",
+   "translation": "Извини за опоздание."
+  },
+  {
+   "text": "Better late than never.",
+   "translation": "Лучше поздно, чем никогда."
+  },
+  {
+   "text": "Where shall we meet?",
+   "translation": "Где встретимся?"
+  },
+  {
+   "text": "What time works for you?",
+   "translation": "Во сколько тебе удобно?"
+  },
+  {
+   "text": "Does Tuesday work for you?",
+   "translation": "Тебе подходит вторник?"
+  },
+  {
+   "text": "That works for me.",
+   "translation": "Мне подходит."
+  },
+  {
+   "text": "Can we reschedule?",
+   "translation": "Можем перенести?"
+  },
+  {
+   "text": "Let's keep in touch.",
+   "translation": "Давай не теряться."
+  },
+  {
+   "text": "Drop me a line.",
+   "translation": "Черкни мне."
+  },
+  {
+   "text": "Say hi to your family!",
+   "translation": "Передавай привет семье!"
+  },
+  {
+   "text": "Come on in!",
+   "translation": "Заходи!"
+  },
+  {
+   "text": "Make yourself at home.",
+   "translation": "Чувствуй себя как дома."
+  },
+  {
+   "text": "Help yourself.",
+   "translation": "Угощайся."
+  },
+  {
+   "text": "Can I get you anything?",
+   "translation": "Тебе что-нибудь принести?"
+  },
+  {
+   "text": "I have to go.",
+   "translation": "Мне пора."
+  },
+  {
+   "text": "It's getting late.",
+   "translation": "Становится поздно."
+  },
+  {
+   "text": "Sleep tight!",
+   "translation": "Сладких снов!"
+  },
+  {
+   "text": "Did you sleep well?",
+   "translation": "Хорошо спал?"
+  },
+  {
+   "text": "I overslept.",
+   "translation": "Я проспал."
+  },
+  {
+   "text": "I'm not a morning person.",
+   "translation": "Я не жаворонок."
+  },
+  {
+   "text": "I'm feeling under the weather.",
+   "translation": "Мне нездоровится."
+  },
+  {
+   "text": "I've caught a cold.",
+   "translation": "Я простудился."
+  },
+  {
+   "text": "I'm calling in sick.",
+   "translation": "Я беру больничный."
+  },
+  {
+   "text": "Are you okay?",
+   "translation": "Ты в порядке?"
+  },
+  {
+   "text": "Is everything all right?",
+   "translation": "Всё нормально?"
+  },
+  {
+   "text": "What happened?",
+   "translation": "Что случилось?"
+  },
+  {
+   "text": "What's going on?",
+   "translation": "Что происходит?"
+  },
+  {
+   "text": "Tell me everything!",
+   "translation": "Рассказывай всё!"
+  },
+  {
+   "text": "What do you think?",
+   "translation": "Что думаешь?"
+  },
+  {
+   "text": "I'm fine with that.",
+   "translation": "Меня это устраивает."
+  },
+  {
+   "text": "I don't mind.",
+   "translation": "Я не против."
+  },
+  {
+   "text": "Go ahead.",
+   "translation": "Давай, вперёд."
+  },
+  {
+   "text": "After you.",
+   "translation": "После вас."
+  },
+  {
+   "text": "It's your turn.",
+   "translation": "Твоя очередь."
+  },
+  {
+   "text": "Whose turn is it?",
+   "translation": "Чья очередь?"
+  },
+  {
+   "text": "That's not fair!",
+   "translation": "Это нечестно!"
+  },
+  {
+   "text": "Be honest.",
+   "translation": "Будь честен."
+  },
+  {
+   "text": "To be honest, I don't know.",
+   "translation": "Честно говоря, не знаю."
+  },
+  {
+   "text": "What a coincidence!",
+   "translation": "Какое совпадение!"
+  },
+  {
+   "text": "Small world!",
+   "translation": "Мир тесен!"
+  },
+  {
+   "text": "That's the last straw!",
+   "translation": "Это последняя капля!"
+  },
+  {
+   "text": "I'm fed up with it.",
+   "translation": "Мне это надоело."
+  },
+  {
+   "text": "I've had enough.",
+   "translation": "С меня хватит."
+  },
+  {
+   "text": "It drives me crazy.",
+   "translation": "Меня это бесит."
+  },
+  {
+   "text": "Don't get me wrong.",
+   "translation": "Не пойми меня неправильно."
+  },
+  {
+   "text": "No offence.",
+   "translation": "Без обид."
+  },
+  {
+   "text": "None taken.",
+   "translation": "Я не обиделся."
+  },
+  {
+   "text": "Let's not go there.",
+   "translation": "Давай не будем об этом."
+  },
+  {
+   "text": "Let's change the subject.",
+   "translation": "Давай сменим тему."
+  },
+  {
+   "text": "Where was I?",
+   "translation": "На чём я остановился?"
+  },
+  {
+   "text": "What was I saying?",
+   "translation": "О чём я говорил?"
+  },
+  {
+   "text": "It's on the tip of my tongue.",
+   "translation": "Вертится на языке."
+  },
+  {
+   "text": "I forgot.",
+   "translation": "Я забыл."
+  },
+  {
+   "text": "Don't forget!",
+   "translation": "Не забудь!"
+  },
+  {
+   "text": "Remind me later.",
+   "translation": "Напомни мне позже."
+  },
+  {
+   "text": "It's a piece of cake.",
+   "translation": "Проще простого."
+  },
+  {
+   "text": "Practice makes perfect.",
+   "translation": "Повторение — мать учения."
+  },
+  {
+   "text": "Easier said than done.",
+   "translation": "Легко сказать, да трудно сделать."
+  },
+  {
+   "text": "Better safe than sorry.",
+   "translation": "Береженого Бог бережёт."
+  },
+  {
+   "text": "Every cloud has a silver lining.",
+   "translation": "Нет худа без добра."
+  },
+  {
+   "text": "Don't count your chickens before they hatch.",
+   "translation": "Цыплят по осени считают."
+  },
+  {
+   "text": "Tomorrow is another day.",
+   "translation": "Завтра будет новый день."
+  },
+  {
+   "text": "Time flies!",
+   "translation": "Время летит!"
+  },
+  {
+   "text": "Time's up.",
+   "translation": "Время вышло."
+  },
+  {
+   "text": "Let's get started.",
+   "translation": "Давай начнём."
+  },
+  {
+   "text": "Here we go!",
+   "translation": "Поехали!"
+  },
+  {
+   "text": "Bring it on!",
+   "translation": "Давай, я готов!"
+  },
+  {
+   "text": "I'm ready.",
+   "translation": "Я готов."
+  },
+  {
+   "text": "I'm not ready yet.",
+   "translation": "Я ещё не готов."
+  },
+  {
+   "text": "Hold on a second.",
+   "translation": "Подожди секунду."
+  },
+  {
+   "text": "Bear with me.",
+   "translation": "Потерпи немного."
+  },
+  {
+   "text": "I'll be right back.",
+   "translation": "Я сейчас вернусь."
+  },
+  {
+   "text": "I'm heading out.",
+   "translation": "Я ухожу."
+  },
+  {
+   "text": "I'm home!",
+   "translation": "Я дома!"
+  },
+  {
+   "text": "Close the door, please.",
+   "translation": "Закрой дверь, пожалуйста."
+  },
+  {
+   "text": "Turn off the lights.",
+   "translation": "Выключи свет."
+  },
+  {
+   "text": "Whose turn is it to do the dishes?",
+   "translation": "Чья очередь мыть посуду?"
+  },
+  {
+   "text": "We're out of milk.",
+   "translation": "У нас закончилось молоко."
+  },
+  {
+   "text": "I'll do the shopping.",
+   "translation": "Я схожу за продуктами."
+  },
+  {
+   "text": "Let me check.",
+   "translation": "Сейчас проверю."
+  },
+  {
+   "text": "Let me look it up.",
+   "translation": "Сейчас поищу."
+  },
+  {
+   "text": "I'll google it.",
+   "translation": "Погуглю."
+  },
+  {
+   "text": "What's the weather like?",
+   "translation": "Какая погода?"
+  },
+  {
+   "text": "It's pouring.",
+   "translation": "Льёт как из ведра."
+  },
+  {
+   "text": "It's freezing out there.",
+   "translation": "На улице жутко холодно."
+  },
+  {
+   "text": "Lovely day, isn't it?",
+   "translation": "Прекрасный день, правда?"
+  },
+  {
+   "text": "I'm cold.",
+   "translation": "Мне холодно."
+  },
+  {
+   "text": "I'm boiling.",
+   "translation": "Я умираю от жары."
+  },
+  {
+   "text": "Let's get some fresh air.",
+   "translation": "Давай подышим свежим воздухом."
+  },
+  {
+   "text": "I'm going for a run.",
+   "translation": "Я на пробежку."
+  },
+  {
+   "text": "I'm looking forward to it.",
+   "translation": "Жду с нетерпением."
+  },
+  {
+   "text": "I can't wait!",
+   "translation": "Не могу дождаться!"
+  },
+  {
+   "text": "I'm curious.",
+   "translation": "Мне любопытно."
+  },
+  {
+   "text": "You scared me!",
+   "translation": "Ты меня напугал!"
+  },
+  {
+   "text": "That's annoying.",
+   "translation": "Это раздражает."
+  },
+  {
+   "text": "What a hassle.",
+   "translation": "Сколько мороки."
+  },
+  {
+   "text": "Not again!",
+   "translation": "Только не снова!"
+  },
+  {
+   "text": "That's a good sign.",
+   "translation": "Это хороший знак."
+  },
+  {
+   "text": "I have a good feeling about this.",
+   "translation": "У меня хорошее предчувствие."
+  },
+  {
+   "text": "I have a bad feeling about this.",
+   "translation": "У меня плохое предчувствие."
+  },
+  {
+   "text": "It was worth it.",
+   "translation": "Оно того стоило."
+  },
+  {
+   "text": "I regret it.",
+   "translation": "Я жалею об этом."
+  },
+  {
+   "text": "I didn't see that coming.",
+   "translation": "Этого я не ожидал."
+  },
+  {
+   "text": "You've got a point.",
+   "translation": "В этом что-то есть."
+  },
+  {
+   "text": "That helps a lot.",
+   "translation": "Это очень помогает."
+  },
+  {
+   "text": "It couldn't hurt.",
+   "translation": "Не повредит."
+  },
+  {
+   "text": "I can live with that.",
+   "translation": "С этим я могу смириться."
+  },
+  {
+   "text": "I'll leave it up to you.",
+   "translation": "Оставляю это на твоё усмотрение."
+  },
+  {
+   "text": "You choose.",
+   "translation": "Выбирай ты."
+  },
+  {
+   "text": "Suit yourself.",
+   "translation": "Как хочешь."
+  },
+  {
+   "text": "Stop complaining!",
+   "translation": "Хватит ныть!"
+  },
+  {
+   "text": "Mind your step!",
+   "translation": "Смотри под ноги!"
+  },
+  {
+   "text": "Watch out!",
+   "translation": "Осторожно!"
+  },
+  {
+   "text": "Easy does it.",
+   "translation": "Аккуратно, не спеши."
+  },
+  {
+   "text": "Slow down!",
+   "translation": "Помедленнее!"
+  },
+  {
+   "text": "Hurry up!",
+   "translation": "Поторопись!"
+  },
+  {
+   "text": "We're running out of time.",
+   "translation": "У нас заканчивается время."
+  },
+  {
+   "text": "There's no rush.",
+   "translation": "Спешить некуда."
+  },
+  {
+   "text": "Take your time.",
+   "translation": "Не торопись."
+  },
+  {
+   "text": "Let's play it by ear.",
+   "translation": "Посмотрим по ситуации."
+  },
+  {
+   "text": "We'll see.",
+   "translation": "Посмотрим."
+  },
+  {
+   "text": "Fingers crossed!",
+   "translation": "Держу кулачки!"
+  },
+  {
+   "text": "Knock on wood.",
+   "translation": "Тьфу-тьфу, чтобы не сглазить."
+  },
+  {
+   "text": "Break a leg!",
+   "translation": "Ни пуха ни пера!"
+  },
+  {
+   "text": "You nailed it!",
+   "translation": "Ты справился на отлично!"
+  },
+  {
+   "text": "Hats off to you!",
+   "translation": "Снимаю шляпу!"
+  },
+  {
+   "text": "It's not my cup of tea.",
+   "translation": "Это не моё."
+  },
+  {
+   "text": "I'm really into it.",
+   "translation": "Мне это очень нравится."
+  },
+  {
+   "text": "I'm a big fan.",
+   "translation": "Я большой поклонник."
+  },
+  {
+   "text": "Same here.",
+   "translation": "У меня так же."
+  },
+  {
+   "text": "Me neither.",
+   "translation": "Я тоже нет."
+  },
+  {
+   "text": "Me too.",
+   "translation": "Я тоже."
+  },
+  {
+   "text": "Who's paying?",
+   "translation": "Кто платит?"
+  },
+  {
+   "text": "I'll get this one.",
+   "translation": "Этот раз за мной."
+  },
+  {
+   "text": "Let's go Dutch.",
+   "translation": "Давай каждый заплатит за себя."
+  },
+  {
+   "text": "How did it go?",
+   "translation": "Ну как всё прошло?"
+  },
+  {
+   "text": "It went really well.",
+   "translation": "Всё прошло отлично."
+  },
+  {
+   "text": "It didn't go as planned.",
+   "translation": "Пошло не по плану."
+  },
+  {
+   "text": "Back to square one.",
+   "translation": "Всё сначала."
+  },
+  {
+   "text": "Let's sleep on it.",
+   "translation": "Утро вечера мудренее."
+  },
+  {
+   "text": "I'm all ears.",
+   "translation": "Я весь внимание."
+  },
+  {
+   "text": "Spill the beans!",
+   "translation": "Выкладывай!"
+  },
+  {
+   "text": "Keep it to yourself.",
+   "translation": "Никому не говори."
+  },
+  {
+   "text": "My lips are sealed.",
+   "translation": "Я — могила."
+  },
+  {
+   "text": "It's been ages!",
+   "translation": "Сколько лет, сколько зим!"
+  },
+  {
+   "text": "How's the family?",
+   "translation": "Как семья?"
+  },
+  {
+   "text": "Thanks for having me.",
+   "translation": "Спасибо, что пригласили."
+  },
+  {
+   "text": "It was a pleasure.",
+   "translation": "Мне было приятно."
+  },
+  {
+   "text": "You're right.",
+   "translation": "Ты прав."
+  },
+  {
+   "text": "I was wrong.",
+   "translation": "Я был неправ."
+  },
+  {
+   "text": "You can say that again!",
+   "translation": "Это уж точно!"
+  },
+  {
+   "text": "That remains to be seen.",
+   "translation": "Это ещё вопрос."
+  },
+  {
+   "text": "As soon as possible.",
+   "translation": "Как можно скорее."
+  },
+  {
+   "text": "You've convinced me.",
+   "translation": "Ты меня убедил."
+  },
+  {
+   "text": "I'm not into it.",
+   "translation": "Это не по мне."
+  },
+  {
+   "text": "It's not a big deal.",
+   "translation": "Ничего особенного, не переживай."
+  },
+  {
+   "text": "I'll keep that in mind.",
+   "translation": "Буду иметь в виду."
+  },
+  {
+   "text": "Let's wrap it up.",
+   "translation": "Давай закругляться."
+  }
+ ]
+}

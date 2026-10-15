@@ -585,21 +585,54 @@ def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
     assert opened == [(cid, False)]
 
 
-def test_each_daily_phrase_has_grammar_and_another_example():
+def test_daily_phrase_pool_has_300_unique_conversational_phrases_per_language():
     import live_language
 
-    for phrases in live_language._DAILY_PHRASES.values():
-        for phrase in phrases:
-            assert phrase["translation"] and phrase["more"] and phrase["more_translation"]
-            assert phrase["rule"].count("_") % 2 == 0 and "_" in phrase["rule"]
-            assert " → " in phrase["rule"] or phrase["rule"].startswith(("Present", "Третий"))
-            assert phrase["more"] != phrase["text"]
+    for language in ("nl", "en"):
+        phrases = live_language.daily_phrases(language)
+        texts = [phrase["text"].casefold() for phrase in phrases]
+        assert len(phrases) >= 300 and len(set(texts)) == len(texts)  # запас 300+ без повторов
+        assert all(phrase["translation"].strip() and " → " not in phrase["text"] for phrase in phrases)
+        assert all(not phrase["text"].endswith("...") for phrase in phrases)
+
+
+def test_daily_phrase_never_repeats_until_the_pool_is_used_up(monkeypatch):
+    import live_language
+    from datetime import date, datetime
+    profile = {}
+    monkeypatch.setattr(live_language.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(live_language.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+    pool = live_language.daily_phrases("en")
+    days = iter(range(len(pool) + 1))
+
+    class Clock:
+        @staticmethod
+        def now(_tz=None):
+            return datetime.combine(date.fromordinal(date(2026, 1, 1).toordinal() + current[0]), datetime.min.time())
+
+    current = [0]
+    monkeypatch.setattr(live_language, "datetime", Clock)
+    shown = []
+    for current[0] in days:
+        first = live_language.daily_phrase("42", "en")["text"]
+        assert live_language.daily_phrase("42", "en")["text"] == first  # весь день — одна фраза
+        shown.append(first)
+
+    assert len(set(shown[:len(pool)])) == len(pool)  # весь запас без единого повтора
+    assert shown[len(pool)] != shown[len(pool) - 1]  # новый круг не начинается со вчерашней
 
 
 def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     import live_language
     from ui import menu as menu_ui
-    lesson = next(item for item in live_language._DAILY_PHRASES["nl"] if item["topic"] == "Hoeven … te")
+    lesson = {
+        "topic": "Hoeven … te", "meaning": "не нужно что-то делать",
+        "explain": "Обычно используется с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце: "
+                   "We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
+        "more": "Je hoeft niet te koken, we eten buiten.",
+        "more_translation": "Тебе не нужно готовить, мы едим вне дома.",
+    }
 
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
 
@@ -611,7 +644,7 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     ]
     assert "Пример:" not in text
     assert all(item.get("topic") and item.get("meaning") and item.get("explain")
-               for items in live_language._DAILY_PHRASES.values() for item in items)
+               for language in ("nl", "en") for item in live_language.grammar_topics(language))
 
 
 def test_choose_language_button_is_green_right_under_add():

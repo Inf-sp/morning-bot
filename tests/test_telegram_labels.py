@@ -85,7 +85,7 @@ def test_day_summary_has_no_restaurant_line():
 def test_day_summary_word_keeps_capital_letter_after_label():
     message = day_summary("Пн, 20 июля", "Алкмар", word_line="tijd → время")
 
-    assert "🎯 Тренажер: Tijd → Время" in message.text
+    assert "💬 Фраза дня: Tijd → Время" in message.text
 
 
 def test_free_text_formatter_applies_same_rule_to_plain_and_markdown_labels():

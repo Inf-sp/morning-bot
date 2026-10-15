@@ -96,6 +96,7 @@ def day_summary(
     weather_line="",
     word_line="",
     word_lang="nl",
+    word_title="Фраза дня",
     movie_rebus=None,
     outfit_items=None,
     outfit_emoji="🧶",
@@ -147,8 +148,8 @@ def day_summary(
 
     if word_line:
         term, translation = _split_word_translation(word_line)
-        b.text_line("🎯 ")
-        b.label("Тренажер")
+        b.text_line("💬 ")
+        b.label(word_title or "Фраза дня")
         if term:
             b.text_line(f" {term}")
         if translation:

@@ -328,21 +328,23 @@ def _clip_quote(text):
 
 
 def _word_of_day(cid):
-    """Фраза дня для строки «Тренажер»: «Doe maar rustig aan → Не торопись.» (перевод — под спойлером).
+    """Строка «💬 Фраза дня»: «Doe maar rustig aan → Не торопись.» (перевод — под спойлером).
 
-    Фраза дня живёт в «Моём дне»; экран «Обучение» начинается с грамматики (live_language).
+    Каждый день новая разговорная фраза из запаса 300+ на изучаемом языке, без повторов до конца запаса
+    (live_language.daily_phrase); экран «Обучение» начинается с грамматики.
     """
     if not store.learning_is_enabled(cid):
         return "", ""
     import live_language
     lang = learning._active_language_code(cid)
-    variant = int((store.get_profile(cid) or {}).get("learning_home_variant") or 0)
-    phrase = live_language.daily_phrase(lang, variant=variant)
+    phrase = live_language.daily_phrase(cid, lang)
     text = str(phrase.get("text") or "").strip().rstrip(".")
-    translation = str(phrase.get("translation") or "").strip().rstrip(".")
+    translation = str(phrase.get("translation") or "").strip()
     if not text or not translation:
         return "", lang
-    return f"{_cap(text)} → {_cap(translation)}.", lang
+    if translation[-1] not in ".!?…":  # «Удачи!» — без лишней точки
+        translation += "."
+    return f"{_cap(text)} → {_cap(translation)}", lang
 
 
 def _movie_rebus_of_day(day):
@@ -351,7 +353,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 19
+_DAY_CACHE_VERSION = 20
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -623,8 +625,10 @@ def _build_day_text(cid, *, refresh_current=False):
     weekday_name = _WEEKDAY_SHORT[now.weekday()]
     learning_enabled = store.learning_is_enabled(cid)
     trip = _vacation_blocks(cid)
-    if trip.get("word"):  # в отпуске «Тренажер» — слово на языке страны
+    word_title = "Фраза дня"
+    if trip.get("word"):  # в отпуске — слово на языке страны поездки
         word_line, word_lang = (trip["word"], "") if on("word") else ("", "")
+        word_title = "Слово дня"
     else:
         word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
     movie_rebus = {} if learning_enabled or trip.get("word") or not on("word") \
@@ -647,6 +651,7 @@ def _build_day_text(cid, *, refresh_current=False):
         weather_line=weather_line,
         word_line=word_line,
         word_lang=word_lang,
+        word_title=word_title,
         movie_rebus=movie_rebus,
         outfit_items=outfit_summary["items"],
         outfit_emoji=outfit_summary["emoji"],

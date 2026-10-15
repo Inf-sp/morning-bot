@@ -179,10 +179,10 @@ def test_country_block_and_summary_lines():
         "Языки": "африкаанс, английский и ещё 1", "Валюта": "ZAR (R) · 1 € = 18,53 R",
         "Время": "на 1 ч больше, чем в Амстердаме", "Телефонный код": "+27",
     }
-    text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", vacation={
+    text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", word_title="Слово дня", vacation={
         "country_lines": [("Столица", "Pretoria")]}).text
     assert "В отпуске" not in text and "дома" not in text  # строку «✈️ В отпуске … · дома …» не пишем
-    assert "🌍 Страна:\nСтолица: Pretoria" in text and "🎯 Тренажер: Dankie → Спасибо" in text
+    assert "🌍 Страна:\nСтолица: Pretoria" in text and "💬 Слово дня: Dankie → Спасибо" in text  # в отпуске — слово страны
     assert "Разговорник" not in text
 
 

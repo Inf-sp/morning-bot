@@ -102,10 +102,12 @@ def test_myday_trainer_line_is_the_phrase_of_the_day(monkeypatch):
     monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: True)
     monkeypatch.setattr(myday.store, "get_profile", lambda _cid: {})
     monkeypatch.setattr(myday.learning, "_active_language_code", lambda _cid: "nl")
-    monkeypatch.setattr(live_language, "daily_phrase", lambda _lang, variant=0: {
+    monkeypatch.setattr(live_language, "daily_phrase", lambda _cid, _lang: {
         "text": "Doe maar rustig aan.", "translation": "Не торопись"})
 
     assert myday._word_of_day("42") == ("Doe maar rustig aan → Не торопись.", "nl")
+    monkeypatch.setattr(live_language, "daily_phrase", lambda _cid, _lang: {"text": "Succes!", "translation": "Удачи!"})
+    assert myday._word_of_day("42") == ("Succes! → Удачи!", "nl")  # без лишней точки после «!»
 
 
 def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
@@ -117,7 +119,7 @@ def test_day_summary_keeps_capitalized_dictionary_translation_after_arrow():
         word_lang="nl",
     )
 
-    assert "🎯 Тренажер: Slim → Худой, умный." in message.text
+    assert "💬 Фраза дня: Slim → Худой, умный." in message.text
     assert "→ Худой" in message.text
 
 

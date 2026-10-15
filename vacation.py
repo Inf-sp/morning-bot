@@ -604,7 +604,7 @@ def lesson_today(cid, today=None) -> dict:
 
 
 def word_today(cid, today=None) -> str:
-    """«Dankie → Спасибо» для строки «Тренажер» в «Моём дне» или ""."""
+    """«Dankie → Спасибо» для строки «Слово дня» в «Моём дне» (в отпуске вместо фразы дня) или ""."""
     word = _of_day(guide(cid).get("words") or [], today)
     return f"{word['text']} → {word['ru']}" if word else ""
 
