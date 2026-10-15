@@ -448,10 +448,12 @@ def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
 def _today_picks(monkeypatch, *, rain=False, concert=True):
     import leisure_hub
     from datetime import date
-    film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "genres": "история, драма",
+    film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "year": "2026",
+                                     "genres": "история, драма",
                                      "runtime": 112, "overview": "Историческая драма о восстании. Второе. Третье.",
                                      "because": "Гладиатор", "trailer_url": "https://y.example/t"})
-    series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "genres": "драма", "network": "Prime Video",
+    series = ({"title": "Нили"}, {"id": 2, "kind": "tv", "name": "Нили", "release_date": "2025-09-12",
+                                 "genres": "драма", "network": "Prime Video",
                                  "episode_runtime": 45, "url": "https://tmdb.example/tv/2"})
     monkeypatch.setattr(leisure_hub.leisure_movies, "_cached_movie",
                         lambda _cid, kind="movie", stale=False: film if kind == "movie" else series)
@@ -477,10 +479,10 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
         "Фильм на вечер:\n"
-        "Восставший · история · драма · 1 ч 52 мин • Историческая драма о восстании. Второе.\n"
+        "Восставший · 2026 · история · драма · 1 ч 52 мин • Историческая драма о восстании. Второе.\n"
         "Не слишком длинный — как раз на будний вечер.\n\n"
         "Если не хочется кино:\n"
-        "Сериал — Нили · Prime Video · драма · серия 45 мин\n"
+        "Сериал — Нили · 2025 · Prime Video · драма · серия 45 мин\n"
         "Музыка — Focus Group · Инди\n\n"
         "Если захочется выйти:\n"
         "Muse — сегодня, Ziggo Dome\n\n"
@@ -498,7 +500,7 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
 
     # Без фильма главной становится первая карточка — без описания строка не ломается.
     msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
-    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · Prime Video")
+    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · 2025 · Prime Video")
     assert "Другие варианты:\nМузыка — Focus Group" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()

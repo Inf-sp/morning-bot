@@ -292,9 +292,11 @@ def _movie_pick(kind, cached):
     else:
         why = ""
     url = leisure_ui.trailer_link({**it, **tm})  # YouTube-трейлер, без него — поиск трейлера на YouTube
+    year = str(tm.get("year") or tm.get("release_date") or "")[:4]
     meta = [str(tm.get("genres") or "").replace(", ", " · ")]
     if kind == "tv":
         meta = [tm.get("network") or "", *meta]
+    meta = [year if year.isdigit() else "", *meta]  # год — сразу после названия: «Восставший · 2026 · драма»
     meta.append(leisure_ui.runtime_label(minutes, episode=kind == "tv"))
     return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url,
             "meta": meta, "about": tm.get("overview") or "", "why": why}
