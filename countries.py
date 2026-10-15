@@ -288,6 +288,28 @@ def artist_latest_album(name, fetch=True) -> dict:
     return album if isinstance(album, dict) else {}
 
 
+_FANS_TTL = 30 * 86400
+
+
+def _deezer_fans(name) -> dict:
+    """Поклонники артиста на Deezer (без ключа): {"fans": N}; нет на Deezer — 0. Сбой — исключение (не кэшируется)."""
+    response = requests.get("https://api.deezer.com/search/artist", params={"q": name, "limit": 5}, timeout=_TIMEOUT)
+    response.raise_for_status()
+    data = response.json()
+    if "error" in data:  # Deezer отвечает 200 с {"error": …} при лимите — это не «артиста нет»
+        raise RuntimeError(f"deezer error: {data['error']}")
+    wanted = _artist_key(name)
+    return {"fans": max((int(row.get("nb_fan") or 0) for row in data.get("data") or []
+                         if _artist_key(row.get("name")) == wanted), default=0)}
+
+
+def artist_fans(name, fetch=True) -> int | None:
+    """Число поклонников артиста на Deezer — мера известности; None — неизвестно (сбой, нет кэша при fetch=False)."""
+    found = _person_cache(config.ARTIST_FANS_KEY, main_artist(name), _deezer_fans, fetch, keep_empty=True,
+                          ttl=_FANS_TTL)
+    return int(found["fans"]) if isinstance(found, dict) else None
+
+
 def artist_years(name, fetch=True) -> str:
     """Годы активности группы по MusicBrainz («с 2011», «2005–2019»); у сольного артиста и без данных — ""."""
     return _person_cache(config.ARTIST_YEARS_KEY, main_artist(name), _group_years, fetch, keep_empty=True)

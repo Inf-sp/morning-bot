@@ -27,6 +27,20 @@ MAX_ANCHORS = 12
 # Рейтинг на нескольких случайных оценках не является сигналом качества.
 MIN_VOTE_COUNT = 50
 MIN_SIMILAR_GENRE_RATIO = 0.5
+# Планка «топового» — ступенями: (рейтинг TMDb, голосов у фильма, голосов у сериала). Сначала строгая; пусто —
+# мягче, последняя — прежние 7.0 и 50 голосов, чтобы карточка не оставалась пустой. У сериалов голосов меньше.
+QUALITY_STEPS = ((7.5, 1000, 300), (7.0, 300, 100), (7.0, MIN_VOTE_COUNT, MIN_VOTE_COUNT))
+
+
+def top_quality(items, min_rating=0.0) -> list:
+    """Кандидаты самой строгой ступени QUALITY_STEPS, где кто-то есть; порядок сохраняется.
+    min_rating — порог из настроек пользователя, если он выше ступени."""
+    for rating, movie_votes, tv_votes in QUALITY_STEPS:
+        passed = [c for c in items if float(c.get("rating") or 0) >= max(rating, float(min_rating or 0))
+                  and int(c.get("vote_count") or 0) >= (tv_votes if c.get("kind") == "tv" else movie_votes)]
+        if passed:
+            return passed
+    return []
 
 
 def _norm(s):
@@ -177,6 +191,8 @@ def collect_candidates(taste):
 
 # ---------- фильтрация ----------
 def filter_candidates(cid, pool, min_rating):
+    """Кандидаты пула без исключённых, выключенных регионов, старше 2000 года — и на самой строгой ступени
+    качества, где кто-то остался (`top_quality`)."""
     import countries
     import movie_recommendation
     excluded = _excluded_norms(cid)
@@ -187,9 +203,7 @@ def filter_candidates(cid, pool, min_rating):
             continue
         if not countries.allowed(c, regions_off):  # выключенный регион — строгий фильтр
             continue
-        if c.get("adult") or int(c.get("vote_count") or 0) < MIN_VOTE_COUNT:
-            continue
-        if (c.get("rating") or 0) < min_rating:
+        if c.get("adult"):
             continue
         raw_date = str(c.get("release_date") or "")[:10]
         try:
@@ -199,7 +213,7 @@ def filter_candidates(cid, pool, min_rating):
         if released < date(2000, 1, 1):
             continue
         out.append(c)
-    return out
+    return top_quality(out, min_rating)
 
 
 # ---------- ранжирование ----------
@@ -216,7 +230,7 @@ def _score(c, taste, prefs=None):
     score += (c.get("rating") or 0) * 0.5
     score += math.log10(max(1, int(c.get("vote_count") or 0))) * 0.8
     score += min(float(c.get("popularity") or 0), 100.0) * 0.02
-    score += (c.get("freq", 1) - 1) * 2.0  # рекомендован от нескольких любимых
+    score += (c.get("freq", 1) - 1) * 4.0  # TMDb советует по нескольким любимым — самый надёжный сигнал вкуса
     # Действующие предпочтения из настроек (приоритет, не запрет).
     if prefs:
         if prefs.get("type_pref") in ("movie", "tv") and c.get("kind") == prefs["type_pref"]:
@@ -247,15 +261,7 @@ def recommend(cid, prefs=None, limit=10):
     pool = collect_candidates(taste)
     if not pool:
         return [], taste
-    start = max(
-        RATING_STEPS[0],
-        float((prefs or {}).get("min_rating") or RATING_STEPS[0]),
-    )
-    steps = [r for r in RATING_STEPS if r <= start] or [RATING_STEPS[-1]]
-    if start not in steps:
-        steps = [start] + steps
-    for min_rating in steps:
-        filtered = filter_candidates(cid, pool, min_rating)
-        if filtered:
-            return rank(filtered, taste, prefs)[:limit], taste
-    return [], taste
+    only = (prefs or {}).get("only")  # «Фильмы» / «Сериалы»: ступень качества — среди своего типа
+    pool = {key: c for key, c in pool.items() if not only or (c.get("kind") or "movie") == only}
+    filtered = filter_candidates(cid, pool, float((prefs or {}).get("min_rating") or 0))
+    return rank(filtered, taste, prefs)[:limit], taste

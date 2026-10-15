@@ -697,7 +697,8 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         cand_genre = str(cand.get("genre") or "").strip().casefold() if isinstance(cand, dict) else ""
         _log.info("send_listen: candidate cid=%s cand_type=%s cand_artist=%r",
                   cid, type(cand).__name__, cand_artist)
-        if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known:
+        if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known \
+                and await _well_known(cand_artist):
             data = cand
             break
     if not data or not data.get("artist"):
@@ -745,6 +746,22 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await _deliver_artist_card(
         bot, cid, msg, _listen_kb(), status=status)
+
+
+_MIN_DEEZER_FANS = 30_000  # ponytail: порог «известного» артиста; у инди на Deezer поклонников меньше, чем у поп-звёзд
+
+
+async def _well_known(artist) -> bool:
+    """Артист дня — только известный: от _MIN_DEEZER_FANS поклонников на Deezer. Deezer недоступен — не отсеиваем."""
+    import countries
+    try:
+        fans = await asyncio.wait_for(asyncio.to_thread(countries.artist_fans, artist), 4)
+    except Exception:
+        return True
+    if fans is not None and fans < _MIN_DEEZER_FANS:
+        _log.info("send_listen: %r skipped — %s fans on Deezer", artist, fans)
+        return False
+    return True
 
 
 async def _release_artist(cid, genres, known):

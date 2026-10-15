@@ -443,8 +443,8 @@ def _discover_pick(cid, genre_ids, prefs, require_genre_ids=None, reason=None):
                 if not countries.allowed(c, (prefs or {}).get("regions_off")):
                     continue
                 pool[f"{c['kind']}:{c['id']}"] = c
-        if pool:
-            ranked = movie_engine.rank(list(pool.values()), taste, prefs)
+        if pool:  # сначала самые сильные по рейтингу и числу голосов
+            ranked = movie_engine.rank(movie_engine.top_quality(list(pool.values()), mr), taste, prefs)
             it, tm = _first_allowed_card(cid, ranked, prefs, reason=reason)
             if tm:
                 return it, tm

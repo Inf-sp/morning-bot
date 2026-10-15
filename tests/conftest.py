@@ -36,6 +36,7 @@ def _no_country_network(monkeypatch):
     monkeypatch.setattr(countries, "artist_label", lambda _name, fetch=True: "")
     monkeypatch.setattr(countries, "artist_years", lambda _name, fetch=True: "")
     monkeypatch.setattr(countries, "artist_latest_album", lambda _name, fetch=True: {})
+    monkeypatch.setattr(countries, "artist_fans", lambda _name, fetch=True: None)
     monkeypatch.setattr(countries, "title_info", lambda *_a, **_k: {})
     yield
 

@@ -449,6 +449,8 @@ def _pick_good_movie(items, used_titles, prefs=None):
             accepted.append((movie_engine._score(tm or {}, {
                 "genres": {}, "countries": {}, "kind_pref": None,
             }, prefs), it, tm))
+    top = {id(tm) for tm in movie_engine.top_quality([row[2] for row in accepted])}  # самая строгая ступень
+    accepted = [row for row in accepted if id(row[2]) in top]
     if not accepted:
         return None, None
     _score, item, tm = max(accepted, key=lambda row: row[0])
@@ -562,9 +564,9 @@ async def get_current_movie(cid, kind="movie"):
             except Exception as error:
                 _log.info("movie home TMDb unavailable: %s", type(error).__name__)
                 candidates = []
-            candidates = [movie for movie in candidates
-                          if movie_engine._norm(movie.get("name")) not in excluded
-                          and int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT]
+            candidates = movie_engine.top_quality(
+                [movie for movie in candidates if movie_engine._norm(movie.get("name")) not in excluded],
+                prefs.get("min_rating"))
             if candidates:
                 break
         candidates = movie_engine.rank(candidates, {
@@ -646,8 +648,8 @@ async def _discover_movie_pick(cid, prefs, region=None):
             items = [movie for movie in items
                      if int(movie.get("vote_count") or 0) >= movie_engine.MIN_VOTE_COUNT
                      and movie_engine._norm(movie.get("name")) not in hard_excluded]
-            fresh = [movie for movie in items
-                     if movie_engine._norm(movie.get("name")) not in excluded]
+            fresh = movie_engine.top_quality([movie for movie in items
+                                              if movie_engine._norm(movie.get("name")) not in excluded], min_rating)
             if fresh:
                 tm = await _first_fitting(movie_engine.rank(fresh, {
                     "genres": {}, "countries": {}, "kind_pref": None,

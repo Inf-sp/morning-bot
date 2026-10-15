@@ -149,3 +149,26 @@ def test_latest_album_is_the_newest_released_studio_album(monkeypatch):
     assert asked == [("release-group", {"artist": "mbid-1", "type": "album", "limit": 100})]
     monkeypatch.setattr(countries, "_musicbrainz_artists", lambda _name: [])
     assert countries._latest_album("Nobody") == {}
+
+
+def test_deezer_fans_match_the_exact_artist_and_errors_are_not_answers(monkeypatch):
+    import pytest
+
+    class Response:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.data
+
+    rows = {"data": [{"name": "Alvvays Tribute", "nb_fan": 900000}, {"name": "ALVVAYS", "nb_fan": 61000}]}
+    monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response(rows))
+    assert countries._deezer_fans("Alvvays") == {"fans": 61000}  # трибьют с похожим именем не в счёт
+    monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response({"data": []}))
+    assert countries._deezer_fans("Nobody") == {"fans": 0}
+    monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response({"error": {"code": 4}}))
+    with pytest.raises(RuntimeError):  # лимит Deezer — сбой, а не «0 поклонников»
+        countries._deezer_fans("Alvvays")

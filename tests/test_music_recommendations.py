@@ -356,3 +356,37 @@ def test_music_prompt_asks_for_a_lively_verified_card_without_why(monkeypatch):
     assert '"style"' in prompt and "2–3 предложения" in prompt and "Используй только проверяемые факты" in prompt
     assert '"why"' not in prompt and "почему" not in prompt.casefold()
     assert delivered[0].startswith("🎸 Wednesday\n\nИнди-рок") and "Почему" not in delivered[0]
+
+
+def test_obscure_ai_candidate_is_skipped_for_a_well_known_one(monkeypatch):
+    import countries
+    delivered = []
+    fans = {"Tiny Band": 4000, "Wolf Alice": 450000}
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            delivered.append(text)
+
+    async def candidates(*_args, **_kwargs):
+        return {"candidates": [
+            {"artist": "Tiny Band", "genre": "indie", "desc": "Тихий инди."},
+            {"artist": "Wolf Alice", "genre": "indie", "desc": "Гитарный рок."},
+        ]}
+
+    async def same(data):
+        return data
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", candidates)
+    monkeypatch.setattr(leisure_music, "_attach_track_links", same)
+    monkeypatch.setattr(countries, "artist_fans", lambda name, fetch=True: fans.get(name))
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    assert "Wolf Alice" in delivered[0] and "Tiny Band" not in delivered[0]  # 4 тыс. поклонников — не «топ»

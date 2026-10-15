@@ -202,3 +202,29 @@ def test_trailer_takes_only_official_videos_in_good_quality():
 
     assert tmdb._pick_trailer(videos) == "hd"  # не фанатский, 720p+ раньше более свежего 480p
     assert tmdb._pick_trailer(videos[:1]) == ""  # только неофициальный — нет трейлера (дальше поиск с проверкой)
+
+
+def test_recommendations_take_the_strictest_quality_step_that_has_titles():
+    import movie_engine
+    titles = [
+        {"name": "Нишевый", "kind": "movie", "rating": 8.4, "vote_count": 120},
+        {"name": "Хит", "kind": "movie", "rating": 7.8, "vote_count": 25000},
+        {"name": "Сериал-хит", "kind": "tv", "rating": 8.1, "vote_count": 450},  # у сериалов голосов меньше
+        {"name": "Середнячок", "kind": "movie", "rating": 7.2, "vote_count": 5000},
+    ]
+
+    assert [c["name"] for c in movie_engine.top_quality(titles)] == ["Хит", "Сериал-хит"]
+    # Строгой ступени никто не прошёл — мягче, но карточка не пустая.
+    assert [c["name"] for c in movie_engine.top_quality(titles[3:])] == ["Середнячок"]
+    assert [c["name"] for c in movie_engine.top_quality(titles[:1])] == ["Нишевый"]  # последняя — 7.0 и 50 голосов
+    assert movie_engine.top_quality(titles, min_rating=8.0) == [titles[2]]  # порог из настроек выше ступени
+    assert movie_engine.top_quality([{"name": "Слабый", "rating": 6.5, "vote_count": 9000}]) == []
+
+
+def test_title_recommended_by_several_favorites_ranks_higher():
+    import movie_engine
+    taste = {"genres": {}, "countries": {}, "kind_pref": None}
+    once = {"name": "A", "rating": 8.0, "vote_count": 5000, "popularity": 90, "freq": 1}
+    twice = {"name": "B", "rating": 7.6, "vote_count": 2000, "popularity": 40, "freq": 3}
+
+    assert [c["name"] for c in movie_engine.rank([once, twice], taste)] == ["B", "A"]
