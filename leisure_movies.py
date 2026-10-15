@@ -363,7 +363,7 @@ def _movie_genre_menu_kb(back="m_leisure", kind="movie"):
         rows.append(nav_row(back))
         return InlineKeyboardMarkup(rows)
     rows = [
-        # Новинка — первой, как в книгах, музыке и играх.
+        # Новинка — первой, как в музыке.
         [InlineKeyboardButton("🆕 Новинка", callback_data="nov_movie")],
         *[[InlineKeyboardButton(label, callback_data=f"movie_g_{gid}")]
           for label, gid in _GENRE_MENU],
@@ -681,10 +681,6 @@ async def _lookup_movie_tm(it):
 
 
 async def send_recos(bot, cid, kind, status=None):
-    if kind == "book":
-        import leisure_books
-        await leisure_books.send_books_reco(bot, cid, status=status)
-        return
     kind = "tv" if kind == "tv" else "movie"  # «Фильмы» и «Сериалы» — строго свой тип
     prefs = _kind_prefs(cid, kind)
     inclusive_pick = (

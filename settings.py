@@ -362,8 +362,6 @@ def preferences_summary(cid) -> list:
     import movie_recommendation
     movie = [countries.regions_off_text(movie_recommendation.regions_off(cid)),
              f"от ⭐ {get(cid, 'movie_min_rating', '')}" if get(cid, "movie_min_rating", "") else ""]
-    books = ["новинки" if get(cid, "book_recency", "") == "new" else "",
-             f"от ⭐ {get(cid, 'book_min_rating', '')}" if get(cid, "book_min_rating", "") else ""]
     return [
         ("Обучение", learning),
         ("Кухни", ", ".join(label.split(" ", 1)[-1] for label in cuisine_labels(cid)) or _NOT_SET),
@@ -371,7 +369,6 @@ def preferences_summary(cid) -> list:
         ("Стиль", " · ".join(style_group_labels(style_groups(cid))) or _NOT_SET),
         ("Музыка", ", ".join(music[key] for key in leisure_music._music_styles(cid)) or _NOT_SET),
         ("Кино", " · ".join(part for part in movie if part) or _NOT_SET),
-        ("Книги", " · ".join(part for part in books if part) or _NOT_SET),
     ]
 
 
@@ -391,7 +388,6 @@ async def send_preferences(bot, cid, q=None):
         [InlineKeyboardButton("🧵 Стиль", callback_data="set_pref_style")],
         [InlineKeyboardButton("🎧 Музыка", callback_data="set_pref_music")],
         [InlineKeyboardButton("🎬 Кино", callback_data="set_pref_movie")],
-        [InlineKeyboardButton("📚 Книги", callback_data="set_pref_books")],
         nav_row("set_home"),
     ]
     msg = settings_ui.preferences_home(preferences_summary(cid))
@@ -1097,11 +1093,8 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_pref_movie":
         import leisure_movies
         await leisure_movies.send_movie_prefs(bot, cid, q)
-    elif data == "set_pref_books":
-        import leisure_books
-        await leisure_books.send_book_preferences(bot, cid, q)
-    elif data == "set_pref_games" or data.startswith("set_game_"):
-        # Раздела игр больше нет: старые кнопки настроек игр ведут к предпочтениям.
+    elif data in ("set_pref_books", "set_pref_games") or data.startswith("set_game_"):
+        # Разделов книг и игр больше нет: старые кнопки их настроек ведут к предпочтениям.
         await send_preferences(bot, cid, q)
     elif data == "set_lifehacks" or data.startswith(("set_lh_", "set_lhtopic_")):
         # Лайфхаков больше нет: кнопки из старых сообщений ведут к блокам «Моего дня».

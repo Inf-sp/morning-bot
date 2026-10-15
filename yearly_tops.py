@@ -6,25 +6,10 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 import config
-import google_books
-import open_library
 import tmdb
 from ui import leisure as leisure_ui
 from ui.navigation import nav_row
 
-
-_BOOKS_2025 = (
-    {"title": "Flesh", "author": "David Szalay", "genre": "литературная проза",
-     "summary": "Сдержанный роман о теле, амбициях и цене социального подъёма."},
-    {"title": "The Loneliness of Sonia and Sunny", "author": "Kiran Desai", "genre": "семейная сага",
-     "summary": "История двух людей между Индией и Америкой, любовью и семейной памятью."},
-    {"title": "The Book of Records", "author": "Madeleine Thien", "genre": "историческая проза",
-     "summary": "Многослойный роман о памяти, изгнании и людях, которых разделяют эпохи."},
-    {"title": "My Friends", "author": "Fredrik Backman", "genre": "современная проза",
-     "summary": "Тёплая история о дружбе, искусстве и следе, который люди оставляют друг в друге."},
-    {"title": "One Day, Everyone Will Have Always Been Against This", "author": "Omar El Akkad", "genre": "эссе",
-     "summary": "Личное и острое размышление о справедливости, принадлежности и политическом разочаровании."},
-)
 
 def previous_year() -> int:
     return datetime.now(config.TZ).year - 1
@@ -55,32 +40,11 @@ async def get_items(kind):
             if len(result) == 5:
                 break
         return result
-    if kind == "book":
-        return await asyncio.gather(*(
-            asyncio.to_thread(_enrich_book, item) for item in _BOOKS_2025
-        ))
     return []
 
 
-def _enrich_book(item):
-    enriched = google_books.enrich_book(item)
-    if enriched.get("cover_url"):
-        return enriched
-    matches = open_library.search_books(
-        item.get("title"), author=item.get("author"), year=previous_year(),
-        max_results=5, english_only=True,
-    )
-    if not matches:
-        return enriched
-    result = dict(enriched)
-    for field in ("cover_url", "info_link", "isbn"):
-        if matches[0].get(field):
-            result[field] = matches[0][field]
-    return result
-
-
 def _photo(item):
-    return str(item.get("poster") or item.get("cover_url") or "").strip()
+    return str(item.get("poster") or "").strip()
 
 
 def _view(kind, items, page=0):

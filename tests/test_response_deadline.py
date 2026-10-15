@@ -10,7 +10,6 @@ import pytest
 import ai
 import bot
 import bot_maintenance
-import leisure_books
 import tracking
 from fakes import RecordingBot
 
@@ -207,29 +206,6 @@ def test_finished_action_is_no_longer_active():
     assert tracking.has_active_actions() is False
 
 
-def test_book_card_skips_optional_network_after_action_budget(monkeypatch):
-    sent = []
-
-    monkeypatch.setattr(
-        leisure_books.google_books, "enrich_book",
-        lambda _item: (_ for _ in ()).throw(AssertionError("network called")),
-    )
-    monkeypatch.setattr(
-        leisure_books, "_book_cover",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("network called")),
-    )
-
-    trace = tracking.start_action("42", "Книги", "book", budget_seconds=0.1)
-    try:
-        asyncio.run(leisure_books._send_book_card(
-            RecordingBot(sent), "42", {"title": "1984", "author": "Джордж Оруэлл"}, 0,
-        ))
-    finally:
-        tracking.finish_action(trace)
-
-    assert sent and "1984" in sent[0]["text"]
-
-
 def test_home_cache_warm_yields_to_active_user_action(monkeypatch):
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: True)
@@ -376,9 +352,18 @@ def test_myday_final_warm_retries_without_saving_partial_summary(monkeypatch):
     assert retries[0][1]["data"] == "myday"
 
 
-def test_nightly_premieres_warm_movies_and_books(monkeypatch):
+def _patch_mutate_kv(monkeypatch, store):
+    """mutate_kv поверх уже подменённых в тесте _load/_save."""
+    def mutate(key, change):
+        value, result = change(copy.deepcopy(store._load(key) or {}))
+        store._save(key, value)
+        return result
+
+    monkeypatch.setattr(store, "mutate_kv", mutate)
+
+
+def test_nightly_premieres_warm_movies(monkeypatch):
     movie_calls = []
-    book_calls = []
 
     monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42", "43", "44"])
     monkeypatch.setattr(bot.tracking, "has_active_actions", lambda: False)
@@ -390,27 +375,9 @@ def test_nightly_premieres_warm_movies_and_books(monkeypatch):
     async def warm_movie(cid):
         movie_calls.append(cid)
 
-    async def warm_books():
-        book_calls.append(True)
-
     monkeypatch.setattr(bot.leisure_movies, "warm_movie_premieres_cache", warm_movie)
-    monkeypatch.setattr(bot.leisure_books, "warm_book_premieres_cache", warm_books)
     monkeypatch.setattr(bot.settings, "notif_on", lambda *_args: True)
 
     asyncio.run(bot.job_warm_movie_premieres_cache(object()))
-    asyncio.run(bot.job_warm_book_premieres_cache(object()))
 
     assert movie_calls == ["42", "44"]
-    assert book_calls == [True]
-
-
-
-
-def _patch_mutate_kv(monkeypatch, store):
-    """mutate_kv поверх уже подменённых в тесте _load/_save."""
-    def mutate(key, change):
-        value, result = change(copy.deepcopy(store._load(key) or {}))
-        store._save(key, value)
-        return result
-
-    monkeypatch.setattr(store, "mutate_kv", mutate)

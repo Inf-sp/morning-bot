@@ -1,7 +1,7 @@
-"""Страны и регионы для кино, книг и музыки: «🇯🇵 Япония» и фильтр регионов кино.
+"""Страны и регионы для кино и музыки: «🇯🇵 Япония» и фильтр регионов кино.
 
 Названия и части света — из открытого датасета mledoze/countries (кэш 90 дней), страна
-артиста — MusicBrainz, страна автора — Wikidata (wikidata_books). Страна не угадывается:
+артиста — MusicBrainz, при сбое — Wikidata (wikidata_books). Страна не угадывается:
 нет данных — нет строки, а фильм с неизвестной страной фильтр регионов не отсеивает.
 """
 import logging
@@ -218,18 +218,6 @@ def _artist_country(name):
 def artist_label(name, fetch=True) -> str:
     """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
     return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _artist_country, fetch))
-
-
-def author_cc(name, fetch=True) -> str:
-    """ISO-код страны автора книги (гражданство в Wikidata) или ""."""
-    import wikidata_books
-    first = str(name or "").split(",")[0].strip()  # «A, B» — соавторы через запятую: ищем первого
-    return _person_cache(config.AUTHOR_COUNTRY_KEY, first, wikidata_books.author_country, fetch)
-
-
-def author_label(name, fetch=True) -> str:
-    """«🇬🇧 Великобритания» для автора книги или ""."""
-    return label(author_cc(name, fetch))
 
 
 def title_info(kind, tmdb_id, fetch=True) -> dict:

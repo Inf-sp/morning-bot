@@ -16,7 +16,6 @@ import store
 
 _log = logging.getLogger(__name__)
 
-GOOGLE_BOOKS_DAILY_LIMIT = 1000
 TAVILY_MONTHLY_LIMIT = 1000
 TAVILY_SOFT_LIMIT = 900
 
@@ -47,14 +46,6 @@ def _local_request_counter(period_key, used_key, period, limit, consume):
         return store.mutate_kv(config.API_USAGE_KEY, mut)
     except Exception:
         return {"used": 0, "remaining": limit, "allowed": True}
-
-
-def google_books_requests(*, consume=False) -> dict:
-    """Два локальных поля дневного лимита Google Books в общем KV состояния."""
-    return _local_request_counter(
-        "google_books_requests_date", "google_books_requests_used",
-        _now().date().isoformat(), GOOGLE_BOOKS_DAILY_LIMIT, consume,
-    )
 
 
 def gemini_requests(model="", *, consume=False) -> dict:

@@ -31,7 +31,6 @@ _ADD_CHOICE_TTL = 15 * 60
 _add_choices = {}
 _COLLECTIONS = {
     "movies": (config.FAVORITE_MOVIES_KEY, "cinema_favorites"),
-    "books": (config.FAVORITE_BOOKS_KEY, "books_favorites"),
     "artists": (config.FAVORITE_ARTISTS_KEY, "music_favorite_artists"),
 }
 
@@ -216,14 +215,8 @@ async def love_add_start(bot, cid, key, origin="base"):
     name = {
         "movies": "фильм или сериал",
         "artists": "артиста",
-        "books": "книгу",
     }[key]
-    if key == "books":
-        text = (
-            "Напиши название книги — добавлю в 🎚️ Мои книги. Автора и год "
-            "можно не указывать — покажу варианты.\n\nНапример: Марсианин"
-        )
-    elif key == "movies":
+    if key == "movies":
         text = "Напиши фильм или сериал — добавлю в 🎚️ Моё кино."
     elif key == "artists":
         text = "Напиши артиста — добавлю в 🎚️ Мои артисты."
@@ -234,7 +227,6 @@ async def love_add_start(bot, cid, key, origin="base"):
 
 async def _analyze_collection_candidates(key, text):
     kind_rules = {
-        "books": "Книги: value строго в формате «Название — Автор»; label содержит название, автора и год.",
         "movies": "Кино: различай фильм и сериал; value строго «Название (фильм, ГГГГ)» или «Название (сериал, ГГГГ)»; label содержит название, тип и год.",
         "artists": "Артисты: value содержит только точное сценическое имя; label содержит имя и короткий отличительный признак.",
     }
@@ -343,7 +335,7 @@ async def _offer_collection_choices(bot, cid, key, text, origin):
         "cid": str(cid), "key": key, "origin": origin,
         "created_at": now, "choices": choices,
     }
-    names = {"books": "книгу", "movies": "фильм или сериал",
+    names = {"movies": "фильм или сериал",
              "artists": "артиста"}
     rows = [[InlineKeyboardButton(
         item["label"], callback_data=f"collection_pick:{token}:{index}",
@@ -381,11 +373,6 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
 
         await settings.send_home(bot, cid)
         return
-    if key == "books":
-        import leisure_books
-
-        await leisure_books.offer_manual_favorite_book(bot, cid, text, origin)
-        return
     if not confirmed and key in {"movies", "artists"}:
         await _offer_collection_choices(bot, cid, key, text, origin)
         return
@@ -417,7 +404,7 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
                 text="Не получилось подтвердить этот фильм или сериал. Уточни название и год.",
             )
             return
-    elif key != "books":
+    else:
         items = [plain_label(item) for item in items if plain_label(item)]
     existing = {
         (movie_title_for_lookup(item) if key == "movies" else _item_text(item)).casefold()
@@ -440,11 +427,6 @@ async def love_add_done(bot, cid, key, text, origin="base", *, confirmed=False):
         import leisure_movies
 
         await leisure_movies.send_favorite_movies_added_card(bot, cid, added)
-        return
-    if key == "books" and added:
-        import leisure_books
-
-        await leisure_books.send_favorite_books_added_card(bot, cid, added)
         return
     import cleanup
 

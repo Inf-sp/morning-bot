@@ -73,26 +73,9 @@ def favorite_movies_home(total):
     return b.build_stripped()
 
 
-def favorite_books_home(total):
-    b = MessageBuilder()
-    b.title(f"🎚️ Мои книги · {total} {_pluralize_books(total)}")
-    if not total:
-        b.spacer()
-        b.line("Добавь любимые книги — следующие рекомендации станут точнее.")
-    else:
-        b.italic("По любимым книгам подбираю похожие.")
-        b.newline()
-    return b.build_stripped()
-
-
-def _pluralize_books(n):
-    return ru_plural(n, "книга", "книги", "книг")
-
-
 def yearly_top_screen(kind, year, item):
     labels = {
         "movie": "Фильмы", "tv": "Сериалы",
-        "book": "Книги",
     }
     b = MessageBuilder()
     b.section(f"🏆 Топ-5 · {labels.get(kind, 'Лучшее')} {year}")
@@ -299,76 +282,6 @@ def _fmt_date(iso):
         return iso
 
 
-def book_text(item):
-    """Карточка книги как в кино: название → автор → «⭐ 4.2 · жанр · 🇬🇧 Страна · год» → описание →
-    об авторе → интересный факт (премия, экранизация) курсивом в конце."""
-    author = str(item.get("author") or "").strip()
-    country = str(item.get("country") or "").strip()
-    title = str(item.get("title") or "Книга").strip()
-    original = str(
-        item.get("original_title") or item.get("title_en") or item.get("alternative_title") or ""
-    ).strip()
-    year = str(item.get("year") or "").strip() or str(item.get("published_date") or "")[:4].strip()
-    year = year if year.isdigit() else ""
-    categories = item.get("categories") or []
-    if isinstance(categories, str):
-        categories = [categories]
-    genre_names = {
-        "fiction": "Проза", "fantasy": "Фэнтези",
-        "science fiction": "Фантастика", "mystery & detective": "Детектив",
-        "thrillers": "Триллер", "romance": "Романтика", "history": "История",
-        "biography & autobiography": "Биографии", "psychology": "Психология",
-    }
-    genre = str(item.get("genre") or "").strip() or next(
-        (genre_names.get(str(value).casefold(), str(value).strip())
-         for value in categories if str(value).strip()), "")
-
-    b = MessageBuilder()
-    b.bold(title)
-    b.newline()
-    byline = [value for value in (author, original if original.casefold() != title.casefold() else "") if value]
-    if byline:
-        b.line(" · ".join(byline))
-    # Рейтинг — только при достаточном числе оценок, как у кино.
-    rating = _weekly_rating(item.get("rating"), item.get("ratings_count"), 5).removesuffix("/5") \
-        if int(item.get("ratings_count") or 0) >= _BOOK_MIN_RATINGS else ""
-    metadata = [value for value in (rating, genre[:1].lower() + genre[1:] if genre else "", country, year) if value]
-    if metadata:
-        b.line(" · ".join(metadata))
-
-    plot_source = item.get("plot") or item.get("description") or item.get("desc")
-    if plot_source:
-        plot = " ".join(str(plot_source).split()).strip()
-        sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", plot) if part.strip()]
-        # Описание без подписи «Сюжет»: до пяти предложений, как подробный пересказ.
-        plot = clip(" ".join(sentences[:5]), limit=700)
-        if plot and plot[-1] not in ".!?…":
-            plot += "."
-        b.spacer()
-        b.line(plot)
-    fact = " ".join(str(item.get("fact") or "").split()).strip()
-    if fact and re.search(r"[а-яё]", fact, re.I):
-        b.spacer()
-        b.italic(fact if fact[-1] in ".!?…" else fact + ".")  # интересное о книге — курсивом в конце
-        b.newline()
-    return b.build_stripped()
-
-
-_BOOK_MIN_RATINGS = 5
-
-
-def book_add_candidate_card(data):
-    """Короткая карточка подтверждения: факты каталога без длинного служебного текста."""
-    item = dict(data or {})
-    description = str(item.get("description") or item.get("desc") or "").strip()
-    if description:
-        item["description"] = clip(description, limit=320)
-        item.pop("desc", None)
-    for field in ("why", "plot", "quote", "quote_author"):
-        item.pop(field, None)
-    return book_text(item)
-
-
 def artist_card(data):
     """Составная карточка (условные блоки) -> MessageBuilder."""
     artist = data.get("artist", "")
@@ -484,45 +397,6 @@ def favorite_movie_added_card(title, tm=None):
         b.text_line(" · " + " · ".join(details))
     b.spacer()
     b.line("Учту в следующих подборках.")
-    return b.build_stripped()
-
-
-def favorite_book_added_card(data, *, already=False):
-    """Подтверждение ручного добавления книги с проверенными метаданными."""
-    data = data if isinstance(data, dict) else {}
-    title = str(data.get("title") or data.get("value") or "Книга").strip()
-    url = str(data.get("url") or data.get("info_link") or "").strip()
-    details = [
-        str(data.get("year") or "").strip(),
-        str(data.get("genre_label") or "").strip(),
-    ]
-    b = MessageBuilder()
-    b.line("✅ Уже в «🎚️ Мои книги»" if already
-           else "✅ Добавлена в «🎚️ Мои книги»")
-    b.spacer()
-    b.text_line("📚 ")
-    if url:
-        b.link(title, url)
-    else:
-        b.bold(title)
-    details = [value for value in details if value]
-    if details:
-        b.text_line(" · " + " · ".join(details))
-    b.newline()
-    author = str(data.get("author") or "").strip()
-    if author:
-        b.labeled_line("Автор", author, lowercase=False)
-    try:
-        rating = float(data.get("rating") or 0)
-        ratings_count = int(data.get("ratings_count") or 0)
-    except (TypeError, ValueError):
-        rating, ratings_count = 0, 0
-    if rating and ratings_count:
-        b.line(f"⭐ {rating:.1f}/5 · {ratings_count:,} оценок".replace(",", " "))
-    description = str(data.get("description") or data.get("desc") or "").strip()
-    if description:
-        b.spacer()
-        b.line(clip(description, limit=260))
     return b.build_stripped()
 
 
@@ -672,139 +546,6 @@ def combined_premiere_screen(item):
     return b.build_stripped()
 
 
-def book_premieres_screen(month, items):
-    """Одна карточка книжной премьеры для перелистываемой витрины."""
-    b = MessageBuilder()
-    b.text_line("🆕 ")
-    b.bold(f"Премьеры книг · {month}")
-    b.newline()
-    b.spacer()
-    if not items:
-        b.line("Витрина появится после ближайшего ночного обновления.")
-        return b.build_stripped()
-    for item in list(items or [])[:1]:
-        card = MessageBuilder()
-        _write_book_premiere(card, item, summary_limit=90)
-        card = card.build_stripped()
-        if u16_len(b.text) + 2 + u16_len(card.text) > 1024:
-            break
-        b.embed(card)
-    return b.build_stripped()
-
-
-def _write_book_premiere(
-    builder: MessageBuilder, item, *, compact=False, summary_limit=310,
-) -> None:
-    title = str(_item_value(item, "title", "") or "").strip()
-    if not title:
-        return
-    author = str(_item_value(item, "author", "") or "").strip()
-    genres = _book_premiere_genres(item)
-    summary = str(_item_value(item, "summary", "") or _item_value(item, "vibe", "") or "").strip()
-    url = str(_item_value(item, "url", "") or "").strip()
-
-    if compact:
-        builder.text_line("• ")
-        if url:
-            builder.link(title, url)
-        else:
-            builder.text_line(title)
-        if author:
-            builder.text_line(f" — {author}")
-        if genres:
-            builder.text_line(f" · {genres}")
-        if summary:
-            builder.text_line(f" · {_book_premiere_summary(summary, limit=150)}")
-        builder.newline()
-        return
-
-    if url:
-        builder.link(f"«{title}»", url)
-    else:
-        builder.bold(f"«{title}»")
-    builder.newline()
-    if author:
-        builder.line(author)
-    if genres:
-        builder.line(genres)
-    premiere_date = _book_premiere_date(item)
-    if premiere_date:
-        builder.line(f"Премьера: {premiere_date}")
-    if summary:
-        builder.spacer()  # описание отделено от данных книги пустой строкой
-        builder.line(_book_premiere_summary(summary, limit=summary_limit))
-    builder.newline()
-
-
-def _book_premiere_genres(item) -> str:
-    determined = str(_item_value(item, "genre_label", "") or "").strip()
-    if determined and determined != "Без жанра":
-        return determined
-    categories = _item_value(item, "categories", [])
-    if isinstance(categories, str):
-        categories = [categories]
-    if not isinstance(categories, list):
-        return ""
-    translations = {
-        "fiction": "Художественная проза",
-        "fantasy": "Фэнтези",
-        "science fiction": "Научная фантастика",
-        "space opera": "Космическая опера",
-        "dystopian": "Дистопия",
-        "dystopias": "Дистопия",
-        "historical": "Историческая проза",
-        "family life": "Семейная проза",
-        "coming of age": "Взросление",
-        "literary": "Литературная проза",
-        "magical realism": "Магический реализм",
-        "mystery & detective": "Детектив",
-        "thrillers": "Триллер",
-        "romance": "Романтика",
-        "history": "История",
-        "biography": "Биография",
-        "biography & autobiography": "Биография",
-        "psychology": "Психология",
-        "poetry": "Поэзия",
-        "juvenile fiction": "Детская литература",
-    }
-    labels = []
-    for category in categories:
-        parts = re.split(r"\s*(?:/|>)\s*", str(category or ""))
-        for raw in parts:
-            raw = raw.strip()
-            translated = translations.get(raw.casefold())
-            if translated:
-                labels.append(translated)
-            elif any("а" <= char.casefold() <= "я" for char in raw):
-                labels.append(raw[:1].upper() + raw[1:])
-    return " · ".join(dict.fromkeys(labels[:3]))
-
-
-def _book_premiere_summary(summary, *, limit):
-    summary = clip(str(summary or ""), limit=limit)
-    summary = summary[:1].upper() + summary[1:] if summary else ""
-    return summary if summary.endswith((".", "!", "?", "…")) else summary + "."
-
-
-def _book_premiere_date(item):
-    raw = str(_item_value(item, "published_date", "") or "").strip()
-    month_match = re.fullmatch(r"(\d{4})-(\d{2})", raw)
-    if month_match:
-        year, month = int(month_match.group(1)), int(month_match.group(2))
-        month_names = (
-            "", "январь", "февраль", "март", "апрель", "май", "июнь",
-            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
-        )
-        return f"{month_names[month]} {year}" if 1 <= month <= 12 else ""
-    if re.fullmatch(r"\d{4}", raw):
-        return raw
-    try:
-        value = date.fromisoformat(raw)
-    except ValueError:
-        return ""
-    return _format_date_label(value, include_year=True)
-
-
 def music_activity_screen(task):
     """Небольшая карточка одного трека под выбранное занятие."""
     task = task or {}
@@ -882,17 +623,6 @@ def _format_date_label(day: date, *, include_year: bool = False) -> str:
     return text
 
 
-def _weekly_rating(value, count, scale) -> str:
-    try:
-        rating = float(value or 0)
-        ratings_count = int(count or 0)
-    except (TypeError, ValueError):
-        return ""
-    if rating <= 0 or ratings_count <= 0:
-        return ""
-    return f"⭐ {rating:.1f}/{scale}"
-
-
 _ABOUT_MAX = 160
 
 
@@ -952,10 +682,9 @@ def weekly_concerts_card(mine, popular, title="🎫 Концерты недел�
     return b.build_stripped()
 
 
-def library_stats_line(movies, books, artists) -> str:
-    movies, books, artists = int(movies or 0), int(books or 0), int(artists or 0)
+def library_stats_line(movies, artists) -> str:
+    movies, artists = int(movies or 0), int(artists or 0)
     return (f"Твоя библиотека · {movies} {ru_plural(movies, 'фильм', 'фильма', 'фильмов')}"
-            f" · {books} {ru_plural(books, 'книга', 'книги', 'книг')}"
             f" · {artists} {ru_plural(artists, 'артист', 'артиста', 'артистов')}")
 
 
@@ -977,9 +706,9 @@ def runtime_label(minutes, *, episode=False) -> str:
     return f"серия {label}" if episode else label
 
 
-_TODAY_MAIN = {"movie": "Фильм на вечер", "tv": "Сериал на вечер", "book": "Книга на вечер",
+_TODAY_MAIN = {"movie": "Фильм на вечер", "tv": "Сериал на вечер",
                "music": "Музыка под настроение"}
-_TODAY_ALT = {"movie": "Фильм", "tv": "Сериал", "book": "Книга", "music": "Музыка"}
+_TODAY_ALT = {"movie": "Фильм", "tv": "Сериал", "music": "Музыка"}
 
 
 def _today_name(b: MessageBuilder, pick, meta=True) -> None:
@@ -999,7 +728,7 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
-        b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Книги» ниже.")
+        b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Сериалы» ниже.")
     else:
         first = picks[0]
         b.bold(f"{_TODAY_MAIN.get(first['kind'], 'На сегодня')}:")
@@ -1031,20 +760,19 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
         b.newline()
     if library:
         b.spacer()
-        b.italic(library_stats_line(library.get("movies"), library.get("books"), library.get("artists")))
+        b.italic(library_stats_line(library.get("movies"), library.get("artists")))
         b.newline()
     return b.build_stripped(reply_markup=reply_markup)
 
 
 def leisure_hub_kb():
-    """«Премьеры» — первой строкой; Фильмы | Сериалы и Книги | Музыка — полные карточки; ниже «Концерты»."""
+    """«Премьеры» — первой строкой; Фильмы | Сериалы — полные карточки; Музыка | Концерты."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco")],
-        [InlineKeyboardButton("📚 Книги", callback_data="book_reco"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
+         InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -1057,8 +785,8 @@ def no_month_concerts(title="🎫 Ближайшие концерты") -> Messa
     return b.build_stripped()
 
 
-WEEK_PAGES = ("movie", "series", "book", "music")  # «Премьеры недели»: виды в меню по порядку
-_WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "book": ("📚", "Книги"), "music": ("🎧", "Музыка")}
+WEEK_PAGES = ("movie", "series", "music")  # «Премьеры недели»: виды в меню по порядку
+_WEEK_TABS = {"movie": ("🎬", "Фильмы"), "series": ("📺", "Сериалы"), "music": ("🎧", "Музыка")}
 
 
 def _week_item(item, kind) -> tuple:
@@ -1071,18 +799,13 @@ def _week_item(item, kind) -> tuple:
         return (item.get("name"), item.get("url"),
                 (_movie_genres_for_line(item).replace(", ", " · "), f"{season}-й сезон" if season > 1 else "",
                  item.get("country_label"), item.get("network")), item.get("overview"))
-    if kind == "book":
-        return (_item_value(item, "title", ""), _item_value(item, "url", ""),
-                (_book_premiere_genres(item),
-                 _weekly_rating(_item_value(item, "rating", 0), _item_value(item, "ratings_count", 0), 5),
-                 item.get("country_label")), _item_value(item, "summary", ""))
     movie_id = _item_value(item, "id", "")
     url = _item_value(item, "trailer_url", "") or (f"https://www.themoviedb.org/movie/{movie_id}" if movie_id else "")
     return (_item_value(item, "title", ""), url,
             (_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")), _item_value(item, "overview", ""))
 
 
-_PREMIERE_LABELS = {"movie": "Новые фильмы", "series": "Новые сериалы", "book": "Новые книги", "music": "Новая музыка"}
+_PREMIERE_LABELS = {"movie": "Новые фильмы", "series": "Новые сериалы", "music": "Новая музыка"}
 _PREMIERE_ABOUT_MAX = 700
 
 
@@ -1152,10 +875,9 @@ def premiere_card(kind, items, index=0) -> MessageSpec:
 def leisure_library_menu() -> MessageSpec:
     b = MessageBuilder()
     b.title("🎚️ Моя библиотека")
-    b.line("Любимое кино, книги и артисты — по ним подбираю рекомендации.")
+    b.line("Любимое кино и артисты — по ним подбираю рекомендации.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([*_column_kb((
         ("🎬 Фильмы и сериалы", "movie_favorites"),
-        ("📚 Книги", "book_favorites"),
         ("🎧 Музыка", "artist_favorites"),
         ("🎫 Концерты", "a_concerts_find"),
     )).inline_keyboard, nav_row("m_leisure")]))
@@ -1164,7 +886,6 @@ def leisure_library_menu() -> MessageSpec:
 # ---------- «Новинка» в меню «Выбрать жанр» ----------
 _NOVELTY_EMPTY = {
     "movie": "Свежих премьер в кино пока нет — загляни позже.",
-    "book": "Свежих книжных премьер пока нет — загляни позже.",
     "music": "Свежих альбомов в твоих жанрах пока нет — загляни позже.",
 }
 
@@ -1182,8 +903,6 @@ def _novelty_status(kind, item) -> str:
     if kind == "movie":
         # В «Новинку» попадают только вышедшие фильмы; дата премьеры — в строке жанров.
         return "🎬 Уже в кино"
-    if kind == "book":
-        return f"📚 Новая книга · {label}" if label else "📚 Новая книга"
     return f"🎧 Новый альбом · {label}" if label else "🎧 Новый альбом"
 
 
@@ -1209,9 +928,6 @@ def novelty_card(kind, item) -> MessageSpec:
         meta = [_movie_genres_for_line(item).replace(", ", " · "), country,
                 _event_date_label(str(_item_value(item, "date", "") or ""))]
         summary = _movie_premiere_summary(_item_value(item, "overview", ""), limit=300)
-    elif kind == "book":
-        meta = [str(_item_value(item, "author", "") or ""), _book_premiere_genres(item), country]
-        summary = _book_premiere_summary(str(_item_value(item, "summary", "") or ""), limit=300)
     else:
         meta = [str(item.get("genre_label") or ""), country, _event_date_label(str(item.get("date") or ""))]
         summary = str(item.get("about") or "")

@@ -17,7 +17,6 @@ import learning_dictionary as dictionary
 import learning_game
 import learning_settings
 import learning_router
-import leisure_books
 import leisure_concerts
 import leisure_hub
 import leisure_movies
@@ -69,7 +68,7 @@ def _status_stages(data):
     if data.startswith("w_buy"):
         return progress("🛍️ Смотрю шкаф...", "🧮 Считаю сочетания...", "🔎 Ищу пробелы...", "📝 Готовлю список...")
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
-        return progress("🎬 Смотрю афиши кинотеатров...", "📚 Листаю новые книги...", "🎧 Слушаю свежие альбомы...",
+        return progress("🎬 Смотрю афиши кинотеатров...", "📺 Смотрю новые сериалы...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")
     if data == "lz_concerts" or data.startswith(("a_concerts", "concerts_")):
         return progress("🎫 Проверяю афиши...", "🎸 Ищу твоих артистов...", "🏟️ Смотрю площадки рядом...",
@@ -79,9 +78,6 @@ def _status_stages(data):
     if data.startswith(("movie_", "a_watch", "mfi:", "m_movie", "tv_")):
         return progress("🎬 Перебираю фильмы...", "🍿 Сверяю с твоим вкусом...", "⭐ Смотрю оценки...",
                         "🎞️ Ищу трейлер...")
-    if data.startswith(("book_", "a_read", "bfi:")):
-        return progress("📚 Листаю полки...", "🔖 Сверяю с твоим вкусом...", "⭐ Смотрю отзывы читателей...",
-                        "📝 Готовлю карточку...")
     if data.startswith(("music_", "listen", "a_listen", "artist_")):
         return progress("🎧 Слушаю новинки...", "🎸 Ищу похожих артистов...", "🎵 Подбираю треки...",
                         "📝 Готовлю карточку...")
@@ -314,7 +310,7 @@ async def _action(c):
 
 async def _yearly_tops(c):
     _prefix, kind, page = c.data.split(":", 2)
-    if kind not in ("movie", "tv", "book"):
+    if kind not in ("movie", "tv"):
         return
     if page == "open":
         await c.status(lambda status: yearly_tops.send(c.bot, c.cid, kind, status=status))
@@ -414,8 +410,6 @@ ROUTES = (
     R("ob_*", lambda c: onboard.handle_callback(c.bot, c.cid, c.q, c.data), sub="onboard"),
     R("collection_pick:*", lambda c: personal_collections.handle_collection_callback(
         c.bot, c.cid, c.q, c.data), sub="personal_collections"),
-    R(("book_add_ok:*", "book_add_next:*"), lambda c: leisure_books.handle_manual_book_add_callback(
-        c.bot, c.cid, c.q, c.data)),
     # Раздела игр больше нет: старые кнопки игр из истории чата открывают хаб «Досуг».
     R(("game_add_ok:*", "game_add_next:*", "game_premiere_page:*", "game_prefs", "game_love",
        "game_no", "vg_*",
@@ -496,12 +490,9 @@ ROUTES = (
     R("game_opt_*", lambda c: learning_game.game_option(c.bot, c.cid, c.q, _tail_int(c))),
     # Старые кнопки общего экрана «Досуг» ведут в соответствующую категорию.
     R("leisure_prefs_movie", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
-    R("leisure_prefs_books", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
     R("leisure_prefs_music", lambda c: leisure_music.send_music_preferences(c.bot, c.cid, c.q)),
     R("leisure_prefs_movie_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "cinema_favorites", back="movie_prefs")),
-    R("leisure_prefs_books_favorites", lambda c: cleanup.open_collection(
-        c.bot, c.cid, "books_favorites", back="book_prefs")),
     R("leisure_prefs_music_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "music_favorite_artists", back="music_prefs")),
     R("movie_prefs", lambda c: leisure_movies.send_movie_prefs(c.bot, c.cid, c.q)),
@@ -522,18 +513,8 @@ ROUTES = (
         c.bot, c.cid, status=status, refresh=True, cuisine=c.data.removeprefix("food_mine_go_"))))),
     R("food_mine_new", _replaced(lambda c: c.status(
         lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status, refresh=True)))),
-    # Книги.
-    R("book_reco", lambda c: c.status(lambda status: leisure_books.send_books_reco(c.bot, c.cid, status=status))),
-    R("book_next", _picked(lambda c: c.status(lambda _s: leisure_books._advance_book(c.bot, c.cid)))),
-    R("book_pick_*", _swap_kb(lambda c: leisure_books._book_genre_menu_kb(back=f"book_card_{_tail_int(c)}"))),
-    R("book_card_*", _swap_kb(lambda c: leisure_books._book_kb(_tail_int(c)))),
+    # Старые кнопки «Топ-5» кино и сериалов из истории чата.
     R("yt:*", _yearly_tops),
-    R("book_premieres", lambda c: c.status(
-        lambda status: leisure_books.send_book_premieres(c.bot, c.cid, status=status))),
-    R("book_premiere_page:*", lambda c: leisure_books.show_book_premiere_page(c.q, _page(c))),
-    R("book_genre_menu", _acked(lambda c: leisure_books.send_book_genre_menu(c.bot, c.cid, c.q))),
-    R("book_g_*", _picked(lambda c: c.status(
-        lambda _s: leisure_books.send_book_by_genre(c.bot, c.cid, c.data[len("book_g_"):])))),
     # Музыка.
     R("music_reco", lambda c: c.status(lambda _s: leisure_music.send_listen(c.bot, c.cid))),
     R("music_next", _picked(lambda c: c.status(
@@ -547,11 +528,10 @@ ROUTES = (
     R("music_genre_menu", _acked(lambda c: leisure_music.send_music_genre_menu(c.bot, c.cid, c.q))),
     # «Настроить» под карточкой Досуга: настройки раздела новым сообщением, карточка остаётся.
     R("lz_cfg_movie", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid)),
-    R("lz_cfg_book", lambda c: leisure_books.send_favorite_books(c.bot, c.cid)),
     R("lz_cfg_music", lambda c: cleanup.open_collection(c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
     R("music_g_*", _picked(lambda c: c.status(lambda status: leisure_music.send_music_by_genre(
         c.bot, c.cid, c.data[len("music_g_"):], status=status)))),
-    # Избранное кино и книги.
+    # Избранное кино.
     R("movie_favorites", lambda c: leisure_movies.send_favorite_movies(c.bot, c.cid, q=c.q)),
     R("mfg:*", lambda c: leisure_movies.send_favorite_movie_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
     R("mfl:*", lambda c: leisure_movies.send_favorite_movie_list(c.bot, c.cid, *_genre_args(c), q=c.q)),
@@ -559,15 +539,7 @@ ROUTES = (
     # Удаление сразу, без отдельного подтверждения (mfdok/bfdok — кнопки старых сообщений).
     R("mfd:*", _delete_favorite_movie),
     R("mfdok:*", _delete_favorite_movie),
-    R("book_favorites", lambda c: leisure_books.send_favorite_books(c.bot, c.cid, q=c.q)),
-    R("bfg:*", lambda c: leisure_books.send_favorite_book_genre(c.bot, c.cid, *_genre_args(c), q=c.q)),
-    R("bfl:*", lambda c: leisure_books.send_favorite_book_list(c.bot, c.cid, *_genre_args(c), q=c.q)),
-    R("bfi:*", lambda c: leisure_books.send_favorite_book_card(c.bot, c.cid, *_card_args(c))),
-    R("bfd:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_card_args(c)[:2], q=c.q)),
-    R("bfdok:*", lambda c: leisure_books.delete_favorite_book(c.bot, c.cid, *_token_id(c), q=c.q)),
     # Предпочтения.
-    R("book_prefs", lambda c: leisure_books.send_book_preferences(c.bot, c.cid, c.q)),
-    R("bookpref_*", _acked(lambda c: leisure_books.toggle_book_preference(c.bot, c.cid, c.data, c.q))),
     R("artist_favorites", lambda c: cleanup.open_collection(
         c.bot, c.cid, "music_favorite_artists", back="lz_lib")),
     R("music_prefs", lambda c: leisure_music.send_music_preferences(c.bot, c.cid, c.q)),
@@ -607,7 +579,6 @@ ROUTES = (
         lambda _s: leisure_movies.send_movie_by_genre(c.bot, c.cid, c.data[len("movie_g_"):])))),
     # Реакции на карточки.
     R("movie_love_*", lambda c: leisure_movies.movie_love(c.bot, c.cid, _tail_int(c), c.q)),
-    R("book_love_*", lambda c: leisure_books.book_love(c.bot, c.cid, _tail_int(c), c.q)),
     # «Новинка» из выбора жанра: nov_pick_*, nov_card_* и nov_no_* раньше nov_*.
     R("nov_pick_*", _swap_kb(lambda c: leisure_novelty.genre_picker(
         c.cid, c.data[len("nov_pick_"):], back=f"nov_card_{c.data[len('nov_pick_'):]}"))),
@@ -622,7 +593,6 @@ ROUTES = (
         lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
     R("movie_no_*", _replaced(lambda c: c.status(
         lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c))))),
-    R("book_no_*", _replaced(lambda c: c.status(lambda _s: leisure_books.book_dislike(c.bot, c.cid, _tail_int(c))))),
     # «Продолжить / ещё раз» и «Короче / Глубже» для последнего ответа.
     R("chat_retry", lambda c: c.status(
         lambda status: retry_flow.retry_last_response(c.bot, c.cid, status=status))),
@@ -634,6 +604,10 @@ ROUTES = (
 LEGACY_ALIASES = (
     (("m_travel*", "a_trav_*"), "m_menu"),
     (("m_movie", "m_music", "m_books", "m_games", "movie_now_playing"), "m_leisure"),
+    # Книг в Досуге больше нет: старые кнопки книг из истории чата открывают хаб.
+    (("book_*", "bookpref_*", "bfg:*", "bfl:*", "bfi:*", "bfd:*", "bfdok:*", "lz_cfg_book",
+      "leisure_prefs_books*", "as_loveadd_books", "ls_loveadd_books", "lv_books", "lvls_books", "hid_books", "yt:book:*",
+      "a_read*"), "m_leisure"),
     ("m_food_gen", "m_food"),  # прежняя кнопка «🍳 Что приготовить»
 )
 

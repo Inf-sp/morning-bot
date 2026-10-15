@@ -12,7 +12,6 @@ import bot_callbacks
 import cleanup
 import config
 import home_cache
-import leisure_books
 import leisure_concerts
 import leisure_hub
 import leisure_movies
@@ -68,9 +67,6 @@ def _seed_caches(monkeypatch):
     leisure_movies._movie_premieres_cache_set("NL", today + timedelta(days=7), [
         {"id": 1, "title": "Дюна", "trailer_url": "https://youtube.example/dune"},
     ])
-    leisure_books._book_premieres_cache_set(today, [
-        {"title": "Новая книга", "url": "https://books.example/new"},
-    ])
 
 
 def test_main_menu_has_leisure_hub_instead_of_four_sections():
@@ -99,7 +95,6 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
               {"kind": "tv", "name": "Без жанра", "overview": "Описание.", "origin_country": ["US"]},
               {"kind": "tv", "name": "Без страны", "overview": "Описание.", "genres": "Драма"}]
     monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
-    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
     monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: series)
     monkeypatch.setattr(leisure_hub, "new_music", lambda *_a: [])
     monday = date(2026, 10, 12)
@@ -108,13 +103,11 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
 
     assert [weekday for weekday, _item in films] == ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     assert [item["title"] for _weekday, item in films] == [f"Фильм {i}" for i in range(7)]  # топ-7 по популярности
-    assert leisure_hub.week_data("42", "book", day=monday) == []
 
     menu_screen = leisure_ui.premieres_menu()
     assert _labels(menu_screen.reply_markup) == [
-        ["Новые фильмы"], ["Новые сериалы"], ["Новые книги"], ["Новая музыка"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(menu_screen.reply_markup)[:4] == ["lz_prem_movie", "lz_prem_series", "lz_prem_book",
-                                                        "lz_prem_music"]
+        ["Новые фильмы"], ["Новые сериалы"], ["Новая музыка"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert _callbacks(menu_screen.reply_markup)[:3] == ["lz_prem_movie", "lz_prem_series", "lz_prem_music"]
 
     items = leisure_ui.week_items("movie", films)
     card = leisure_ui.premiere_card("movie", items, 0)
@@ -139,8 +132,8 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
         "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
         "url": "https://music.example/a", "about": "Мечтательный инди-поп."}])
     assert album.text == "🎧 Alvvays — «Blue Rev»\n\nИнди · 🇨🇦 CA\n\nМечтательный инди-поп."  # сначала исполнитель
-    empty = leisure_ui.premiere_card("book", [])
-    assert empty.text == "📚 Новые книги\n\nПремьер на эту неделю пока нет."
+    empty = leisure_ui.premiere_card("music", [])
+    assert empty.text == "🎧 Новая музыка\n\nПремьер на эту неделю пока нет."
 
 
 def test_premiere_flip_replaces_photo_in_place(monkeypatch):
@@ -190,7 +183,6 @@ def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
     chart["items"] = [{"title": f"Альбом {i}", "artist": f"A{i}"} for i in range(9)]
     today["day"] = date(2026, 10, 18)  # воскресенье
     monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: [])
-    monkeypatch.setattr(leisure_hub.leisure_books, "_book_premieres_cache_get", lambda *_a, **_k: [])
     monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: [])
     rows = leisure_hub.week_data(cid, "music")
     assert [day for day, _item in rows] == ["Пт", "Сб", "Вс", "Пн", "Вт", "Ср", "Чт"]
@@ -240,12 +232,10 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
 
     monkeypatch.setattr(leisure_hub, "_warm_concerts", step("concerts", fail=True))
     monkeypatch.setattr(leisure_hub, "_warm_movie_premieres", step("movies"))
-    monkeypatch.setattr(leisure_books, "get_book_premieres", step("books"))
     async def current(_cid, kind="movie"):
         calls.append("movie_reco" if kind == "movie" else "tv_reco")
 
     monkeypatch.setattr(leisure_movies, "get_current_movie", current)
-    monkeypatch.setattr(leisure_books, "get_current_book", step("book_reco"))
     monkeypatch.setattr(leisure_hub.leisure_music, "send_listen", step("artist_reco"))
     monkeypatch.setattr(leisure_hub.apple_music, "_feed", lambda _cc: calls.append("music") or [])
     monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
@@ -253,7 +243,7 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
-    assert calls == ["concerts", "movies", "books", "music", "movie_reco", "tv_reco", "book_reco", "artist_reco",
+    assert calls == ["concerts", "movies", "music", "movie_reco", "tv_reco", "artist_reco",
                      "series", "album_notes", "details"]
 
 
@@ -261,12 +251,12 @@ def test_premieres_and_library_submenus():
     library = leisure_ui.leisure_library_menu()
 
     assert _labels(library.reply_markup) == [
-        ["🎬 Фильмы и сериалы"], ["📚 Книги"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Фильмы и сериалы"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(library.reply_markup) == [
-        "movie_favorites", "book_favorites", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
+        "movie_favorites", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
     ]
-    for collection in ("cinema_favorites", "books_favorites", "music_favorite_artists"):
+    for collection in ("cinema_favorites", "music_favorite_artists"):
         assert cleanup.COLLECTIONS[collection]["back"] == "lz_lib"
 
 
@@ -323,8 +313,6 @@ def _dispatch(monkeypatch, data, module, name):
     ("lz_lib", leisure_hub, "send_library_menu"),
     ("movie_reco", leisure_movies, "send_current_movie"),
     ("movie_next", leisure_movies, "send_recos"),
-    ("book_reco", leisure_books, "send_books_reco"),
-    ("book_next", leisure_books, "_advance_book"),
     ("music_reco", bot_callbacks.leisure_music, "send_listen"),
     ("music_next", bot_callbacks.leisure_music, "listen_next"),
     # Старые кнопки игр из истории чата открывают хаб.
@@ -338,6 +326,7 @@ def test_hub_buttons_route_to_existing_flows(monkeypatch, data, module, name):
 
 @pytest.mark.parametrize("data", [
     "m_movie", "m_music", "m_books", "m_games", "movie_now_playing", "a_watch", "a_read", "a_listen",
+    "book_reco", "book_favorites", "bfg:tok:0:0",
 ])
 def test_old_section_callbacks_open_the_hub(monkeypatch, data):
     assert len(_dispatch(monkeypatch, data, leisure_hub, "send_hub")) == 1
@@ -375,21 +364,6 @@ def test_new_music_follows_music_styles_with_one_album_per_artist(monkeypatch):
     music = leisure_hub.new_music("42", "NL", date(2026, 10, 9))
 
     assert [(item["title"], item["genre_label"]) for item in music] == [("P1", "Поп"), ("A1", "Инди")]
-
-
-def test_book_premiere_summaries_are_russian_or_dropped(monkeypatch):
-    import leisure_books
-    items = [{"title": "Onyx", "summary": "A war is coming."}, {"title": "Тень", "summary": "Уже по-русски."},
-             {"title": "Other", "summary": "Untranslated text."}]
-
-    async def translate(*_a, **_k):
-        return {"items": [{"id": 0, "summary_ru": "Приближается война."}, {"id": 2, "summary_ru": "still english"}]}
-
-    monkeypatch.setattr(leisure_books.ai, "allm_json", translate)
-    result = asyncio.run(leisure_books._russian_premiere_summaries(items))
-
-    assert [item.get("summary") for item in result] == ["Приближается война.", "Уже по-русски.", None]
-    assert items[0]["summary"] == "A war is coming."  # исходный список не меняется
 
 
 def test_album_descriptions_are_stored_once(monkeypatch):
@@ -454,25 +428,21 @@ def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
 
     def week(_cid, kind, _day=None, fetch=False):
         calls.append((kind, fetch))
-        return [("Пн", {"title": "Книга", "author": "Автор"})]
+        return [("Пт", {"title": "Blue Rev", "artist": "Alvvays", "about": "Мечтательный инди-поп."})]
 
     async def show(*_args):
         return None
 
-    async def no_cover(*_args):
-        return ""
-
     monkeypatch.setattr(leisure_hub, "week_data", week)
     monkeypatch.setattr(leisure_hub, "_show_card", show)
-    monkeypatch.setattr(leisure_hub.leisure_books, "_cover_for", no_cover)
 
     async def main():
-        await leisure_hub.send_week_premieres(None, "42", "book")
+        await leisure_hub.send_week_premieres(None, "42", "music")
         for _ in range(5):
             await asyncio.sleep(0.01)
 
     asyncio.run(main())
-    assert calls == [("book", False), ("book", True)]  # открытие — из кэша, страна — догрузка в фоне
+    assert calls == [("music", False), ("music", True)]  # открытие — из кэша, страна — догрузка в фоне
 
 
 def _today_picks(monkeypatch, *, rain=False, concert=True):
@@ -485,8 +455,6 @@ def _today_picks(monkeypatch, *, rain=False, concert=True):
                                  "episode_runtime": 45, "url": "https://tmdb.example/tv/2"})
     monkeypatch.setattr(leisure_hub.leisure_movies, "_cached_movie",
                         lambda _cid, kind="movie", stale=False: film if kind == "movie" else series)
-    monkeypatch.setattr(leisure_hub.leisure_books, "_cached_book",
-                        lambda _cid, stale=False: {"title": "Under Story", "author": "Chloe Benjamin", "genre": "проза"})
     monkeypatch.setattr(leisure_hub.leisure_music, "_cached_artist",
                         lambda _cid, stale=False: {"artist": "Focus Group", "genre": "indie", "why": ["Как Bonobo, но теплее"]})
     monkeypatch.setattr(leisure_hub, "_evening_rain", lambda *_a: rain)
@@ -496,7 +464,7 @@ def _today_picks(monkeypatch, *, rain=False, concert=True):
     monkeypatch.setattr(leisure_hub.leisure_concerts, "_not_a_concert", lambda _e: False)
     monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
     monkeypatch.setattr(leisure_hub.store, "get_list", lambda key, _cid: ["a"] * {
-        leisure_hub.config.FAVORITE_MOVIES_KEY: 55, leisure_hub.config.FAVORITE_BOOKS_KEY: 6}.get(key, 42))
+        leisure_hub.config.FAVORITE_MOVIES_KEY: 55}.get(key, 42))
     monkeypatch.setattr(leisure_hub.movie_recommendation, "runtime_limit", lambda _kind, day=None: 130)
     return leisure_hub.today_data("42", day=date(2026, 10, 13))
 
@@ -513,11 +481,10 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
         "Не слишком длинный — как раз на будний вечер.\n\n"
         "Если не хочется кино:\n"
         "Сериал — Нили · Prime Video · драма · серия 45 мин\n"
-        "Книга — Under Story · Chloe Benjamin · проза\n"
         "Музыка — Focus Group · Инди\n\n"
         "Если захочется выйти:\n"
         "Muse — сегодня, Ziggo Dome\n\n"
-        "Твоя библиотека · 55 фильмов · 6 книг · 42 артиста"
+        "Твоя библиотека · 55 фильмов · 42 артиста"
     )
     raw = msg.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
@@ -532,7 +499,7 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
     # Без фильма главной становится первая карточка — без описания строка не ломается.
     msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
     assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал на вечер:\nНили · Prime Video")
-    assert "Другие варианты:\nКнига — Under Story" in msg.text
+    assert "Другие варианты:\nМузыка — Focus Group" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:2] == [["🆕 Премьеры"], ["🎬 Фильмы", "📺 Сериалы"]] and _callbacks(kb)[0] == "lz_prem"

@@ -235,7 +235,6 @@ def test_ask_days_screen_shows_flag_facts_and_italic_question():
     assert italic and italic[-1].startswith("До какого дня отпуск?") and "дату в чат" in italic[-1]
 
 
-
 def test_holidays_of_the_trip_are_listed_with_russian_names(monkeypatch):
     import public_holidays
     saved, _places = _env(monkeypatch, {**CAPE, "cc": "ZA"})
@@ -274,34 +273,6 @@ def test_trip_changes_wardrobe_purchase_key_and_prompt_gets_trip_weather(monkeyp
     # Только дни отпуска (до 14-го): 15-е с +30° и ливнем не считается.
     assert summary.endswith("днём от +17° до +24°, дождь в 1 из 3 дней, ветер до 9 м/с")
     assert summary.startswith("Кейптаун (ZA), до 14 октября")
-
-
-def test_vacation_puts_trip_country_first_in_leisure(monkeypatch):
-    import leisure_books
-    saved, _places = _env(monkeypatch, CAPE)
-    assert vacation.trip_priority_rule("42", "книги авторов") == ""  # дома — без правила
-    saved["vacation"] = {"home": HOME, "cc": "za", "until": ""}
-
-    rule = vacation.trip_priority_rule("42", "книги авторов")
-    assert "ЮАР (ZA)" in rule and "Сначала предлагай книги авторов" in rule
-    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
-    monkeypatch.setattr(leisure_books, "_book_matches_preferences", lambda *_a: True)
-    picked = leisure_books._pick_good_book([
-        {"title": "Popular", "rating": 4.8, "ratings_count": 900, "country_cc": "GB"},
-        {"title": "Disgrace", "rating": 3.9, "ratings_count": 40, "country_cc": "ZA"},
-    ], "42")
-    assert picked["title"] == "Disgrace"  # автор из страны поездки — первым, даже с оценкой ниже
-
-
-def test_new_books_of_trip_country_authors_come_first(monkeypatch):
-    import countries
-    import leisure_books
-    saved, _places = _env(monkeypatch, CAPE)
-    books = [{"title": "A", "author": "Sally Rooney"}, {"title": "B", "author": "Damon Galgut"}]
-    monkeypatch.setattr(countries, "author_cc", lambda name, fetch=False: "ZA" if "Galgut" in name else "IE")
-    assert leisure_books.trip_local_books("42", books) == []  # дома — обычный порядок
-    saved["vacation"] = {"home": HOME, "cc": "ZA"}
-    assert leisure_books.trip_local_books("42", books) == [books[1]]
 
 
 def test_concerts_in_trip_country_only_for_trip_dates(monkeypatch):
@@ -351,24 +322,6 @@ def test_country_instead_of_city_asks_for_city_and_keeps_date(monkeypatch):
     assert vacation.place_label(places["now"]) == "Барселона, ES 🇪🇸"
 
 
-def test_disliked_book_is_hidden_under_all_its_titles(monkeypatch):
-    import asyncio as aio
-    import leisure_books
-    added = []
-    monkeypatch.setattr(leisure_books.store, "last_recos", {"42": {"kind": "movie", "items": ["Dune"]}})
-    monkeypatch.setattr(leisure_books, "_current_book", lambda _cid: {
-        "title": "Бесчестье", "title_en": "Disgrace", "original_title": "Disgrace"})
-    monkeypatch.setattr(leisure_books.recommendation_stoplist, "add", lambda _c, kind, name, _r: added.append(name))
-
-    async def advance(*_a):
-        return None
-
-    monkeypatch.setattr(leisure_books, "_advance_book", advance)
-    aio.run(leisure_books.book_dislike(None, "42", 0))
-    # Последним был фильм — но отмечается книга с карточки, под русским и оригинальным названием.
-    assert sorted(added) == ["Disgrace", "Бесчестье"]
-
-
 def test_vacation_hides_home_data_settings_buttons(monkeypatch):
     import telegram_runtime
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -382,3 +335,12 @@ def test_vacation_hides_home_data_settings_buttons(monkeypatch):
     saved["vacation"] = {"home": HOME, "cc": "ZA"}
     texts = [b.text for row in telegram_runtime._without_home_settings(markup, "42").inline_keyboard for b in row]
     assert texts == ["✨ Другое меню на сегодня", "#️⃣ Главная"]
+
+
+def test_vacation_adds_trip_priority_rule_to_leisure(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    assert vacation.trip_priority_rule("42", "исполнителей") == ""  # дома — без правила
+    saved["vacation"] = {"home": HOME, "cc": "za", "until": ""}
+
+    rule = vacation.trip_priority_rule("42", "исполнителей")
+    assert "ЮАР (ZA)" in rule and "Сначала предлагай исполнителей" in rule

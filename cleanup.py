@@ -42,13 +42,12 @@ _views = {}  # view_id -> {"ctx", "revision", "selected_ids", "page", "back", "c
 # storage-ключей по суффиксу key, см. также _ctx_items/_cleanup_delete (старый
 # путь) выше — держать в синхроне при изменении набора категорий.
 _LOVE_STORE_KEYS = {"movies": config.FAVORITE_MOVIES_KEY,
-                    "artists": config.FAVORITE_ARTISTS_KEY, "books": config.FAVORITE_BOOKS_KEY}
+                    "artists": config.FAVORITE_ARTISTS_KEY}
 _PERSONAL_COLLECTION_BACK = {
     "movies": "lz_lib",
-    "books": "lz_lib",
     "artists": "lz_lib",
 }
-_HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY, "books": config.BOOK_BLACKLIST_KEY,
+_HIDDEN_STORE_KEYS = {"movies": config.MOVIE_BLACKLIST_KEY,
                       "artists": config.MUSIC_DISLIKE_KEY}
 
 def _collection(id, owner, title, storage_key, item_type, back, actions,
@@ -85,21 +84,6 @@ COLLECTIONS = {
         "cinema_hidden", "cinema", f"Скрытое · {ui_label('cinema', 'Кино')}", config.MOVIE_BLACKLIST_KEY, "movie",
         "lz_lib", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
 
-    "books_favorites": _collection(
-        "books_favorites", "books", "🎚️ Мои книги", config.FAVORITE_BOOKS_KEY, "book",
-        "lz_lib", [{"id": "remove", "label": "Убрать из любимого", "confirm": False},
-                   {"id": "hide", "label": "Скрыть", "confirm": False}],
-        add_button=("✅ Добавить книгу", "as_loveadd_books"),
-        menu_button=("📝 Выбрать предпочтения", "book_prefs"),
-        add_button_at_bottom=False,
-        allow_edit=False),
-    "books_read": _collection(
-        "books_read", "books", f"{ui_label('seen', 'Прочитано')} · {ui_label('books', 'Книги')}", config.BOOK_SEEN_KEY, "book",
-        "lz_lib", [{"id": "remove", "label": "Убрать из прочитанного", "confirm": False}]),
-    "books_hidden": _collection(
-        "books_hidden", "books", f"Скрытое · {ui_label('books', 'Книги')}", config.BOOK_BLACKLIST_KEY, "book",
-        "lz_lib", [{"id": "restore", "label": "Вернуть в рекомендации", "confirm": False}]),
-
     "music_favorite_artists": _collection(
         "music_favorite_artists", "music", "🎚️ Мои артисты", config.FAVORITE_ARTISTS_KEY, "artist",
         "lz_lib", [{"id": "remove", "label": "Убрать артистов", "confirm": False},
@@ -123,12 +107,9 @@ COLLECTIONS = {
 _COLLECTION_ALIASES = {
     "lv_movies": "cinema_favorites",
     "lvls_movies": "cinema_favorites",
-    "lv_books": "books_favorites",
-    "lvls_books": "books_favorites",
     "lv_artists": "music_favorite_artists",
     "lvls_artists": "music_favorite_artists",
     "hid_movies": "cinema_hidden",
-    "hid_books": "books_hidden",
     "hid_artists": "music_hidden_artists",
     "wl": "cinema_favorites",
     "fridge": "fridge_items",
@@ -186,7 +167,6 @@ def _view_store_key(ctx):
 _VIEW_ADD_LABEL = {
     "movies": "✅ Добавить фильм",
     "artists": "✅ Добавить артиста",
-    "books": "✅ Добавить книгу",
 }
 
 
@@ -309,13 +289,13 @@ def _ctx_items(cid, ctx):
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = _LOVE_STORE_KEYS.get(key)
         title = {"movies": f"{ui_label('cinema', 'Чистка: фильмы')}", 
-                 "artists": f"{ui_label('music', 'Чистка: музыканты')}", "books": f"{ui_label('books', 'Чистка: книги')}"}.get(key, "Чистка")
+                 "artists": f"{ui_label('music', 'Чистка: музыканты')}"}.get(key, "Чистка")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
-        title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
+        title = {"movies": "Скрытое: фильмы",
                  "artists": "Скрытое: музыканты"}.get(key, "Скрытое")
         items = [(i, _list_label(it)) for i, it in enumerate(store.get_list(store_key, cid))] if store_key else []
         return title, items, f"as_love_{key}"
@@ -390,10 +370,8 @@ async def send_cleanup(bot, cid, ctx, page=0, q=None):
     _lv_add_label = {
         "lv_movies": "✅ Добавить фильм",
         "lv_artists": "✅ Добавить артиста",
-        "lv_books": "✅ Добавить книгу",
         "lvls_movies": "✅ Добавить фильм",
         "lvls_artists": "✅ Добавить артиста",
-        "lvls_books": "✅ Добавить книгу",
     }
     rows = []
     if ctx in _lv_add_label:
@@ -499,14 +477,14 @@ def _view_items(ctx, cid):
         key = ctx[len("lvls_"):] if is_leisure else ctx[len("lv_"):]
         store_key = _LOVE_STORE_KEYS.get(key)
         title = {"movies": ui_label("cinema", "Чистка: фильмы"), 
-                 "artists": ui_label("music", "Чистка: музыканты"), "books": ui_label("books", "Чистка: книги")}.get(key, "Чистка")
+                 "artists": ui_label("music", "Чистка: музыканты")}.get(key, "Чистка")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
         return title, items, _PERSONAL_COLLECTION_BACK.get(key, "m_menu")
     if ctx.startswith("hid_"):
         key = ctx[len("hid_"):]
         store_key = _HIDDEN_STORE_KEYS.get(key)
-        title = {"movies": "Скрытое: фильмы", "books": "Скрытое: книги",
+        title = {"movies": "Скрытое: фильмы",
                  "artists": "Скрытое: музыканты"}.get(key, "Скрытое")
         records = store.ensure_list_ids(store_key, cid) if store_key else []
         items = [(r["id"], _view_label(r)) for r in records]
@@ -566,8 +544,6 @@ def _stoplist_kind_for_collection(ctx):
     canonical = _canonical_ctx(ctx)
     if canonical.startswith("cinema_"):
         return "movie"
-    if canonical.startswith("books_"):
-        return "book"
     if canonical.startswith("music_"):
         return "artist"
     return None
@@ -601,7 +577,7 @@ def _apply_collection_action(ctx, cid, action_id, ids):
         else:
             canonical = _canonical_ctx(ctx)
             reason = "hidden" if action_id == "hide" else (
-                "seen" if canonical in {"cinema_watched", "books_read", "music_seen_artists"}
+                "seen" if canonical in {"cinema_watched", "music_seen_artists"}
                 else "removed"
             )
             for value in selected_values:
@@ -674,7 +650,7 @@ async def _render_view(bot, cid, view_id, q=None):
         count_line = f"Всего: {total}"
     lines = [f"<b>{esc(title)}</b>", "", count_line]
     if ctx == "music_favorite_artists" and not sel:
-        # Как «Моё кино» и «Мои книги»: одна строка, артисты — кнопками по жанрам.
+        # Как «Моё кино»: одна строка, артисты — кнопками по жанрам.
         lines = [f"<b>{esc(title)} · {total} {ru_plural(total, 'артист', 'артиста', 'артистов')}</b>"]
         if total:
             lines += ["", "<i>По ним подбираю новую музыку и ищу концерты.</i>"]

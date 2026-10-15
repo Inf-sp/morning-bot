@@ -134,7 +134,7 @@ _SECTION_BY_MODULE = {
     "dictionary_import": "Обучение", "language_tool": "Обучение",
     "wardrobe": "Гардероб",
     "research": "Поиск", "assistant": "Ассистент", "leisure_movies": "Кино",
-    "tmdb": "Кино", "leisure_books": "Книги", "google_books": "Книги",
+    "tmdb": "Кино",
     "leisure_music": "Музыка", "leisure_concerts": "Концерты",
     "gtts": "Озвучка", "dictionary_tts": "Озвучка",
     "travel_photos": "Фото",
@@ -154,8 +154,7 @@ _SERVICE_BY_MODULE = {
     "spoonacular": "Spoonacular", "themealdb": "TheMealDB",
     "language_tool": "LanguageTool", "gtts": "gTTS",
     "dictionary_tts": "gTTS", "tmdb": "TMDB",
-    "leisure_movies": "TMDB", "google_books": "Google Books",
-    "leisure_books": "Google Books", "leisure_concerts": "Ticketmaster",
+    "leisure_movies": "TMDB", "leisure_concerts": "Ticketmaster",
     "rerank": "ZeroEntropy", "research": "Tavily", "ai": "несколько AI-сервисов",
     "travel_photos": "Pexels",
 }
@@ -164,7 +163,7 @@ _FALLBACK_BY_SERVICE = {
     "OpenWeather": "сохранённый прогноз", "Spoonacular": "TheMealDB",
     "TheMealDB": "шаблон без AI", "LanguageTool": "проверка в коде",
     "gTTS": "текстовая карточка", "TMDB": "Gemini",
-    "Google Books": "Open Library", "Ticketmaster": "Tavily",
+    "Ticketmaster": "Tavily",
     "ZeroEntropy": "поиск в базе", "Tavily": "Firecrawl",
     "Gemini": "Groq", "Groq": "Cloudflare AI",
 }

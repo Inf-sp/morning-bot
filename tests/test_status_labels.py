@@ -126,7 +126,6 @@ def test_inline_status_starts_with_action_specific_text():
         "m_food_next": "🍳 Составляю меню...",
         "w_look": "👕 Открываю шкаф...",
         "movie_reco": "🎬 Перебираю фильмы...",
-        "book_reco": "📚 Листаю полки...",
         "music_g_indie": "🎧 Слушаю новинки...",
         "listen_no": "🎧 Слушаю новинки...",
         "a_concerts_nl": "🎫 Проверяю афиши...",
@@ -234,7 +233,7 @@ def test_long_main_screens_have_a_specific_tracking_topic():
 
 def test_long_inline_actions_have_four_distinct_progress_stages():
     for data in (
-        "game_again", "m_food_next", "w_look", "movie_reco", "book_reco",
+        "game_again", "m_food_next", "w_look", "movie_reco",
         "listen_no", "music_g_indie", "a_concerts_nl",
         "a_dictadd_smart_nl", "ex_next_task", "m_myday",
     ):

@@ -177,7 +177,7 @@ def _enhance_markup(markup, level=2):
     add_rows = set()
     refresh_rows = set()
     prefs_rows = set()
-    # «Не интересно» под кино, книгой, музыкой и новинкой — самой первой строкой.
+    # «Не интересно» под кино, музыкой и новинкой — самой первой строкой.
     dislike_rows = {
         index for index, row in enumerate(rows)
         if any(str(button.get("callback_data") or "").startswith(_DISLIKE_TOP) for button in row)

@@ -1,4 +1,4 @@
-"""Хаб «🍿 Досуг»: премьеры кино и книг, новая музыка, подборки и библиотека.
+"""Хаб «🍿 Досуг»: премьеры кино и сериалов, новая музыка, подборки и библиотека.
 
 Открытие хаба читает готовые кэши премьер — без AI; «Новая музыка» — недельный
 выпуск из ленты Apple Music, обновляется по пятницам (``weekly_music``). Кэши обновляет ночной прогрев
@@ -15,7 +15,6 @@ from datetime import date, datetime, timedelta
 import ai
 import apple_music
 import config
-import leisure_books
 import leisure_concerts
 import leisure_movies
 import leisure_music
@@ -63,7 +62,7 @@ def _week_start(day, first=0):
 def _daily(items, today, count=1, popularity=None, first=0):
     """Самые популярные за неделю по очереди: в первый день недели — первый, дальше каждый день следующий.
 
-    popularity — оценка популярности элемента (TMDb popularity, число оценок книги); без неё — порядок
+    popularity — оценка популярности элемента (TMDb popularity); без неё — порядок
     источника (у музыки это чарт). count — сколько показать в день. first — первый день недели
     (0 — понедельник; у музыки — пятница).
     """
@@ -199,8 +198,6 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     """
     _today, cc = _today_and_cc(cid)
     movies = leisure_movies._movie_premieres_cache_get(cc, today, allow_stale=True) or []
-    books = leisure_books._book_premieres_cache_get(today, allow_stale=True) or []
-    books = leisure_books.trip_local_books(cid, books, fetch) or books  # в отпуске — авторы страны поездки
     import countries
     import movie_recommendation
     off = movie_recommendation.regions_off(cid)
@@ -211,8 +208,6 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     pools = {
         "movies": ([m for m in movies if m.get("overview")] or movies, _popularity, 0),
         "series": ([s for s in series if s.get("overview")] or series, _popularity, 0),
-        "books": ([b for b in books if re.search(r"[а-яё]", str(b.get("summary") or ""), re.I)] or books,
-                  _popularity, 0),
     }
     if music:
         notes = _album_notes()
@@ -222,12 +217,10 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
 
 
 def _with_labels(data, fetch=False) -> dict:
-    """Страна, студия, страна автора и артиста — из кэшей (fetch=False)."""
+    """Страна, студия и страна артиста — из кэшей (fetch=False)."""
     import countries
     return {
         "movies": [_title_labels(item, fetch) for item in data.get("movies") or []],
-        "books": [{**item, "country_label": countries.author_label(item.get("author"), fetch)}
-                  for item in data.get("books") or []],
         "music": [{**item, "country_label": countries.artist_label(item.get("artist"), fetch)}
                   for item in data.get("music") or []],
     }
@@ -244,14 +237,14 @@ _WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
 _WEEK_POOLS = {"movie": ("movies", "movies"), "series": ("series", "movies"),
-               "book": ("books", "books"), "music": ("music", "music")}  # вкладка → (пул, поле подписей)
+               "music": ("music", "music")}  # вкладка → (пул, поле подписей)
 
 
 def week_data(cid, kind, day=None, fetch=False) -> list[tuple[str, dict]]:
     """Вкладка «Всех премьер»: [(день, пункт)] — те же пункты, что хаб показывает в каждый день недели.
 
-    kind — movie, series, book (с понедельника) или music (с пятницы, Пт…Чт). Без данных — пустой список.
-    fetch=True — догрузить страну автора / артиста / фильма из сети (ночной прогрев, фон), иначе — из кэшей.
+    kind — movie, series (с понедельника) или music (с пятницы, Пт…Чт). Без данных — пустой список.
+    fetch=True — догрузить страну артиста / фильма из сети (ночной прогрев, фон), иначе — из кэшей.
     """
     today = day or _today_and_cc(cid)[0]
     pool_key, field = _WEEK_POOLS[kind]
@@ -284,7 +277,7 @@ async def _show(bot, cid, msg, q=None):
 
 # ---------- «Досуг на сегодня»: план из персональных карточек дня ----------
 
-_TODAY_KINDS = ("movie", "tv", "book", "music")  # главное — фильм, остальные — варианты строкой
+_TODAY_KINDS = ("movie", "tv", "music")  # главное — фильм, остальные — варианты строкой
 _EVENING_HOURS = range(18, 23)
 
 
@@ -305,13 +298,6 @@ def _movie_pick(kind, cached):
     meta.append(leisure_ui.runtime_label(minutes, episode=kind == "tv"))
     return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url,
             "meta": meta, "about": tm.get("overview") or "", "why": why}
-
-
-def _book_pick(book):
-    return {"kind": "book", "name": book.get("title") or "", "url": book.get("url") or "",
-            "meta": [book.get("author") or "", book.get("genre_label") or book.get("genre") or ""],
-            "about": book.get("desc") or book.get("description") or book.get("plot") or "",
-            "why": "Отдых от экрана — читать в спокойном темпе."}
 
 
 def _music_pick(artist):
@@ -368,7 +354,7 @@ def _outing(cid, today):
 
 
 def today_data(cid, day=None) -> dict:
-    """Досуг на сегодня: персональные карточки дня (фильм, сериал, книга, артист) из кэшей, событие рядом,
+    """Досуг на сегодня: персональные карточки дня (фильм, сериал, артист) из кэшей, событие рядом,
     если вечером без дождя, и статистика библиотеки. Без AI; погода — из кэша прогноза."""
     today = day or _today_and_cc(cid)[0]
     picks = []
@@ -376,9 +362,6 @@ def today_data(cid, day=None) -> dict:
         if kind in ("movie", "tv"):
             cached = leisure_movies._cached_movie(cid, kind, stale=True)
             pick = _movie_pick(kind, cached) if cached else None
-        elif kind == "book":
-            book = leisure_books._cached_book(cid, stale=True)
-            pick = _book_pick(book) if book else None
         else:
             artist = leisure_music._cached_artist(cid, stale=True)
             pick = _music_pick(artist) if artist else None
@@ -388,7 +371,6 @@ def today_data(cid, day=None) -> dict:
     return {
         "picks": picks, "outing": outing, "city": store.get_settings(cid).get("city") or "",
         "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
-                    "books": len(store.get_list(config.FAVORITE_BOOKS_KEY, cid) or []),
                     "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
     }
 
@@ -420,13 +402,12 @@ async def send_concerts(bot, cid, q=None):
 
 
 async def send_week_premieres(bot, cid, kind="", q=None):
-    """«🆕 Премьеры»: меню «Новые фильмы / сериалы / книги / музыка»; вид (lz_prem_<вид>_<n>) — карточки недели
+    """«🆕 Премьеры»: меню «Новые фильмы / сериалы / музыка»; вид (lz_prem_<вид>_<n>) — карточки недели
     с постером или обложкой, ← n/N → по кругу в том же сообщении."""
-    if not kind:
+    kind, _sep, index = kind.partition("_")
+    if kind not in leisure_ui.WEEK_PAGES:  # без вида или старая кнопка «Книги» — меню премьер
         await _show_card(bot, cid, leisure_ui.premieres_menu(), "", q)
         return
-    kind, _sep, index = kind.partition("_")
-    kind = kind if kind in leisure_ui.WEEK_PAGES else "movie"
     rows = await asyncio.to_thread(week_data, cid, kind)
     items = leisure_ui.week_items(kind, rows)
     index = int(index) % len(items) if items and index.isdigit() else 0
@@ -440,7 +421,7 @@ async def send_week_premieres(bot, cid, kind="", q=None):
 
 
 async def _premiere_image(kind, item) -> str:
-    """Постер фильма или сериала, обложка альбома; обложка книги — с ограничением по времени (кэш 30 дней)."""
+    """Постер фильма или сериала, обложка альбома."""
     image = str(item.get("cover" if kind == "music" else "poster") or "").strip()
     if image or kind != "series" or not item.get("id"):
         return image
@@ -509,11 +490,9 @@ async def warm_hub_cache(cid):
         ("concerts", lambda: _warm_concerts(cid)),
         ("movie_premieres", lambda: _warm_movie_premieres(cid)),
         # refresh=True возвращает свежий кэш без запроса; внешний поиск — только без него.
-        ("book_premieres", lambda: leisure_books.get_book_premieres(refresh=True)),
         ("new_music", lambda: asyncio.to_thread(apple_music._feed, _today_and_cc(cid)[1].lower())),
         ("movie_reco", lambda: leisure_movies.get_current_movie(cid)),
         ("tv_reco", lambda: leisure_movies.get_current_movie(cid, "tv")),
-        ("book_reco", lambda: leisure_books.get_current_book(cid)),
         ("artist_reco", lambda: leisure_music.send_listen(None, cid, preview=True)),
         ("series", lambda: _warm_series(cid)),
         ("album_notes", lambda: _warm_album_notes(cid)),
@@ -534,6 +513,5 @@ def is_ready(cid) -> bool:
     today, cc = _today_and_cc(cid)
     return (
         leisure_movies._movie_premieres_cache_get(cc, today) is not None
-        and leisure_books._book_premieres_cache_get(today) is not None
         and leisure_movies._cached_movie(cid) is not None
     )

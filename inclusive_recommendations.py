@@ -17,12 +17,6 @@ _TITLES = {
         "it's a sin", "это грех",
         "pose", "поза",
     },
-    "book": {
-        "the song of achilles", "песнь ахилла",
-        "giovanni's room", "комната джованни",
-        "the price of salt", "цена соли", "кэрол",
-        "last night at the telegraph club", "прошлой ночью в телеграфном клубе",
-    },
 }
 
 

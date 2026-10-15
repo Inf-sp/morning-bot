@@ -42,8 +42,8 @@ async def handle(update, context, remove_reply_keyboard):
         await wardrobe.ingest(bot, cid, text)
         return
 
-    # «Добавь книги / музыку / фильмы X» — явная команда библиотеки: раньше словаря, который иначе
-    # принял бы «книги X» за слово; прежний ввод снимается, как у словаря.
+    # «Добавь музыку / фильмы X» — явная команда библиотеки: раньше словаря, который иначе
+    # принял бы «музыку X» за слово; прежний ввод снимается, как у словаря.
     if assistant._detect_love_add(text):
         store.pending_input.pop(cid, None)
         await assistant.try_add_love_from_chat(bot, cid, text)

@@ -25,7 +25,6 @@ import trainer
 import learning
 import settings
 import leisure_movies
-import leisure_books
 import leisure_collection
 import leisure_concerts
 import weather
@@ -350,17 +349,6 @@ async def job_warm_movie_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
 
 
 @ai.background_job
-async def job_warm_book_premieres_cache(context: ContextTypes.DEFAULT_TYPE):
-    """Ночью обновляет единую книжную витрину один раз для всех пользователей."""
-    if not access.get_allowed_cids() or tracking.has_active_actions():
-        return
-    try:
-        await leisure_books.warm_book_premieres_cache()
-    except Exception:
-        logging.exception("job_warm_book_premieres_cache failed")
-
-
-@ai.background_job
 async def job_vacation_return(context: ContextTypes.DEFAULT_TYPE):
     """День возвращения из отпуска: домашний город обратно."""
     try:
@@ -393,7 +381,7 @@ async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_refresh_concerts_cache failed for cid=%s", cid)
 
 async def job_weekend_events(context: ContextTypes.DEFAULT_TYPE):
-    """Компактные премьеры кино, концертов, книг и игр по пятницам."""
+    """Пятничная подборка «Концерты недели»."""
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "weekend_events") or not _slot_due(context, cid, "weekend_events"):
             continue
@@ -661,10 +649,6 @@ def _build_application():
     jq.run_daily(
         job_warm_movie_premieres_cache, time=_t("02:10"), days=(0,),
         **_job_options("movie_premieres_cache_weekly"),
-    )
-    jq.run_daily(
-        job_warm_book_premieres_cache, time=_t("02:20"), days=(0,),
-        **_job_options("book_premieres_cache_weekly"),
     )
     # Концерты прогреваются до самого раннего времени «Концертов недели» (09:00).
     jq.run_daily(

@@ -64,19 +64,6 @@ def _claim(value):
     return {"mainsnak": {"datavalue": {"value": value}}}
 
 
-def test_author_country_skips_historic_state_without_iso(monkeypatch):
-    writer = {
-        "claims": {"P31": [_claim({"id": "Q5"})],
-                   "P27": [_claim({"id": "Q174193"}), _claim({"id": "Q145"})]},
-        "descriptions": {"en": {"value": "English writer"}},
-    }
-    states = {"Q174193": {"claims": {}}, "Q145": {"claims": {"P297": [_claim("GB")]}}}
-    responses = iter([{"search": [{"id": "Q42511"}]}, {"entities": {"Q42511": writer}}, {"entities": states}])
-    monkeypatch.setattr(wikidata_books, "_get", lambda _params: next(responses))
-
-    assert wikidata_books.author_country("H. G. Wells") == "GB"
-
-
 def test_engine_pick_checks_production_country_from_details(monkeypatch):
     monkeypatch.setattr(countries, "_table", lambda: TABLE)
     details = {1: {"name": "Голливуд", "countries": ["US"]}, 2: {"name": "Париж", "countries": ["FR"]}}

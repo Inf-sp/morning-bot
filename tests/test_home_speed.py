@@ -8,7 +8,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 import ai
 import bot
 import bot_maintenance
-import leisure_books
 import leisure_movies
 import tracking
 
@@ -95,14 +94,6 @@ def test_home_warm_runs_ai_in_background_mode(monkeypatch):
     assert ai._is_background() is False
 
 
-def test_background_jobs_are_wrapped():
-    for job in (bot.job_warm_weather_cache, bot.job_warm_movie_premieres_cache,
-                bot.job_warm_book_premieres_cache,
-                bot.job_refresh_concerts_cache, bot.job_retry_dictionary_adds,
-                bot.job_requested_dictionary_rechecks):
-        assert hasattr(job, "__wrapped__"), job.__name__
-
-
 def test_bounded_timeout_follows_live_action_budget():
     assert tracking.bounded_timeout(15) == 15.0
     trace = tracking.start_action("42", "Кино", "movie_reco", budget_seconds=3)
@@ -110,3 +101,10 @@ def test_bounded_timeout_follows_live_action_budget():
         assert 2.5 <= tracking.bounded_timeout(15) <= 3.0
     finally:
         tracking.finish_action(trace)
+
+
+def test_background_jobs_are_wrapped():
+    for job in (bot.job_warm_weather_cache, bot.job_warm_movie_premieres_cache,
+                bot.job_refresh_concerts_cache, bot.job_retry_dictionary_adds,
+                bot.job_requested_dictionary_rechecks):
+        assert hasattr(job, "__wrapped__"), job.__name__

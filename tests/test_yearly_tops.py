@@ -12,13 +12,13 @@ def _labels(markup):
 
 
 def test_yearly_top_card_has_genre_and_short_description():
-    message = yearly_tops.leisure_ui.yearly_top_screen("book", 2025, {
+    message = yearly_tops.leisure_ui.yearly_top_screen("movie", 2025, {
         "title": "Flesh",
         "genre": "литературная проза",
         "summary": "Сдержанный роман о теле и амбициях.",
     })
 
-    assert message.text.startswith("🏆 Топ-5 · Книги 2025")
+    assert message.text.startswith("🏆 Топ-5 · Фильмы 2025")
     assert "литературная проза" in message.text
     assert "Сдержанный роман" in message.text
 
@@ -50,9 +50,9 @@ def test_movie_top_uses_previous_year_and_english_posters(monkeypatch):
 
 
 def test_yearly_top_carousel_uses_one_of_five_counter():
-    items = [{"title": f"Книга {index}"} for index in range(5)]
+    items = [{"title": f"Фильм {index}"} for index in range(5)]
 
-    _message, markup, page = yearly_tops._view("book", items, page=1)
+    _message, markup, page = yearly_tops._view("movie", items, page=1)
 
     assert page == 1
     assert _labels(markup)[0] == ["◀️", "2/5", "▶️"]

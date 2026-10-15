@@ -29,13 +29,11 @@ def _no_concert_notes_ai(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_country_network(monkeypatch):
-    """Таблица стран, MusicBrainz и Wikidata-гражданство в тестах не запрашиваются."""
+    """Таблица стран, MusicBrainz и Wikidata в тестах не запрашиваются."""
     import countries
 
     monkeypatch.setattr(countries, "_table", lambda: {})
     monkeypatch.setattr(countries, "artist_label", lambda _name, fetch=True: "")
-    monkeypatch.setattr(countries, "author_label", lambda _name, fetch=True: "")
-    monkeypatch.setattr(countries, "author_cc", lambda _name, fetch=True: "")
     monkeypatch.setattr(countries, "title_info", lambda *_a, **_k: {})
     yield
 
@@ -65,15 +63,6 @@ def _no_local_events_search(monkeypatch):
     import local_events
 
     monkeypatch.setattr(local_events, "_search", lambda *_a: [])
-    yield
-
-
-@pytest.fixture(autouse=True)
-def _no_open_library_covers(monkeypatch):
-    """Запасная обложка Open Library в тестах не запрашивается."""
-    import leisure_books
-
-    monkeypatch.setattr(leisure_books, "_book_cover", lambda *_a, **_k: None)
     yield
 
 

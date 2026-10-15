@@ -4,7 +4,6 @@ import os
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
-import leisure_books
 import leisure_movies
 import movie_discovery
 
@@ -62,33 +61,3 @@ def test_movie_premiere_without_poster_is_not_shown(monkeypatch):
     assert bot.sent[0][1]["photo"] == "https://images.test/en2.jpg"
 
 
-
-
-def test_book_premiere_without_cover_is_not_shown(monkeypatch):
-    items = [{
-        "title": "Без обложки",
-        "author": "Автор",
-        "published_date": "2026-08-15",
-        "categories": ["Fiction"],
-        "summary": "Описание.",
-        "url": "https://books.test/missing",
-    }, {
-        "title": "С обложкой",
-        "author": "Автор",
-        "published_date": "2026-08-15",
-        "categories": ["Fiction"],
-        "summary": "Описание.",
-        "url": "https://books.test/covered",
-        "cover_url": "https://images.test/book.jpg",
-    }]
-    monkeypatch.setattr(
-        leisure_books, "get_book_premieres",
-        lambda *_args, **_kwargs: asyncio.sleep(0, result=items),
-    )
-    bot = Bot()
-
-    asyncio.run(leisure_books.send_book_premieres(bot, "42"))
-
-    assert [kind for kind, _kwargs in bot.sent] == ["photo"]
-    assert bot.sent[0][1]["photo"] == "https://images.test/book.jpg"
-    assert "Без обложки" not in bot.sent[0][1]["caption"]

@@ -680,8 +680,8 @@ def trip_priority_rule(cid, what) -> str:
 
 
 def _clear_leisure_cards(cid):
-    """Карточки дня Досуга (фильм, книга, артист) подбираются заново — уже с приоритетом страны."""
-    for key in (config.MOVIE_RECO_CACHE_KEY, config.BOOK_RECO_CACHE_KEY, config.MUSIC_RECO_CACHE_KEY):
+    """Карточки дня Досуга (фильм, артист) подбираются заново — уже с приоритетом страны."""
+    for key in (config.MOVIE_RECO_CACHE_KEY, config.MUSIC_RECO_CACHE_KEY):
         def mutate(data):
             data = data if isinstance(data, dict) else {}
             data.pop(str(cid), None)

@@ -48,7 +48,7 @@ _quota_from_headers = provider_runtime.quota_from_headers
 
 _AI_SERVICES = ("gemini", "cerebras", "groq", "cloudflare", "github", "openrouter")
 _DATA_SERVICES = (
-    "openweather", "firecrawl", "tavily", "tmdb", "google_books", "youtube", "languagetool",
+    "openweather", "firecrawl", "tavily", "tmdb", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "ns", "pexels", "unsplash",
 )
 _DATA_CATEGORIES = {
@@ -56,7 +56,6 @@ _DATA_CATEGORIES = {
     "firecrawl": "Поиск",
     "tavily": "Поиск",
     "tmdb": "Кино",
-    "google_books": "Книги",
     "youtube": "",  # «YouTube · 3 сегодня» — без категории
     "languagetool": "Обучение",
     "spoonacular": "Питание",
@@ -159,18 +158,6 @@ def format_row(service: str, state: dict | None = None) -> str:
         return _format_groq_row(state)
     if service in ("gemini", "cerebras", "cloudflare", "github", "openrouter"):
         return _format_ai_row(service, state)
-    if service == "google_books":
-        usage = api_usage.google_books_requests()
-        remaining = int(usage["remaining"])
-        if remaining <= 0:
-            return "🔴 Google Books · Книги · лимит исчерпан → Open Library"
-        if not _configured(service):
-            return "🔴 Google Books · Книги · API-ключ не настроен"
-        if status in (WARNING, DOWN):
-            return _row(status, " · ".join([
-                spec.label, spec.category, _status_detail(service, state),
-            ]))
-        return f"🟢 Google Books · Книги · {_number(remaining)}/1 000 осталось"
     parts = [spec.label]
     category = _DATA_CATEGORIES.get(service, spec.category)
     if category:
@@ -303,7 +290,6 @@ def _probe_request(service: str):
         "tmdb": ("GET", "https://api.themoviedb.org/3/configuration", {"params": {"api_key": config.TMDB_API_KEY}}),
         # videos.list стоит 1 единицу квоты (поиск — 100): проверяет только ключ.
         "youtube": ("GET", "https://www.googleapis.com/youtube/v3/videos", {"params": {"part": "id", "id": "dQw4w9WgXcQ", "key": config.YOUTUBE_API_KEY}}),
-        "google_books": ("GET", "https://www.googleapis.com/books/v1/volumes", {"params": {"q": "1984", "maxResults": 1, "printType": "books", "projection": "lite", "key": config.GOOGLE_BOOKS_API_KEY}}),
         "languagetool": ("POST", f"{config.LANGUAGETOOL_API_URL}/check", {"data": {"text": "Dit is goed.", "language": "nl-NL"}}),
         "spoonacular": ("GET", "https://api.spoonacular.com/food/ingredients/search", {"params": {"query": "apple", "number": 1, "apiKey": config.SPOONACULAR_API_KEY}}),
         "themealdb": ("GET", f"https://www.themealdb.com/api/json/v1/{config.THEMEALDB_API_KEY}/lookup.php", {"params": {"i": "52772"}}),
@@ -347,19 +333,13 @@ def probe(service: str) -> bool:
         return False
     try:
         method, url, kwargs = _probe_request(service)
-        if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
-            return False
-        try:
-            response = requests.request(method, url, **kwargs)
-        finally:
-            if service == "google_books":
-                api_usage.google_books_requests(consume=True)
+        response = requests.request(method, url, **kwargs)
         ok = 200 <= response.status_code < 300
         error = ""
         if not ok:
             error = (
                 provider_runtime.google_error_details(response)
-                if service in ("google_books", "youtube")
+                if service == "youtube"
                 else f"HTTP {response.status_code}"
             )
         remaining = total = None
@@ -481,8 +461,6 @@ def live_check(service: str) -> dict | None:
             return result("ok", detail="по реальным запросам")
         return result("fail", detail=state.get("last_error") or "сервис не ответил")
     if service == "tavily" and provider_runtime.tavily_monthly_quota_exhausted():
-        return result("limit", detail="лимит исчерпан")
-    if service == "google_books" and not api_usage.google_books_requests()["allowed"]:
         return result("limit", detail="лимит исчерпан")
     if service == "database":
         try:

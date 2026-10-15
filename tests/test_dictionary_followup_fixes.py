@@ -94,7 +94,6 @@ def test_favorite_collection_normalization_preserves_item_ids(monkeypatch):
         config.FAVORITE_MOVIES_KEY: {"42": [
             {"id": "m1", "value": "🎬 **Укрытие (2023)**"}, "Укрытие", "Дюна",
         ]},
-        config.FAVORITE_BOOKS_KEY: {"42": [{"id": "b1", "name": "*Дюна*"}, "Дюна"]},
         config.FAVORITE_ARTISTS_KEY: {"42": ["Radiohead"]},
     }
     saved = {}
@@ -106,7 +105,7 @@ def test_favorite_collection_normalization_preserves_item_ids(monkeypatch):
     assert saved[config.FAVORITE_MOVIES_KEY]["42"] == [
         {"id": "m1", "value": "Укрытие (2023)"}, "Дюна",
     ]
-    assert saved[config.FAVORITE_BOOKS_KEY]["42"] == [{"id": "b1", "name": "Дюна"}]
+    assert config.FAVORITE_BOOKS_KEY not in saved  # книги больше не нормализуются — данные не трогаем
     assert config.FAVORITE_ARTISTS_KEY not in saved
 
 

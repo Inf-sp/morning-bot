@@ -10,7 +10,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import cleanup
 import config
-import leisure_books
 import leisure_movies
 import movie_discovery
 import movie_recommendation
@@ -32,62 +31,16 @@ def _bold_values(message):
     }
 
 
-def test_recommendation_cards_have_no_refresh_label():
-    assert "✨ Обновить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
-    assert "✨ Обновить" not in sum(_labels(leisure_books._book_kb(0)), [])
-    assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
-    # «По жанру» открывает выбор жанра под карточкой; кнопки «Выбрать жанр» нет.
-    for keyboard, other, callback in (
-        (leisure_movies._movie_kb(0), "По жанру", "movie_pick_0"),
-        (leisure_books._book_kb(0), "По жанру", "book_pick_0"),
-        (leisure_music._listen_kb(), "По жанру", "music_pick"),
-    ):
-        second = keyboard.inline_keyboard[1][0]
-        assert (second.text, second.callback_data) == (other, callback)
-        assert all("Выбрать жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
-        assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
-    # «Не интересно» — красная, первой строкой, вместо «Добавить в Моё…».
-    for keyboard, callback in (
-        (leisure_movies._movie_kb(3), "movie_no_3"),
-        (leisure_movies._movie_kb(3, kind="tv"), "tv_no_3"),
-        (leisure_books._book_kb(3), "book_no_3"),
-        (leisure_music._listen_kb(), "listen_no"),
-    ):
-        dislike = keyboard.inline_keyboard[0][0]
-        assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
-            "Не интересно", callback, {"style": "danger"},
-        )
-        # «Настроить» на карточках нет — библиотека настраивается из хаба.
-        assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)
-        assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
-    assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-
-
-def test_preferences_are_available_in_personal_content_lists():
-    assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📝 Выбрать предпочтения", "movie_prefs")
-    assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is False
-    assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
-    assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["books_favorites"]["menu_button"] == ("📝 Выбрать предпочтения", "book_prefs")
-    assert cleanup.COLLECTIONS["books_favorites"]["add_button_at_bottom"] is False
-    assert cleanup.COLLECTIONS["books_favorites"]["allow_edit"] is False
-    assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📝 Выбрать предпочтения", "music_prefs")
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is False
-    assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
-
-
 def test_global_preferences_has_all_recommendation_sections():
     bot = RecordingBot()
     asyncio.run(settings.send_preferences(bot, "42"))
 
     assert _labels(bot.sent[0]["reply_markup"]) == [
         ["☀️ Мой день"], ["🧠 Обучение"], ["🥣 Кухни"], ["🧵 Стиль"], ["🎧 Музыка"],
-        ["🎬 Кино"], ["📚 Книги"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Кино"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     # Сводка всех предпочтений текстом: каждый раздел — своя строка.
-    for label in ("Обучение:", "Кухни:", "Ограничения в еде:", "Стиль:", "Музыка:", "Кино:", "Книги:"):
+    for label in ("Обучение:", "Кухни:", "Ограничения в еде:", "Стиль:", "Музыка:", "Кино:"):
         assert label in bot.sent[0]["text"]
 
 
@@ -300,50 +253,6 @@ def test_movie_cache_serializes_tmdb_anchors(monkeypatch):
     )
 
 
-def test_leisure_preference_choices_use_one_column():
-    keyboards = (
-        leisure_movies._movie_prefs_kb("42"),
-        leisure_books._book_preferences_kb("42"),
-        leisure_music._music_preferences_kb("42"),
-    )
-
-    assert all(len(row) == 1 for keyboard in keyboards for row in _labels(keyboard)[:-1])
-
-
-def test_book_preferences_filter_recommendations_by_recency_and_rating(monkeypatch):
-    values = {"book_recency": "new", "book_min_rating": "4.5"}
-    monkeypatch.setattr(leisure_books.settings, "get", lambda _cid, key, default=None: values.get(key, default))
-    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
-    current_year = datetime.now(config.TZ).year
-    items = [
-        {"title": "Старая высокая", "year": str(current_year - 3), "rating": 4.9, "ratings_count": 100},
-        {"title": "Новая ниже", "year": str(current_year), "rating": 4.4, "ratings_count": 100},
-        {"title": "Новая подходящая", "year": str(current_year), "rating": 4.7, "ratings_count": 10},
-    ]
-
-    rows = _labels(leisure_books._book_preferences_kb("42"))
-
-    assert rows == [
-        ["✅ Новинки"],
-        ["□ Любые годы"],
-        ["□ ⭐️ 3.5"],
-        ["□ ⭐️ 4.0"],
-        ["✅ ⭐️ 4.5"],
-        ["⬅️ Назад", "#️⃣ Главная"],
-    ]
-    assert leisure_books._pick_good_book(items, "42", fallback=False)["title"] == "Новая подходящая"
-
-
-def test_genre_book_reserve_keeps_producing_distinct_cards(monkeypatch):
-    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
-    shown = []
-    for _index in range(5):
-        item = leisure_books._genre_fallback_book("42", "fantasy", shown)
-        shown.append(item["title"])
-
-    assert len(set(shown)) == 5
-
-
 def test_artist_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     view_id = "artists-layout"
     cleanup._views[view_id] = {
@@ -400,13 +309,6 @@ def test_movie_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
     assert rows[0] == ["✅ Добавить фильм"]
     assert ["📝 Выбрать предпочтения"] in rows
     assert all("✏️ Изменить" not in row for row in rows)
-
-
-def test_favorite_movies_and_books_home_show_title_and_one_hint():
-    ui = leisure_movies.leisure_ui
-    assert ui.favorite_movies_home(3).text == "🎚️ Моё кино · 3 фильма/сериала\n\nПо любимым фильмам и сериалам подбираю похожее."
-    assert ui.favorite_books_home(5).text == "🎚️ Мои книги · 5 книг\n\nПо любимым книгам подбираю похожие."
-    assert ui.favorite_movies_home(0).text.startswith("🎚️ Моё кино · 0 фильмов/сериалов\n\nДобавь")
 
 
 def test_favorite_movies_open_genre_and_poster_card(monkeypatch):
@@ -532,181 +434,8 @@ def test_favorite_movie_delete_removes_only_selected_record(monkeypatch):
     assert reopened == [("42", None)]
 
 
-def test_favorite_books_are_grouped_by_genre_and_open_cover_card(monkeypatch):
-    class Bot:
-        def __init__(self):
-            self.messages = []
-            self.photos = []
-
-        async def send_message(self, **kwargs):
-            self.messages.append(kwargs)
-
-        async def send_photo(self, **kwargs):
-            self.photos.append(kwargs)
-
-    records = [
-        {"id": "book-a123", "value": "Дюна"},
-        {"id": "book-b123", "value": "Гордость и предубеждение"},
-    ]
-    metadata = {
-        "Дюна": {"title": "Дюна", "categories": ["Science Fiction"],
-                 "cover_url": "https://images.test/dune.jpg", "description": "История Арракиса."},
-        "Гордость и предубеждение": {"title": "Гордость и предубеждение",
-                                     "categories": ["Romance"]},
-    }
-    monkeypatch.setattr(leisure_books.store, "ensure_list_ids", lambda *_args: records)
-    monkeypatch.setattr(
-        leisure_books.google_books, "enrich_book",
-        lambda item: metadata[item["title"]],
-    )
-
-    bot = Bot()
-    asyncio.run(leisure_books.send_favorite_books(bot, "42"))
-
-    assert bot.messages[0]["text"].startswith("🎚️ Мои книги · 2 книги\n\n")
-    genre_callback = next(
-        row[0].callback_data for row in bot.messages[0]["reply_markup"].inline_keyboard
-        if row[0].text.startswith("Фантастика")
-    )
-    _op, token, genre_index, page = genre_callback.split(":")
-    asyncio.run(leisure_books.send_favorite_book_genre(
-        bot, "42", token, int(genre_index), int(page),
-    ))
-
-    assert bot.photos[-1]["photo"] == "https://images.test/dune.jpg"
-    assert _labels(bot.photos[-1]["reply_markup"])[0] == ["❌ Удалить"]
-
-
-def test_reopening_favorite_book_does_not_replace_it_with_same_title_match(monkeypatch):
-    saved = {
-        "id": "book-martian", "value": "Марсианин", "title": "Марсианин",
-        "author": "Энди Вейер", "year": "2014", "genre_label": "Без жанра",
-        "description": "Астронавт остаётся один на Марсе.",
-        "cover_url": "https://images.test/martian.jpg",
-        "google_books_id": "real-martian",
-    }
-    monkeypatch.setattr(leisure_books.store, "ensure_list_ids", lambda *_args: [saved])
-    persisted = []
-    monkeypatch.setattr(
-        leisure_books.store, "set_list",
-        lambda _key, _cid, values: persisted.extend(values),
-    )
-    async def genre_ai(*_args, **_kwargs):
-        return {"items": [{"id": 0, "genre": "Фантастика"}]}
-    monkeypatch.setattr(leisure_books.ai, "allm_json", genre_ai)
-    monkeypatch.setattr(leisure_books.google_books, "find_volume", lambda *_args, **_kwargs: {
-        "google_books_id": "ridley-biography", "title": "Марсианин",
-        "author": "Иэн Нейтан", "year": "2014",
-        "categories": ["Ридли Скотт. Гений визуальных миров. От «Чужого» до «Марсианина»"],
-        "description": "Биография режиссёра Ридли Скотта.",
-        "cover_url": "https://images.test/ridley.jpg",
-    })
-
-    records = asyncio.run(leisure_books._favorite_book_records("42"))
-    book = records[0]["book"]
-
-    assert book["google_books_id"] == "real-martian"
-    assert book["author"] == "Энди Вейер"
-    assert book["description"] == "Астронавт остаётся один на Марсе."
-    assert book["cover_url"] == "https://images.test/martian.jpg"
-    assert records[0]["genre"] == "Фантастика"
-    assert persisted[0]["genre_label"] == "Фантастика"
-
-
-def test_favorite_book_with_multiple_categories_uses_primary_genre_once():
-    assert leisure_books._favorite_book_genre({
-        "categories": ["Fantasy", "Romance"],
-    }) == "Фэнтези"
-    token, view = leisure_books._new_favorite_book_view("42", [{
-        "id": "book-1", "title": "Книга", "genre": "Фэнтези", "book": {},
-    }])
-
-    assert token
-    assert [(genre, [item["title"] for item in items]) for genre, items in view["genres"]] == [
-        ("Фэнтези", ["Книга"]),
-    ]
-
-
-def test_favorite_book_genre_switches_covers_in_the_same_card():
-    token = "book-carousel"
-    leisure_books._favorite_book_views[token] = {
-        "cid": "42", "created_at": leisure_books.time.time(),
-        "genres": [("Фантастика", [{
-            "id": "book-one", "title": "Первая", "book": {
-                "title": "Первая", "cover_url": "one.jpg",
-            },
-        }, {
-            "id": "book-two", "title": "Вторая", "book": {
-                "title": "Вторая", "cover_url": "two.jpg",
-            },
-        }])],
-    }
-    edited = []
-
-    class Query:
-        async def edit_message_media(self, **kwargs):
-            edited.append(kwargs)
-
-    asyncio.run(leisure_books.send_favorite_book_genre(
-        object(), "42", token, 0, 1, q=Query(),
-    ))
-
-    assert edited[0]["media"].media == "two.jpg"
-    assert "Вторая" in edited[0]["media"].caption
-    assert _labels(edited[0]["reply_markup"])[:2] == [["❌ Удалить"], ["◀️", "2/2", "▶️"]]
-
-
-def test_book_list_keeps_add_above_navigation_without_edit_button(monkeypatch):
-    view_id = "books-layout"
-    cleanup._views[view_id] = {
-        "ctx": "books_favorites",
-        "revision": 0,
-        "selected_ids": set(),
-        "page": 0,
-        "back": "m_books",
-        "created_at": 0,
-        "confirming": False,
-        "editing": False,
-    }
-    monkeypatch.setattr(
-        cleanup, "_view_items",
-        lambda *_args: ("🎚️ Мои книги", [("book-1", "Книга")], "m_books"),
-    )
-
-    bot = RecordingBot()
-    try:
-        asyncio.run(cleanup._render_view(bot, "42", view_id))
-    finally:
-        cleanup._views.pop(view_id, None)
-
-    rows = _labels(bot.message["reply_markup"])
-    assert rows[0] == ["✅ Добавить книгу"]
-    assert ["📝 Выбрать предпочтения"] in rows
-    assert all("✏️ Изменить" not in row for row in rows)
-
-
 def test_personal_lists_are_available_from_their_category_preferences():
     assert _labels(leisure_music._music_preferences_kb("42"))[0] == ["⬜ Инди"]
-
-
-def test_recommendation_subscreens_return_to_their_category_home():
-    music_styles = [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES]
-    original_music_styles = leisure_music._music_styles
-    leisure_music._music_styles = lambda _cid: music_styles
-    keyboards = [
-        leisure_movies._movie_genre_menu_kb(),
-        leisure_books._book_kb(0),
-        leisure_books._book_genre_menu_kb(),
-        leisure_music._listen_kb(), leisure_music._music_genre_menu_kb("42"),
-    ]
-    try:
-        assert all(_labels(keyboard)[-1] == ["⬅️ Назад", "#️⃣ Главная"] for keyboard in keyboards)
-        assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-        assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-        assert _labels(leisure_books._book_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-        assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-    finally:
-        leisure_music._music_styles = original_music_styles
 
 
 def test_music_does_not_offer_generic_bookmarks():
@@ -730,28 +459,6 @@ def test_music_styles_are_stored_and_invalidate_the_daily_recommendation(monkeyp
     assert saved["music_styles"] == ["indie"]
 
 
-def test_movies_and_books_do_not_offer_generic_bookmarks():
-    for keyboard in (
-        leisure_movies._movie_kb(0), leisure_books._book_kb(0),
-    ):
-        assert "💾 Сохранения" not in sum(_labels(keyboard), [])
-        assert "💾 Сохранить" not in sum(_labels(keyboard), [])
-
-
-def test_book_recommendation_skips_favorite_and_prefers_reader_rating(monkeypatch):
-    def get_list(key, _cid):
-        return [{"value": "1984"}] if key == config.FAVORITE_BOOKS_KEY else []
-
-    monkeypatch.setattr(leisure_books.store, "get_list", get_list)
-    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
-    result = leisure_books._pick_good_book([
-        {"title": "1984", "rating": 5},
-        {"title": "Книга читателей", "rating": 4.6, "ratings_count": 240},
-        {"title": "Книга с меньшей оценкой", "rating": 4.1, "ratings_count": 900},
-    ], "42")
-    assert result["title"] == "Книга читателей"
-
-
 def test_favorite_artists_are_grouped_by_genre_without_no_genre_category(monkeypatch):
     monkeypatch.setattr(leisure_music, "_cached_artist", lambda _cid: {})
     items = [
@@ -770,83 +477,12 @@ def test_favorite_artists_are_grouped_by_genre_without_no_genre_category(monkeyp
     }
 
 
-def test_book_and_music_genre_menus_have_one_column_without_emoji(monkeypatch):
-    monkeypatch.setattr(
-        leisure_music, "_music_styles",
-        lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
-    )
-    assert _labels(leisure_books._book_genre_menu_kb())[:-1] == [
-        ["🆕 Новинка"], ["Фэнтези"], ["Фантастика"], ["Детектив"], ["Триллер"],
-        ["Романтика"], ["История"], ["Биографии"], ["Психология"], ["Проза"],
-    ]
-    assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
-        ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
-    ]
-    assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
-        ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
-        ["Триллер"], ["Романтика"], ["Драма"], ["Анимация"],
-    ]
-
-
 def test_music_genre_menu_shows_only_selected_styles(monkeypatch):
     monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "rock"])
 
     assert _labels(leisure_music._music_genre_menu_kb("42")) == [
         ["🆕 Новинка"], ["Инди"], ["Рок"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
-
-
-def test_book_genre_menu_does_not_replace_the_recommendation_card():
-    class BookMessage:
-        def __init__(self):
-            self.edits = []
-            self.markup = None
-
-        async def edit_text(self, *args, **kwargs):
-            self.edits.append((args, kwargs))
-
-        async def edit_reply_markup(self, *, reply_markup):
-            self.markup = reply_markup
-
-    message = BookMessage()
-    query = type("Query", (), {"message": message})()
-    bot = RecordingBot()
-
-    asyncio.run(leisure_books.send_book_genre_menu(bot, "42", query))
-
-    assert message.edits == []
-    assert _labels(message.markup) == _labels(leisure_books._book_genre_menu_kb())
-    assert bot.sent == []
-
-
-def test_book_genre_uses_a_matching_fallback_when_catalogue_is_empty(monkeypatch):
-    selected = []
-
-    class Bot:
-        sent = []
-
-        async def send_message(self, **kwargs):
-            self.sent.append(kwargs)
-
-    async def send_card(_bot, _cid, book, _index, *, enrich):
-        selected.append(book)
-        return book
-
-    async def no_books(_cid, _category):
-        return []
-
-    monkeypatch.setattr(leisure_books, "_book_candidates", no_books)
-    monkeypatch.setattr(leisure_books, "_send_book_card", send_card)
-    monkeypatch.setattr(leisure_books, "_cache_book", lambda *_args: None)
-    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
-    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
-    monkeypatch.setattr(leisure_books.store, "last_recos", {})
-
-    bot = Bot()
-    asyncio.run(leisure_books.send_book_by_genre(bot, "genre-empty", "fantasy"))
-
-    assert selected[0]["title"] == "Заражённая чаша"
-    assert bot.sent == []
 
 
 def test_music_genre_selection_stays_in_the_selected_genre(monkeypatch):
@@ -863,144 +499,6 @@ def test_music_genre_selection_stays_in_the_selected_genre(monkeypatch):
         "kind": "genre", "value": "indie", "label": "Инди",
         "prompt_name": "инди-поп или инди-рок",
     }, "force": True, "status": "status"})]
-
-
-def test_book_cache_drops_a_favorite(monkeypatch):
-    today = datetime.now(config.TZ).date().isoformat()
-    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: {
-        "42": {"date": today, "item": {"title": "1984"}},
-    })
-    monkeypatch.setattr(leisure_books.store, "get_list", lambda key, _cid: [{"value": "1984"}] if key == config.FAVORITE_BOOKS_KEY else [])
-    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
-    assert leisure_books._cached_book("42") is None
-
-
-def test_book_home_reads_its_fresh_daily_cache(monkeypatch):
-    today = datetime.now(config.TZ).date().isoformat()
-    entry = {
-        "42": {
-            "date": today,
-            "item": {"title": "Дюна", "rating": 4.5, "ratings_count": 1_000},
-            "preferences": {"recency": None, "min_rating": None},
-        },
-    }
-    monkeypatch.setattr(leisure_books.store, "_load", lambda *_args: entry)
-    monkeypatch.setattr(leisure_books.store, "get_list", lambda *_args: [])
-    monkeypatch.setattr(leisure_books.recommendation_stoplist, "values", lambda *_args: [])
-    monkeypatch.setattr(leisure_books.settings, "get", lambda *_args: "")
-
-    assert leisure_books._cached_book("42")["title"] == "Дюна"
-
-
-def test_book_card_has_modern_compact_hierarchy():
-    message = leisure_books._book_text({
-        "title": "Ночной город", "title_en": "Night Night Fawn", "author": "Автор",
-        "year": "2026", "categories": ["Fantasy"],
-        "plot": "Первое. Второе. Третье. Четвёртое. Пятое. Шестое предложение.",
-        "rating": 4.7, "ratings_count": 1234,
-        "why": ["Необычный мир"],
-        "quote": "Выдуманная цитата",
-    })
-    assert message.text == (
-        "Ночной город\n\n"
-        "Автор · Night Night Fawn\n"
-        "⭐ 4.7 · фэнтези · 2026\n\n"  # как в кино: рейтинг · жанр · страна · год
-        "Первое. Второе. Третье. Четвёртое. Пятое."  # описание без «Сюжет»: до пяти предложений
-    )
-    assert "Почему стоит читать" not in message.text
-    assert "цитат" not in message.text.casefold()
-
-
-def test_book_card_has_no_author_section_even_for_old_cached_details():
-    message = leisure_books._book_text({
-        "title": "Книга", "author": "Автор", "plot": "О чём книга.",
-        "author_about": "Американская писательница", "author_books": ["A", "B", "C", "D"],
-    })
-    assert "Об авторе" not in message.text and "Другие книги" not in message.text
-    assert message.text.endswith("О чём книга.")
-
-
-def test_book_card_hides_missing_metadata_instead_of_inventing_it():
-    message = leisure_books._book_text({
-        "title": "Night Night Fawn",
-        "url": "https://books.google.com/books?id=test",
-    })
-
-    assert message.text == "Night Night Fawn"
-
-
-def test_book_card_from_inline_status_is_sent_with_cover(monkeypatch):
-    sent = []
-
-    class Bot:
-        async def send_photo(self, **kwargs):
-            sent.append(("photo", kwargs))
-
-        async def send_message(self, **kwargs):
-            sent.append(("message", kwargs))
-
-    class Status:
-        async def replace(self, *_args, **_kwargs):
-            raise AssertionError("card with cover must be sent as a photo")
-
-    item = {
-        "title": "Новая книга",
-        "url": "https://books.google.com/books?id=new",
-        "cover_url": "https://images.test/new-book.jpg",
-    }
-
-    asyncio.run(leisure_books._send_book_card(
-        Bot(), "42", item, 0, enrich=False, status=Status(),
-    ))
-
-    assert [kind for kind, _kwargs in sent] == ["photo"]
-    assert sent[0][1]["photo"] == "https://images.test/new-book.jpg"
-
-
-def test_book_card_text_fallback_disables_link_preview(monkeypatch):
-    replaced = {}
-
-    class Status:
-        async def replace(self, text, **kwargs):
-            replaced.update({"text": text, **kwargs})
-
-    monkeypatch.setattr(leisure_books, "_book_cover", lambda *_args: None)
-
-    asyncio.run(leisure_books._send_book_card(
-        object(), "42", {
-            "title": "Книга без обложки",
-            "url": "https://books.google.com/books?id=no-cover",
-        }, 0, enrich=False, status=Status(),
-    ))
-
-    assert replaced["disable_web_page_preview"] is True
-
-
-def test_premiere_screens_are_compact_and_keep_book_links():
-    movie = leisure_movies.leisure_ui.movie_premieres_screen("Нидерланды", "13–26 августа", [{
-        "title": "Премьера", "date": "2026-08-15", "genres": "Драма, комедия",
-        "overview": "Семья пытается сохранить дом после большого наводнения",
-        "trailer_url": "https://www.youtube.com/watch?v=premiere",
-    }])
-    books = leisure_books.leisure_ui.book_premieres_screen("Августа 2026", [{
-        "title": "Новая книга", "author": "Автор", "summary": "Героиня ищет сестру в незнакомом городе",
-        "published_date": "2026-08-15", "categories": ["Fiction"],
-        "url": "https://books.google.com/books?id=new",
-    }])
-
-    assert "Премьеры фильмов · Нидерланды" in movie.text
-    assert "до 7 самых популярных" not in movie.text
-    assert "«Премьера» · драма · комедия · 15 августа 2026" in movie.text
-    assert "Семья пытается сохранить дом после большого наводнения." in movie.text
-    assert any(
-        entity.type == MessageEntity.TEXT_LINK
-        and entity.url == "https://www.youtube.com/watch?v=premiere"
-        for entity in movie.entities
-    )
-    assert books.text.startswith("🆕 Премьеры книг · Августа 2026")
-    assert "«Новая книга»\nАвтор\nХудожественная проза\nПремьера: 15 августа 2026" in books.text
-    assert "Героиня ищет сестру в незнакомом городе." in books.text
-    assert any(entity.type == MessageEntity.TEXT_LINK and entity.url.endswith("id=new") for entity in books.entities)
 
 
 def test_weekly_concerts_card_lists_my_artists_then_popular():
@@ -1139,63 +637,6 @@ def test_movie_premiere_carousel_edits_the_same_message(monkeypatch):
     ]
 
 
-def test_book_premieres_are_sent_as_one_poster_carousel(monkeypatch):
-    sent = []
-    items = [{
-        "title": f"Книга {index}", "author": f"Автор {index}",
-        "published_date": "2026-08-15", "categories": ["Fiction"],
-        "summary": f"Короткое описание {index}.",
-        "cover_url": f"https://images.test/book{index}.jpg",
-    } for index in range(3)]
-
-    class Bot:
-        async def send_photo(self, **kwargs):
-            sent.append(kwargs)
-
-    monkeypatch.setattr(
-        leisure_books, "_book_premieres_with_covers",
-        lambda: asyncio.sleep(0, result=items),
-    )
-
-    asyncio.run(leisure_books.send_book_premieres(Bot(), "42"))
-
-    assert sent[0]["photo"] == items[0]["cover_url"]
-    assert "Книга 0" in sent[0]["caption"]
-    assert "Книга 1" not in sent[0]["caption"]
-    assert _labels(sent[0]["reply_markup"]) == [
-        ["◀️", "1/3", "▶️"],
-        ["⬅️ Назад", "#️⃣ Главная"],
-    ]
-
-
-def test_book_premiere_carousel_edits_the_same_message(monkeypatch):
-    items = [{
-        "title": f"Книга {index}", "author": f"Автор {index}",
-        "published_date": "2026-08-15", "categories": ["Fiction"],
-        "summary": f"Короткое описание {index}.",
-        "cover_url": f"https://images.test/book{index}.jpg",
-    } for index in range(3)]
-    edited = []
-
-    class Query:
-        async def edit_message_media(self, **kwargs):
-            edited.append(kwargs)
-
-    monkeypatch.setattr(
-        leisure_books, "_book_premieres_with_covers",
-        lambda: asyncio.sleep(0, result=items),
-    )
-
-    asyncio.run(leisure_books.show_book_premiere_page(Query(), 1))
-
-    assert edited[0]["media"].media == items[1]["cover_url"]
-    assert "Книга 1" in edited[0]["media"].caption
-    assert _labels(edited[0]["reply_markup"]) == [
-        ["◀️", "2/3", "▶️"],
-        ["⬅️ Назад", "#️⃣ Главная"],
-    ]
-
-
 def test_series_premiere_card_marks_favorite_season_without_rating():
     message = leisure_movies.leisure_ui.series_premiere_screen({
         "name": "Разделение",
@@ -1219,27 +660,11 @@ def test_series_premiere_card_marks_favorite_season_without_rating():
     )
 
 
-def test_book_card_does_not_show_quote():
-    message = leisure_books._book_text({
-        "title": "1984", "author": "Джордж Оруэлл", "quote": "Война - это мир.",
-    })
-    assert "Война - это мир" not in message.text
-
-
 def test_cinema_rebus_changes_with_calendar_day():
     today = date(2026, 8, 4)
 
     assert leisure_movies._daily_rebus(today)["answer"] == "Челюсти"
     assert leisure_movies._daily_rebus(today + timedelta(days=1))["answer"] != "Челюсти"
-
-
-def test_book_showcase_falls_back_to_google_books_search_link():
-    item = leisure_books._with_book_url({
-        "title": "Недавний бестселлер", "author": "Автор",
-        "summary": "Короткое описание книги.",
-    })
-
-    assert item["url"] == "https://books.google.com/books?q=%D0%9D%D0%B5%D0%B4%D0%B0%D0%B2%D0%BD%D0%B8%D0%B9+%D0%B1%D0%B5%D1%81%D1%82%D1%81%D0%B5%D0%BB%D0%BB%D0%B5%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%80"
 
 
 def test_tv_detail_line_uses_russian_plurals():
@@ -1252,19 +677,6 @@ def test_tv_detail_line_uses_russian_plurals():
     for n, (seasons, episodes) in expected.items():
         line = _detail_line({"kind": "tv", "seasons": n, "episodes": n})
         assert line == f"{seasons} • {episodes}"
-
-
-def test_book_premiere_summary_is_separated_from_date_by_blank_line():
-    from ui import leisure as leisure_ui
-
-    text = leisure_ui.book_premieres_screen("сентябрь", [{
-        "title": "Intermezzo", "author": "Sally Rooney",
-        "published_date": "2026-09-01", "summary": "История двух братьев после смерти отца.",
-    }]).text
-
-    assert "Премьера: 1 сентября 2026\n\nИстория двух братьев" in text
-
-
 
 
 def test_other_opens_plain_genre_picker_and_back_returns_card_buttons():
@@ -1329,24 +741,6 @@ class _NoStatus:
         return None
 
 
-def test_book_genre_pick_uses_library_taste_first(monkeypatch):
-    asked = []
-
-    def recommend(kind, cid, genre=None):
-        asked.append(genre)
-        return {"items": [{"title": "Dune"}]}
-
-    async def enrich(items):
-        return items
-
-    monkeypatch.setattr(leisure_books, "content_recommend", recommend)
-    monkeypatch.setattr(leisure_books, "_enrich_book_candidates", enrich)
-
-    items = asyncio.run(leisure_books._book_candidates("42", {"value": "scifi"}))
-
-    assert asked == [("Фантастика", "Science fiction")] and items == [{"title": "Dune"}]
-
-
 def test_movie_card_puts_full_release_date_into_rating_line():
     _title, msg = leisure_movies.leisure_ui.movie_card({"title": "Дюна"}, {
         "name": "Дюна", "year": "2021", "release_date": "2021-09-15", "kind": "movie",
@@ -1398,19 +792,6 @@ def leisure_novelty_card_cfg():
     return leisure_novelty.card_keyboard("book").inline_keyboard[-2][0].callback_data
 
 
-def test_book_card_shows_author_country_year_and_genre():
-    text = leisure_movies.leisure_ui.book_text({
-        "title": "Проект «Аве Мария»", "author": "Энди Вейер", "country": "США",
-        "year": "2021", "genre": "Фантастика", "plot": "Учёный просыпается на корабле.",
-    }).text
-
-    assert text.startswith("Проект «Аве Мария»\n\nЭнди Вейер\nфантастика · США · 2021\n\nУчёный")
-
-
-
-
-
-
 def test_preferences_summary_lists_every_section(monkeypatch):
     values = {"cuisines": ["italian"], "food_restrictions": ["no_pork"], "movie_type_pref": "tv",
               "movie_min_rating": "7.0", "book_recency": "new"}
@@ -1423,19 +804,94 @@ def test_preferences_summary_lists_every_section(monkeypatch):
     assert summary["Обучение"] == "не изучаю"
     assert summary["Кухни"] == "Итальянская" and summary["Ограничения в еде"] == "Без свинины"
     assert summary["Стиль"] == "Повседневный · Классический" and summary["Музыка"] == "не выбрано"
-    assert summary["Кино"] == "от ⭐ 7.0" and summary["Книги"] == "новинки"
+    assert summary["Кино"] == "от ⭐ 7.0" and "Книги" not in summary
 
 
-def test_book_card_ends_with_italic_fact_and_series_card_with_italic_status():
-    book = leisure_movies.leisure_ui.book_text({
-        "title": "Марсианин", "author": "Энди Вейер", "plot": "Инженер выживает на Марсе.",
-        "fact": "Экранизирован Ридли Скоттом в 2015 году"})
-    italic = [book.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
-              for e in book.entities if e.type == "italic"]
-    assert book.text.endswith("Экранизирован Ридли Скоттом в 2015 году.") and italic == [
-        "Экранизирован Ридли Скоттом в 2015 году."]
 
-    _title, card = leisure_movies.leisure_ui.movie_card({"title": "Тьма"}, {
-        "name": "Тьма", "kind": "tv", "status": "Ended", "seasons": 3, "episodes": 26, "overview": "Время."})
-    assert card.text.endswith("Завершено · 3 сезона • 26 серий")
-    assert any(e.type == "italic" for e in card.entities)
+
+def test_recommendation_cards_have_no_refresh_label():
+    assert "✨ Обновить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
+    assert "✨ Обновить" not in sum(_labels(leisure_music._listen_kb()), [])
+    # «По жанру» открывает выбор жанра под карточкой; кнопки «Выбрать жанр» нет.
+    for keyboard, other, callback in (
+        (leisure_movies._movie_kb(0), "По жанру", "movie_pick_0"),
+        (leisure_music._listen_kb(), "По жанру", "music_pick"),
+    ):
+        second = keyboard.inline_keyboard[1][0]
+        assert (second.text, second.callback_data) == (other, callback)
+        assert all("Выбрать жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
+        assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
+    # «Не интересно» — красная, первой строкой, вместо «Добавить в Моё…».
+    for keyboard, callback in (
+        (leisure_movies._movie_kb(3), "movie_no_3"),
+        (leisure_movies._movie_kb(3, kind="tv"), "tv_no_3"),
+        (leisure_music._listen_kb(), "listen_no"),
+    ):
+        dislike = keyboard.inline_keyboard[0][0]
+        assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
+            "Не интересно", callback, {"style": "danger"},
+        )
+        # «Настроить» на карточках нет — библиотека настраивается из хаба.
+        assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)
+        assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)
+    assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+
+
+def test_preferences_are_available_in_personal_content_lists():
+    assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["cinema_favorites"]["menu_button"] == ("📝 Выбрать предпочтения", "movie_prefs")
+    assert cleanup.COLLECTIONS["cinema_favorites"]["add_button_at_bottom"] is False
+    assert cleanup.COLLECTIONS["cinema_favorites"]["allow_edit"] is False
+    assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["menu_button"] == ("📝 Выбрать предпочтения", "music_prefs")
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["add_button_at_bottom"] is False
+    assert cleanup.COLLECTIONS["music_favorite_artists"]["allow_edit"] is False
+    assert "books_favorites" not in cleanup.COLLECTIONS  # книг в библиотеке больше нет
+
+
+def test_leisure_preference_choices_use_one_column():
+    keyboards = (leisure_movies._movie_prefs_kb("42"), leisure_music._music_preferences_kb("42"))
+
+    assert all(len(row) == 1 for keyboard in keyboards for row in _labels(keyboard)[:-1])
+
+
+def test_favorite_movies_home_shows_title_and_one_hint():
+    ui = leisure_movies.leisure_ui
+    assert ui.favorite_movies_home(3).text == "🎚️ Моё кино · 3 фильма/сериала\n\nПо любимым фильмам и сериалам подбираю похожее."
+    assert ui.favorite_movies_home(0).text.startswith("🎚️ Моё кино · 0 фильмов/сериалов\n\nДобавь")
+
+
+def test_recommendation_subscreens_return_to_their_category_home():
+    music_styles = [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES]
+    original_music_styles = leisure_music._music_styles
+    leisure_music._music_styles = lambda _cid: music_styles
+    keyboards = [
+        leisure_movies._movie_genre_menu_kb(),
+        leisure_music._listen_kb(), leisure_music._music_genre_menu_kb("42"),
+    ]
+    try:
+        assert all(_labels(keyboard)[-1] == ["⬅️ Назад", "#️⃣ Главная"] for keyboard in keyboards)
+        assert _labels(leisure_movies._movie_kb(0))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+        assert _labels(leisure_movies._movie_prefs_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+        assert _labels(leisure_music._music_preferences_kb("42"))[-1] == ["⬅️ Назад", "#️⃣ Главная"]
+    finally:
+        leisure_music._music_styles = original_music_styles
+
+
+def test_movies_do_not_offer_generic_bookmarks():
+    assert "💾 Сохранения" not in sum(_labels(leisure_movies._movie_kb(0)), [])
+    assert "💾 Сохранить" not in sum(_labels(leisure_movies._movie_kb(0)), [])
+
+
+def test_music_and_movie_genre_menus_have_one_column_without_emoji(monkeypatch):
+    monkeypatch.setattr(
+        leisure_music, "_music_styles",
+        lambda _cid: [key for key, _label, _prompt_name in leisure_music._MUSIC_GENRES],
+    )
+    assert _labels(leisure_music._music_genre_menu_kb("42"))[:-1] == [
+        ["🆕 Новинка"], ["Инди"], ["Поп"], ["Электроника"], ["R&B"], ["Рок"], ["Хип-хоп"],
+    ]
+    assert _labels(leisure_movies._movie_genre_menu_kb())[:-1] == [
+        ["🆕 Новинка"], ["Комедия"], ["Ужасы"], ["Фантастика"],
+        ["Триллер"], ["Романтика"], ["Драма"], ["Анимация"],
+    ]

@@ -138,7 +138,6 @@ _INTENT_MAP = [
     (("холодильник", "из холодильника", "что есть дома", "что есть в холодильнике", "остатк"),
      "fridge"),
     (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
-    (("что почитать", "почитать", "книгу", "книжку"), "book"),
     (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
     (("концерт", "мероприят", "событи", "афиша", "выступлен"), "concerts"),
     (("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "де/хет", "de/het"), "learn"),
@@ -167,14 +166,13 @@ _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|о
 # «Добавь сериал X» — глагол сразу перед категорией: слово «любимые» не обязательно.
 _DIRECT_ADD_RE = re.compile(
     r"^\s*(?:добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\s+(?:мне\s+)?"
-    r"(?:фильм|сериал|кино|книг|книжк|музык|музыкант|исполнител|артист|групп)",
+    r"(?:фильм|сериал|кино|музык|музыкант|исполнител|артист|групп)",
     re.I,
 )
 
 # (regex категории, config-ключ хранилища, вкладка «Моей библиотеки» для подтверждения)
 _LOVE_CATEGORIES = [
     (re.compile(r"\b(фильм[а-я]*|сериал[а-я]*|кино)\b", re.I), "movies", "Фильмы и сериалы"),
-    (re.compile(r"\b(книг[а-я]*|книжк[а-я]*)\b", re.I), "books", "Книги"),
     (re.compile(r"\b(музык[а-я]*|музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b", re.I),
      "artists", "Музыка"),
 ]
@@ -182,7 +180,7 @@ _LOVE_CATEGORIES = [
 # Слово категории вместе с «фильмы или сериалы» убирается из названия целиком.
 _MOVIE_WORD = r"(?:фильм[а-я]*|сериал[а-я]*|кино)"
 _LOVE_CATEGORY_KEY_RE = re.compile(
-    rf"\b(?:{_MOVIE_WORD}(?:\s+(?:или|и)\s+{_MOVIE_WORD})?|книг[а-я]*|книжк[а-я]*|"
+    rf"\b(?:{_MOVIE_WORD}(?:\s+(?:или|и)\s+{_MOVIE_WORD})?|"
     r"музык[а-я]*|музыкант[а-я]*|исполнител[а-я]*|артист[а-я]*|груп[а-я]*)\b",
     re.I,
 )
@@ -193,7 +191,7 @@ def _detect_love_add(text: str):
     Триггер строго требует и глагол добавления, и слово «любим*» — иначе
     «люблю фильмы про космос» не должно случайно матчиться."""
     text = text or ""
-    if re.search(r"словар", text, re.I):  # «добавь книгу в словарь» — это словарь, не библиотека
+    if re.search(r"словар", text, re.I):  # «добавь фильм в словарь» — это словарь, не библиотека
         return None
     loved = _LOVE_ADD_VERB_RE.search(text) and _LOVE_WORD_RE.search(text)
     if not loved and not _DIRECT_ADD_RE.search(text):
@@ -213,7 +211,7 @@ def _detect_love_add(text: str):
 
 
 async def try_add_love_from_chat(bot, cid, text):
-    """«Добавь книги / музыку / фильмы или сериалы X, Y» из чата — в нужную вкладку «Моей библиотеки».
+    """«Добавь музыку / фильмы или сериалы X, Y» из чата — в нужную вкладку «Моей библиотеки».
 
     Несколько названий — через запятую или с новой строки. Без названия — обычное добавление вкладки.
     """
@@ -230,8 +228,7 @@ async def try_add_love_from_chat(bot, cid, text):
     from leisure_collection import (
         _resolve_movie_label, canonical_movie_label, movie_title_for_lookup, plain_label,
     )
-    list_key = {"movies": config.FAVORITE_MOVIES_KEY, "books": config.FAVORITE_BOOKS_KEY,
-                "artists": config.FAVORITE_ARTISTS_KEY}[store_key]
+    list_key = {"movies": config.FAVORITE_MOVIES_KEY, "artists": config.FAVORITE_ARTISTS_KEY}[store_key]
 
     def comparable(value):
         value = value.get("value", "") if isinstance(value, dict) else str(value)
@@ -359,8 +356,6 @@ async def _run_intent(bot, cid, action, recipe_ingredients=None):
         await fridge.send_fridge_recipe(no_kb_bot, cid)
     elif action == "movie":
         await leisure_movies.send_recos(no_kb_bot, cid, "movie")
-    elif action == "book":
-        await leisure_movies.send_recos(no_kb_bot, cid, "book")
     elif action == "music":
         await leisure_music.send_listen(no_kb_bot, cid)
     elif action == "concerts":

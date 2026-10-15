@@ -8,7 +8,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import cleanup
 import config
-import leisure_books
 import leisure_movies
 import movie_engine
 import personal_collections
@@ -87,27 +86,3 @@ def test_yearly_top_counter_matches_the_number_of_found_items():
     assert markup.inline_keyboard[0][1].text == "1/2"
 
 
-def test_next_book_in_genre_uses_verified_genre_reserve_after_catalog(monkeypatch):
-    sent = []
-    category = {"kind": "genre", "value": "scifi", "label": "Фантастика"}
-    monkeypatch.setitem(leisure_books.store.last_recos, "42", {
-        "kind": "book", "items": ["Дюна"], "category": category,
-    })
-
-    async def no_candidates(*_args, **_kwargs):
-        return []
-
-    async def send_card(_bot, _cid, item, index, **_kwargs):
-        sent.append((item["title"], index))
-        return item
-
-    monkeypatch.setattr(leisure_books, "_book_candidates", no_candidates)
-    monkeypatch.setattr(leisure_books, "_book_used", lambda _cid: set())
-    monkeypatch.setattr(leisure_books, "_send_book_card", send_card)
-    monkeypatch.setattr(leisure_books, "_cache_book", lambda *_args: None)
-    monkeypatch.setattr(leisure_books.inclusive_recommendations, "record", lambda *_args: None)
-
-    asyncio.run(leisure_books._advance_book(object(), "42"))
-
-    assert sent and sent[0][0] != "Дюна"
-    assert sent[0][1] == 1

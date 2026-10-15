@@ -1,4 +1,4 @@
-"""«Новинка» в меню «Выбрать жанр»: премьера кино, книги или свежий альбом.
+"""«Новинка» в меню «Выбрать жанр»: премьера кино или свежий альбом.
 
 Данные — только из реальных источников, которые уже собирает бот (TMDB,
 книжная витрина премьер) и Apple Music для музыки. Показанные новинки
@@ -12,7 +12,6 @@ from itertools import zip_longest
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import apple_music
-import leisure_books
 import leisure_movies
 import leisure_music
 import recommendation_rotation as rotation
@@ -24,18 +23,16 @@ from ui.navigation import nav_row
 
 _log = logging.getLogger(__name__)
 
-KINDS = ("movie", "book", "music")
+KINDS = ("movie", "music")
 
 
 def genre_picker(cid, kind, back="m_leisure"):
     """Тот же выбор жанра, что под карточкой рекомендации (с «Новинкой» и «Любым жанром»)."""
     if kind == "movie":
         return leisure_movies._movie_genre_menu_kb(back=back)
-    if kind == "book":
-        return leisure_books._book_genre_menu_kb(back=back)
     return leisure_music._music_genre_menu_kb(cid, back=back)
 # Тип записи стоп-листа: альбом музыки не должен скрывать артиста.
-_STOP_KIND = {"movie": "movie", "book": "book", "music": "album"}
+_STOP_KIND = {"movie": "movie", "music": "album"}
 _SEEN_KEY = "novelty_seen"
 _SEEN_LIMIT = 50
 
@@ -58,16 +55,12 @@ async def _items(cid, kind) -> list[dict]:
         off = movie_recommendation.regions_off(cid)
         return [dict(item) for item in await leisure_movies.get_movie_premieres(cid)
                 if str(item.get("date") or "")[:10] <= today and countries.allowed(item, off)]
-    if kind == "book":
-        items = [dict(item) for item in await leisure_books._book_premieres_with_covers()]
-        local = leisure_books.trip_local_books(cid, items)  # в отпуске — сначала авторы страны поездки
-        return local + [item for item in items if item not in local]
     styles = leisure_music._music_styles(cid) or list(apple_music.GENRE_IDS)
     cc = str(store.get_settings(cid).get("cc") or "nl")
     # Одна лента страны на все жанры: после первого запроса остальные берут её из кэша.
     lists = await asyncio.to_thread(lambda: [apple_music.new_releases(key, cc) for key in styles])
     # По очереди из каждого выбранного жанра, чтобы один жанр не забивал круг.
-    return [item for group in zip_longest(*lists) for item in group if item]
+    return [item for group in zip_longest(*lists) for item in group if item and apple_music.not_mix(item)]
 
 
 def _pick(cid, kind, items):
@@ -89,8 +82,7 @@ def _remember(cid, kind, item):
     store.mutate_profile(cid, change)
 
 
-_CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сериалы", "book": "🎚️ Настроить книги",
-                    "music": "🎚️ Настроить музыку"}
+_CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сериалы", "music": "🎚️ Настроить музыку"}
 
 
 def card_keyboard(kind):
@@ -107,18 +99,16 @@ def card_keyboard(kind):
 async def _image(kind, item) -> str:
     if kind == "movie":
         return str(await asyncio.to_thread(tmdb.english_poster, item.get("id"), "movie") or "").strip()
-    return str(item.get("cover_url") or item.get("cover") or item.get("poster") or "").strip()
+    return str(item.get("cover") or item.get("poster") or "").strip()
 
 
 async def _with_details(kind, item):
-    """Страна (кино — TMDb, книга — автор в Wikidata, музыка — артист в MusicBrainz) и описание альбома."""
+    """Страна (кино — TMDb, музыка — артист в MusicBrainz) и описание альбома."""
     import countries
 
     def country():
         if kind == "movie":
             return countries.title_info("movie", item.get("id")).get("country_label", "")
-        if kind == "book":
-            return countries.author_label(item.get("author"))
         return countries.artist_label(item.get("artist"))
 
     try:

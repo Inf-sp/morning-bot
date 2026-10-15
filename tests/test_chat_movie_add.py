@@ -59,12 +59,12 @@ def test_chat_add_saves_verified_title_or_asks_to_clarify(monkeypatch):
 
 def test_library_add_commands_reach_the_right_tab():
     detect = assistant._detect_love_add
-    assert detect("Добавить книги Мастер и Маргарита") == ("books", "Книги", "Мастер и Маргарита")
     assert detect("Добавить музыку Radiohead") == ("artists", "Музыка", "Radiohead")
     assert detect("добавить фильмы Дюна") == ("movies", "Фильмы и сериалы", "Дюна")
     assert detect("Добавить фильмы или сериалы Матрица") == ("movies", "Фильмы и сериалы", "Матрица")
-    assert detect("Добавить книги") == ("books", "Книги", "")  # без названия — открыть добавление
-    assert detect("добавь книгу в словарь") is None  # это словарь
+    assert detect("Добавить музыку") == ("artists", "Музыка", "")  # без названия — открыть добавление
+    assert detect("добавь фильм в словарь") is None  # это словарь
+    assert detect("Добавить книги Мастер и Маргарита") is None  # книг в библиотеке больше нет
     assert detect("люблю фильмы про космос") is None
 
 
@@ -87,8 +87,8 @@ def test_library_add_without_title_opens_the_tab_add_flow(monkeypatch):
         started.append((cid, key, origin))
 
     monkeypatch.setattr(personal_collections, "love_add_start", start)
-    assert asyncio.run(assistant.try_add_love_from_chat(Bot(), "42", "Добавить книги"))
-    assert started == [("42", "books", "leisure")]
+    assert asyncio.run(assistant.try_add_love_from_chat(Bot(), "42", "Добавить музыку"))
+    assert started == [("42", "artists", "leisure")]
 
 
 def test_library_command_is_not_taken_by_dictionary(monkeypatch):
@@ -107,13 +107,13 @@ def test_library_command_is_not_taken_by_dictionary(monkeypatch):
     monkeypatch.setattr(bot_text.tracking, "touch", lambda _cid: None)
     monkeypatch.setattr(bot_text.assistant, "try_add_love_from_chat", love)
     monkeypatch.setattr(bot_text.dictionary_import, "try_add_dict_from_chat", dictionary)
-    update = SimpleNamespace(effective_chat=SimpleNamespace(id="42"), message=SimpleNamespace(text="Добавить книги Дюна"))
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id="42"), message=SimpleNamespace(text="Добавить музыку Radiohead"))
 
     async def nothing(*_args):
         return None
 
     asyncio.run(bot_text.handle(update, SimpleNamespace(bot=Bot()), nothing))
-    assert handled == ["Добавить книги Дюна"]
+    assert handled == ["Добавить музыку Radiohead"]
 
 
 def test_do_not_add_button_is_red():
