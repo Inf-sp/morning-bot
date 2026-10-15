@@ -284,26 +284,22 @@ def _fmt_date(iso):
 
 
 def artist_card(data):
-    """Составная карточка (условные блоки) -> MessageBuilder."""
-    artist = data.get("artist", "")
+    """Карточка артиста: «🇨🇦 **Имя**» (имя — ссылка на YouTube Music), «Жанр · Страна · Годы», образное
+    описание, «С чего начать:» — три трека с короткими пометками, в конце курсивом проверяемый факт.
+    Нет части — нет строки; «почему тебе зайдёт» в карточке нет."""
+    artist = str(data.get("artist") or "").strip()
+    flag, _space, country = str(data.get("country_label") or "").strip().partition(" ")
     b = MessageBuilder()
-    b.text_line("🎸 ")
-    b.bold_link(artist, youtube_music_link(artist)) if str(artist or "").strip() else b.bold(artist)
+    b.text_line(f"{flag or '🎸'} ")
+    b.bold_link(artist, youtube_music_link(artist)) if artist else b.bold(artist)
     b.newline()
-    meta = [str(value).strip() for value in (data.get("genre_label"), data.get("country_label")) if value]
-    if meta:
-        b.text_line(" · ".join(meta))
-        b.newline()
-    if data.get("desc"):
+    style = " ".join(str(data.get("style") or data.get("genre_label") or "").split())
+    meta = [style[:1].upper() + style[1:], country.strip(), str(data.get("years") or "").strip()]
+    if any(meta):
+        b.line(" · ".join(value for value in meta if value))
+    if str(data.get("desc") or "").strip():
         b.spacer()
-        b.line(data["desc"])
-    why = data.get("why") or []
-    if isinstance(why, list) and why:
-        b.spacer()
-        b.bold("Почему тебе зайдёт:")
-        b.newline()
-        for w in why:
-            b.bullet(str(w))
+        b.line(" ".join(str(data["desc"]).split()))
     tracks = data.get("tracks") or []
     if isinstance(tracks, list) and tracks:
         b.spacer()
@@ -324,6 +320,8 @@ def artist_card(data):
                 b.link(title, url)
             else:
                 b.text_line(title)
+            if re.match(r"[А-ЯЁ][а-яё]", note):  # пометка со строчной: «— солнечный джэнгл-поп»
+                note = note[0].lower() + note[1:]
             if note:
                 b.text_line(f" — {note}")
             b.newline()

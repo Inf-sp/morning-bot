@@ -320,3 +320,39 @@ def test_music_premieres_and_novelty_link_to_youtube_music():
     for message in (leisure_ui.premiere_card("music", [album]), leisure_ui.novelty_card("music", album)):
         links = [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
         assert links == ["https://music.youtube.com/search?q=Alvvays+Blue+Rev"]  # не Apple Music
+
+
+def test_music_prompt_asks_for_a_lively_verified_card_without_why(monkeypatch):
+    prompts, delivered = [], []
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            delivered.append(text)
+
+    async def capture(prompt, *_args, **_kwargs):
+        prompts.append(prompt)
+        return {"candidates": [{
+            "artist": "Wednesday", "genre": "indie", "style": "инди-рок",
+            "desc": "Гитары на грани развала. Голос срывается в крик.",
+            "tracks": ["Bull Believer - восемь минут нарастающего шума"], "fact": "",
+        }]}
+
+    async def same(data):
+        return data
+
+    monkeypatch.setattr(leisure_music.ai, "allm_json", capture)
+    monkeypatch.setattr(leisure_music, "_attach_track_links", same)
+    monkeypatch.setattr(leisure_music.store, "get_list", lambda *_args: [])
+    monkeypatch.setattr(leisure_music.store, "get_profile", lambda _cid: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_profile", lambda *_args: None)
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
+    monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
+    monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: [])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie"])
+
+    asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
+
+    prompt = prompts[0]
+    assert '"style"' in prompt and "2–3 предложения" in prompt and "Используй только проверяемые факты" in prompt
+    assert '"why"' not in prompt and "почему" not in prompt.casefold()
+    assert delivered[0].startswith("🎸 Wednesday\n\nИнди-рок") and "Почему" not in delivered[0]

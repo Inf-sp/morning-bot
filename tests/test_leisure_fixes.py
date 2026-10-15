@@ -47,7 +47,39 @@ def test_breakfast_from_my_products_rejects_lunch_dishes():
 
 def test_artist_card_shows_genre_and_country_line():
     msg = leisure_ui.artist_card({"artist": "Wolf Alice", "genre_label": "Инди", "country_label": "🇬🇧 UK"})
-    assert msg.text.startswith("🎸 Wolf Alice\n\nИнди · 🇬🇧 UK")
+    assert msg.text.startswith("🇬🇧 Wolf Alice\n\nИнди · UK")
+
+
+def test_artist_card_is_a_lively_recommendation_without_why_block():
+    msg = leisure_ui.artist_card({
+        "artist": "Fontaines D.C.", "genre_label": "Рок", "style": "пост-панк", "country_label": "🇮🇪 IE",
+        "years": "с 2017", "why": ["Старое поле из кэша"],
+        "desc": "Дублинский пост-панк с шершавыми гитарами. Вокал скорее читает стихи, чем поёт.",
+        "tracks": [{"title": "Boys in the Better Land", "note": "Быстрый и злой", "url": "https://music.youtube.com/a"},
+                   "A Hero's Death - мантра на одном риффе", "Starburster - тревожный, с одышкой"],
+        "fact": "Альбом «A Hero's Death» номинировали на «Грэмми»",
+    })
+
+    assert msg.text == (
+        "🇮🇪 Fontaines D.C.\n\n"
+        "Пост-панк · IE · с 2017\n\n"  # точный жанр, страна кратко, годы группы
+        "Дублинский пост-панк с шершавыми гитарами. Вокал скорее читает стихи, чем поёт.\n\n"
+        "С чего начать:\n"
+        "• Boys in the Better Land — быстрый и злой\n"  # пометка со строчной
+        "• A Hero's Death — мантра на одном риффе\n"
+        "• Starburster — тревожный, с одышкой\n\n"
+        "Альбом «A Hero's Death» номинировали на «Грэмми»."
+    )
+    assert "Почему" not in msg.text and _italic(msg)[-1] == "Альбом «A Hero's Death» номинировали на «Грэмми»."
+
+
+def test_local_fallback_artists_follow_the_card_format():
+    import leisure_music
+    for items in leisure_music._LOCAL_ARTIST_FALLBACKS.values():
+        for item in items:
+            assert item["style"] and item["fact"] and "why" not in item
+            assert item["desc"].count(". ") >= 1  # 2–3 предложения
+            assert len(item["tracks"]) == 3 and all(" - " in track for track in item["tracks"])
 
 
 def test_configure_buttons_name_what_they_open():

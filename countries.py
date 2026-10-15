@@ -136,8 +136,10 @@ def title_label(tm) -> str:
 
 # ---------- страна артиста: MusicBrainz ----------
 
-def _person_cache(key, name, loader, fetch=True):
-    """Значение из кэша; fetch=False — только кэш, без сети (экран Досуга не ждёт)."""
+def _person_cache(key, name, loader, fetch=True, keep_empty=False):
+    """Значение из кэша; fetch=False — только кэш, без сети (экран Досуга не ждёт).
+
+    keep_empty — пустой ответ тоже окончательный (у сольного артиста лет активности нет) и не перепроверяется."""
     norm = " ".join(str(name or "").split()).casefold()
     if not norm:
         return ""
@@ -145,7 +147,7 @@ def _person_cache(key, name, loader, fetch=True):
     entry = saved.get(norm) if isinstance(saved, dict) else None
     fresh = isinstance(entry, dict) and time.time() - float(entry.get("ts") or 0) < _PERSON_TTL
     # «Не нашли» не держим полгода: прогрев и «Обновить карточки» (fetch=True) спрашивают снова.
-    if fresh and (entry.get("value") or not fetch):
+    if fresh and (entry.get("value") or not fetch or keep_empty):
         return entry.get("value") or ""
     if not fetch:
         return ""
@@ -164,7 +166,13 @@ def _person_cache(key, name, loader, fetch=True):
     return value or ""
 
 
-def _musicbrainz_country(name):
+def _musicbrainz_artists(name) -> list:
+    """Совпадения MusicBrainz по имени (без регистра, «the», знаков и диакритики, оценка от 90), лучшие первыми;
+    иначе не угадываем. Страна и годы берут один запрос: ответ держится в памяти час, сбой — не держится."""
+    wanted = _artist_key(name)
+    cached = util.ttl_get("musicbrainz_artists", wanted, 3600)
+    if cached is not None:
+        return cached
     with _mb_lock:
         wait = _MUSICBRAINZ_GAP - (time.monotonic() - _mb_last[0])
         if wait > 0:
@@ -175,17 +183,39 @@ def _musicbrainz_country(name):
         params={"query": f'artist:"{name}"', "fmt": "json", "limit": 3},
         headers={"User-Agent": "morning-bot/1.0 ( https://github.com/ )"}, timeout=_TIMEOUT,
     ).json()
-    wanted = _artist_key(name)
+    found = []
     for artist in data.get("artists") or []:
-        # Совпадение имени (без регистра, «the», знаков и диакритики) с высокой оценкой — иначе не угадываем.
         names = [artist.get("name"), artist.get("sort-name"), *[a.get("name") for a in artist.get("aliases") or []]]
-        if int(artist.get("score") or 0) < 90 or wanted not in {_artist_key(value) for value in names if value}:
-            continue
+        if int(artist.get("score") or 0) >= 90 and wanted in {_artist_key(value) for value in names if value}:
+            found.append(artist)
+    return util.ttl_set("musicbrainz_artists", wanted, found)
+
+
+def _musicbrainz_country(name):
+    for artist in _musicbrainz_artists(name):
         codes = (artist.get("area") or {}).get("iso-3166-1-codes") or []
         country = artist.get("country") or (codes[0] if len(codes) == 1 else "")
         if country:
             return str(country).upper()
     return ""
+
+
+_GROUP_TYPES = {"Group", "Orchestra", "Choir"}
+
+
+def _group_years(name) -> str:
+    """Годы активности группы из MusicBrainz: «с 2011» или «2005–2019». У человека life-span — годы жизни, а не
+    карьеры, поэтому сольному артисту лет нет; распалась без даты — тоже без лет."""
+    matches = _musicbrainz_artists(name)
+    if not matches or matches[0].get("type") not in _GROUP_TYPES:
+        return ""
+    span = matches[0].get("life-span") or {}
+    begin, end = str(span.get("begin") or "")[:4], str(span.get("end") or "")[:4]
+    if not begin.isdigit():
+        return ""
+    if end.isdigit():
+        return begin if end == begin else f"{begin}–{end}"
+    return "" if span.get("ended") else f"с {begin}"
 
 
 _FEATURING_RE = re.compile(r"\s+(?:&|and|x|feat\.?|ft\.?|featuring|with)\s+|,\s*", re.IGNORECASE)
@@ -218,6 +248,11 @@ def _artist_country(name):
 def artist_label(name, fetch=True) -> str:
     """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
     return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _artist_country, fetch))
+
+
+def artist_years(name, fetch=True) -> str:
+    """Годы активности группы по MusicBrainz («с 2011», «2005–2019»); у сольного артиста и без данных — ""."""
+    return _person_cache(config.ARTIST_YEARS_KEY, main_artist(name), _group_years, fetch, keep_empty=True)
 
 
 def title_info(kind, tmdb_id, fetch=True) -> dict:

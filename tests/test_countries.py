@@ -55,9 +55,21 @@ def test_cards_show_country_only_when_known():
     title, msg = leisure_ui.movie_card({"title": "Дюна"}, {
         "name": "Дюна", "kind": "movie", "genres": "фантастика", "country_label": "🇺🇸 USA", "year": 2021})
     assert "фантастика · 🇺🇸 USA · 2021" in msg.text
-    assert leisure_ui.artist_card({"artist": "Alvvays", "country_label": "🇨🇦 CA"}).text.startswith(
-        "🎸 Alvvays\n\n🇨🇦 CA")  # после заголовка — пустая строка по UI-контракту
-    assert "\n" not in leisure_ui.artist_card({"artist": "Alvvays", "country_label": ""}).text
+    # Флаг — перед именем, страна кратко — в строке «жанр · страна · годы»; после заголовка — пустая строка.
+    assert leisure_ui.artist_card({"artist": "Alvvays", "country_label": "🇨🇦 CA"}).text == "🇨🇦 Alvvays\n\nCA"
+    assert leisure_ui.artist_card({"artist": "Alvvays", "country_label": ""}).text == "🎸 Alvvays"
+
+
+def test_group_years_come_from_musicbrainz_and_solo_artists_have_none(monkeypatch):
+    def artists(*rows):
+        monkeypatch.setattr(countries, "_musicbrainz_artists", lambda _name: list(rows))
+        return countries._group_years("X")
+
+    assert artists({"type": "Group", "life-span": {"begin": "2011-05", "ended": None}}) == "с 2011"
+    assert artists({"type": "Group", "life-span": {"begin": "2005", "end": "2019-02-01", "ended": True}}) == "2005–2019"
+    assert artists({"type": "Group", "life-span": {"begin": "2005", "ended": True}}) == ""  # распалась, дата неизвестна
+    assert artists({"type": "Person", "life-span": {"begin": "1990-01-01"}}) == ""  # годы жизни, а не карьеры
+    assert artists() == ""
 
 
 def _claim(value):
