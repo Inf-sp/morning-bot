@@ -582,6 +582,14 @@ def test_premiere_of_day_picks_one_todays_premiere_by_personal_priority(monkeypa
     assert leisure_hub.premiere_of_day("42", today)["title"] == "Дюна"  # затем фильм в кино
     assert leisure_hub.premiere_of_day("42", date(2026, 10, 20)) is None  # не сегодня — строки нет
 
+    # Релиз любимого артиста с Deezer (не из чарта) — тоже премьера дня.
+    profile = {"hub_music": {"items": []}, "hub_music_fav": {"date": "2026-10-16", "items": [
+        {"artist": "Tokio Hotel", "title": "ENCORE", "date": "2026-10-16", "favorite": True}]}}
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_hub, "_pools", lambda *_a, **_k: {"movies": ([], None, 0), "series": ([], None, 0)})
+    monkeypatch.setattr(leisure_hub.leisure_music, "_ensure_artists", lambda _cid: ["Tokio Hotel"])
+    assert leisure_hub.premiere_of_day("42", today)["title"] == "ENCORE"
+
 
 def test_premiere_line_in_my_day():
     from ui import myday as myday_ui
@@ -605,3 +613,89 @@ def test_today_screen_shows_country_without_flag_emoji(monkeypatch):
     text = leisure_ui.leisure_today_screen(data["picks"], city=data["city"]).text
     assert "🇩🇪" not in text and "🇺🇸" not in text and "🇬🇧" not in text  # страна есть, флагов нет
     assert "· DE ·" in text and "· USA\n" in text and "альбом · UK" in text
+
+
+def test_artist_releases_keep_fresh_albums_eps_and_singles_of_the_week(monkeypatch):
+    import apple_music
+    from datetime import date
+    answers = {
+        "search/artist": {"data": [{"id": 9, "name": "Tokio Hotel Tribute"}, {"id": 7, "name": "Tokio Hotel"}]},
+        "artist/7/albums": {"data": [
+            {"title": "ENCORE", "release_date": "2026-10-16", "record_type": "album", "link": "u1"},
+            {"title": "Run, Run, Run", "release_date": "2026-10-12", "record_type": "single"},
+            {"title": "Best of Tokio Hotel", "release_date": "2026-10-14", "record_type": "compile"},
+            {"title": "Live in Berlin (Live)", "release_date": "2026-10-14", "record_type": "album"},
+            {"title": "2001", "release_date": "2022-11-18", "record_type": "album"},
+            {"title": "Next Year", "release_date": "2027-01-22", "record_type": "album"},
+        ]},
+    }
+    monkeypatch.setattr(apple_music, "_deezer_json", lambda path, _params: answers[path])
+
+    releases = apple_music.artist_releases("tokio hotel", date(2026, 10, 10), date(2026, 10, 16))
+
+    assert [(item["title"], item["genre_label"]) for item in releases] == [("ENCORE", ""), ("Run, Run, Run", "сингл")]
+    assert releases[0]["artist"] == "Tokio Hotel" and releases[0]["favorite"] is True  # имя — как на Deezer
+
+
+def test_week_music_puts_favorite_releases_first_and_chart_fills_the_rest(monkeypatch):
+    import leisure_hub
+    from datetime import date
+    profile = {"hub_music_fav": {"date": "2026-10-16", "items": [
+        {"artist": "Tokio Hotel", "title": "ENCORE", "date": "2026-10-16"},
+        {"artist": "Elderbrook", "title": "Lost in the View", "date": "2026-10-13"},
+        {"artist": "Old Friend", "title": "Old", "date": "2026-09-01"},  # старше недели — нет
+    ]}}
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
+    chart = [{"artist": f"Chart {i}", "title": f"A{i}"} for i in range(7)] + [{"artist": "Elderbrook", "title": "X"}]
+
+    week = leisure_hub._with_favorites("42", chart, date(2026, 10, 16))
+
+    assert [item["artist"] for item in week] == ["Tokio Hotel", "Elderbrook", "Chart 0", "Chart 1", "Chart 2",
+                                                "Chart 3", "Chart 4"]  # любимые первыми, всего 7
+    pick = leisure_hub._with_favorites("42", [], date(2026, 10, 16))
+    assert [item["title"] for item in pick] == ["ENCORE", "Lost in the View"]
+
+
+def test_favorite_releases_warm_once_a_day_and_keeps_old_list_when_deezer_is_down(monkeypatch):
+    import apple_music
+    import leisure_hub
+    from datetime import date
+    profile = {"hub_music_fav": {"date": "2026-10-15", "items": [{"artist": "Old", "title": "Kept"}]}}
+    monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid: (date(2026, 10, 16), "NL"))
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_hub.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+    monkeypatch.setattr(leisure_hub.leisure_music, "_ensure_artists", lambda _cid: ["Elderbrook", "Tokio Hotel"])
+    monkeypatch.setattr(leisure_hub, "_DEEZER_PAUSE", 0)
+
+    def down(*_args):
+        raise RuntimeError("deezer error")
+
+    monkeypatch.setattr(apple_music, "artist_releases", down)
+    asyncio.run(leisure_hub._warm_favorite_releases("42"))
+    assert profile["hub_music_fav"]["items"] == [{"artist": "Old", "title": "Kept"}]  # сбой — прежний список
+
+    releases = {"Elderbrook": [{"artist": "Elderbrook", "title": "Lost in the View", "date": "2026-10-13"}],
+                "Tokio Hotel": [{"artist": "Tokio Hotel", "title": "ENCORE", "date": "2026-10-16"}]}
+    monkeypatch.setattr(apple_music, "artist_releases", lambda artist, _since, _until: releases[artist])
+    asyncio.run(leisure_hub._warm_favorite_releases("42"))
+    assert profile["hub_music_fav"] == {"date": "2026-10-16", "items": [releases["Tokio Hotel"][0],
+                                                                       releases["Elderbrook"][0]]}  # свежие первыми
+
+
+def test_music_premieres_check_favorite_releases_in_background_once(monkeypatch):
+    import leisure_hub
+    from datetime import date
+    started = []
+    profile = {}
+    monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid: (date(2026, 10, 16), "NL"))
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_hub.util, "background", lambda coro, _name: started.append(coro.close()))
+
+    leisure_hub._refresh_favorite_releases("42")
+    leisure_hub._refresh_favorite_releases("42")  # листание, пока проверка идёт, — второй не запускаем
+    assert len(started) == 1
+    leisure_hub._FAVORITES_WARMING.clear()
+    profile["hub_music_fav"] = {"date": "2026-10-16", "items": []}
+    leisure_hub._refresh_favorite_releases("42")  # сегодня уже проверено
+    assert len(started) == 1

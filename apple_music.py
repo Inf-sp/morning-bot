@@ -91,21 +91,58 @@ def _deezer_releases(genre_key, since) -> list[dict]:
     return items
 
 
-def top_tracks(artist, limit=3) -> list[str]:
-    """Самые популярные треки артиста на Deezer (без ключа): точное совпадение имени; нет — []."""
+def _deezer_json(path, params) -> dict:
+    """GET к API Deezer (без ключа); ответ-ошибка (лимит) и сбой сети — исключение."""
+    response = requests.get(f"https://api.deezer.com/{path}", params=params, timeout=_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    data = response.json()
+    if "error" in data:  # Deezer отвечает 200 с {"error": …} при лимите запросов
+        raise RuntimeError(f"deezer error: {data['error']}")
+    return data
+
+
+def _deezer_artist(artist) -> dict | None:
+    """Артист Deezer с точно таким именем (регистр, «the», знаки и диакритика не важны) или None."""
     import countries
+    wanted = countries._artist_key(artist)
+    rows = _deezer_json("search/artist", {"q": artist, "limit": 5}).get("data") or []
+    return next((row for row in rows if countries._artist_key(row.get("name")) == wanted), None)
+
+
+def top_tracks(artist, limit=3) -> list[str]:
+    """Самые популярные треки артиста на Deezer (без ключа): точное совпадение имени; нет или сбой — []."""
     try:
-        rows = requests.get("https://api.deezer.com/search/artist", params={"q": artist, "limit": 5},
-                            timeout=_TIMEOUT_SECONDS).json().get("data") or []
-        found = next((row for row in rows if countries._artist_key(row.get("name")) == countries._artist_key(artist)), None)
+        found = _deezer_artist(artist)
         if not found:
             return []
-        tracks = requests.get(f"https://api.deezer.com/artist/{int(found['id'])}/top", params={"limit": limit},
-                              timeout=_TIMEOUT_SECONDS).json().get("data") or []
+        tracks = _deezer_json(f"artist/{int(found['id'])}/top", {"limit": limit}).get("data") or []
     except Exception as error:
         _log.warning("deezer top tracks unavailable artist=%s: %r", artist, error)
         return []
     return [" ".join(str(row.get("title") or "").split()) for row in tracks if row.get("title")][:limit]
+
+
+# Типы релизов Deezer → подпись в «Новой музыке»; сборники (compile) — не новый релиз.
+_RECORD_TYPES = {"album": "", "ep": "EP", "single": "сингл"}
+
+
+def artist_releases(artist, since, until) -> list[dict]:
+    """Релизы артиста на Deezer, вышедшие с since по until: альбомы, EP и синглы — без сборников, концертников и
+    переизданий (`is_fresh_album`). Нет такого артиста — []; сбой или лимит Deezer — исключение."""
+    found = _deezer_artist(artist)
+    if not found:
+        return []
+    out = []
+    for row in _deezer_json(f"artist/{int(found['id'])}/albums", {"limit": 25}).get("data") or []:
+        title = " ".join(str(row.get("title") or "").split())
+        released, kind = str(row.get("release_date") or ""), str(row.get("record_type") or "")
+        if (title and kind in _RECORD_TYPES and since.isoformat() <= released <= until.isoformat()
+                and is_fresh_album({"title": title, "artist": artist})):
+            out.append({"title": title, "artist": " ".join(str(found.get("name") or artist).split()),
+                        "date": released, "cover": str(row.get("cover_xl") or row.get("cover_big") or ""),
+                        "url": str(row.get("link") or ""), "genre": "", "genre_label": _RECORD_TYPES[kind],
+                        "favorite": True})
+    return out
 
 
 def new_releases(genre_key, cc="us", today=None) -> list[dict]:

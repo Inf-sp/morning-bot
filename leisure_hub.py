@@ -177,10 +177,67 @@ def weekly_music(cid, cc, day) -> list[dict]:
         return kept  # выпуск с отсеянным альбомом (детский, переиздание…) собирается заново
     items = new_music(cid, cc, day)[:_WEEK_TOP]
     if not items:
-        return kept
+        return _with_favorites(cid, kept, day)
     if friday == _week_start(_today_and_cc(cid)[0], _FRIDAY):
         store.mutate_profile(cid, lambda profile: ({**profile, "hub_music": {**key, "items": items}}, None))
-    return items
+    return _with_favorites(cid, items, day)
+
+
+_FAVORITE_RELEASE_DAYS = 7  # релизы любимых артистов — за последнюю неделю
+_DEEZER_PAUSE = 0.3  # пауза между артистами: лимит Deezer — 50 запросов за 5 секунд
+
+
+def _with_favorites(cid, items, day) -> list:
+    """Выпуск недели: сначала свежие релизы любимых артистов (Deezer, готовит прогрев), затем чарт без их повторов;
+    всего до _WEEK_TOP. Без сети — только сохранённое."""
+    saved = (store.get_profile(cid) or {}).get("hub_music_fav") or {}
+    since = (day - timedelta(days=_FAVORITE_RELEASE_DAYS - 1)).isoformat()
+    favorites = [item for item in saved.get("items") or [] if since <= str(item.get("date") or "") <= day.isoformat()]
+    artists = {str(item.get("artist") or "").casefold() for item in favorites}
+    rest = [item for item in items or [] if str(item.get("artist") or "").casefold() not in artists]
+    return (favorites + rest)[:_WEEK_TOP]
+
+
+_FAVORITES_WARMING = set()  # чаты, где проверка релизов уже идёт: листание карточек не плодит запросы к Deezer
+
+
+def _refresh_favorite_releases(cid):
+    """Фоном проверить релизы любимых артистов, если сегодня ещё не проверяли (ночной прогрев не успел)."""
+    saved = (store.get_profile(cid) or {}).get("hub_music_fav") or {}
+    if saved.get("date") == _today_and_cc(cid)[0].isoformat() or str(cid) in _FAVORITES_WARMING:
+        return
+    _FAVORITES_WARMING.add(str(cid))
+
+    async def run():
+        try:
+            await _warm_favorite_releases(cid)
+        finally:
+            _FAVORITES_WARMING.discard(str(cid))
+
+    util.background(run(), "favorite releases")
+
+
+async def _warm_favorite_releases(cid):
+    """Раз в день: свежие релизы любимых артистов на Deezer (альбомы, EP, синглы) — в чарт Apple Music они могут не
+    попасть. Deezer совсем недоступен — прежний список остаётся."""
+    today = _today_and_cc(cid)[0]
+    saved = (store.get_profile(cid) or {}).get("hub_music_fav") or {}
+    if saved.get("date") == today.isoformat():
+        return
+    since = today - timedelta(days=_FAVORITE_RELEASE_DAYS - 1)
+    found, failed = [], 0
+    for artist in leisure_music._ensure_artists(cid):
+        try:
+            found.extend(await asyncio.to_thread(apple_music.artist_releases, artist, since, today))
+        except Exception:
+            failed += 1
+            _log.warning("favorite releases: deezer failed artist=%r", artist, exc_info=True)
+        await asyncio.sleep(_DEEZER_PAUSE)
+    if failed and not found:
+        return
+    found.sort(key=lambda item: item["date"], reverse=True)  # самые свежие — первыми
+    store.mutate_profile(cid, lambda profile: (
+        {**profile, "hub_music_fav": {"date": today.isoformat(), "items": found}}, None))
 
 
 async def _warm_album_notes(cid):
@@ -383,7 +440,7 @@ def premiere_of_day(cid, day=None):
     movies = [item for item in pools["movies"][0] if str(item.get("date") or "")[:10] == iso]
     series = [item for item in pools["series"][0] if str(item.get("release_date") or "")[:10] == iso]
     saved = (store.get_profile(cid) or {}).get("hub_music") or {}
-    albums = [item for item in saved.get("items") or []
+    albums = [item for item in _with_favorites(cid, saved.get("items") or [], today)
               if str(item.get("date") or "")[:10] == iso and apple_music.is_fresh_album(item)]
     loved = {name.casefold() for name in leisure_music._ensure_artists(cid)}
     picks = (
@@ -466,6 +523,8 @@ async def send_week_premieres(bot, cid, kind="", q=None):
         util.background(describe_albums(missing), "album notes")
     if any(not item.get("country_label") for _day, item in rows):  # страна — в фоне, к следующему открытию
         util.background(asyncio.to_thread(week_data, cid, kind, None, True), "week premiere countries")
+    if kind == "music":  # релизы любимых артистов сегодня ещё не проверялись — в фоне, к следующему открытию
+        _refresh_favorite_releases(cid)
 
 
 async def _premiere_trailer(kind, item) -> str:
@@ -554,6 +613,7 @@ async def warm_hub_cache(cid):
         ("tv_reco", lambda: leisure_movies.get_current_movie(cid, "tv")),
         ("artist_reco", lambda: leisure_music.send_listen(None, cid, preview=True)),
         ("series", lambda: _warm_series(cid)),
+        ("favorite_releases", lambda: _warm_favorite_releases(cid)),  # до описаний: им тоже нужна фраза
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
     )
