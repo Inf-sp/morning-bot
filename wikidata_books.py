@@ -1,7 +1,9 @@
-"""Страна артиста через Wikidata (резерв MusicBrainz) — без ключа и AI; кэш — в countries."""
+"""Страна и описание артиста через Wikidata и Википедию (резерв MusicBrainz) — без ключа; кэш — в countries."""
 import logging
+import re
 import threading
 import time
+from urllib.parse import quote
 
 import requests
 
@@ -89,3 +91,26 @@ def _person_country(name, markers, groups=frozenset()) -> str:
                     return value.upper()
         return ""
     return ""
+
+
+def article_titles(qid) -> dict:
+    """{"ruwiki": название, "enwiki": название, "ru_desc": краткое описание} по Q-id; чего нет — нет ключа."""
+    data = _get({"action": "wbgetentities", "ids": qid, "props": "sitelinks|descriptions",
+                 "languages": "ru", "sitefilter": "ruwiki|enwiki"})
+    entity = (data.get("entities") or {}).get(qid) or {}
+    found = {site: link["title"] for site, link in (entity.get("sitelinks") or {}).items() if link.get("title")}
+    if desc := ((entity.get("descriptions") or {}).get("ru") or {}).get("value"):
+        found["ru_desc"] = desc
+    return found
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+(?=[A-ZА-ЯЁ«\"0-9])")
+
+
+def article_intro(lang, title, sentences=2) -> str:
+    """Первые предложения статьи Википедии (REST summary — без скобок с датами и сносок); сбой — исключение."""
+    response = requests.get(f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
+                            headers=_HEADERS, timeout=_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    extract = " ".join(str(response.json().get("extract") or "").split())
+    return " ".join(_SENTENCE_END.split(extract)[:sentences])

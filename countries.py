@@ -336,6 +336,51 @@ def artist_years(name, fetch=True) -> str:
     return _person_cache(config.ARTIST_YEARS_KEY, _full_name(name), _group_years, fetch, keep_empty=True)
 
 
+_SUMMARY_TTL = 30 * 86400
+
+
+def _wikidata_id(name) -> str:
+    """Q-id артиста из связей MusicBrainz (url-rels → wikidata); нет совпадения или связи — ""."""
+    matches = _musicbrainz_artists(_known_name(name))
+    if not matches or not matches[0].get("id"):
+        return ""
+    data = _mb_get(f"artist/{matches[0]['id']}", {"inc": "url-rels"})
+    for relation in data.get("relations") or []:
+        if relation.get("type") == "wikidata":
+            return str((relation.get("url") or {}).get("resource") or "").rstrip("/").rsplit("/", 1)[-1]
+    return ""
+
+
+def _translate_intro(text) -> str:
+    import ai
+    prompt = ("Translate into Russian for a music recommendation card. Keep names of people, bands, albums, songs "
+              f"and labels in the original. Return only the translation.\n\n{text}")
+    return " ".join(ai.llm(prompt, 400, 0.2, tier="cheap", module="countries",
+                           fallback_allowed=True, privacy_level="public").split())
+
+
+def _artist_summary(name) -> str:
+    """Русская Википедия (2 предложения) → краткое описание Wikidata → английская статья с переводом AI.
+    Сбой сети или AI — исключение: _person_cache его не кэширует."""
+    import wikidata_books
+    qid = _wikidata_id(name)
+    if not qid:
+        return ""
+    titles = wikidata_books.article_titles(qid)
+    if titles.get("ruwiki") and (intro := wikidata_books.article_intro("ru", titles["ruwiki"])):
+        return intro
+    if titles.get("ru_desc"):
+        return titles["ru_desc"][:1].upper() + titles["ru_desc"][1:] + "."
+    if titles.get("enwiki") and (intro := wikidata_books.article_intro("en", titles["enwiki"])):
+        return _translate_intro(intro)
+    return ""
+
+
+def artist_summary(name, fetch=True) -> str:
+    """Описание артиста для карточки без AI (из чарта): кэш на месяц, сбой не кэшируется; нет данных — ""."""
+    return _person_cache(config.ARTIST_SUMMARY_KEY, _full_name(name), _artist_summary, fetch, ttl=_SUMMARY_TTL)
+
+
 def title_info(kind, tmdb_id, fetch=True) -> dict:
     """{country_label, network} фильма или сериала из деталей TMDb (кэш 30 дней); fetch=False — только кэш."""
     if not tmdb_id:

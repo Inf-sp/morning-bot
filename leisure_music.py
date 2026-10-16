@@ -774,10 +774,24 @@ async def _most_popular(candidates):
     return max(ranked, key=lambda row: row[:2])[2] if ranked else None
 
 
+# Описание из Википедии — до 4 запросов с паузами MusicBrainz и Wikidata; не дождались — карточка без него,
+# а поток дописывает кэш, и следующий показ берёт описание сразу.
+_SUMMARY_WAIT_SECONDS = 8
+
+
+async def _bounded(coro, default, seconds):
+    try:
+        return await asyncio.wait_for(coro, seconds)
+    except Exception:
+        _log.debug("send_listen: chart card detail unavailable", exc_info=True)
+        return default
+
+
 async def _release_artist(cid, genres, known):
     """Резерв без AI: реальный артист из свежих альбомов жанров (Apple Music, иначе Deezer) — не из любимых,
     не скрытый и не показанный недавно, без DJ-миксов."""
     import apple_music
+    import countries
     cc = (store.get_settings(cid).get("cc") or "NL").lower()
     for genre in genres:
         try:
@@ -788,12 +802,12 @@ async def _release_artist(cid, genres, known):
         for item in releases:
             if item["artist"].lower() not in known:
                 released = date.fromisoformat(item["date"])
-                # Без AI описания нет, но карточка не пустая: реальные популярные треки и факт о свежем альбоме.
-                try:
-                    tracks = await asyncio.wait_for(asyncio.to_thread(apple_music.top_tracks, item["artist"]), 6)
-                except Exception:
-                    tracks = []
-                return {"artist": item["artist"], "genre": genre, "tracks": tracks, "source": "chart",
+                # Без AI карточка не пустая: описание из Википедии, реальные популярные треки и факт о свежем альбоме.
+                tracks, desc = await asyncio.gather(
+                    _bounded(asyncio.to_thread(apple_music.top_tracks, item["artist"]), [], 6),
+                    _bounded(asyncio.to_thread(countries.artist_summary, item["artist"]), "", _SUMMARY_WAIT_SECONDS),
+                )
+                return {"artist": item["artist"], "genre": genre, "tracks": tracks, "desc": desc, "source": "chart",
                         "fact": f"Свежий альбом «{item['title']}» вышел {released.day} {util._MONTHS[released.month - 1]}."}
     return None
 

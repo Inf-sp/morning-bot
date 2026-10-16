@@ -307,11 +307,15 @@ def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_a
     monkeypatch.setattr(apple_music, "new_releases", lambda genre, _cc: [
         {"title": "Bleeds", "artist": "Wednesday", "date": "2026-10-09", "url": "https://music.example/a"},
     ] if genre == "electronic" else [])
+    import countries
+    monkeypatch.setattr(countries, "artist_summary",
+                        lambda name, fetch=True: "Wednesday — американская инди-рок-группа из Эшвилла.")
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
     assert calls and "Не удалось подобрать" not in calls[0]
     assert "Wednesday" in calls[0] and "Свежий альбом «Bleeds» вышел 9 октября." in calls[0]
+    assert "американская инди-рок-группа из Эшвилла" in calls[0]
 
 
 def test_music_premieres_and_novelty_link_to_youtube_music():

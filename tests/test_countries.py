@@ -1,8 +1,11 @@
 import asyncio
 
+import pytest
+
 import countries
 
 REAL_TITLE_INFO = countries.title_info
+REAL_ARTIST_SUMMARY = countries.artist_summary
 import leisure_movies  # noqa: F401 — порядок импорта как в боте (movie_recommendation ↔ leisure_movies)
 import movie_engine
 import movie_recommendation
@@ -186,3 +189,67 @@ def test_band_with_ampersand_is_looked_up_by_its_full_name(monkeypatch):
     assert countries._musicbrainz_country(countries._known_name("Chase & Status")) == "GB"
     assert countries._group_years("Chase & Status") == "с 2003"
     assert countries._known_name("Doja Cat & SZA") == "Doja Cat"  # совместного релиза целиком нет
+
+
+def _summary_sources(monkeypatch, titles, intros, translate=lambda text: f"ru:{text}"):
+    monkeypatch.setattr(countries, "_wikidata_id", lambda _name: "Q434745")
+    monkeypatch.setattr(wikidata_books, "article_titles", lambda _qid: titles)
+    monkeypatch.setattr(wikidata_books, "article_intro", lambda lang, title: intros.get(lang, ""))
+    monkeypatch.setattr(countries, "_translate_intro", translate)
+
+
+def test_artist_summary_prefers_russian_wikipedia_then_wikidata_then_translated_english(monkeypatch):
+    intros = {"ru": "Тинаше — американская певица.", "en": "Tinashe is an American singer."}
+
+    _summary_sources(monkeypatch, {"ruwiki": "Тинаше", "enwiki": "Tinashe", "ru_desc": "певица"}, intros)
+    assert countries._artist_summary("Tinashe") == "Тинаше — американская певица."
+
+    _summary_sources(monkeypatch, {"enwiki": "Tinashe", "ru_desc": "американская певица"}, intros)
+    assert countries._artist_summary("Tinashe") == "Американская певица."
+
+    _summary_sources(monkeypatch, {"enwiki": "Tinashe"}, intros)
+    assert countries._artist_summary("Tinashe") == "ru:Tinashe is an American singer."
+
+
+def test_artist_summary_without_ai_has_no_description_and_failure_is_not_cached(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(countries.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(countries.store, "mutate_kv", lambda _key, change: saved.update(change(saved)[0]))
+
+    def ai_down(_text):
+        raise RuntimeError("all providers failed")
+
+    _summary_sources(monkeypatch, {"enwiki": "Elderbrook"}, {"en": "Elderbrook is an English musician."}, ai_down)
+    assert REAL_ARTIST_SUMMARY("Elderbrook") == ""
+    assert saved == {}
+
+    _summary_sources(monkeypatch, {"ruwiki": "Элдербрук"}, {"ru": "Элдербрук — английский музыкант."})
+    assert REAL_ARTIST_SUMMARY("Elderbrook") == "Элдербрук — английский музыкант."
+    monkeypatch.setattr(countries, "_wikidata_id", lambda _name: pytest.fail("cached for a month"))
+    assert REAL_ARTIST_SUMMARY("Elderbrook") == "Элдербрук — английский музыкант."
+
+
+def test_article_intro_keeps_two_sentences(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"extract": "Chase & Status — британский дуэт. Образован в 2003 году. Выпустил четыре альбома."}
+
+    monkeypatch.setattr(wikidata_books.requests, "get", lambda url, **_kwargs: Response())
+
+    assert wikidata_books.article_intro("ru", "Chase & Status") == (
+        "Chase & Status — британский дуэт. Образован в 2003 году."
+    )
+
+
+def test_wikidata_id_comes_from_musicbrainz_url_relations(monkeypatch):
+    monkeypatch.setattr(countries, "_known_name", lambda name: name)
+    monkeypatch.setattr(countries, "_musicbrainz_artists", lambda _name: [{"id": "mbid-1"}])
+    monkeypatch.setattr(countries, "_mb_get", lambda path, params: {"relations": [
+        {"type": "official homepage", "url": {"resource": "https://tinashe.com"}},
+        {"type": "wikidata", "url": {"resource": "https://www.wikidata.org/wiki/Q434745"}},
+    ]} if path == "artist/mbid-1" and params == {"inc": "url-rels"} else {})
+
+    assert countries._wikidata_id("Tinashe") == "Q434745"
