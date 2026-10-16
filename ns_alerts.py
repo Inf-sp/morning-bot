@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup
 
 import ai
 import config
@@ -17,6 +17,7 @@ import ns_api
 import secure
 import store
 from ui import transport as transport_ui
+from ui.navigation import notif_row
 
 _log = logging.getLogger(__name__)
 
@@ -33,10 +34,7 @@ def is_active_time(now=None):
 
 
 def _keyboard():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
+    return InlineKeyboardMarkup([notif_row()])
 
 
 def _translate(disruption):

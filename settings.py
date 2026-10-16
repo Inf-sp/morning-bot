@@ -7,7 +7,7 @@ import learning_settings as learning_preferences
 from ui import settings as settings_ui
 from ui.constants import cuisine_label, ui_label
 import rich_delivery
-from ui.navigation import nav_row
+from ui.navigation import nav_row, notif_row
 
 _log = logging.getLogger(__name__)
 
@@ -284,20 +284,12 @@ def _notif_label(kind: str, label: str) -> str:
 
 
 def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeyboardMarkup:
-    """Единая вертикальная навигация плановых уведомлений."""
-    toggle_label = "🔕 Отключить уведомления" if enabled else "✅ Включить уведомления"
-    actions, home = [], []
-    for row in rows:
-        for button in row:
-            callback = str(getattr(button, "callback_data", "") or "")
-            if callback.startswith("set_notifpush_"):
-                continue
-            (home if callback == "m_menu" else actions).append(button)
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(toggle_label, callback_data=f"set_notifpush_{kind}")],
-        *[[button] for button in actions],
-        *[[button] for button in home],
-    ])
+    """Единая навигация плановых уведомлений: действия рассылки, ниже «Настроить уведомления | Главная».
+    Кнопки «Отключить уведомления» нет; kind и enabled — для старых сообщений с ней (`set_notifpush_*`)."""
+    actions = [button for row in rows for button in row
+               if str(getattr(button, "callback_data", "") or "") not in ("m_menu", "set_notif_new")
+               and not str(getattr(button, "callback_data", "") or "").startswith("set_notifpush_")]
+    return InlineKeyboardMarkup([*[[button] for button in actions], notif_row()])
 
 def settings_summary(cid) -> str:
     """«включено 4 · следующая: Погода на завтра сегодня в 20:00»."""
@@ -495,11 +487,8 @@ async def _send_scheduled_notification(bot, cid, kind):
         await leisure_concerts.send_weekend_events(bot, cid)
     elif kind == "evening_weather":
         import weather as _w
-        # Одна строка: «Настроить» (настройки уведомлений новым сообщением) | «Главная».
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]])
+        # «Настроить уведомления» (настройки уведомлений новым сообщением) | «Главная».
+        kb = InlineKeyboardMarkup([notif_row()])
         await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)
     elif kind == "ns_disruptions":
         import ns_alerts
@@ -528,11 +517,8 @@ async def _send_holidays_eve(bot, cid):
     if not lines:
         return
     msg = myday_ui.holidays_eve(place.get("city", ""), lines)
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-        InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-    ]])
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup([notif_row()]))
 
 
 async def send_scheduled_notification(bot, cid, kind):

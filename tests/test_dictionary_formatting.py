@@ -247,7 +247,7 @@ def test_normalize_dictionary_merges_same_term_with_different_translations(monke
 
 def test_daily_word_has_delete_home_and_notification_settings(monkeypatch):
     sent = []
-    delete = InlineKeyboardButton("❌ Удалить слово", callback_data="a_dictdelid_w1")
+    delete = InlineKeyboardButton("❌ Удалить из словаря", callback_data="a_dictdelid_w1")
 
     monkeypatch.setattr(settings, "study_lang", lambda _cid: "нидерландский")
     monkeypatch.setattr(
@@ -260,8 +260,8 @@ def test_daily_word_has_delete_home_and_notification_settings(monkeypatch):
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("❌ Удалить слово", "a_dictdelid_w1")],
-        [("🎚️ Настроить рассылку", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
+        [("❌ Удалить из словаря", "a_dictdelid_w1")],
+        [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]
 
 
@@ -435,5 +435,29 @@ def test_morning_word_offers_delete_with_confirmation(monkeypatch):
     _msg, rows = dictionary_morning._build_morning_word("42", "nl")
 
     assert [(b.text, b.callback_data) for row in rows for b in row] == [
-        ("❌ Удалить слово", "a_dictdelid_w1"),
+        ("❌ Удалить из словаря", "a_dictdelid_w1"),
     ]
+
+
+def test_deleting_a_word_offers_no_green_add_button(monkeypatch):
+    import asyncio
+    import dictionary_management
+    shown = []
+    words = [{"id": "w1", "term": "afspraak", "translation": "встреча", "language": "nl"}]
+
+    class Dictionary:
+        normalize_user_dictionary = staticmethod(lambda _cid: list(words))
+        _dict_lang = staticmethod(lambda _item: "nl")
+        _active_language_code = staticmethod(lambda _cid: "nl")
+
+        @staticmethod
+        async def _show_screen(_bot, _cid, text, _entities, kb, q=None):
+            shown.append(kb)
+
+    monkeypatch.setattr(dictionary_management, "_dictionary", lambda: Dictionary)
+    monkeypatch.setattr(dictionary_management.store, "set_list", lambda *_args: None)
+
+    asyncio.run(dictionary_management.del_dict_entry_by_id(object(), "42", "w1"))
+
+    labels = [[button.text for button in row] for row in shown[0].inline_keyboard]
+    assert labels == [["🎚️ Настроить словарь"], ["⬅️ Назад", "#️⃣ Главная"]]  # без «Добавить своё слово»

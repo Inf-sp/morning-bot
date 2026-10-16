@@ -19,6 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 import store
 from ui import transport as transport_ui
+from ui.navigation import notif_row
 
 _log = logging.getLogger(__name__)
 
@@ -121,8 +122,7 @@ def deal_details(item):
 def _keyboard(link):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Открыть публикацию", url=link)],
-        [InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        notif_row(),
     ])
 
 

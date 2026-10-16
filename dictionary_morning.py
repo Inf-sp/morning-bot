@@ -19,6 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ui import learning as learning_ui
 from ui.constants import delete_label
+from ui.navigation import notif_row
 
 _code = dictionary._code
 
@@ -120,7 +121,7 @@ def _build_morning_word(cid, language):
     word_id = str(practice["entries"][0].get("id") or "")
     # Удаление идёт через общее подтверждение словаря.
     return msg, ([[InlineKeyboardButton(
-        delete_label("Удалить слово"), callback_data=f"a_dictdelid_{word_id}")]] if word_id else [])
+        delete_label("Удалить из словаря"), callback_data=f"a_dictdelid_{word_id}")]] if word_id else [])
 
 
 async def send_daily_practice(bot, cid):
@@ -134,10 +135,7 @@ async def send_daily_practice(bot, cid):
         chat_id=cid,
         text=word_msg.text,
         entities=word_msg.entities,
-        reply_markup=InlineKeyboardMarkup([*del_row, [
-            # Отдельным сообщением: слово дня остаётся в истории.
-            InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-            InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu"),
-        ]]),
+        # Настройки уведомлений — отдельным сообщением: слово дня остаётся в истории.
+        reply_markup=InlineKeyboardMarkup([*del_row, notif_row()]),
     )
     return True

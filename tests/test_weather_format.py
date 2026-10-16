@@ -289,7 +289,7 @@ def test_weather_warning_job_skips_disabled_users(monkeypatch):
     assert sent == []
 
 
-def test_weather_warning_notification_links_only_to_home(monkeypatch):
+def test_weather_warning_notification_links_to_notification_settings_and_home(monkeypatch):
     sent = []
 
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"lat": 52.6, "lon": 4.7})
@@ -308,8 +308,7 @@ def test_weather_warning_notification_links_only_to_home(monkeypatch):
 
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("🔕 Отключить уведомления", "set_notifpush_weather_warn")],
-        [("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],  # без «Отключить»
     ]
 
 
@@ -335,11 +334,11 @@ def test_evening_weather_is_at_twenty_and_has_settings_and_home_in_one_row(monke
     assert option.button_label == "Погода на завтра · 20:00"
     assert calls[0][:4] == (notification_bot, "42", "tomorrow_plain", None)
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("🎚️ Настроить рассылку", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]
 
 
-def test_notification_can_be_disabled_in_place_and_enabled_again(monkeypatch):
+def test_old_disable_button_still_toggles_but_notifications_have_no_disable_button(monkeypatch):
     saved = []
     edited = []
     markup = settings.notification_markup("daily_words", [[
@@ -361,11 +360,11 @@ def test_notification_can_be_disabled_in_place_and_enabled_again(monkeypatch):
     ))
 
     keyboard = edited[0].inline_keyboard
-    assert saved == [("42", "notif_daily_words", False)]
+    assert saved == [("42", "notif_daily_words", False)]  # старая кнопка из истории чата работает
+    # Под рассылкой нет «Отключить / Включить уведомления» — только «Настроить уведомления | Главная».
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
-        [("✅ Включить уведомления", "set_notifpush_daily_words")],
         [("🧠 Обучение", "notify_learning")],
-        [("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]
 
 

@@ -19,7 +19,7 @@ import store
 import util
 from ui import leisure as leisure_ui
 from ui.builder import MessageSpec
-from ui.navigation import nav_row
+from ui.navigation import nav_row, notif_row
 
 _log = logging.getLogger(__name__)
 
@@ -1316,8 +1316,7 @@ async def send_weekend_events(bot, cid):
     # Как «Главные новости»: действие, ниже «Настроить | Главная» одной строкой.
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎫 Все концерты", callback_data="a_concerts_find")],
-        [InlineKeyboardButton("🎚️ Настроить рассылку", callback_data="set_notif_new"),
-         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        notif_row(),
     ])
     await bot.send_message(
         chat_id=cid,

@@ -291,7 +291,7 @@ def test_weekly_concerts_notification_buttons(monkeypatch):
     keyboard = sent[0]["reply_markup"].inline_keyboard
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
         [("🎫 Все концерты", "a_concerts_find")],
-        [("🎚️ Настроить рассылку", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
+        [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]
     assert sent[0]["disable_web_page_preview"] is True
 

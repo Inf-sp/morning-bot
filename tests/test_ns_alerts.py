@@ -92,14 +92,14 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
     asyncio.run(ns_alerts.check_user(bot, "42"))
     asyncio.run(ns_alerts.check_user(bot, "42"))
     assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🚆 Сбой NS · Alkmaar")
-    assert [b.text for b in bot.sent[0]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить рассылку", "#️⃣ Главная"]
+    assert [b.text for b in bot.sent[0]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
     assert bot.sent[-1]["text"].startswith(
         "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal: поезда снова ходят.")
     assert "\n\nПричина: Defecte trein." in bot.sent[-1]["text"]
-    assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить рассылку", "#️⃣ Главная"]
+    assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
 
 

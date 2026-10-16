@@ -93,7 +93,10 @@ async def del_dict_entry_by_id(bot, cid, word_id, page=None, q=None):
         await dictionary._show_screen(
             bot, cid, msg.text, msg.entities, back_menu_keyboard(f"a_dictedit_{lang}_{page}"), q=q)
         return
-    await dictionary._show_screen(bot, cid, msg.text, msg.entities, dictionary._dict_manage_kb(lang), q=q)
+    # После удаления — без зелёной «Добавить своё слово»: только словарь и навигация (назад — в Обучение).
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🎚️ Настроить словарь", callback_data=f"a_dictlang_{lang}")],
+                               nav_row("m_learn")])
+    await dictionary._show_screen(bot, cid, msg.text, msg.entities, kb, q=q)
 
 
 async def del_dict_category_entry(
