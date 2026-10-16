@@ -121,6 +121,16 @@ def test_colour_harmony_prefers_classic_pairs():
     assert rules.harmony_score(look("белый", "оливковый", "бежевый")) > red_pink
 
 
+def test_two_earth_tones_on_top_and_bottom_lose_to_a_contrast():
+    def look(*colors):
+        return [{"zone": zone, "colors": [color]} for zone, color in zip(("Верх", "Низ", "Обувь"), colors)]
+
+    muddy = rules.harmony_score(look("коричневый", "оливковый", "чёрный"))  # тёплые приглушённые — без контраста
+    assert muddy < rules.harmony_score(look("белый", "оливковый", "чёрный"))
+    assert muddy < rules.harmony_score(look("коричневый", "тёмно-синий", "чёрный"))
+    assert muddy < rules.harmony_score(look("коричневый", "бежевый", "чёрный"))
+
+
 def test_socks_follow_trousers_when_top_is_the_accent():
     items = [_it("t", "Верх", "Бордовый свитер", "бордовый"), JEANS, SNEAKERS]
     assert build_sock_recommendation(items) == "Серые носки"

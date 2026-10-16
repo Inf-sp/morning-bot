@@ -174,7 +174,19 @@ def harmony_score(items):
         pool = family_set | shade_set
         if first in pool and second in pool and first != second:
             score += 1.5
+    if _earth_top_and_bottom(items):
+        score -= _MUDDY_PENALTY
     return score
+
+
+_MUDDY_PENALTY = 5  # сильнее бонусов «база» и «проверенная пара»: такой комплект проигрывает контрастному
+
+
+def _earth_top_and_bottom(items) -> bool:
+    """Верх и низ оба землистых тонов (коричневая рубашка + оливковые брюки): тёплые приглушённые цвета рядом
+    сливаются — образу не хватает контраста. Землистый цвет хорош с нейтральным или тёмно-синим."""
+    by_zone = {item.get("zone"): color_family(main_color(item)) for item in items}
+    return by_zone.get("Верх") == "earth" and by_zone.get("Низ") == "earth"
 
 
 # ---------- строка-причина ----------
