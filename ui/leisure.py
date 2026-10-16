@@ -783,7 +783,7 @@ def _linked_names(b: MessageBuilder, label, names) -> None:
 
 
 def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
-    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: фильмы страны, что слушают сейчас, легенды и что идёт во время отпуска —
+    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: фильмы страны, музыка страны (до трёх местных артистов) и что идёт во время отпуска —
     праздники, фестивали и события города, концерты твоих артистов. Премьер и рекомендаций нет."""
     b = MessageBuilder()
     b.title(f"🍿 Досуг · {place}".rstrip(" ·"))
@@ -798,10 +798,9 @@ def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
             meta = [str(film.get("year") or ""), str(film.get("genres") or "").replace(", ", " · ")]
             b.text_line("".join(f" · {value}" for value in meta if value.strip()))
             b.newline()
-    if data.get("chart") or data.get("legends"):
+    if data.get("music"):
         b.spacer()
-        _linked_names(b, "Слушают сейчас", data.get("chart"))
-        _linked_names(b, "Легенды", data.get("legends"))
+        _linked_names(b, "Музыка страны", data["music"])
     during = [("🎉", f"{day} — {name}", "") for day, name in data.get("holidays") or []]
     for event in events or ():
         start, end = _event_date_label(event.get("start")), _event_date_label(event.get("end"))
@@ -817,7 +816,7 @@ def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
         b.newline()
         for emoji, name, tail in during:
             b.line(f"{emoji} {name}{tail}")
-    if not films and not data.get("chart") and not during:
+    if not films and not data.get("music") and not during:
         b.line("Собираю досуг страны — загляни чуть позже.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
                                                                                      callback_data="m_menu")]]))

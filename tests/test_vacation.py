@@ -117,7 +117,7 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
     # Не грамматика, а что пригодится в поездке: ситуация дня, произношение, факт о языке курсивом.
     assert msg.text.startswith("🇿🇦 Африкаанс в поездке\n\nСитуация: ")
     assert "Een koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)" in msg.text
-    assert "Произношение: «g» читается как хриплое «х»." in msg.text and "Грамматика" not in msg.text
+    assert "Произношение" not in msg.text and "Грамматика" not in msg.text  # в поездке — только фразы и факт
     assert msg.text.endswith("Африкаанс вырос из нидерландского XVII века.")
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
     assert vacation.situation_today("42", date(2026, 10, 12)) != vacation.situation_today("42", date(2026, 10, 13))
@@ -180,7 +180,7 @@ def test_country_block_and_summary_lines():
 
     assert lines == {
         "Столица": "Pretoria", "Население": "64,7 млн (2025)", "Площадь": "1 221 037 км²",
-        "Языки": "африкаанс, английский и ещё 1", "Валюта": "ZAR (R) · 1 € = 18,53 R",
+        "Языки": "африкаанс, английский, Zulu", "Валюта": "ZAR (R) · 1 € = 18,53 R",  # все языки, без «и ещё N»
         "Время": "на 1 ч больше, чем в Амстердаме", "Телефонный код": "+27",
     }
     text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", vacation={
@@ -411,14 +411,14 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
     from ui import leisure as leisure_ui
     msg = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {
         "films": [{"id": 1, "title": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"}],
-        "chart": ["Tyla", "Kabza De Small"], "legends": ["Miriam Makeba"],
+        "music": ["Tyla", "Die Antwoord", "Miriam Makeba"],
         "holidays": [("24 сентября", "Heritage Day — День наследия")],
     }, events=[{"name": "Cape Town Jazz Festival", "start": "2026-09-26", "end": "2026-09-27"}],
         concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
 
     text = msg.text
     assert text.startswith("🍿 Досуг · ЮАР 🇿🇦\n\nФильмы страны:\n- Район №9 · 2009 · фантастика")
-    assert "Слушают сейчас: Tyla · Kabza De Small\nЛегенды: Miriam Makeba" in text
+    assert "Музыка страны: Tyla · Die Antwoord · Miriam Makeba" in text and "Легенды" not in text
     assert "Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n🎪 Cape Town Jazz Festival — 26 сентября" in text
     assert "🎫 Muse — 30 сентября, Cape Town Stadium" in text
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["m_menu"]]
@@ -442,3 +442,19 @@ def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
     text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
                                         "dishes": {"lunch": {"name": "Брай", "note": "мясо на открытом огне"}}}, "42").text
     assert text.startswith("🇿🇦 Меню на сегодня · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")
+
+
+def test_country_music_is_up_to_three_local_artists_chart_first(monkeypatch):
+    import apple_music
+    import countries
+    local = {"Tyla", "Kabza De Small", "Die Antwoord", "Black Coffee"}
+    monkeypatch.setattr(countries, "label", lambda cc: f"flag {cc}")
+    monkeypatch.setattr(countries, "artist_label", lambda name, fetch=True: "flag ZA" if name in local else "flag US")
+    monkeypatch.setattr(apple_music, "_feed", lambda _cc: [
+        {"artistName": "Taylor Swift"}, {"artistName": "Tyla"}, {"artistName": "Tyla"}, {"artistName": "Drake"},
+        {"artistName": "Kabza De Small"}])
+
+    music = vacation._verified_artists([*vacation._chart_artists("ZA"), "Die Antwoord", "Black Coffee"], "ZA")
+
+    # Из чарта — только местные (Тейлор Свифт и Дрейк — нет), затем известные из AI; не больше трёх, без повторов.
+    assert music == ["Tyla", "Kabza De Small", "Die Antwoord"]

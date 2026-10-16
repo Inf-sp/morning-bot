@@ -117,9 +117,8 @@ def country_lines(facts, guide=None) -> list:
     if country.get("area"):
         lines.append(("Площадь", f"{_number(country['area'])} км²"))
     languages = [guide.get("languages_ru", {}).get(name, name) for name in country.get("languages") or []]
-    if languages:
-        extra = f" и ещё {len(languages) - 2}" if len(languages) > 2 else ""
-        lines.append(("Языки", ", ".join(languages[:2]) + extra))
+    if languages:  # все языки страны: у ЮАР их 11 — «и ещё 9» ничего не говорит
+        lines.append(("Языки", ", ".join(languages)))
     if country.get("currency"):
         currency = country["currency"] + (f" ({country['symbol']})" if country.get("symbol") else "")
         rate = facts.get("rate")
