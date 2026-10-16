@@ -503,7 +503,7 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
     assert "Другие варианты:\n- Focus Group · музыкальный альбом · UK" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильмы", "📺 Сериалы", "🎧 Музыка"], ["🎫 Концерты"]] and _callbacks(kb)[0] == "lz_prem"
+    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты"]] and _callbacks(kb)[0] == "lz_prem"
     assert "✨ Другой вариант" not in sum(_labels(kb), [])
     assert routing.resolve_callback_handler("lz_today_2")["handled"]  # старая кнопка из истории — хаб
 

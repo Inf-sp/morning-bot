@@ -827,8 +827,8 @@ def leisure_hub_kb():
     """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
-        [InlineKeyboardButton("🎬 Фильмы", callback_data="movie_reco"),
-         InlineKeyboardButton("📺 Сериалы", callback_data="tv_reco"),
+        [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
+         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
