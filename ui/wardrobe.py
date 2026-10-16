@@ -359,7 +359,7 @@ def _trip_dates(start, end) -> str:
 def suitcase_screen(data, saved=False):
     """«🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней»: погода поездки (дальше прогноза — «Обычно в эти дни»), вещи
     шкафа по зонам («Футболки и рубашки: …»), курсивом совет. Пустой шкаф — базовый набор с пометкой; saved —
-    подтверждённый чемодан из «Мой шкаф»."""
+    подтверждённый чемодан; swaps — строка «Заменил: …» после «Подобрать замену» (только у черновика)."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
@@ -367,7 +367,7 @@ def suitcase_screen(data, saved=False):
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
     if saved:
-        b.line("✅ Сохранён — открывается из «Мой шкаф».")
+        b.line("✅ Сохранён — открывается кнопкой «Собрать чемодан».")
         b.spacer()
     if data.get("weather"):
         weather = _finish_dot(data["weather"])
@@ -427,7 +427,7 @@ def suitcase_looks_screen(data, looks):
         weather = (f"{look['tmax']:+d}°" + (", дождь" if look.get("rain") else "")) if look.get("tmax") is not None \
             else ""
         items = ", ".join(_lower_first(_clean_text(name)) for name in look.get("items") or []) \
-            or "из чемодана образ не собрать"
+            or "в шкафу нет вещей для образа"
         b.line(" · ".join(part for part in (f"{_WEEKDAYS[day.weekday()]} {day.day} {_MONTHS_SHORT[day.month - 1]}",
                                             weather, items) if part))
     if len(looks) > _LOOK_DAYS_SHOWN:

@@ -590,11 +590,6 @@ async def send_wardrobe_zones(bot, cid, q=None):
             f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
-    import wardrobe_suitcase
-    saved = wardrobe_suitcase.saved_suitcase(cid)
-    if saved:  # подтверждённый чемодан в поездку — в «Мой шкаф»
-        place = saved["result"].get("place") or "поездка"
-        rows.append([InlineKeyboardButton(f"🧳 Чемодан · {place}", callback_data="w_pack_saved")])
     rows.append(nav_row("m_wardrobe"))
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)

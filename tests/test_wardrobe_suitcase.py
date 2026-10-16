@@ -20,6 +20,7 @@ CLOTHES = [
     ("Обувь", _item("Белые кеды")),
     ("Верхняя одежда", _item("Пуховик", (-20, 5))), ("Верхняя одежда", _item("Ветровка", (5, 26), rain_ok=True)),
 ]
+WARM = {"tmin": 18, "tmax": 24, "rainy": 0, "days": 8, "wind": 5, "typical": False}
 TRIP = {"city": "Кейптаун", "cc": "ZA", "lat": -33.9, "lon": 18.4, "start": "2026-10-20", "end": "2026-10-27"}
 
 
@@ -33,9 +34,14 @@ class Bot:
 
 def _memory_profile(monkeypatch):
     profile = {}
+
+    def mutate(_cid, change):  # как store.mutate_profile: профиль целиком заменяется результатом
+        updated = change(dict(profile))[0]
+        profile.clear()
+        profile.update(updated)
+
     monkeypatch.setattr(wardrobe_suitcase.store, "get_profile", lambda _cid: profile)
-    monkeypatch.setattr(wardrobe_suitcase.store, "mutate_profile",
-                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+    monkeypatch.setattr(wardrobe_suitcase.store, "mutate_profile", mutate)
     return profile
 
 
@@ -86,7 +92,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
         return {"latitude": -33.9, "longitude": 18.4, "name": "Кейптаун", "country_code": "za"}
 
     monkeypatch.setattr(weather_location, "geocode", geocode)
-    monkeypatch.setattr(wardrobe_suitcase, "pack", lambda _cid, trip, avoid=(): {
+    monkeypatch.setattr(wardrobe_suitcase, "pack", lambda _cid, trip, avoid=(), declined=(): {
         "place": trip["city"], "start": trip["start"], "end": trip["end"], "days": 8,
         "groups": [("Верх", ["Белая футболка"])], "avoid": list(avoid)})
     bot = Bot()
@@ -123,7 +129,19 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert bot.sent[-1]["text"].startswith("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Сохранён")
     assert "Заменил" not in bot.sent[-1]["text"]
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_looks"], ["w_pack_edit"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+    assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
+
+    # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
+    asyncio.run(wardrobe_suitcase.send(bot, "42"))
+    assert "✅ Сохранён — открывается кнопкой «Собрать чемодан»." in bot.sent[-1]["text"]
+    assert "42" not in wardrobe_suitcase.store.pending_input
+
+    # «Удалить подборку» — сразу, без подтверждения; дальше снова вопрос «Куда и когда едешь?».
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_del"))
+    assert "suitcase_saved" not in profile and "suitcase_draft" not in profile
+    assert bot.sent[-1]["text"].startswith("🧳 Собрать чемодан\n\nКуда и когда едешь?")
+    assert wardrobe_suitcase.store.pending_input["42"] == "suitcase_trip"
 
 
 def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch):
@@ -138,7 +156,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "✅ Сохранён" in bot.sent[-1]["text"]  # собранный дома чемодан — без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_looks"], ["w_pack_edit"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
@@ -234,3 +252,81 @@ def test_trip_weather_keeps_each_day_for_daily_looks(monkeypatch):
     assert found["daily"] == [
         {"date": "2026-10-20", "tmax": 22, "tmin": 14, "rain": False, "wind": 3},
         {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 10}]
+
+
+def test_declined_items_never_come_back_after_confirm_rebuild_or_new_pack(monkeypatch):
+    profile = _memory_profile(monkeypatch)
+    trip = {**TRIP}
+    profile["suitcase_saved"] = {"trip": trip, "declined": ["Белая футболка"], "result": {
+        "place": "Кейптаун", "days": 8, "groups": [("Верх", ["Серая футболка"]), ("Низ", ["Джинсы"])],
+        "wx": {"tmin": 18, "tmax": 24}}}
+    monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
+    bot = Bot()
+
+    # «Пересобрать» сохранённого: отказ из прошлого раза переходит в черновик.
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_edit"))
+    assert profile["suitcase_draft"]["declined"] == ["Белая футболка"]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_view"))  # «Назад» без замены — отметка остаётся
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_again"))
+    assert profile["suitcase_draft"]["removed"] == [0]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))
+    # Других футболок нет (белая отклонена раньше) — верх берётся любой свободный, а не отклонённый.
+    assert "Белая футболка" not in [name for _zone, names in profile["suitcase_draft"]["result"]["groups"]
+                                    for name in names]
+    assert profile["suitcase_draft"]["declined"] == ["Белая футболка", "Серая футболка"]
+
+    # Новая сборка на ту же поездку: отклонённых вещей не видит ни AI, ни запасной подбор.
+    seen = []
+    monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: WARM)
+    monkeypatch.setattr(wardrobe_suitcase, "_ai_pick", lambda _cid, clothes, *_a: seen.extend(
+        item["name"] for _zone, item in clothes) or ([], ""))
+    result = wardrobe_suitcase.pack("42", trip, declined=wardrobe_suitcase._declined_for("42", trip))
+    names = [name for _zone, group in result["groups"] for name in group]
+    assert "Белая футболка" not in seen and "Серая футболка" not in seen
+    assert "Белая футболка" not in names and "Серая футболка" not in names
+
+
+def test_pack_always_has_top_bottom_and_shoes(monkeypatch):
+    monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
+    monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: WARM)
+    monkeypatch.setattr(wardrobe_suitcase, "_ai_pick", lambda *_a: ([0, 1], "Возьми солнцезащитный крем."))
+
+    groups = dict(wardrobe_suitcase.pack("42", TRIP)["groups"])
+
+    assert groups["Верх"] == ["Белая футболка", "Серая футболка"]
+    assert groups["Низ"] == ["Бежевые чиносы"] and groups["Обувь"] == ["Белые кеды"]
+
+
+def test_swap_keeps_the_last_shoes_when_no_pair_fits_the_weather():
+    clothes = [("Обувь", _item("Белые кеды")), ("Обувь", _item("Зимние ботинки", (-20, 5)))]
+
+    groups, swaps = wardrobe_suitcase.swap_items(clothes, [("Обувь", ["Белые кеды"])], ["Белые кеды"],
+                                                 {"tmin": 18, "tmax": 24})
+
+    assert groups == [("Обувь", ["Зимние ботинки"])] and swaps == [("Белые кеды", "Зимние ботинки")]
+
+
+def test_daily_looks_use_daytime_low_and_never_leave_a_day_empty():
+    closet = _closet(("Верх", "Серая рубашка"), ("Верх", "Коричневая рубашка"), ("Низ", "Бежевые брюки"),
+                     ("Обувь", "Белые кеды"), ("Верхняя одежда", "Чёрная ветровка"))
+    for zone in ("Низ", "Обувь"):  # лёгкие: по правилам — только от +12° днём
+        for item in closet["zones"][zone]["Все"]:
+            item["warmth"] = "лёгкие"
+    names = {"Серая рубашка", "Коричневая рубашка", "Бежевые брюки", "Чёрная ветровка"}  # обуви в чемодане нет
+    trip = {"start": "2026-10-19", "end": "2026-10-21"}
+    daily = [{"date": "2026-10-19", "tmax": 18, "tmin": 9, "rain": True, "wind": 4},  # ночью +9°, днём +18°
+             {"date": "2026-10-20", "tmax": 19, "tmin": 8, "rain": False, "wind": 3},
+             {"date": "2026-10-21", "tmax": 3, "tmin": -6, "rain": False, "wind": 2}]  # холодно для лёгкого
+
+    looks = wardrobe_suitcase.daily_looks(closet, names, trip, daily)
+
+    # Минимум дня — дневной (середина ночного минимума и максимума), а не ночные +9°: лёгкое проходит строгий подбор.
+    assert wardrobe_suitcase._day_context(daily[0])["tmin"] == 14
+    import wardrobe_outfit
+    assert wardrobe_outfit.top_outfits(wardrobe_suitcase._suitcase_closet(closet, names),
+                                       wardrobe_suitcase._day_context(daily[0]), [], "")
+    assert all({"Бежевые брюки", "Белые кеды"} <= set(look["items"]) for look in looks)  # кеды — из шкафа
+    assert all(any("рубашка" in name for name in look["items"]) for look in looks)
+    assert "образ" not in wardrobe_ui.suitcase_looks_screen({"place": "Кейптаун", "days": 3}, looks).text.split(
+        "\n", 1)[1]
