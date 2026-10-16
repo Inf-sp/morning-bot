@@ -692,15 +692,15 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     # Совместимость с валидным одиночным ответом старого кэша/резерва.
     if not candidates and isinstance(generated, dict) and generated.get("artist"):
         candidates = [generated]
+    valid = []
     for cand in candidates[:3]:
         cand_artist = str(cand.get("artist") or "").strip() if isinstance(cand, dict) else ""
         cand_genre = str(cand.get("genre") or "").strip().casefold() if isinstance(cand, dict) else ""
         _log.info("send_listen: candidate cid=%s cand_type=%s cand_artist=%r",
                   cid, type(cand).__name__, cand_artist)
-        if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known \
-                and await _well_known(cand_artist):
-            data = cand
-            break
+        if cand_artist and cand_genre in allowed_genres and cand_artist.lower() not in known:
+            valid.append(cand)
+    data = await _most_popular(valid) or data
     if not data or not data.get("artist"):
         data = _local_artist_fallback(
             hard_blocked, fallback_category, recent=recent,
@@ -748,20 +748,30 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         bot, cid, msg, _listen_kb(), status=status)
 
 
-_MIN_DEEZER_FANS = 30_000  # ponytail: порог «известного» артиста; у инди на Deezer поклонников меньше, чем у поп-звёзд
+# Совсем безвестных отсеиваем, остальных ранжируем: жёсткий порог в 30 тыс. отсекал Overmono, Kelela, Alvvays —
+# у британской и европейской сцены на Deezer (аудитория — Франция, Бразилия) поклонников немного.
+_MIN_DEEZER_FANS = 1_000
 
 
-async def _well_known(artist) -> bool:
-    """Артист дня — только известный: от _MIN_DEEZER_FANS поклонников на Deezer. Deezer недоступен — не отсеиваем."""
+async def _most_popular(candidates):
+    """Самый известный из подходящих кандидатов AI — по поклонникам на Deezer (артист дня — «топовый», но с
+    полной карточкой AI). Меньше _MIN_DEEZER_FANS — отсеивается; Deezer недоступен — порядок AI."""
     import countries
-    try:
-        fans = await asyncio.wait_for(asyncio.to_thread(countries.artist_fans, artist), 4)
-    except Exception:
-        return True
-    if fans is not None and fans < _MIN_DEEZER_FANS:
-        _log.info("send_listen: %r skipped — %s fans on Deezer", artist, fans)
-        return False
-    return True
+
+    async def fans(cand):
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(countries.artist_fans, cand["artist"]), 4)
+        except Exception:
+            return None
+
+    counts = await asyncio.gather(*(fans(cand) for cand in candidates))
+    ranked = []
+    for index, (cand, count) in enumerate(zip(candidates, counts)):
+        if count is not None and count < _MIN_DEEZER_FANS:
+            _log.info("send_listen: %r skipped — %s fans on Deezer", cand["artist"], count)
+            continue
+        ranked.append(((-1 if count is None else count), -index, cand))  # неизвестно — после известных
+    return max(ranked, key=lambda row: row[:2])[2] if ranked else None
 
 
 async def _release_artist(cid, genres, known):
@@ -778,8 +788,13 @@ async def _release_artist(cid, genres, known):
         for item in releases:
             if item["artist"].lower() not in known:
                 released = date.fromisoformat(item["date"])
-                return {"artist": item["artist"], "genre": genre,
-                        "desc": f"Свежий альбом «{item['title']}» — вышел {released.day} {util._MONTHS[released.month - 1]}."}
+                # Без AI описания нет, но карточка не пустая: реальные популярные треки и факт о свежем альбоме.
+                try:
+                    tracks = await asyncio.wait_for(asyncio.to_thread(apple_music.top_tracks, item["artist"]), 6)
+                except Exception:
+                    tracks = []
+                return {"artist": item["artist"], "genre": genre, "tracks": tracks,
+                        "fact": f"Свежий альбом «{item['title']}» вышел {released.day} {util._MONTHS[released.month - 1]}."}
     return None
 
 

@@ -311,7 +311,7 @@ def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_a
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
     assert calls and "Не удалось подобрать" not in calls[0]
-    assert "Wednesday" in calls[0] and "«Bleeds» — вышел 9 октября" in calls[0]
+    assert "Wednesday" in calls[0] and "Свежий альбом «Bleeds» вышел 9 октября." in calls[0]
 
 
 def test_music_premieres_and_novelty_link_to_youtube_music():
@@ -390,3 +390,16 @@ def test_obscure_ai_candidate_is_skipped_for_a_well_known_one(monkeypatch):
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
     assert "Wolf Alice" in delivered[0] and "Tiny Band" not in delivered[0]  # 4 тыс. поклонников — не «топ»
+
+
+def test_most_popular_ai_candidate_wins_and_only_unknown_names_are_dropped(monkeypatch):
+    import countries
+    fans = {"Overmono": 8206, "Barry Can't Swim": 4965, "Nobody Knows": 120}
+    monkeypatch.setattr(countries, "artist_fans", lambda name, fetch=True: fans.get(name))
+    candidates = [{"artist": "Barry Can't Swim"}, {"artist": "Overmono"}, {"artist": "Nobody Knows"}]
+
+    # Британской сцене на Deezer мало поклонников — не отсекаем, а берём самого известного.
+    assert asyncio.run(leisure_music._most_popular(candidates))["artist"] == "Overmono"
+    assert asyncio.run(leisure_music._most_popular(candidates[2:])) is None  # совсем безвестный
+    monkeypatch.setattr(countries, "artist_fans", lambda name, fetch=True: None)  # Deezer недоступен
+    assert asyncio.run(leisure_music._most_popular(candidates))["artist"] == "Barry Can't Swim"  # порядок AI

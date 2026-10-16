@@ -758,10 +758,9 @@ def _verified_artists(names, cc) -> list:
 def _chart_artists(cc) -> list:
     """Что слушают сейчас в стране: первые разные артисты чарта альбомов Apple Music этой страны."""
     import apple_music
-    import countries
     out = []
     for row in apple_music._feed(cc.lower()):
-        artist = countries.main_artist(str(row.get("artistName") or ""))
+        artist = " ".join(str(row.get("artistName") or "").split())  # «Chase & Status» — целиком, это группа
         if artist and artist.casefold() not in {name.casefold() for name in out}:
             out.append(artist)
         if len(out) >= _TRIP_CHART:

@@ -47,6 +47,7 @@ def _no_deezer(monkeypatch):
     import apple_music
 
     monkeypatch.setattr(apple_music, "_deezer_releases", lambda *_a: [])
+    monkeypatch.setattr(apple_music, "top_tracks", lambda *_a, **_k: [])
     yield
 
 

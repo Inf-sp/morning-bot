@@ -216,7 +216,7 @@ _GROUP_TYPES = {"Group", "Orchestra", "Choir"}
 def _group_years(name) -> str:
     """Годы активности группы из MusicBrainz: «с 2011» или «2005–2019». У человека life-span — годы жизни, а не
     карьеры, поэтому сольному артисту лет нет; распалась без даты — тоже без лет."""
-    matches = _musicbrainz_artists(name)
+    matches = _musicbrainz_artists(_known_name(name))
     if not matches or matches[0].get("type") not in _GROUP_TYPES:
         return ""
     span = matches[0].get("life-span") or {}
@@ -244,20 +244,35 @@ def main_artist(name) -> str:
     return _FEATURING_RE.split(str(name or "").strip(), maxsplit=1)[0].strip()
 
 
+def _full_name(name) -> str:
+    return " ".join(str(name or "").split())
+
+
+def _known_name(name) -> str:
+    """Под каким именем искать артиста: полное, если MusicBrainz его знает («Chase & Status» — группа, а не
+    американская «Chase» 1969 года), иначе первый артист совместного релиза («Doja Cat & SZA» → «Doja Cat»).
+    Сбой MusicBrainz — исключение: вызывающий решает сам."""
+    name = _full_name(name)
+    main = main_artist(name)
+    return name if main == name or _musicbrainz_artists(name) else main
+
+
 def _artist_country(name):
-    """MusicBrainz, при сбое или без ответа — Wikidata (без ключа)."""
+    """MusicBrainz, при сбое или без ответа — Wikidata (без ключа) по полному имени."""
     import wikidata_books
+    known = _full_name(name)
     try:
-        found = _musicbrainz_country(name)
+        known = _known_name(name)
+        found = _musicbrainz_country(known)
     except Exception:
         _log.warning("musicbrainz unavailable for %r, trying wikidata", name, exc_info=True)
         found = ""
-    return found or wikidata_books.artist_country(name)
+    return found or wikidata_books.artist_country(known)
 
 
 def artist_label(name, fetch=True) -> str:
-    """«🇬🇧 UK» для артиста (у совместного релиза — первого) или ""."""
-    return label(_person_cache(config.ARTIST_COUNTRY_KEY, main_artist(name), _artist_country, fetch))
+    """«🇬🇧 UK» для артиста (у совместного релиза, которого нет целиком, — первого) или ""."""
+    return label(_person_cache(config.ARTIST_COUNTRY_KEY, _full_name(name), _artist_country, fetch))
 
 
 _ALBUM_TTL = 30 * 86400  # новый альбом выходит нечасто, но и не раз в полгода
@@ -266,7 +281,7 @@ _ALBUM_TTL = 30 * 86400  # новый альбом выходит нечасто
 def _latest_album(name) -> dict:
     """Последний вышедший студийный альбом артиста из MusicBrainz: {"title", "date"}; без концертников,
     сборников и ремиксов (у них есть secondary-types). Нет совпадения или альбомов — {}."""
-    matches = _musicbrainz_artists(name)
+    matches = _musicbrainz_artists(_known_name(name))
     if not matches or not matches[0].get("id"):
         return {}
     today = time.strftime("%Y-%m-%d")
@@ -283,7 +298,7 @@ def _latest_album(name) -> dict:
 
 def artist_latest_album(name, fetch=True) -> dict:
     """Последний альбом артиста ({"title", "date"} или {}); fetch=False — только кэш, без сети."""
-    album = _person_cache(config.ARTIST_ALBUM_KEY, main_artist(name), _latest_album, fetch,
+    album = _person_cache(config.ARTIST_ALBUM_KEY, _full_name(name), _latest_album, fetch,
                           keep_empty=True, ttl=_ALBUM_TTL)
     return album if isinstance(album, dict) else {}
 
@@ -292,27 +307,33 @@ _FANS_TTL = 30 * 86400
 
 
 def _deezer_fans(name) -> dict:
-    """Поклонники артиста на Deezer (без ключа): {"fans": N}; нет на Deezer — 0. Сбой — исключение (не кэшируется)."""
-    response = requests.get("https://api.deezer.com/search/artist", params={"q": name, "limit": 5}, timeout=_TIMEOUT)
-    response.raise_for_status()
-    data = response.json()
-    if "error" in data:  # Deezer отвечает 200 с {"error": …} при лимите — это не «артиста нет»
-        raise RuntimeError(f"deezer error: {data['error']}")
-    wanted = _artist_key(name)
-    return {"fans": max((int(row.get("nb_fan") or 0) for row in data.get("data") or []
-                         if _artist_key(row.get("name")) == wanted), default=0)}
+    """Поклонники артиста на Deezer (без ключа): {"fans": N}; сначала полное имя («Chase & Status»), без
+    точного совпадения — первый артист совместного релиза; нет на Deezer — 0. Сбой — исключение (не кэшируется)."""
+    name = _full_name(name)
+    for query in dict.fromkeys((name, main_artist(name))):
+        response = requests.get("https://api.deezer.com/search/artist", params={"q": query, "limit": 5},
+                                timeout=_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+        if "error" in data:  # Deezer отвечает 200 с {"error": …} при лимите — это не «артиста нет»
+            raise RuntimeError(f"deezer error: {data['error']}")
+        wanted = _artist_key(query)
+        fans = [int(row.get("nb_fan") or 0) for row in data.get("data") or [] if _artist_key(row.get("name")) == wanted]
+        if fans:
+            return {"fans": max(fans)}
+    return {"fans": 0}
 
 
 def artist_fans(name, fetch=True) -> int | None:
     """Число поклонников артиста на Deezer — мера известности; None — неизвестно (сбой, нет кэша при fetch=False)."""
-    found = _person_cache(config.ARTIST_FANS_KEY, main_artist(name), _deezer_fans, fetch, keep_empty=True,
+    found = _person_cache(config.ARTIST_FANS_KEY, _full_name(name), _deezer_fans, fetch, keep_empty=True,
                           ttl=_FANS_TTL)
     return int(found["fans"]) if isinstance(found, dict) else None
 
 
 def artist_years(name, fetch=True) -> str:
     """Годы активности группы по MusicBrainz («с 2011», «2005–2019»); у сольного артиста и без данных — ""."""
-    return _person_cache(config.ARTIST_YEARS_KEY, main_artist(name), _group_years, fetch, keep_empty=True)
+    return _person_cache(config.ARTIST_YEARS_KEY, _full_name(name), _group_years, fetch, keep_empty=True)
 
 
 def title_info(kind, tmdb_id, fetch=True) -> dict:

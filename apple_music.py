@@ -91,6 +91,23 @@ def _deezer_releases(genre_key, since) -> list[dict]:
     return items
 
 
+def top_tracks(artist, limit=3) -> list[str]:
+    """Самые популярные треки артиста на Deezer (без ключа): точное совпадение имени; нет — []."""
+    import countries
+    try:
+        rows = requests.get("https://api.deezer.com/search/artist", params={"q": artist, "limit": 5},
+                            timeout=_TIMEOUT_SECONDS).json().get("data") or []
+        found = next((row for row in rows if countries._artist_key(row.get("name")) == countries._artist_key(artist)), None)
+        if not found:
+            return []
+        tracks = requests.get(f"https://api.deezer.com/artist/{int(found['id'])}/top", params={"limit": limit},
+                              timeout=_TIMEOUT_SECONDS).json().get("data") or []
+    except Exception as error:
+        _log.warning("deezer top tracks unavailable artist=%s: %r", artist, error)
+        return []
+    return [" ".join(str(row.get("title") or "").split()) for row in tracks if row.get("title")][:limit]
+
+
 def new_releases(genre_key, cc="us", today=None) -> list[dict]:
     """[{title, artist, date, cover, url, genre}] альбомов жанра за последние 90 дней, новые первыми;
     только современные новые альбомы (`is_fresh_album`, без детской музыки по жанру Apple)."""

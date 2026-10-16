@@ -172,3 +172,17 @@ def test_deezer_fans_match_the_exact_artist_and_errors_are_not_answers(monkeypat
     monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response({"error": {"code": 4}}))
     with pytest.raises(RuntimeError):  # лимит Deezer — сбой, а не «0 поклонников»
         countries._deezer_fans("Alvvays")
+
+
+def test_band_with_ampersand_is_looked_up_by_its_full_name(monkeypatch):
+    known = {"Chase & Status": [{"name": "Chase & Status", "type": "Group", "country": "GB",
+                                 "life-span": {"begin": "2003"}}],
+             "Chase": [{"name": "Chase", "type": "Group", "country": "US",
+                        "life-span": {"begin": "1969", "end": "1974", "ended": True}}],
+             "Doja Cat": [{"name": "Doja Cat", "type": "Person", "country": "US"}]}
+    monkeypatch.setattr(countries, "_musicbrainz_artists", lambda name: known.get(name, []))
+
+    assert countries._known_name("Chase & Status") == "Chase & Status"  # группа, а не американская «Chase»
+    assert countries._musicbrainz_country(countries._known_name("Chase & Status")) == "GB"
+    assert countries._group_years("Chase & Status") == "с 2003"
+    assert countries._known_name("Doja Cat & SZA") == "Doja Cat"  # совместного релиза целиком нет
