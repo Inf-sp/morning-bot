@@ -9,7 +9,6 @@ import wardrobe
 import wardrobe_router
 import bot_callbacks
 import util
-from ui.wardrobe import purchase_check_card, purchase_suggestions_card
 from fakes import RecordingBot
 
 
@@ -267,131 +266,16 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
     assert bot.sends == []
 
 
-def test_purchase_check_card_shows_verdict_color_styles_and_matches():
-    message = purchase_check_card({
-        "title": "Белая льняная рубашка", "verdict": "брать", "gain": 18,
-        "why": "Закрывает лёгкий верх к лету",
-        "color_advice": "Белый хорошо ляжет в спокойную палитру; запасной вариант — светло-голубой",
-        "styles": ["Минимализм", "Скандинавский"],
-        "wear_with": ["Тёмные джинсы", "Бежевые чиносы", "Белые кеды", "Лишняя"],
-    })
-
-    assert message.text == (
-        "🔎 Белая льняная рубашка\n\n"
-        "Брать — закрывает лёгкий верх к лету, +18 образов.\n"
-        "Цвет: белый хорошо ляжет в спокойную палитру; запасной вариант — светло-голубой.\n"
-        "Стили: Минимализм, Скандинавский\n"
-        "Сочетается с: тёмные джинсы, бежевые чиносы, белые кеды"
-    )
-
-
-def test_purchase_check_rejects_unexplained_negative_verdict():
-    result = wardrobe._normalize_purchase_check({
-        "verdict": "не брать",
-        "not_buy_reason": "style",
-        "why": "Не соответствует стилю",
-        "fits_count": 4,
-        "duplicates": "нет",
-        "closes_gap": "нет",
-    })
-
-    assert result["verdict"] == "недостаточно данных"
-    assert "конкретной причины" in result["why"]
-
-
-def test_purchase_check_keeps_supported_negative_verdict():
-    result = wardrobe._normalize_purchase_check({
-        "verdict": "не брать",
-        "not_buy_reason": "duplicate",
-        "why": "Почти полностью дублирует уже имеющуюся красную юбку",
-        "fits_count": 3,
-        "duplicates": "да",
-        "closes_gap": "нет",
-    })
-
-    assert result["verdict"] == "не брать"
-
-
-def test_purchase_check_does_not_invent_zero_compatibility():
-    result = wardrobe._normalize_purchase_check({"verdict": "недостаточно данных"})
-    message = purchase_check_card(result)
-
-    assert result["fits_count"] == "недостаточно данных"
-    assert message.text.startswith("🔎 Проверка покупки\n\nПока не ясно — ") and "0 вещ" not in message.text
-
-
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
         ["Повседневный", "Классический"],  # вместо «Новый образ» — две группы стиля
-        ["💳 Что докупить"],
         ["🧳 Собрать чемодан"],  # дома — спросит город и даты поездки
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
     assert [b.callback_data for b in wardrobe.build_wardrobe_keyboard().inline_keyboard[0]] == [
         "w_lookst_casual", "w_lookst_classic"]
-    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_buy"
+    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_pack"
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
-
-
-def test_purchase_suggestions_show_colors_and_three_real_outfits():
-    message = purchase_suggestions_card({
-        "item": "худи",
-        "headline": "Лучше выбрать спокойный оттенок.",
-        "colors": [
-            {"color": "тёмно-синий", "reason": "собирает серые и оливковые вещи"},
-        ],
-        "outfits": ["Худи + серые джинсы", "Худи + оливковые брюки", "Худи + белые кеды"],
-    })
-
-    assert "💳 Что докупить · худи" in message.text
-    assert "Лучшие цвета:\n• Тёмно-синий — собирает серые и оливковые вещи." in message.text
-    assert "С чем носить:\n• Худи + серые джинсы." in message.text
-    assert "• Худи + белые кеды." in message.text
-
-
-def test_fresh_purchase_candidates_exclude_the_current_carousel():
-    wardrobe_data = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
-        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
-    }}
-    current = wardrobe._purchase_candidates(wardrobe_data, limit=3)
-    current_names = {item["item"].casefold() for item in current}
-
-    fresh = wardrobe._purchase_candidates(
-        wardrobe_data, limit=3, exclude_names=current_names,
-    )
-
-    assert fresh
-    assert current_names.isdisjoint(item["item"].casefold() for item in fresh)
-
-
-def test_purchase_suggestions_keep_only_outfits_with_real_wardrobe_items(monkeypatch):
-    wardrobe_data = {
-        "zones": {
-            "Верх": {"Худи": [{"name": "Оливковая худи", "zone": "Верх"}]},
-            "Низ": {"Джинсы": [{"name": "Серые джинсы", "zone": "Низ"}]},
-            "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
-        }
-    }
-    sent = []
-
-    async def recommend(*_args, **_kwargs):
-        return {
-            "colors": [{"color": "бордовый", "reason": "даёт акцент"}],
-            "outfits": ["Худи + выдуманные вещи"],
-        }
-
-    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
-    monkeypatch.setattr(wardrobe.store, "wardrobe_to_text", lambda _w: "Оливковая худи; Серые джинсы; Белые кеды")
-    monkeypatch.setattr(wardrobe._settings, "wardrobe_prefs_context", lambda _cid: "")
-    monkeypatch.setattr(ai, "allm_json", recommend)
-
-    asyncio.run(wardrobe.recommend_purchase(RecordingBot(sent), "42", "худи"))
-
-    assert "Бордовый — даёт акцент." in sent[0]["text"]
-    assert "выдуманные вещи" not in sent[0]["text"]
-    assert "Оливковая худи + Серые джинсы" in sent[0]["text"]
 
 
 def test_other_outfit_keeps_result_card_instead_of_deleting_it(monkeypatch):
@@ -720,3 +604,16 @@ def test_listen_button_has_standard_color():
 
     row = dictionary_views._dict_tts_row({"id": "w1", "term": "wazig", "lang": "nl"})
     assert row and not row[0][0].api_kwargs
+
+
+def test_old_purchase_buttons_open_wardrobe_home(monkeypatch):
+    opened = []
+
+    async def home(_bot, cid, q=None):
+        opened.append(cid)
+
+    monkeypatch.setattr(wardrobe, "send_home", home)
+    for data in ("w_buy", "w_buy_more", "w_buy_i:abc", "w_buy_got:abc", "w_buy_no:abc", "w_check"):
+        asyncio.run(wardrobe.handle_callback(object(), "42", None, data))
+
+    assert opened == ["42"] * 6

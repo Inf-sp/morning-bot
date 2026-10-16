@@ -451,120 +451,6 @@ def test_city_style_prefers_a_relaxed_top_over_office_shirts_outside_the_first_p
     assert "office" not in {item["id"] for item in outfit}
 
 
-def test_city_style_recommends_a_relaxed_tshirt_when_only_office_top_is_available():
-    wardrobe_data = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Белая офисная рубашка", "zone": "Верх"}]},
-        "Низ": {"Брюки": [{"name": "Чёрные брюки", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Чёрные кеды", "zone": "Обувь"}]},
-    }}
-
-    recommendation = wardrobe._purchase_candidate(
-        wardrobe_data,
-        {"has_rain": False},
-        selected_styles=["Городской"],
-    )
-
-    assert recommendation["item"] == "Белая свободная футболка"
-    assert "городскую базу" in recommendation["reason"]
-
-
-def test_city_style_does_not_recommend_a_tshirt_when_a_city_base_already_exists():
-    wardrobe_data = {"zones": {
-        "Верх": {"Футболки": [{"name": "Белая свободная футболка", "zone": "Верх"}]},
-        "Низ": {"Джинсы": [{"name": "Серые широкие джинсы", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Чёрные кеды", "zone": "Обувь"}]},
-    }}
-
-    assert wardrobe._purchase_candidate(
-        wardrobe_data,
-        {"has_rain": False},
-        selected_styles=["Городской"],
-    ) is None
-
-
-def test_purchase_recommendation_is_stable_until_a_more_important_gap(monkeypatch):
-    profile = {}
-    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
-    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
-
-    w = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
-        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Белые кеды", "zone": "Обувь"}]},
-    }}
-    dry = {"has_rain": False}
-    first = wardrobe._get_or_create_purchase_recommendation("stable-rec", w, dry)
-    second = wardrobe._get_or_create_purchase_recommendation("stable-rec", w, {"has_rain": False, "strong_wind": True})
-
-    assert first["item"] == "Серые широкие джинсы"
-    assert second == first
-
-    important = wardrobe._get_or_create_purchase_recommendation(
-        "stable-rec", w, {"has_rain": True})
-    assert important["item"] == "Лёгкая непромокаемая ветровка"
-
-def test_wardrobe_keeps_a_wear_tip_when_no_purchase_gap_exists(monkeypatch):
-    profile = {}
-    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
-    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
-
-    w = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Зелёная рубашка", "zone": "Верх"}]},
-        "Низ": {"Джинсы": [{"name": "Синие джинсы", "zone": "Низ"}]},
-    }}
-    recommendation = wardrobe._get_or_create_purchase_recommendation(
-        "wear-tip", w, {"has_rain": False}, fallback_tip="Оставь рубашку навыпуск, чтобы образ выглядел легче.",
-    )
-
-    assert recommendation["kind"] == "wear"
-    assert recommendation["reason"].startswith("Оставь рубашку")
-
-
-def test_cached_outfit_repairs_missing_useful_recommendation(monkeypatch):
-    profile = {}
-    wardrobe_data = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
-        "Низ": {"Брюки": [{"name": "Бежевые брюки", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Бежевые кеды с чёрной точкой", "zone": "Обувь"}]},
-    }}
-    look_data = {
-        "primary_style": "Городской",
-        "items": [
-            {"name": "Голубая рубашка"},
-            {"name": "Бежевые брюки"},
-            {"name": "Бежевые кеды с чёрной точкой"},
-        ],
-        "purchase_recommendation": {},
-    }
-    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: wardrobe_data)
-    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
-    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
-
-    repaired = wardrobe._repair_missing_purchase_recommendation("cached-tip", look_data)
-    message = render_wardrobe_message(repaired)
-
-    assert repaired["purchase_recommendation"]
-    assert "Полезно:" not in message.text
-
-
-def test_malformed_saved_recommendation_is_replaced_for_another_outfit(monkeypatch):
-    profile = {"version": wardrobe.PURCHASE_RECOMMENDATION_VERSION, "priority": 0}
-    wardrobe_data = {"zones": {
-        "Верх": {"Рубашки": [{"name": "Голубая рубашка", "zone": "Верх"}]},
-        "Низ": {"Джинсы": [{"name": "Синие джинсы", "zone": "Низ"}]},
-        "Обувь": {"Кеды": [{"name": "Бежевые кеды", "zone": "Обувь"}]},
-    }}
-    monkeypatch.setattr(wardrobe.store, "get_wardrobe_purchase_recommendation", lambda _cid: dict(profile))
-    monkeypatch.setattr(wardrobe.store, "set_wardrobe_purchase_recommendation", lambda _cid, value: profile.update(value))
-
-    recommendation = wardrobe._get_or_create_purchase_recommendation(
-        "another-outfit", wardrobe_data, {},
-        fallback_tip="Сделай обувь финальным акцентом, чтобы образ выглядел собраннее.",
-    )
-
-    assert recommendation["reason"]
-
-
 def test_outfit_card_has_no_save_action():
     labels = [
         button.text
@@ -633,16 +519,15 @@ def test_style_screen_reads_settings_once(monkeypatch):
     assert calls["count"] == 1
 
 
-def test_style_preferences_invalidate_current_outfit_and_purchase_advice(monkeypatch):
+def test_style_preferences_invalidate_current_outfit(monkeypatch):
     invalidated = []
     monkeypatch.setattr(settings.store, "clear_wardrobe_daylook", lambda cid: invalidated.append(("look", cid)))
-    monkeypatch.setattr(settings.store, "clear_wardrobe_purchase_recommendation", lambda cid: invalidated.append(("purchase", cid)))
     monkeypatch.setattr(settings, "get", lambda _cid, _key, default=None: default)
     monkeypatch.setattr(settings, "set_", lambda *_args: None)
 
     settings._toggle_palette("42", 0)
 
-    assert invalidated == [("look", "42"), ("purchase", "42")]
+    assert invalidated == [("look", "42")]
 
 
 def test_wardrobe_preferences_show_two_style_groups_as_toggles():

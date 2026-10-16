@@ -28,7 +28,6 @@ from wardrobe_outfit import (
     build_style_tip,
     choose_outfit_style,
     fresh_outfits,
-    is_urban_2026_base_top,
     outfit_display_order,
     save_outfit_feedback,
     top_outfits,
@@ -39,36 +38,8 @@ _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
 COPY_VALIDATOR_VERSION = 13
-PURCHASE_RECOMMENDATION_VERSION = 3
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Кофты", "Низ", "Верхняя одежда", "Обувь")
-_PURCHASE_IDEAS = (
-    {
-        "item": "Тёмно-синий оверсайз-пиджак",
-        "category": "Верхняя одежда", "style": "Smart Casual", "season": "Осень",
-        "reason": "закроет потребность в многослойности и легко свяжет базовые футболки с денимом и брюками",
-        "markers": ("пиджак", "блейзер"),
-    },
-    {
-        "item": "Кожаные лоферы на утолщённой подошве",
-        "category": "Обувь", "style": "Кэжуал", "season": "Всесезон",
-        "reason": "сбалансируют расслабленные повседневные образы и добавят структуры широким брюкам",
-        "markers": ("лофер",),
-    },
-    {
-        "item": "Текстурный трикотажный жилет",
-        "category": "Трикотаж", "style": "Минимализм", "season": "Слои",
-        "reason": "добавит объёма и интереса монохромным рубашкам без утяжеления силуэта",
-        "markers": ("жилет",),
-    },
-    {
-        "item": "Молочная оверсайз-рубашка",
-        "category": "Верх", "style": "Минимализм", "season": "Всесезон",
-        "reason": "даст светлый верх для денима, брюк и многослойных комплектов",
-        "markers": ("молочная рубашка", "белая рубашка"),
-    },
-)
-
 def _kb(rows):
     return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=c) for t, c in row] for row in rows])
 
@@ -195,151 +166,6 @@ def _build_look_message(look_data):
     return msg.text, msg.entities
 
 
-def _purchase_recommendation_text(recommendation):
-    recommendation = recommendation or {}
-    item = _clean_text(recommendation.get("item"))
-    reason = _clean_text(recommendation.get("reason"))
-    return f"{item} — {reason}" if item and reason else item or reason
-
-
-def _city_style_selected(selected_styles):
-    return any(str(style or "").casefold() == "городской" for style in (selected_styles or []))
-
-
-def _purchase_candidate(w, weather_ctx, selected_styles=None):
-    """Возвращает только действительно полезный пробел, без генерации текста."""
-    if weather_ctx.get("has_rain") and not _has_rain_outerwear(w):
-        return {
-            "version": PURCHASE_RECOMMENDATION_VERSION,
-            "item": "Лёгкая непромокаемая ветровка",
-            "category": "Верхняя одежда", "style": "Практичный", "season": "Дождь",
-            "reason": "закроет важный пробел в шкафу и защитит образ от дождя",
-            "priority": 100,
-        }
-
-    items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
-    if _city_style_selected(selected_styles):
-        tops = [item for item in items if item.get("zone") == "Верх"]
-        if tops and not any(is_urban_2026_base_top(item) for item in tops):
-            return {
-                "version": PURCHASE_RECOMMENDATION_VERSION,
-                "item": "Белая свободная футболка",
-                "category": "Верх", "style": "Городской", "season": "Всесезон",
-                "reason": "добавит современную городскую базу к брюкам и кедам",
-                "priority": 60,
-            }
-
-    facts = " ".join(str(item.get("name") or "") for item in items).casefold()
-    if "джинс" not in facts and "деним" not in facts:
-        tops = [
-            item for item in items
-            if item.get("zone") == "Верх"
-            and any(marker in str(item.get("name") or "").casefold()
-                    for marker in ("рубаш", "футбол", "лонгслив", "топ"))
-        ]
-        if tops:
-            return {
-                "version": PURCHASE_RECOMMENDATION_VERSION,
-                "item": "Серые широкие джинсы",
-                "category": "Низ", "style": "Повседневный", "season": "Всесезон",
-                "reason": "закроют пробел в шкафу и дадут больше сочетаний с твоими рубашками и футболками",
-                "priority": 40,
-            }
-    return None
-
-
-def _purchase_candidates(w, weather_ctx=None, selected_styles=None, *, primary=None, limit=3,
-                         exclude_names=None):
-    """Возвращает несколько конкретных недостающих вещей без сетевого запроса."""
-    weather_ctx = weather_ctx or {}
-    items = [item for _zone, _subcat, item in _flat_wardrobe_items(w)]
-    facts = " ".join(str(item.get("name") or "") for item in items).casefold()
-    candidates = []
-    seen = {
-        _clean_text(name).casefold()
-        for name in (exclude_names or [])
-        if _clean_text(name)
-    }
-
-    def add(candidate):
-        candidate = dict(candidate or {})
-        name = _clean_text(candidate.get("item"))
-        key = name.casefold()
-        if not name or key in seen:
-            return
-        seen.add(key)
-        candidate["version"] = PURCHASE_RECOMMENDATION_VERSION
-        candidates.append(candidate)
-
-    add(primary or _purchase_candidate(w, weather_ctx, selected_styles))
-    for idea in _PURCHASE_IDEAS:
-        if any(marker in facts for marker in idea["markers"]):
-            continue
-        add({key: value for key, value in idea.items() if key != "markers"})
-        if len(candidates) >= limit:
-            break
-    # Если шкаф уже очень полный, предлагаем другой крой или цвет знакомой
-    # категории: экран всё равно должен дать три конкретных направления покупки.
-    if len(candidates) < limit:
-        for idea in _PURCHASE_IDEAS:
-            add({key: value for key, value in idea.items() if key != "markers"})
-            if len(candidates) >= limit:
-                break
-    return candidates[:limit]
-
-
-def _get_or_create_purchase_recommendation(cid, w, weather_ctx, fallback_tip="", selected_styles=None,
-                                           refresh_wear_tip=False):
-    current = store.get_wardrobe_purchase_recommendation(cid)
-    if current and current.get("version") != PURCHASE_RECOMMENDATION_VERSION:
-        current = {}
-    candidate = _purchase_candidate(w, weather_ctx, selected_styles)
-    if current:
-        if not _purchase_recommendation_text(current):
-            if candidate:
-                store.set_wardrobe_purchase_recommendation(cid, candidate)
-                return candidate
-            if fallback_tip:
-                fallback = {
-                    "version": PURCHASE_RECOMMENDATION_VERSION,
-                    "kind": "wear",
-                    "reason": fallback_tip,
-                    "priority": 0,
-                }
-                store.set_wardrobe_purchase_recommendation(cid, fallback)
-                return fallback
-            return {}
-        current_priority = int(current.get("priority", 0) or 0)
-        candidate_priority = int((candidate or {}).get("priority", 0) or 0)
-        if candidate_priority > current_priority:
-            store.set_wardrobe_purchase_recommendation(cid, candidate)
-            return candidate
-        if (refresh_wear_tip and current.get("kind") == "wear" and fallback_tip
-                and _clean_text(current.get("reason")) != _clean_text(fallback_tip)):
-            refreshed = {
-                "version": PURCHASE_RECOMMENDATION_VERSION,
-                "kind": "wear",
-                "reason": fallback_tip,
-                "priority": 0,
-            }
-            store.set_wardrobe_purchase_recommendation(cid, refreshed)
-            return refreshed
-        return current
-    if candidate:
-        store.set_wardrobe_purchase_recommendation(cid, candidate)
-        return candidate
-    if fallback_tip:
-        fallback = {
-            "version": PURCHASE_RECOMMENDATION_VERSION,
-            "kind": "wear",
-            "reason": fallback_tip,
-            "priority": 0,
-        }
-        store.set_wardrobe_purchase_recommendation(cid, fallback)
-        return fallback
-    return {}
-
-
 def _cached_outfit_items(w, look_data):
     names = {
         _clean_text(item.get("name") if isinstance(item, dict) else item).casefold()
@@ -352,41 +178,8 @@ def _cached_outfit_items(w, look_data):
     ]
 
 
-def _repair_missing_purchase_recommendation(cid, look_data):
-    """Восстанавливает полезный блок в старом дневном кэше образа."""
-    look_data = dict(look_data or {})
-    recommendation = look_data.get("purchase_recommendation") or {}
-    if (_purchase_recommendation_text(recommendation)
-            and recommendation.get("version") == PURCHASE_RECOMMENDATION_VERSION):
-        return look_data
-    wardrobe = store.load_wardrobe(cid)
-    outfit_items = _cached_outfit_items(wardrobe, look_data)
-    fallback_tip = build_style_tip(outfit_items, {})
-    if not _clean_text(look_data.get("style_tip")) and fallback_tip:
-        look_data["style_tip"] = fallback_tip
-    recommendation = _get_or_create_purchase_recommendation(
-        cid,
-        wardrobe,
-        {},
-        fallback_tip=fallback_tip,
-        selected_styles=[look_data.get("primary_style")],
-    )
-    if recommendation:
-        look_data["purchase_recommendation"] = recommendation
-    return look_data
-
-
 def _clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
-
-
-def _build_purchase_message(data):
-    msg = wardrobe_ui.purchase_check_card(data)
-    return msg.text, msg.entities
-
-def _build_purchase_suggestions_message(data):
-    msg = wardrobe_ui.purchase_suggestions_card(data)
-    return msg.text, msg.entities
 
 
 def _get_cached_look(cid):
@@ -396,8 +189,6 @@ def _get_cached_look(cid):
     if cached.get("copy_validator_version") != COPY_VALIDATOR_VERSION:
         return None
     look_data = cached.get("look_data") or {}
-    if "purchase_recommendation" not in look_data or look_data.get("purchase_recommendation") is None:
-        return None
     return cached
 
 
@@ -446,7 +237,6 @@ def build_wardrobe_keyboard(cid=None):
     rows = [
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
         [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
-        [("💳 Что докупить", "w_buy")],
         [("🧳 Собрать чемодан", "w_pack")],  # дома — спросит, куда и когда едешь
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -489,10 +279,6 @@ async def warm_home_cache(cid):
     """Собирает образ дня в кэш без отправки пользователю."""
     if not _get_cached_look(cid):
         await send_looks(None, cid, status=_WarmCacheStatus())
-    try:
-        await warm_purchase_cache(cid)  # после образа: он меняет версию шкафа
-    except Exception:
-        _log.warning("wardrobe purchase warm failed cid=%s", cid, exc_info=True)
     # Для пустого шкафа постоянная карточка не нужна; сам прогрев всё равно успешен.
     return bool(_get_cached_look(cid) or not store.wardrobe_to_text(store.load_wardrobe(cid)).strip())
 
@@ -627,7 +413,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         store.last_answer[str(cid)] = cached.get("text", "")
         store.last_look[str(cid)] = ", ".join(str(it) for it in cached_names)[:120]
         original_look_data = cached.get("look_data", {})
-        look_data = _repair_missing_purchase_recommendation(cid, original_look_data)
+        look_data = dict(original_look_data)
         if not look_data.get("stats"):  # образ, сохранённый до строки статистики
             look_data = {**look_data, "stats": wardrobe_counts(store.load_wardrobe(cid))}
         if not look_data.get("weather_reason") and weather_now[1] is not None:
@@ -737,14 +523,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         weather_ctx,
         avoid_tips={previous_style_tip} if previous_style_tip else None,
     )
-    purchase_recommendation = _get_or_create_purchase_recommendation(
-        cid,
-        w,
-        weather_ctx,
-        fallback_tip=fallback_tip,
-        selected_styles=selected_styles,
-        refresh_wear_tip=bool(previous_item_ids),
-    )
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
         "items": [
@@ -756,7 +534,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
         "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
         "weather": weather_signature(weather_ctx, flags),
-        "purchase_recommendation": purchase_recommendation,
     }
     # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
     groups = _settings.style_groups_of(selected_styles)
@@ -871,19 +648,6 @@ async def send_item_card(bot, cid, item_id, q=None):
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
-_PURCHASE_VERDICTS = {
-    "брать": "брать",
-    "брать только со скидкой": "брать только со скидкой",
-    "только со скидкой": "брать только со скидкой",
-    "не брать": "не брать",
-    "недостаточно данных": "недостаточно данных",
-}
-_PURCHASE_FLAGS = {"да", "нет", "недостаточно данных"}
-_PURCHASE_REJECT_REASONS = {
-    "duplicate", "fit", "forbidden_color", "low_compatibility",
-    "material_or_season", "price_vs_utility", "poor_condition",
-}
-
 from wardrobe_management import (  # noqa: E402 — wardrobe_management uses names defined above
     get_wardrobe_gaps,
     add_wardrobe_gap,
@@ -898,26 +662,6 @@ from wardrobe_management import (  # noqa: E402 — wardrobe_management uses nam
     edit_item_text,
     edit_add_preview,
     handle_wardrobe_search,
-    _normalize_purchase_check,
-    check_purchase,
-    _purchase_result_kb,
-    _purchase_cache_key,
-    _purchase_state,
-    _build_purchase_cache,
-    _purchase_cache,
-    _ai_purchase_ideas,
-    warm_purchase_cache,
-    _purchase_reply,
-    _remember_purchase_batch,
-    send_purchase_screen,
-    _purchase_candidate_by_id,
-    show_purchase_card,
-    buy_purchase,
-    reject_purchase,
-    ask_purchase_check,
-    _local_purchase_suggestions,
-    _normalize_purchase_suggestions,
-    recommend_purchase,
 )
 from wardrobe_router import (  # noqa: E402 — wardrobe_router uses names defined above
     ingest,

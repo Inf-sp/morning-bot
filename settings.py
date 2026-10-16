@@ -859,9 +859,8 @@ def wardrobe_styles(cid):
 
 
 def _invalidate_wardrobe_recommendations(cid):
-    """Следующий образ и совет по покупке должны учитывать новые параметры стиля."""
+    """Следующий образ должен учитывать новые параметры стиля."""
     store.clear_wardrobe_daylook(cid)
-    store.clear_wardrobe_purchase_recommendation(cid)
 
 
 async def set_style_group(bot, cid, i, q=None):

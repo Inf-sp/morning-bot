@@ -27,7 +27,6 @@ FORBIDDEN_IMPORTS = {
     "fridge_model.py": _PURE,
     "recommendation_rotation.py": _PURE,
     "wardrobe_outfit.py": {"telegram", "ai"},
-    "wardrobe_purchase.py": _PURE,
     "weather_provider.py": {"telegram", "ai"},
     "response_delivery.py": {"ai"},
     "provider_runtime.py": {"ai", "api_usage", "requests", "service_monitor", "telegram"},

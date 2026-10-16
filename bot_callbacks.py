@@ -69,8 +69,6 @@ def _status_stages(data):
     if data.startswith("w_pack"):
         return progress("🌦️ Смотрю погоду в поездке...", "👕 Перебираю шкаф...", "🧳 Складываю чемодан...",
                         "📝 Готовлю список...")
-    if data.startswith("w_buy"):
-        return progress("🛍️ Смотрю шкаф...", "🧮 Считаю сочетания...", "🔎 Ищу пробелы...", "📝 Готовлю список...")
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
         return progress("🎬 Смотрю афиши кинотеатров...", "📺 Смотрю новые сериалы...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")

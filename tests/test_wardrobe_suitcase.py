@@ -127,9 +127,9 @@ def test_pack_button_at_home_and_on_vacation(monkeypatch):
         return [b.callback_data for row in markup.inline_keyboard for b in row]
 
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
-    assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[3] == "w_pack"  # дома — под «Что докупить»
+    assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[2] == "w_pack"  # дома — под стилями
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
-    # В отпуске нет стилей и «Что докупить»: «Ещё вариант» — новый образ дня, ниже «Собрать чемодан».
+    # В отпуске нет стилей: «Ещё вариант» — новый образ дня, ниже «Собрать чемодан».
     assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]
 
 

@@ -238,7 +238,6 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     monkeypatch.setattr(wardrobe, "migrate_item_attrs", same)
     monkeypatch.setattr(settings, "wardrobe_prefs_context", lambda _cid: "")
     monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Городской"])
-    monkeypatch.setattr(wardrobe, "_get_or_create_purchase_recommendation", lambda *_a, **_k: None)
     monkeypatch.setattr(wardrobe, "save_outfit_feedback", lambda *_a: None)
     monkeypatch.setattr(wardrobe, "_save_cached_look", lambda _cid, ids, look_data: saved.update(ids=ids, look=look_data))
     monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles: list(wardrobe_stylist.BASE_TRENDS))

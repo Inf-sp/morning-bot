@@ -139,42 +139,6 @@ def clear_wardrobe_daylook(chat_id):
     mutate_profile(chat_id, change)
 
 
-def get_wardrobe_purchase_recommendation(chat_id):
-    """Текущая рекомендация вещи для покупки, независимая от дневного образа."""
-    value = get_profile(chat_id).get("wardrobe_purchase_recommendation", {})
-    return value if isinstance(value, dict) else {}
-
-
-def set_wardrobe_purchase_recommendation(chat_id, data):
-    recommendation = dict(data or {})
-    mutate_profile(chat_id, lambda prof: (
-        {**prof, "wardrobe_purchase_recommendation": recommendation}, None,
-    ))
-
-
-def clear_wardrobe_purchase_recommendation(chat_id):
-    def change(prof):
-        prof.pop("wardrobe_purchase_recommendation", None)
-        return prof, None
-
-    mutate_profile(chat_id, change)
-
-
-def clear_wardrobe_purchase_if_matches(chat_id, items):
-    """Закрывает рекомендацию, когда пользователь добавил предложенную вещь."""
-    recommendation = get_wardrobe_purchase_recommendation(chat_id)
-    target = " ".join(str(recommendation.get("item") or "").casefold().split())
-    if not target:
-        return False
-    names = {
-        " ".join(str(item.get("name") or "").casefold().split())
-        for item in (items or []) if isinstance(item, dict)
-    }
-    if target not in names and not any(target in name or name in target for name in names):
-        return False
-    clear_wardrobe_purchase_recommendation(chat_id)
-    return True
-
 WARDROBE_HISTORY_LIMIT = 14
 
 
@@ -418,7 +382,6 @@ def add_wardrobe_items(cid, items: list) -> list:
                 added.append(it)
 
     mutate_wardrobe(cid, _mut)
-    clear_wardrobe_purchase_if_matches(cid, added)
     return added
 
 

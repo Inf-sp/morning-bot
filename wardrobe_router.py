@@ -104,25 +104,6 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data == "w_improve":
         await wardrobe.send_home(bot, cid, q=q)
         return
-    if data == "w_buy":
-        await wardrobe.send_purchase_screen(bot, cid)
-        return
-    if data == "w_buy_more":
-        await wardrobe.send_purchase_screen(bot, cid, q=q, more=True)
-        return
-    if data.startswith("w_buy_i:"):
-        await wardrobe.show_purchase_card(bot, cid, data.partition(":")[2], q=q)
-        return
-    if data.startswith("w_buy_got:"):
-        await wardrobe.buy_purchase(bot, cid, data.partition(":")[2], q=q)
-        return
-    if data.startswith("w_buy_no:"):
-        await wardrobe.reject_purchase(bot, cid, data.partition(":")[2], q=q)
-        return
-    if data.startswith("w_buy"):
-        # «⬅️ Назад» из карточки и старые кнопки прежних экранов
-        # (w_buy_page:*, w_buy_new*, w_buy_gap, w_buy_pick) ведут на экран 1.
-        await wardrobe.send_purchase_screen(bot, cid, q=q)
-        return
-    if data == "w_check":
-        await wardrobe.ask_purchase_check(bot, cid)
+    if data.startswith("w_buy") or data == "w_check":
+        # «Что докупить» и «Проверить покупку» убраны: старые кнопки из истории чата — на главный экран Гардероба.
+        await wardrobe.send_home(bot, cid, q=q)
