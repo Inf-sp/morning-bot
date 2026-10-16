@@ -710,3 +710,46 @@ def test_riddle_survives_bot_restart_and_finished_riddle_offers_new_one(monkeypa
     text, kwargs = replies[0]
     assert text == "Эта загадка уже закончилась — держи новую." and "Hint" not in text
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "game_again"
+
+
+def test_vacation_riddle_is_only_an_animal_or_plant_of_the_country(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(learning_game.ai, "llm", lambda prompt, *_args, **_kwargs: prompts.append(prompt) or "")
+
+    learning_game.game_data("африкаанс", [], attempt=0, country="South Africa")
+    learning_game.game_data("африкаанс", [], attempt=1, country="South Africa")
+
+    assert "Choose exactly one wild animal native to or iconic for South Africa" in prompts[0]
+    assert "CATEGORY: exactly animal" in prompts[0]
+    assert "plant: tree, flower or edible plant native to or iconic for South Africa" in prompts[1]
+    assert "CATEGORY: exactly plant" in prompts[1] and "not a dish, place" in prompts[1]
+    assert learning_game._game_category_label({"category": "plant"}) == "растение"
+
+
+def test_vacation_game_skips_the_old_catalog_and_falls_back_to_animals(monkeypatch):
+    import vacation
+    asked, fallback_category = [], []
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(learning_game.store, "game_config", {"42": {"lang": "африкаанс"}})
+    monkeypatch.setattr(learning_game, "_game_recent", lambda _cid: [])
+    monkeypatch.setattr(learning_game, "_stored_card",
+                        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("catalog used on vacation")))
+
+    def fake_game_data(_lang, _recent, attempt=0, country=""):
+        asked.append(country)
+        return {}  # AI не дал загадку
+
+    def fake_local(_lang, _recent, category=None):
+        fallback_category.append(category)
+        return {"description": "I am big and have a trunk. I live in Africa and Asia. I like water.",
+                "answer": "the elephant", "answer_en": "elephant", "aliases": ["слон"], "category": "animal",
+                "hint": "I have a long trunk.", "explain": "An elephant is very large.", "words": [], "_local": True}
+
+    monkeypatch.setattr(learning_game, "game_data", fake_game_data)
+    monkeypatch.setattr(learning_game, "_local_game_data", fake_local)
+    monkeypatch.setattr(learning_game, "_remember_game_answer", lambda *_args: None)
+
+    asyncio.run(learning_game.send_game(FakeBot(), "42"))
+
+    assert asked and set(asked) == {"South Africa"}  # каждая загадка — от AI под страну
+    assert fallback_category == ["animal"]  # без AI — встроенная загадка про животное

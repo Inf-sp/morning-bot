@@ -61,8 +61,9 @@ GAME_UI = {
         "title": "Guess the word",
         "reply_next": "Write your answer in the next message — any language works.",
         "category": "Category",
-        "categories": {"животное": "animal", "еда": "food", "предмет": "object", "профессия": "job",
-                       "транспорт": "transport", "место": "place", "герой": "character", "другое": "other"},
+        "categories": {"животное": "animal", "растение": "plant", "еда": "food", "предмет": "object",
+                       "профессия": "job", "транспорт": "transport", "место": "place", "герой": "character",
+                       "другое": "other"},
         "no_new": "No new riddle right now. Try again later.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
@@ -79,8 +80,9 @@ GAME_UI = {
         "title": "Raad het woord",
         "reply_next": "Schrijf je antwoord in het volgende bericht — elke taal is goed.",
         "category": "Categorie",
-        "categories": {"животное": "dier", "еда": "eten", "предмет": "voorwerp", "профессия": "beroep",
-                       "транспорт": "vervoer", "место": "plek", "герой": "personage", "другое": "overig"},
+        "categories": {"животное": "dier", "растение": "plant", "еда": "eten", "предмет": "voorwerp",
+                       "профессия": "beroep", "транспорт": "vervoer", "место": "plek", "герой": "personage",
+                       "другое": "overig"},
         "no_new": "Er is nu geen nieuw raadsel. Probeer het later nog eens.",
         "hint": "💡 Подсказка",
         "hint_title": "💡 Hint",
@@ -98,6 +100,7 @@ GAME_UI = {
 
 _GAME_CATEGORY_LABELS = {
     "animal": "животное",
+    "plant": "растение",
     "food": "еда",
     "object": "предмет",
     "profession": "профессия",
@@ -108,6 +111,7 @@ _GAME_CATEGORY_LABELS = {
 
 _GAME_CATEGORY_ALIASES = {
     "животное": "animal", "животные": "animal", "animal": "animal",
+    "растение": "plant", "растения": "plant", "plant": "plant", "дерево": "plant", "цветок": "plant",
     "еда": "food", "продукт": "food", "продукты": "food", "food": "food",
     "блюдо": "food", "dish": "food",
     "предмет": "object", "object": "object",
@@ -540,11 +544,12 @@ def _stored_card(clue_lang, recent, attempt=0) -> dict:
     return dict(random.choice(same or fresh))
 
 
-def _local_game_data(clue_lang, recent):
+def _local_game_data(clue_lang, recent, category=None):
+    """Запасная встроенная загадка (английская или нидерландская); category — только этой категории."""
     cards = list(_LOCAL_GAME_CARDS.get(clue_lang) or _LOCAL_GAME_CARDS["английский"])
     cards.extend(_extra_local_game_cards(clue_lang))
     for card in cards:
-        if not _game_is_recent(card, recent):
+        if not _game_is_recent(card, recent) and (category is None or card.get("category") == category):
             return {**card, "_local": True}  # запасная карточка (английская или нидерландская)
     return {}
 
@@ -590,11 +595,17 @@ def _description_is_guessable(data, lang=None):
     return hint.casefold().rstrip(".!") not in description.casefold()
 
 
+# В отпуске загадывается только природа страны: животные и растения по очереди.
+_TRIP_FOCUSES = (("wild animal", "animal"), ("plant: tree, flower or edible plant", "plant"))
+
+
 def game_data(clue_lang, recent, attempt=0, country=""):
-    """country — страна отпуска: загадывается то, что типично для неё (животное, фрукт, герой)."""
+    """country — страна отпуска: только её животные и растения (спрингбок, протея), по очереди."""
     subject, expected_category = _GAME_REQUEST_FOCUSES[(len(recent) + attempt) % len(_GAME_REQUEST_FOCUSES)]
     if country:
-        subject = f"{subject} typical of {country} (local animal, fruit or vegetable, dish, place or famous local character)"
+        subject, expected_category = _TRIP_FOCUSES[(len(recent) + attempt) % len(_TRIP_FOCUSES)]
+        subject = (f"{subject} native to or iconic for {country}, well known to visitors — not a dish, place, "
+                   "object or person")
     avoid = ("Не загадывай ничего из этого списка и их переводы/синонимы: " + ", ".join(recent[-80:])) if recent else ""
     prompt = f"""Create a short guessing game for a language learner.
 Target language: {clue_lang}. CEFR level: A1-A2.
@@ -737,7 +748,8 @@ async def send_game(bot, cid, status=None):
         country = vacation.country_name_en(cid) or store.get_settings(cid).get("country") or ""
     try:
         # Сначала — несыгранная загадка из каталога и встроенного набора; AI — когда они кончились.
-        d = _stored_card(lang, recent)
+        # В отпуске каталог не берём: прежние загадки языка — не обязательно природа этой страны.
+        d = {} if country else _stored_card(lang, recent)
         for attempt in range(0 if d else 5):
             # game_data вызывает синхронный ai.llm: не блокируем event loop.
             cand = await asyncio.to_thread(game_data, lang, attempted, attempt=attempt,
@@ -754,7 +766,8 @@ async def send_game(bot, cid, status=None):
             # Повторы и невалидный формат от AI не должны оставлять пользователя
             # без раунда. Локальный резерв сверяем только с реальными сыгранными
             # загадками: неудачная попытка AI не может спрятать новую карточку.
-            fallback = _local_game_data(lang, recent) or _oldest_local_card(lang, recent)
+            fallback = (_local_game_data(lang, recent, category="animal") if country  # в отпуске — про животных
+                        else _local_game_data(lang, recent) or _oldest_local_card(lang, recent))
             if fallback.get("answer") and _description_is_guessable(fallback, lang):
                 d = fallback
             else:
