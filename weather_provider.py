@@ -495,18 +495,20 @@ _FORECAST_HORIZON_DAYS = 15  # Open-Meteo даёт прогноз на 16 дне
 
 
 def period_weather(lat, lon, start, end, today) -> dict:
-    """Дневная погода поездки: {tmin, tmax, rainy, days, wind, typical}. Поездка в ближайшие 16 дней — прогноз
+    """Дневная погода поездки: {tmin, tmax, rainy, days, wind, typical, daily}. Поездка в ближайшие 16 дней — прогноз
     Open-Meteo (дальше горизонта — обрезается); позже — фактическая погода тех же дней год назад (архив,
-    typical=True: «обычно в эти дни»). Без ключа; сбой — исключение."""
+    typical=True: «обычно в эти дни»). daily — по дням поездки [{date, tmax, tmin, rain, wind}] для образов на
+    каждый день. Без ключа; сбой — исключение."""
     from datetime import timedelta
     typical = start > today + timedelta(days=_FORECAST_HORIZON_DAYS)
     if typical:
         first, last = start.replace(year=start.year - 1), end.replace(year=end.year - 1)
-        url, daily = _OPEN_METEO_ARCHIVE_URL, ("temperature_2m_max", "precipitation_sum", "windspeed_10m_max")
+        url, daily = _OPEN_METEO_ARCHIVE_URL, ("temperature_2m_max", "temperature_2m_min", "precipitation_sum",
+                                               "windspeed_10m_max")
     else:
         first, last = start, min(end, today + timedelta(days=_FORECAST_HORIZON_DAYS))
-        url, daily = _OPEN_METEO_URL, ("temperature_2m_max", "precipitation_probability_max", "precipitation_sum",
-                                       "windspeed_10m_max")
+        url, daily = _OPEN_METEO_URL, ("temperature_2m_max", "temperature_2m_min", "precipitation_probability_max",
+                                       "precipitation_sum", "windspeed_10m_max")
     response = requests.get(url, timeout=max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(12)), params={
         "latitude": lat, "longitude": lon, "timezone": "auto", "wind_speed_unit": "ms", "daily": ",".join(daily),
         "start_date": first.isoformat(), "end_date": last.isoformat(),
@@ -518,11 +520,20 @@ def period_weather(lat, lon, start, end, today) -> dict:
         raise ValueError("open-meteo: empty period")
     count = len(rows.get("time") or highs)
     chance, rain_mm = rows.get("precipitation_probability_max") or [], rows.get("precipitation_sum") or []
-    rainy = sum(1 for index in range(count)
-                if (index < len(chance) and (chance[index] or 0) >= 50)
-                or (typical and index < len(rain_mm) and (rain_mm[index] or 0) >= 1))
-    return {"tmin": round(min(highs)), "tmax": round(max(highs)), "rainy": rainy, "days": count,
-            "wind": round(max((value or 0) for value in rows.get("windspeed_10m_max") or [0])), "typical": typical}
+    wet = [(index < len(chance) and (chance[index] or 0) >= 50)
+           or (typical and index < len(rain_mm) and (rain_mm[index] or 0) >= 1) for index in range(count)]
+
+    def day_value(key, index):
+        values = rows.get(key) or []
+        return round(values[index]) if index < len(values) and values[index] is not None else None
+
+    days = [{"date": (start + timedelta(days=index)).isoformat(), "tmax": day_value("temperature_2m_max", index),
+             "tmin": day_value("temperature_2m_min", index), "rain": wet[index],
+             "wind": day_value("windspeed_10m_max", index)}
+            for index in range(count) if day_value("temperature_2m_max", index) is not None]
+    return {"tmin": round(min(highs)), "tmax": round(max(highs)), "rainy": sum(wet), "days": count,
+            "wind": round(max((value or 0) for value in rows.get("windspeed_10m_max") or [0])), "typical": typical,
+            "daily": days}
 
 
 def _fallback_weather(key, cache_key, lat, lon, error):

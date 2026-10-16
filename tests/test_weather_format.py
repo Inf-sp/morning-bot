@@ -518,6 +518,7 @@ def test_period_weather_uses_forecast_soon_and_last_year_later(monkeypatch):
     soon = weather_provider.period_weather(-33.9, 18.4, date(2026, 10, 20), date(2026, 10, 21), today)
     later = weather_provider.period_weather(-33.9, 18.4, date(2027, 1, 5), date(2027, 1, 6), today)
 
-    assert soon == {"tmin": 17, "tmax": 24, "rainy": 1, "days": 2, "wind": 9, "typical": False}
+    assert {key: value for key, value in soon.items() if key != "daily"} == {
+        "tmin": 17, "tmax": 24, "rainy": 1, "days": 2, "wind": 9, "typical": False}
     assert later["typical"] and later["rainy"] == 1  # архив: дождь — по выпавшим миллиметрам
     assert calls[1] == ("https://archive-api.open-meteo.com/v1/archive", "2026-01-05", "2026-01-06")  # год назад

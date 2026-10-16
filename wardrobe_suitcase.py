@@ -4,11 +4,14 @@
 Open-Meteo, а для поездки дальше 16 дней — те же дни год назад («обычно в эти дни»). Один AI-запрос выбирает вещи
 по номерам из списка шкафа — код оставляет только существующие номера, придуманные вещи не попадают; без AI — набор
 по зонам и погоде; пустой шкаф — базовый набор под погоду. Черновик можно «✅ Подтвердить» (сохраняется один
-чемодан — он в «Мой шкаф», в отпуске образ дня собирается из него) или «Пересобрать».
+чемодан — он в «Мой шкаф», в отпуске образ дня собирается из него) или «Пересобрать»: вещи чемодана кнопками —
+зелёная «беру», нажал — красная «не беру»; «Подобрать замену» ставит вместо красных вещи той же зоны из шкафа под
+погоду поездки. У подтверждённого чемодана — «Образы на каждый день»: образ из вещей чемодана по погоде каждого дня.
 """
 import hashlib
 import json
 import logging
+from collections import Counter
 from datetime import date, datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -151,7 +154,80 @@ def pack(cid, trip, avoid=()) -> dict:
     if not picked:
         picked = rule_pick(clothes, weather, days)
     groups = [(zone, [clothes[i][1]["name"] for i in picked if clothes[i][0] == zone]) for zone in CLOTHING_ZONES]
-    return {**result, "groups": [(zone, names) for zone, names in groups if names], "tip": tip}
+    # Погода остаётся в чемодане: замены и образы по дням не ходят в сеть снова.
+    return {**result, "groups": [(zone, names) for zone, names in groups if names], "tip": tip,
+            "wx": {key: weather[key] for key in ("tmin", "tmax", "rainy") if key in weather},
+            "daily": weather.get("daily") or []}
+
+
+def _flat(result) -> list:
+    """[(зона, вещь)] чемодана в порядке экрана; номер в списке — id кнопки «не беру»."""
+    return [(zone, name) for zone, names in result.get("groups") or [] for name in names]
+
+
+def swap_items(clothes, groups, removed, weather, declined=()) -> tuple:
+    """Вместо вещей «не беру» — вещь той же зоны из шкафа, которая подходит погоде и ещё не в чемодане (и не была
+    отклонена раньше). (новые группы, [(убрал, взял или "")])."""
+    removed, declined = set(removed), set(declined) | set(removed)
+    taken = {name for _zone, names in groups for name in names}
+    new_groups, swaps = [], []
+    for zone, names in groups:
+        kept = []
+        for name in names:
+            if name not in removed:
+                kept.append(name)
+                continue
+            spare = next((item["name"] for item_zone, item in clothes if item_zone == zone
+                          and item["name"] not in taken | declined and _fits(item, weather)), "")
+            if spare:
+                kept.append(spare)
+                taken.add(spare)
+            swaps.append((name, spare))
+        if kept:
+            new_groups.append((zone, kept))
+    return new_groups, swaps
+
+
+_STRONG_WIND_MS = 8  # как weather.STRONG_WIND_MS: ветровка и без открытой обуви
+
+
+def _day_context(day) -> dict:
+    """Погода дня поездки в формате образа дня (select_outfit_candidates/score_outfit); без данных — без погоды."""
+    tmax, wind = day.get("tmax"), day.get("wind")
+    hot, warm = tmax is not None and tmax >= 24, tmax is not None and 17 <= tmax < 24
+    strong = wind is not None and wind >= _STRONG_WIND_MS
+    tags = [tag for tag, on in (("rain", day.get("rain")), ("strong_wind", strong), ("hot", hot), ("warm", warm),
+                                ("cool", tmax is not None and not hot and not warm)) if on]
+    return {"tmin": day.get("tmin"), "tmax": tmax, "has_rain": bool(day.get("rain")), "wind_ms": wind,
+            "strong_wind": strong, "sunny": False, "hot": hot, "warm": warm, "tags": tags}
+
+
+_LOOK_CHOICES = 8  # из скольких лучших комплектов дня выбирать самый непохожий на прошлые дни
+
+
+def daily_looks(wardrobe, names, trip, daily) -> list:
+    """Образ на каждый день поездки из вещей чемодана: [{date, tmax, rain, items}]. Погода — по дню (за горизонтом
+    прогноза — без неё); из лучших комплектов дня берётся тот, что меньше повторяет вчерашний и чаще надетые вещи.
+    Не собрать (нет верха, низа или обуви) — items пустой."""
+    from wardrobe_outfit import outfit_display_order, top_outfits
+    w = _only_items(wardrobe, names)
+    by_date = {day.get("date"): day for day in daily or []}
+    start = date.fromisoformat(trip["start"])
+    worn, yesterday, looks = Counter(), set(), []
+    for offset in range(trip_days(trip)):
+        day = by_date.get((start + timedelta(days=offset)).isoformat()) or {}
+        outfits = top_outfits(w, _day_context(day), [], "", limit=_LOOK_CHOICES)
+        items = []
+        if outfits:
+            ranked = min(enumerate(outfits), key=lambda pair: (
+                len({item.get("name") for item in pair[1]} & yesterday),
+                sum(worn[item.get("name")] for item in pair[1]), pair[0]))
+            items = sorted(ranked[1], key=outfit_display_order)
+        yesterday = {item.get("name") for item in items}
+        worn.update(yesterday)
+        looks.append({"date": (start + timedelta(days=offset)).isoformat(), "tmax": day.get("tmax"),
+                      "rain": bool(day.get("rain")), "items": [item.get("name") for item in items]})
+    return looks
 
 
 def _profile(cid) -> dict:
@@ -171,6 +247,10 @@ def _save_draft(cid, trip, result):
     store.mutate_profile(cid, lambda profile: ({**profile, "suitcase_draft": draft}, None))
 
 
+def _set_draft(cid, draft):
+    store.mutate_profile(cid, lambda profile: ({**profile, "suitcase_draft": draft}, None))
+
+
 def _draft_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Подтвердить", callback_data="w_pack_ok")],
@@ -179,12 +259,25 @@ def _draft_kb():
     ])
 
 
-def _saved_kb(back="m_wardrobe"):
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Пересобрать", callback_data="w_pack_again")], nav_row(back)])
+def _saved_kb(back="m_wardrobe", basic=False):
+    rows = [] if basic else [[InlineKeyboardButton("👕 Образы на каждый день", callback_data="w_pack_looks")]]
+    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("Пересобрать", callback_data="w_pack_edit")],
+                                 nav_row(back)])
 
 
-async def _show(bot, cid, result, kb, q=None, *, saved=False):
-    msg = wardrobe_ui.suitcase_screen(result, saved=saved)
+def _edit_kb(draft):
+    """Вещи чемодана по одной в строке: «✅ X» — беру (зелёная), «□ X» красная — не беру."""
+    removed = set(draft.get("removed") or [])
+    rows = [[InlineKeyboardButton(f"□ {name[:40]}", callback_data=f"w_pack_t:{index}",
+                                  api_kwargs={"style": "danger"})] if index in removed
+            else [InlineKeyboardButton(f"✅ {name[:40]}", callback_data=f"w_pack_t:{index}")]
+            for index, (_zone, name) in enumerate(_flat(draft["result"]))]
+    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("Подобрать замену", callback_data="w_pack_swap")],
+                                 nav_row("w_pack_view")])
+
+
+async def _show(bot, cid, result, kb, q=None, *, saved=False, msg=None):
+    msg = msg or wardrobe_ui.suitcase_screen(result, saved=saved)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -213,7 +306,7 @@ async def send(bot, cid):
     trip = vacation_trip(cid)
     saved = saved_suitcase(cid)
     if saved and saved["trip"].get("cc") and saved["trip"].get("cc") == trip["cc"]:
-        await _show(bot, cid, saved["result"], _saved_kb(), saved=True)
+        await _show(bot, cid, saved["result"], _saved_kb(basic=saved["result"].get("basic")), saved=True)
         return
     draft = _profile(cid).get("suitcase_draft") or {}
     if draft.get("date") == _today().isoformat() and _trip_key(draft.get("trip") or {}) == _trip_key(trip):
@@ -244,28 +337,91 @@ async def trip_entered(bot, cid, text):
     await _build_and_show(bot, cid, trip)
 
 
+async def _edit(bot, cid, draft, q=None):
+    await _show(bot, cid, draft["result"], _edit_kb(draft), q, msg=wardrobe_ui.suitcase_edit_screen(draft["result"]))
+
+
+async def _swap(bot, cid, draft, q=None):
+    """«Подобрать замену»: красные вещи меняются на вещи той же зоны из шкафа, черновик — с заменами."""
+    import asyncio
+    result, trip = draft["result"], draft["trip"]
+    removed = [name for index, (_zone, name) in enumerate(_flat(result)) if index in set(draft.get("removed") or [])]
+    if not removed:
+        await _show(bot, cid, result, _draft_kb(), q)
+        return
+    weather = result.get("wx") or await asyncio.to_thread(_weather, trip)
+    declined = [*draft.get("declined", []), *removed]
+    groups, swaps = swap_items(_clothes(cid), result["groups"], removed, weather, declined)
+    result = {**result, "groups": groups, "swaps": swaps}
+    _set_draft(cid, {**draft, "result": result, "removed": [], "declined": declined})
+    await _show(bot, cid, result, _draft_kb(), q)
+
+
+async def _looks(bot, cid, q=None):
+    import asyncio
+    saved = saved_suitcase(cid)
+    if not saved or saved["result"].get("basic"):
+        await send(bot, cid)
+        return
+    result, trip = saved["result"], saved["trip"]
+    names = {name for _zone, name in _flat(result)}
+    daily = result.get("daily")
+    if daily is None:  # чемодан сохранён до погоды по дням
+        daily = (await asyncio.to_thread(_weather, trip)).get("daily") or []
+    looks = await asyncio.to_thread(daily_looks, store.load_wardrobe(cid), names, trip, daily)
+    msg = wardrobe_ui.suitcase_looks_screen(result, looks)
+    await _show(bot, cid, result, InlineKeyboardMarkup([nav_row("w_pack_saved")]), q, msg=msg)
+
+
 async def handle(bot, cid, data, q=None):
-    """w_pack_ok — подтвердить черновик; w_pack_again — другой вариант; w_pack_saved — открыть сохранённый."""
+    """w_pack_ok — подтвердить черновик; w_pack_again / w_pack_edit — отметить, что не берёшь (черновик /
+    сохранённый); w_pack_t:N — «беру / не беру»; w_pack_swap — замены; w_pack_view — черновик; w_pack_saved —
+    сохранённый; w_pack_looks — образы на каждый день."""
     profile = _profile(cid)
     draft = profile.get("suitcase_draft") or {}
     if data == "w_pack_saved":
         saved = saved_suitcase(cid)
         if saved:
-            await _show(bot, cid, saved["result"], _saved_kb("w_closet"), saved=True)
+            await _show(bot, cid, saved["result"], _saved_kb("w_closet", saved["result"].get("basic")), q, saved=True)
         else:
             await send(bot, cid)
+        return
+    if data == "w_pack_looks":
+        await _looks(bot, cid, q)
         return
     if data == "w_pack_ok" and draft.get("result"):
         store.mutate_profile(cid, lambda p: ({**p, "suitcase_saved": {
             "trip": draft["trip"], "result": draft["result"], "saved": _today().isoformat()}}, None))
-        await _show(bot, cid, draft["result"], InlineKeyboardMarkup([nav_row("m_wardrobe")]), q, saved=True)
+        await _show(bot, cid, draft["result"], _saved_kb(basic=draft["result"].get("basic")), q, saved=True)
         return
+    if data == "w_pack_edit" and saved_suitcase(cid):
+        saved = saved_suitcase(cid)  # сохранённый правится через черновик: «Подтвердить» заменит его
+        draft = {"date": _today().isoformat(), "trip": saved["trip"], "result": saved["result"], "removed": []}
+        data = "w_pack_again"
     if data == "w_pack_again":
         source = draft if draft.get("trip") else saved_suitcase(cid)
-        if source.get("trip"):
-            avoid = [name for _zone, items in source["result"].get("groups") or [] for name in items]
-            await _build_and_show(bot, cid, source["trip"], q, avoid)
+        if source.get("result") and not source["result"].get("basic") and _flat(source["result"]):
+            draft = {**source, "removed": []}
+            _set_draft(cid, draft)
+            await _edit(bot, cid, draft, q)
             return
+        if source.get("trip"):  # пустой шкаф — базовый набор собирается заново
+            await _build_and_show(bot, cid, source["trip"], q)
+            return
+    if data.startswith("w_pack_t:") and draft.get("result"):
+        index = int(data.partition(":")[2]) if data.partition(":")[2].isdigit() else -1
+        removed = set(draft.get("removed") or [])
+        draft = {**draft, "removed": sorted(removed ^ {index}) if 0 <= index < len(_flat(draft["result"]))
+                 else sorted(removed)}
+        _set_draft(cid, draft)
+        await _edit(bot, cid, draft, q)
+        return
+    if data == "w_pack_swap" and draft.get("result"):
+        await _swap(bot, cid, draft, q)
+        return
+    if data == "w_pack_view" and draft.get("result"):
+        await _show(bot, cid, draft["result"], _draft_kb(), q)
+        return
     await send(bot, cid)  # черновика нет (старая кнопка) — начинаем заново
 
 
@@ -284,9 +440,14 @@ def packed_wardrobe(cid, wardrobe) -> dict:
                    and not (suitcase.get("result") or {}).get("basic")), None)
     if not chosen:
         return wardrobe
-    names = {name for _zone, items in chosen["result"].get("groups") or [] for name in items}
+    packed = _only_items(wardrobe, {name for _zone, items in chosen["result"].get("groups") or [] for name in items})
+    if not all(any(packed["zones"].get(zone, {}).values()) for zone in _LOOK_ZONES):
+        return wardrobe
+    return packed
+
+
+def _only_items(wardrobe, names) -> dict:
+    """Шкаф только из вещей с этими названиями (вещи чемодана)."""
     zones = {zone: {sub: [item for item in items if item.get("name") in names] for sub, items in subs.items()}
              for zone, subs in (wardrobe or {}).get("zones", {}).items()}
-    if not all(any(zones.get(zone, {}).values()) for zone in _LOOK_ZONES):
-        return wardrobe
-    return {**wardrobe, "zones": zones}
+    return {**(wardrobe or {}), "zones": zones}

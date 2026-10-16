@@ -381,10 +381,57 @@ def suitcase_screen(data, saved=False):
                        lowercase=False)
     if not groups:
         b.line("Под эту поездку из шкафа ничего не подошло — добавь вещи в «Настроить шкаф».")
+    swaps = [] if saved else data.get("swaps") or []
+    if swaps:
+        b.spacer()
+        changes = [f"{_lower_first(_clean_text(old))} → {_lower_first(_clean_text(new))}" if new
+                   else f"{_lower_first(_clean_text(old))} — убрал, замены нет" for old, new in swaps]
+        b.line(f"Заменил: {'; '.join(changes)}.")
     if str(data.get("tip") or "").strip():
         b.spacer()
         b.italic(_finish_dot(data["tip"]))
         b.newline()
+    return b.build_stripped()
+
+
+def _suitcase_head(title, data):
+    days = int((data or {}).get("days") or 0)
+    return " · ".join(part for part in (title, (data or {}).get("place"),
+                                       f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
+
+
+def suitcase_edit_screen(data):
+    """«Пересобрать»: вещи чемодана кнопками — зелёная «беру», красная «не беру»."""
+    b = MessageBuilder()
+    b.title(_suitcase_head("🧳 Что не берёшь?", data))
+    b.line("Нажми на вещь, которую не берёшь, — она станет красной. Потом «Подобрать замену»: поставлю вместо неё "
+           "вещь той же категории из шкафа под погоду поездки.")
+    return b.build_stripped()
+
+
+_WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_MONTHS_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+_LOOK_DAYS_SHOWN = 31  # длиннее — сообщение не влезет в Telegram; образы всё равно идут по кругу
+
+
+def suitcase_looks_screen(data, looks):
+    """«👕 Образы · Кейптаун · 8 дней»: по строке на день — «Пн 20 окт · +22°, дождь · футболка, чиносы, кеды»."""
+    from datetime import date
+    b = MessageBuilder()
+    b.title(_suitcase_head("👕 Образы", data))
+    if (data or {}).get("typical"):
+        b.line("Погода — как обычно в эти дни.")
+        b.spacer()
+    for look in looks[:_LOOK_DAYS_SHOWN]:
+        day = date.fromisoformat(look["date"])
+        weather = (f"{look['tmax']:+d}°" + (", дождь" if look.get("rain") else "")) if look.get("tmax") is not None \
+            else ""
+        items = ", ".join(_lower_first(_clean_text(name)) for name in look.get("items") or []) \
+            or "из чемодана образ не собрать"
+        b.line(" · ".join(part for part in (f"{_WEEKDAYS[day.weekday()]} {day.day} {_MONTHS_SHORT[day.month - 1]}",
+                                            weather, items) if part))
+    if len(looks) > _LOOK_DAYS_SHOWN:
+        b.line(f"…и ещё {len(looks) - _LOOK_DAYS_SHOWN} дн. — образы повторяются по кругу.")
     return b.build_stripped()
 
 

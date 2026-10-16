@@ -100,11 +100,30 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert profile["suitcase_draft"]["trip"]["cc"] == "ZA" and "42" not in wardrobe_suitcase.store.pending_input
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_ok"], ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+    monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
+    monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 18, "tmax": 24, "rainy": 0})
+
+    # «Пересобрать» — вещи чемодана кнопками: зелёная «беру», нажал — красная «не беру».
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_again"))
-    assert profile["suitcase_draft"]["result"]["avoid"] == ["Белая футболка"]  # другой вариант, чем прошлый
+    rows = bot.sent[-1]["reply_markup"].inline_keyboard
+    assert bot.sent[-1]["text"].startswith("🧳 Что не берёшь? · Кейптаун · 8 дней")
+    assert [[b.text for b in row] for row in rows] == [
+        ["✅ Белая футболка"], ["Подобрать замену"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert [rows[0][0].callback_data, rows[2][0].callback_data] == ["w_pack_t:0", "w_pack_view"]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
+    button = bot.sent[-1]["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "□ Белая футболка" and button.api_kwargs == {"style": "danger"}
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))
+    assert profile["suitcase_draft"]["result"]["groups"] == [("Верх", ["Серая футболка"])]
+    assert "Заменил: белая футболка → серая футболка." in bot.sent[-1]["text"]
+    assert profile["suitcase_draft"]["removed"] == []
+
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
     assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
     assert bot.sent[-1]["text"].startswith("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Сохранён")
+    assert "Заменил" not in bot.sent[-1]["text"]
+    assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
+        ["w_pack_looks"], ["w_pack_edit"], ["m_wardrobe", "m_menu"]]
 
 
 def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch):
@@ -119,7 +138,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "✅ Сохранён" in bot.sent[-1]["text"]  # собранный дома чемодан — без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_looks"], ["w_pack_edit"], ["m_wardrobe", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
@@ -152,3 +171,66 @@ def test_vacation_look_uses_only_packed_items_when_suitcase_has_a_full_outfit(mo
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
     profile["suitcase_saved"]["trip"] = {**TRIP, "cc": "ES"}  # чемодан другой страны не в счёт
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
+
+
+def test_swap_takes_a_same_zone_item_for_the_weather_and_never_a_declined_one():
+    groups = [("Верх", ["Белая футболка"]), ("Обувь", ["Белые кеды"]), ("Верхняя одежда", ["Ветровка"])]
+
+    new_groups, swaps = wardrobe_suitcase.swap_items(
+        CLOTHES, groups, ["Белая футболка", "Белые кеды", "Ветровка"], {"tmin": 18, "tmax": 24},
+        declined=["Серая футболка"])
+
+    # Серая футболка уже была отклонена, другой обуви нет, пуховик не по погоде — честно «замены нет».
+    assert new_groups == []
+    assert swaps == [("Белая футболка", ""), ("Белые кеды", ""), ("Ветровка", "")]
+    assert wardrobe_suitcase.swap_items(CLOTHES, groups, ["Белая футболка"], {"tmin": 18, "tmax": 24})[0][0] == (
+        "Верх", ["Серая футболка"])
+
+
+def _closet(*items):
+    zones = {}
+    for index, (zone, name) in enumerate(items):
+        zones.setdefault(zone, {}).setdefault("Все", []).append(
+            {"id": f"i{index}", "name": name, "zone": zone, "warmth": "обычные", "temp_range": [5, 35]})
+    return {"zones": zones}
+
+
+def test_daily_looks_follow_each_day_weather_and_rotate_items():
+    closet = _closet(("Верх", "Белая футболка"), ("Верх", "Серая футболка"), ("Низ", "Бежевые чиносы"),
+                     ("Низ", "Джинсы"), ("Обувь", "Белые кеды"), ("Обувь", "Кроссовки"), ("Верх", "Пиджак не брал"))
+    names = {"Белая футболка", "Серая футболка", "Бежевые чиносы", "Джинсы", "Белые кеды", "Кроссовки"}
+    trip = {"start": "2026-10-20", "end": "2026-10-22"}
+    daily = [{"date": "2026-10-20", "tmax": 22, "tmin": 15, "rain": False, "wind": 3},
+             {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 5}]
+
+    looks = wardrobe_suitcase.daily_looks(closet, names, trip, daily)
+
+    assert [look["date"] for look in looks] == ["2026-10-20", "2026-10-21", "2026-10-22"]
+    assert looks[1]["tmax"] == 19 and looks[1]["rain"] and looks[2]["tmax"] is None  # за прогнозом — без погоды
+    assert all(len(look["items"]) == 3 and "Пиджак не брал" not in look["items"] for look in looks)
+    assert set(looks[0]["items"]).isdisjoint(looks[1]["items"])  # вещи чередуются, а не повторяются подряд
+    text = wardrobe_ui.suitcase_looks_screen({"place": "Кейптаун", "days": 3}, looks).text
+    assert text.startswith("👕 Образы · Кейптаун · 3 дня\n\nВт 20 окт · +22° · ")
+    assert "\nСр 21 окт · +19°, дождь · " in text
+
+
+def test_trip_weather_keeps_each_day_for_daily_looks(monkeypatch):
+    import weather_provider
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"daily": {"time": ["2026-10-20", "2026-10-21"], "temperature_2m_max": [22.4, 18.6],
+                              "temperature_2m_min": [14.2, 12.8], "precipitation_probability_max": [10, 80],
+                              "precipitation_sum": [0, 4], "windspeed_10m_max": [3.2, 9.6]}}
+
+    monkeypatch.setattr(weather_provider.requests, "get", lambda *_a, **_k: Response())
+
+    found = weather_provider.period_weather(1, 2, date(2026, 10, 20), date(2026, 10, 21), date(2026, 10, 16))
+
+    assert found["rainy"] == 1 and found["tmin"] == 19 and found["tmax"] == 22
+    assert found["daily"] == [
+        {"date": "2026-10-20", "tmax": 22, "tmin": 14, "rain": False, "wind": 3},
+        {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 10}]
