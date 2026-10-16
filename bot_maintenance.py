@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import time
 
 import ai
 import access
+import config
 import day_menu
 import home_cache
 import learning
@@ -12,6 +14,7 @@ import learning_dictionary as dictionary
 import leisure_collection
 import leisure_hub
 import myday
+import store
 import tracking
 import wardrobe
 
@@ -93,6 +96,7 @@ async def job_warm_home_pages(context):
     finalizing_myday = scheduled_section in ("", "myday")
     retry_missing = scheduled_section == "retry"
     retry_myday = False
+    night = {}  # раздел → упавшие шаги по всем пользователям; None — раздел собрался
     for cid in access.get_allowed_cids():
         if tracking.has_active_actions():
             logging.info("home cache warm skipped: user action active")
@@ -128,17 +132,42 @@ async def job_warm_home_pages(context):
                 )
                 if ready:
                     warmed.append(name)
+                    night.setdefault(name, None)
                 else:
                     dependency_failed = True
+                    _night_failed(night, name, cid)
                     logging.warning("home cache warm incomplete cid=%s section=%s", cid, name)
             except Exception:
                 dependency_failed = True
+                _night_failed(night, name, cid)
                 logging.exception("home cache warm failed cid=%s section=%s", cid, name)
         if finalizing_myday and (dependency_failed or "myday" not in warmed):
             retry_myday = True
         logging.info("home cache warm complete cid=%s sections=%s", cid, ",".join(warmed))
+    _save_night(night)
     if retry_myday:
         _schedule_myday_warm_retry(context)
+
+
+def _night_failed(night, name, cid):
+    steps = night.get(name) or []
+    if name == "leisure":
+        steps += [step for step in leisure_hub.failed_steps.get(str(cid), []) if step not in steps]
+    night[name] = steps
+
+
+def _save_night(night):
+    """Итог прогрева по разделам для строки «🌙 Ночь» в админке; разделы, которые не прогревались, не трогает."""
+    if not night:
+        return
+    now = int(time.time())
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        for name, steps in night.items():
+            data[name] = {"ts": now, "ok": steps is None, "steps": steps or []}
+        return data, None
+    store.mutate_kv(config.NIGHT_WARM_KEY, mutate)
 
 
 def _schedule_myday_warm_retry(context, delay_seconds=15 * 60):

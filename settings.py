@@ -1230,6 +1230,17 @@ async def handle_callback(bot, cid, data, q=None):
         import admin as _adm
         card = data[len("adm_refresh_card_"):]
         await _admin_guard(bot, cid, lambda b, c, key=card: _adm.refresh_card(b, c, key, q))
+    elif data == "adm_backup":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_backup(b, c, q))
+    elif data == "adm_restart":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_restart_confirm(b, c, q))
+    elif data.startswith("adm_restart_ok_"):
+        import admin as _adm
+        suffix = data[len("adm_restart_ok_"):]
+        pressed_at = int(suffix) if suffix.isdigit() else 0
+        await _admin_guard(bot, cid, lambda b, c: _adm.restart(b, c, pressed_at, q))
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))

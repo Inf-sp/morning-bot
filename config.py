@@ -49,6 +49,8 @@ CF_ACCOUNT_ID = _env_first("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")
 CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "").strip()  # SQLite-файл KV на VM
+BACKUP_DIR = os.environ.get("BACKUP_DIR", "/var/backups/morning-bot")  # ежедневные копии базы на VM
+SERVICE_NAME = os.environ.get("SERVICE_NAME", "morning-bot")  # systemd-сервис бота (перезапуск из админки)
 # Старая PostgreSQL на Railway: нужна только скрипту tools/migrate_to_sqlite.py.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -121,6 +123,7 @@ MOVIE_RECO_CACHE_KEY = "movie_reco_cache.json"  # {cid: {date, signature, item, 
 MOVIE_PREMIERES_CACHE_KEY = "movie_premieres_cache.json"  # {country: {expires, items}} — новые региональные релизы на неделю
 WARDROBE_TRENDS_CACHE_KEY = "wardrobe_trends_cache.json"  # {version, styles: {стили: {expires, items}}} — тренды сезона на неделю
 MUSIC_RECO_CACHE_KEY = "music_reco_cache.json"  # {cid: {date, item}} — персональный артист на день
+NIGHT_WARM_KEY = "night_warm.json"  # {section: {ts, ok, steps}} — итог ночного прогрева для админки
 RECO_STALE_DAYS = 7  # карточка дня (фильм, сериал, артист) — резерв неделю, если новую не собрать
 YOUTUBE_TRACK_CACHE_KEY = "youtube_track_cache.json"  # {artist + track: {ts, url}} — подтверждённые ссылки на треки
 MOVIE_BLACKLIST_KEY = "movie_blacklist.json"

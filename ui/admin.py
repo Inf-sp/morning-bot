@@ -37,7 +37,8 @@ _STATUS_DOTS = ("🟢", "🟡", "🟠", "🔴", "⚪")
 def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
          notif_line=None, users_line=None, data_line=None, logs_line=None,
-         system_rows=None, error_rows=None, version_line=None, idle_line=None):
+         system_rows=None, error_rows=None, version_line=None, idle_line=None,
+         server_line=None, night_line=None):
     """Render the admin home screen.
 
     The compact metric form is used by the current screen.  The older
@@ -48,7 +49,7 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
-    head = [line for line in (version_line,) if line]
+    head = [line for line in (version_line, server_line, night_line) if line]
     for line in head:
         b.line(line)
     if head:
@@ -98,6 +99,16 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
         b.newline()
         for row in rows:
             b.line(row)
+    return b.build_stripped()
+
+
+def notice(title, text):
+    """Короткий экран админки: заголовок и одна строка."""
+    b = MessageBuilder()
+    b.bold(title)
+    b.newline()
+    b.spacer()
+    b.line(text)
     return b.build_stripped()
 
 

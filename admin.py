@@ -7,8 +7,14 @@ MessageSpec из ui.admin. Роутинг (settings.dispatch) делегируе
 """
 import logging
 import asyncio
+import glob
+import os
+import shutil
+import sqlite3
+import subprocess
+import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -86,16 +92,181 @@ _GREEN = {"style": "success"}
 async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
+        [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards"),
+         InlineKeyboardButton("⚠️ Ошибки", callback_data="adm_logs")],
+        [InlineKeyboardButton("💾 Прислать копию базы", callback_data="adm_backup"),
+         InlineKeyboardButton("🔁 Перезапустить бота", callback_data="adm_restart")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
         system_rows=monitor_rows,
         version_line=deploy_report.version_line(),
+        server_line=server_line(),
+        night_line=night_line(cid),
         idle_line=service_monitor.idle_line(),
     )
     await _show(bot, cid, msg, kb, q)
+
+
+# ================= СЕРВЕР =================
+
+_MB = 1024 * 1024
+
+
+def _disk_part():
+    usage = shutil.disk_usage(os.path.dirname(config.DATABASE_PATH) or "/")
+    return f"Диск {round(usage.used * 100 / usage.total)}%"
+
+
+def _memory_part():
+    with open("/proc/meminfo", encoding="utf-8") as file:  # только Linux; на другой ОС строка без памяти
+        info = {line.split(":")[0]: int(line.split()[1]) for line in file if ":" in line}
+    return f"память {round(100 - info['MemAvailable'] * 100 / info['MemTotal'])}%"
+
+
+def _database_part():
+    path = config.DATABASE_PATH
+    size = os.path.getsize(path) + (os.path.getsize(f"{path}-wal") if os.path.exists(f"{path}-wal") else 0)
+    return f"база {max(1, round(size / _MB))} МБ"
+
+
+def _day_and_time(moment):
+    today = datetime.now(config.TZ).date()
+    day = ("сегодня" if moment.date() == today else "вчера" if moment.date() == today - timedelta(days=1)
+           else f"{moment.day} {_MONTHS_RU[moment.month]}")
+    return f"{day} {moment:%H:%M}"
+
+
+def _backup_part():
+    newest = max(glob.glob(os.path.join(config.BACKUP_DIR, "*")), key=os.path.getmtime)
+    return f"копия базы {_day_and_time(datetime.fromtimestamp(os.path.getmtime(newest), config.TZ))}"
+
+
+def _uptime_part():
+    minutes = int((datetime.now(config.TZ) - deploy_report._STARTED_AT).total_seconds() // 60)
+    days, hours = minutes // 1440, minutes % 1440 // 60
+    if days:
+        return f"работает {days} дн. {hours} ч"
+    return f"работает {hours} ч {minutes % 60} мин" if hours else f"работает {minutes % 60} мин"
+
+
+def server_line():
+    """🖥 Диск 41% · память 63% · база 18 МБ · копия базы сегодня 03:00 · работает 2 дн. 4 ч.
+
+    Недоступный показатель (не Linux, нет базы или копий) пропускается."""
+    parts = []
+    for part in (_disk_part, _memory_part, _database_part, _backup_part, _uptime_part):
+        try:
+            parts.append(part())
+        except Exception:
+            _log.debug("server line: %s unavailable", part.__name__, exc_info=True)
+    return "🖥 " + " · ".join(parts) if parts else None
+
+
+_NIGHT_SECTIONS = (
+    ("wardrobe", "Гардероб"), ("cooking", "Кухня"), ("learning", "Обучение"),
+    ("leisure", "Досуг"), ("myday", "Мой день"),
+)
+_ARTIST_SOURCES = {"local": "артист дня — из запасного списка", "chart": "артист дня — из чарта, без AI"}
+
+
+def night_line(cid):
+    """🌙 Ночь: всё собралось / не собралось — Досуг (концерты), Кухня; артист дня из резерва — отдельно."""
+    night = store._load(config.NIGHT_WARM_KEY) or {}
+    cutoff = time.time() - DAY
+    fresh = {name: entry for name, entry in night.items()
+             if isinstance(entry, dict) and float(entry.get("ts") or 0) >= cutoff}
+    failed = [f"{label} ({', '.join(fresh[name]['steps'])})" if fresh[name].get("steps") else label
+              for name, label in _NIGHT_SECTIONS if name in fresh and not fresh[name].get("ok")]
+    parts = []
+    if fresh:
+        parts.append(f"не собралось — {', '.join(failed)}" if failed else "всё собралось")
+    artist = ((store._load(config.MUSIC_RECO_CACHE_KEY) or {}).get(str(cid)) or {}).get("item") or {}
+    if source := _ARTIST_SOURCES.get(str(artist.get("source") or "")):
+        parts.append(source)
+    return "🌙 Ночь: " + " · ".join(parts) if parts else None
+
+
+# ================= КОПИЯ БАЗЫ И ПЕРЕЗАПУСК =================
+
+_TELEGRAM_FILE_LIMIT = 50 * _MB
+
+
+def _db_snapshot(path):
+    """Согласованный снимок SQLite (backup API): запись в базу во время копирования не портит файл."""
+    source = sqlite3.connect(config.DATABASE_PATH)
+    target = sqlite3.connect(path)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+    return os.path.getsize(path)
+
+
+async def send_backup(bot, cid, q=None):
+    back = InlineKeyboardMarkup([nav_row("adm_home")])
+    if not config.DATABASE_PATH:
+        await _show(bot, cid, ui.notice("💾 Копия базы", "Копия недоступна: база не на диске."), back, q)
+        return
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, f"morning-bot-{datetime.now(config.TZ):%Y-%m-%d-%H%M}.db")
+        try:
+            size = await asyncio.to_thread(_db_snapshot, path)
+        except Exception:
+            _log.exception("admin backup failed")
+            await _show(bot, cid, ui.notice("💾 Копия базы", "Не удалось сделать копию базы."), back, q)
+            return
+        if size > _TELEGRAM_FILE_LIMIT:
+            text = f"База {round(size / _MB)} МБ — больше лимита Telegram в 50 МБ, прислать нельзя."
+            await _show(bot, cid, ui.notice("💾 Копия базы", text), back, q)
+            return
+        with open(path, "rb") as file:
+            await bot.send_document(chat_id=cid, document=file, filename=os.path.basename(path),
+                                    caption=f"💾 Копия базы · {max(1, round(size / _MB))} МБ")
+
+
+def _auto_restart_enabled():
+    """Ненулевой код выхода поднимает сервис снова только при Restart=always или on-failure."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", config.SERVICE_NAME, "-p", "Restart", "--value"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except Exception:
+        _log.warning("admin restart: systemctl unavailable", exc_info=True)
+        return False
+    return result.stdout.strip() in ("always", "on-failure")
+
+
+async def send_restart_confirm(bot, cid, q=None):
+    # Время в callback: после рестарта Telegram может повторить нажатие — старое не перезапускает снова.
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔁 Перезапустить", callback_data=f"adm_restart_ok_{int(time.time())}"),
+         InlineKeyboardButton("Отмена", callback_data="adm_home")],
+    ])
+    text = "Бот остановится и через несколько секунд поднимется сам."
+    await _show(bot, cid, ui.notice("🔁 Перезапустить бота", text), kb, q)
+
+
+_RESTART_DELAY_SECONDS = 3  # Telegram успевает получить ответ и подтвердить нажатие до выхода
+
+
+async def restart(bot, cid, pressed_at, q=None):
+    back = InlineKeyboardMarkup([nav_row("adm_home")])
+    if pressed_at < int(deploy_report._STARTED_AT.timestamp()):
+        await send_home(bot, cid, q)  # повтор нажатия из прошлого запуска
+        return
+    if not await asyncio.to_thread(_auto_restart_enabled):
+        text = "Перезапуск недоступен: сервис не поднимется сам."
+        await _show(bot, cid, ui.notice("🔁 Перезапустить бота", text), back, q)
+        return
+    await _show(bot, cid, ui.notice("🔁 Перезапустить бота", "Перезапускаюсь…"), None, q)
+    _log.warning("admin restart requested cid=%s", cid)
+    await asyncio.sleep(_RESTART_DELAY_SECONDS)
+    logging.shutdown()
+    os._exit(1)  # ненулевой код: systemd (Restart=on-failure) поднимает сервис
 
 
 async def send_api_check(bot, cid, q=None):
@@ -154,7 +325,9 @@ async def _refresh_card_cache(cid, key):
         import leisure_concerts
         import leisure_hub
         import leisure_movies
+        import vacation
         leisure_concerts.invalidate_user_concerts_cache(cid)
+        vacation._clear_leisure_cards(cid)  # фильм, сериал и артист дня — по-настоящему новые
         await leisure_movies.warm_movie_premieres_cache(cid)
         return await leisure_hub.warm_hub_cache(cid)
     if key == "myday":
@@ -187,7 +360,9 @@ async def refresh_card(bot, cid, key, q=None):
         outcome = f"✅ {label} обновлена."
     except Exception:
         _log.exception("admin card refresh failed cid=%s card=%s", cid, key)
-        outcome = f"⚠️ {label} не обновилась."
+        import leisure_hub
+        failed = leisure_hub.failed_steps.get(str(cid)) if key in ("leisure", "myday") else None
+        outcome = f"⚠️ {label}: не обновились — {', '.join(failed)}" if failed else f"⚠️ {label} не обновилась."
     if status is not None:
         await status.stop(delete=True)
     await send_card_refresh_menu(bot, cid, q, status=outcome)

@@ -1,6 +1,8 @@
 import copy
 import asyncio
 import os
+
+import pytest
 from datetime import datetime
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
@@ -61,8 +63,10 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки"], ["👥 Пользователи"], ["#️⃣ Главная"],
+        ["🔄 Обновить карточки", "⚠️ Ошибки"], ["💾 Прислать копию базы", "🔁 Перезапустить бота"],
+        ["👥 Пользователи"], ["#️⃣ Главная"],
     ]
+    assert markup[0][1].callback_data == "adm_logs"
 
 
 def test_admin_card_refresh_menu_has_all_cards():
@@ -414,3 +418,141 @@ def test_api_check_callback_is_admin_only(monkeypatch):
     assert called == []
     asyncio.run(settings.handle_callback(bot, "1", "adm_api_check", None))
     assert called == ["1"]
+
+
+def _put(key, value):
+    admin.store.mutate_kv(key, lambda _data: (value, None))
+
+
+def test_admin_refresh_leisure_resets_cards_of_the_day(monkeypatch):
+    import leisure_concerts
+    import leisure_hub
+    import leisure_movies
+
+    _put(admin.config.MOVIE_RECO_CACHE_KEY, {"42": {"item": "film"}, "42|tv": {"item": "show"}, "7": {"item": "x"}})
+    _put(admin.config.MUSIC_RECO_CACHE_KEY, {"42": {"item": "artist"}})
+    monkeypatch.setattr(leisure_concerts, "invalidate_user_concerts_cache", lambda _cid: None)
+    monkeypatch.setattr(leisure_movies, "warm_movie_premieres_cache", lambda _cid: asyncio.sleep(0))
+    monkeypatch.setattr(leisure_hub, "warm_hub_cache", lambda _cid: asyncio.sleep(0, result=True))
+
+    assert asyncio.run(admin._refresh_card_cache("42", "leisure")) is True
+    assert admin.store._load(admin.config.MOVIE_RECO_CACHE_KEY) == {"7": {"item": "x"}}
+    assert admin.store._load(admin.config.MUSIC_RECO_CACHE_KEY) == {}
+
+
+def test_admin_refresh_card_names_failed_leisure_steps(monkeypatch):
+    import leisure_hub
+
+    async def refresh(cid, key):
+        leisure_hub.failed_steps[cid] = ["концерты", "артист дня"]
+        return False
+
+    monkeypatch.setattr(admin, "_refresh_card_cache", refresh)
+    bot = RecordingBot()
+
+    asyncio.run(admin.refresh_card(bot, "42", "leisure"))
+
+    assert "⚠️ 🍿 Досуг: не обновились — концерты, артист дня" in bot.sent[0]["text"]
+
+
+def test_night_line_lists_failed_sections_and_reserve_artist(monkeypatch):
+    import bot_maintenance
+    import leisure_hub
+
+    _put(admin.config.NIGHT_WARM_KEY, {})
+    _put(admin.config.MUSIC_RECO_CACHE_KEY, {})
+    assert admin.night_line("42") is None
+
+    bot_maintenance._save_night({"wardrobe": None, "cooking": None})
+    assert admin.night_line("42") == "🌙 Ночь: всё собралось"
+
+    monkeypatch.setitem(leisure_hub.failed_steps, "42", ["концерты"])
+    night = {"wardrobe": None}
+    bot_maintenance._night_failed(night, "leisure", "42")
+    bot_maintenance._night_failed(night, "cooking", "42")
+    bot_maintenance._save_night(night)
+    _put(admin.config.MUSIC_RECO_CACHE_KEY, {"42": {"item": {"artist": "Tinashe", "source": "chart"}}})
+
+    assert admin.night_line("42") == (
+        "🌙 Ночь: не собралось — Кухня, Досуг (концерты) · артист дня — из чарта, без AI"
+    )
+
+
+def test_server_line_shows_database_backup_and_uptime_and_skips_missing(monkeypatch, tmp_path):
+    database = tmp_path / "bot.db"
+    database.write_bytes(b"x" * 3 * 1024 * 1024)
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    (backups / "bot-2026-10-16.db").write_bytes(b"x")
+    monkeypatch.setattr(admin.config, "DATABASE_PATH", str(database))
+    monkeypatch.setattr(admin.config, "BACKUP_DIR", str(backups))
+    monkeypatch.setattr(admin.deploy_report, "_STARTED_AT",
+                        datetime.now(admin.config.TZ) - admin.timedelta(days=2, hours=4, minutes=5))
+    monkeypatch.setattr(admin, "_memory_part", lambda: (_ for _ in ()).throw(OSError("no /proc")))
+
+    line = admin.server_line()
+
+    assert line.startswith("🖥 Диск ")
+    assert "память" not in line
+    assert " · база 3 МБ · копия базы сегодня " in line
+    assert line.endswith(" · работает 2 дн. 4 ч")
+
+
+class _DocumentBot(RecordingBot):
+    def __init__(self):
+        super().__init__()
+        self.documents = []
+
+    async def send_document(self, **kwargs):
+        self.documents.append((kwargs["filename"], kwargs["document"].read(), kwargs["caption"]))
+
+
+def test_backup_sends_consistent_sqlite_snapshot_or_explains_limit(monkeypatch, tmp_path):
+    import sqlite3
+
+    database = tmp_path / "bot.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("create table kv (key text, value text)")
+        connection.execute("insert into kv values ('a', 'b')")
+    monkeypatch.setattr(admin.config, "DATABASE_PATH", str(database))
+    bot = _DocumentBot()
+
+    asyncio.run(admin.send_backup(bot, "42"))
+
+    name, body, caption = bot.documents[0]
+    copy_path = tmp_path / name
+    copy_path.write_bytes(body)
+    with sqlite3.connect(copy_path) as connection:
+        assert connection.execute("select * from kv").fetchall() == [("a", "b")]
+    assert caption == "💾 Копия базы · 1 МБ"
+
+    monkeypatch.setattr(admin, "_TELEGRAM_FILE_LIMIT", 10)
+    asyncio.run(admin.send_backup(bot, "42"))
+    assert len(bot.documents) == 1
+    assert "больше лимита Telegram в 50 МБ" in bot.sent[-1]["text"]
+
+
+def test_restart_refuses_without_systemd_auto_restart(monkeypatch):
+    calls = []
+
+    class Result:
+        stdout = "no\n"
+
+    monkeypatch.setattr(admin.subprocess, "run", lambda args, **_kwargs: calls.append(args) or Result())
+    monkeypatch.setattr(admin.os, "_exit", lambda code: pytest.fail("must not exit"))
+    bot = RecordingBot()
+
+    asyncio.run(admin.restart(bot, "42", int(admin.time.time())))
+
+    assert calls == [["systemctl", "show", "morning-bot", "-p", "Restart", "--value"]]
+    assert "Перезапуск недоступен: сервис не поднимется сам." in bot.sent[0]["text"]
+
+
+def test_restart_ignores_press_repeated_from_previous_run(monkeypatch):
+    monkeypatch.setattr(admin, "_auto_restart_enabled", lambda: pytest.fail("must not check"))
+    monkeypatch.setattr(admin, "send_home", lambda bot, cid, q=None: bot.send_message(chat_id=cid, text="home"))
+    bot = RecordingBot()
+
+    asyncio.run(admin.restart(bot, "42", 0))
+
+    assert bot.sent[0]["text"] == "home"

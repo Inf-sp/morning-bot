@@ -599,10 +599,21 @@ async def _warm_movie_premieres(cid):
         await leisure_movies.warm_movie_premieres_cache(cid)
 
 
+_WARM_STEP_LABELS = {
+    "concerts": "концерты", "movie_premieres": "премьеры кино", "new_music": "новая музыка",
+    "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
+    "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
+    "details": "страны",
+}
+# Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
+failed_steps = {}
+
+
 async def warm_hub_cache(cid):
     """Ночной прогрев хаба и карточки «Что посмотреть»; сеть только для устаревших кэшей.
 
-    Ошибка одного источника не мешает остальным; False — хотя бы один не обновился.
+    Ошибка одного источника не мешает остальным; False — хотя бы один не обновился
+    (их названия — в failed_steps[cid]).
     """
     steps = (
         ("concerts", lambda: _warm_concerts(cid)),
@@ -617,14 +628,15 @@ async def warm_hub_cache(cid):
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
     )
-    ok = True
+    failed = []
     for name, call in steps:
         try:
             await call()
         except Exception:
-            ok = False
+            failed.append(_WARM_STEP_LABELS[name])
             _log.exception("leisure hub warm failed cid=%s step=%s", cid, name)
-    return ok
+    failed_steps[str(cid)] = failed
+    return not failed
 
 
 def is_ready(cid) -> bool:

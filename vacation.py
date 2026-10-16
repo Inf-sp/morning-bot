@@ -906,11 +906,12 @@ def trip_priority_rule(cid, what) -> str:
 
 
 def _clear_leisure_cards(cid):
-    """Карточки дня Досуга (фильм, артист) подбираются заново — уже с приоритетом страны."""
+    """Карточки дня Досуга (фильм, сериал, артист) подбираются заново — уже с приоритетом страны."""
     for key in (config.MOVIE_RECO_CACHE_KEY, config.MUSIC_RECO_CACHE_KEY):
         def mutate(data):
             data = data if isinstance(data, dict) else {}
             data.pop(str(cid), None)
+            data.pop(f"{cid}|tv", None)  # сериал дня — свой ключ (movie_recommendation._rec_key)
             return data, None
         store.mutate_kv(key, mutate)
 

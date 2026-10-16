@@ -243,6 +243,7 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
+    assert leisure_hub.failed_steps["42"] == ["концерты"]
     assert calls == ["concerts", "movies", "music", "movie_reco", "tv_reco", "artist_reco",
                      "series", "album_notes", "details"]
 

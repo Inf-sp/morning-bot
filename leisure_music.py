@@ -249,7 +249,7 @@ def _local_artist_fallback(known, category=None, *, recent=None):
             item.get("artist") if isinstance(item, dict) else item or ""
         ).casefold(),
     )
-    return dict(available[0]) if available else None
+    return {**available[0], "source": "local"} if available else None
 
 
 def _cached_artist(cid, stale=False):
@@ -793,7 +793,7 @@ async def _release_artist(cid, genres, known):
                     tracks = await asyncio.wait_for(asyncio.to_thread(apple_music.top_tracks, item["artist"]), 6)
                 except Exception:
                     tracks = []
-                return {"artist": item["artist"], "genre": genre, "tracks": tracks,
+                return {"artist": item["artist"], "genre": genre, "tracks": tracks, "source": "chart",
                         "fact": f"Свежий альбом «{item['title']}» вышел {released.day} {util._MONTHS[released.month - 1]}."}
     return None
 
