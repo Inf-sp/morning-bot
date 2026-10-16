@@ -506,3 +506,40 @@ def test_trip_period_from_city_and_dates_in_any_form():
     assert split("Кейптаун", today) == ("Кейптаун", None)
     assert vacation.parse_period("с 1 по 30 марта и ещё месяц", today) is not None
     assert vacation.parse_period("с 1 января по 1 мая", today) is None  # длиннее 60 дней
+
+
+def test_vacation_offers_the_saved_suitcase_trip_and_starts_it(monkeypatch):
+    saved, places = _env(monkeypatch)
+    import wardrobe_suitcase
+    finished = []
+    trip = {"city": "Кейптаун", "cc": "ZA", "lat": -33.9, "lon": 18.4, "start": "2026-10-20", "end": "2026-10-27"}
+    monkeypatch.setattr(vacation, "datetime", type("Fixed", (), {
+        "now": staticmethod(lambda tz=None: __import__("datetime").datetime(2026, 10, 16, 9, tzinfo=tz))}))
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": trip, "result": {"groups": []}})
+
+    async def finish(_bot, _cid, until):
+        finished.append(until)
+
+    monkeypatch.setattr(vacation, "_finish", finish)
+    bot = Bot()
+
+    asyncio.run(vacation.ask_city(bot, "42"))
+    button = bot.sent[-1]["reply_markup"].inline_keyboard[0][0]
+    assert (button.text, button.callback_data) == ("🧳 Кейптаун · до 27 октября", "set_vac_trip")
+
+    asyncio.run(vacation.start_suitcase_trip(bot, "42"))
+    assert places["now"]["city"] == "Кейптаун" and places["now"]["lat"] == -33.9  # координаты чемодана, без поиска
+    assert vacation.state("42")["home"]["city"] == "Алкмар" and vacation.state("42")["cc"] == "ZA"
+    assert finished == [date(2026, 10, 27)]
+
+
+def test_vacation_has_no_suitcase_button_without_a_current_trip(monkeypatch):
+    _env(monkeypatch)
+    import wardrobe_suitcase
+    old = {"city": "Кейптаун", "cc": "ZA", "lat": -33.9, "lon": 18.4, "start": "2025-10-20", "end": "2025-10-27"}
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": old, "result": {}})
+    bot = Bot()
+
+    asyncio.run(vacation.ask_city(bot, "42"))
+
+    assert bot.sent[-1]["reply_markup"] is None  # поездка уже закончилась — только вопрос о городе

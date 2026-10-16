@@ -14,6 +14,14 @@ def ask_city():
     return b.build_stripped()
 
 
+def suitcase_trip_label(trip):
+    """Кнопка поездки сохранённого чемодана на экране «В отпуске»: «🧳 Кейптаун · до 27 октября»."""
+    from datetime import date
+    from util import _MONTHS
+    end = date.fromisoformat(trip["end"])
+    return f"🧳 {trip['city']} · до {end.day} {_MONTHS[end.month - 1]}"
+
+
 def ask_city_in_country(country, flag=""):
     """Написана страна, а не город: какой город? Погода и всё остальное — по городу."""
     b = MessageBuilder()

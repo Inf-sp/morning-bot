@@ -1192,6 +1192,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_vac":
         import vacation
         await vacation.ask_city(bot, cid)
+    elif data == "set_vac_trip":
+        import vacation
+        await vacation.start_suitcase_trip(bot, cid, q)
     elif data.startswith("set_vacd_"):
         import vacation
         await vacation.set_days(bot, cid, data[len("set_vacd_"):], q)

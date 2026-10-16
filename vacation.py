@@ -223,18 +223,49 @@ def _reset_day_caches(cid):
 
 # ---------- вход и выход ----------
 
+def suitcase_trip(cid) -> dict:
+    """Поездка сохранённого чемодана, которая ещё не закончилась (город и даты уже известны), иначе {}."""
+    import wardrobe_suitcase
+    trip = (wardrobe_suitcase.saved_suitcase(cid) or {}).get("trip") or {}
+    try:
+        ends = date.fromisoformat(str(trip.get("end") or ""))
+    except ValueError:
+        return {}
+    known = trip.get("city") and trip.get("lat") is not None and trip.get("lon") is not None
+    return trip if known and ends >= datetime.now(config.TZ).date() else {}
+
+
 async def ask_city(bot, cid):
-    """«✈️ В отпуске»: запоминаем дом и ждём город отпуска."""
+    """«✈️ В отпуске»: запоминаем дом и ждём город отпуска. Есть сохранённый чемодан — кнопка с его поездкой."""
     current = state(cid)
     _pending_home[str(cid)] = (current or {}).get("home") or dict(store.get_settings(cid))
     store.pending_input[str(cid)] = "vacation_city"
     msg = vacation_ui.ask_city()
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    trip = suitcase_trip(cid)
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        vacation_ui.suitcase_trip_label(trip), callback_data="set_vac_trip")]]) if trip else None
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=markup)
+
+
+async def start_suitcase_trip(bot, cid, q=None):
+    """Кнопка поездки из чемодана: отпуск с её городом (координаты уже известны) и датой возвращения."""
+    trip = suitcase_trip(cid)
+    if q is not None:
+        try:
+            await q.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            _log.debug("vacation: suitcase trip keyboard not cleared", exc_info=True)
+    if not trip:  # чемодан удалили или поездка закончилась — обычный вопрос о городе
+        await ask_city(bot, cid)
+        return
+    home = _pending_home.pop(str(cid), None) or (state(cid) or {}).get("home") or dict(store.get_settings(cid))
+    cc = str(trip.get("cc") or "").upper()
+    store.set_settings(cid, trip["lat"], trip["lon"], trip["city"], cc, cc.lower())
+    await _start(bot, cid, home, date.fromisoformat(trip["end"]))
 
 
 async def city_entered(bot, cid, text):
     """Город (и, если написаны, сроки) отпуска: с датой — сразу готово, без неё — вопрос о дате."""
-    import asyncio
     import weather
     import countries
     import util
@@ -259,6 +290,12 @@ async def city_entered(bot, cid, text):
         if trip:
             _pending_trip[str(cid)] = trip
         return
+    await _start(bot, cid, home, until)
+
+
+async def _start(bot, cid, home, until):
+    """Город отпуска уже сохранён: отпуск начат; с датой возвращения — готово, без неё — вопрос о сроке."""
+    import asyncio
     place = store.get_settings(cid)
     _save(cid, {"home": home, "until": "", "cc": str(place.get("cc") or "").upper(),
                 "since": datetime.now(config.TZ).date().isoformat()})
