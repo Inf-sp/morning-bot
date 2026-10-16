@@ -89,6 +89,7 @@ def _day_menu_message(menu, cid=None):
             and str(menu.get("cuisine") or "").startswith(day_menu.LOCAL_PREFIX) else ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),
         show_mine=cid is None or not vacation.active(cid), stats=stats,
+        trip=cid is not None and vacation.active(cid),
     )
 
 

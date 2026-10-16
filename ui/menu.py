@@ -277,10 +277,11 @@ _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "d
 _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
 
 
-def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None):
-    """Главный экран Готовки: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
+def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None, trip=False):
+    """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (холодильник остался дома).
+    trip — в отпуске: блюда, которые стоит попробовать, без рецептов — кнопки «Другие блюда» и «Главная».
     stats — {"products": N, "meals": M}: курсивная строка «Твой холодильник · …» внизу.
     """
     b = MessageBuilder()
@@ -301,6 +302,11 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
         b.spacer()
         b.italic(fridge_stats_line(stats.get("products"), stats.get("meals")))
         b.newline()
+    if trip:  # в поездке не готовим: рецептов «Завтрак / Обед / Ужин» нет, только новый набор блюд
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✨ Другие блюда", callback_data="food_go_day_any")],
+            [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+        ]))
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes],
                                                       show_mine=show_mine))
 

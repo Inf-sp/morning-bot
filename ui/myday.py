@@ -178,6 +178,16 @@ def day_summary(
         b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
         b.spacer()
 
+    # В отпуске — блюдо, которое стоит попробовать сегодня (главное в меню Кухни).
+    dish = vacation.get("try_dish") or {}
+    if str(dish.get("name") or "").strip():
+        note = str(dish.get("note") or "").strip()
+        b.text_line("🍽 ")
+        b.label("Попробовать сегодня")
+        b.text_line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
+        b.newline()
+        b.spacer()
+
     # Премьера дня из Досуга — только сегодняшняя, одна строка.
     if premiere:
         _premiere_line(b, premiere)

@@ -353,7 +353,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 20
+_DAY_CACHE_VERSION = 21
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -528,9 +528,11 @@ def _vacation_blocks(cid) -> dict:
         return {}
     from ui import vacation as vacation_ui
     guide = vacation.guide(cid)
+    import day_menu
     return {
         "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
+        "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
     }
 
 

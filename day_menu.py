@@ -178,7 +178,7 @@ def is_repeat(name, avoided_names) -> bool:
     return False
 
 
-def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="") -> str:
+def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="", trip=False) -> str:
     def examples(meal):
         # Уже показанные блюда в примеры не попадают, иначе модель выбирает их снова.
         fresh = [(name, note) for name, note in (TYPICAL_DISHES.get(cuisine) or {}).get(meal, ())
@@ -188,16 +188,26 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     lines = "\n".join(f"- {meal}: {examples(meal)}" for meal in meals)
     limits = (f"Обязательные ограничения в еде: {restrictions_text}. Блюдо, которое их нарушает, — ошибка.\n"
               if restrictions_text else "")
-    json_shape = ",".join(f'"{meal}":{{"name":"","note":""}}' for meal in meals)
+    json_shape = ",".join(f'"{meal}":{{"name":"","note":""}}' for meal in meals) \
+        + (f',"top":"один из: {", ".join(meals)}"' if trip else "")
     names = {"breakfast": "завтрак", "lunch": "обед", "dinner": "ужин"}
     fridge = (f"По возможности опирайся на продукты из холодильника: "
               f"{secure.wrap_untrusted(', '.join(available), 'продукты в наличии')}.\n" if available else "")
     avoid = (f"Не повторяй блюда: {secure.wrap_untrusted(', '.join(avoided_names[-60:]), 'история меню')}.\n"
              if avoided_names else "")
-    return (
+    head = (
+        # В отпуске — не домашняя готовка, а то, что путешественнику стоит попробовать в стране.
+        f"Пользователь путешествует. Предложи на один день местные блюда кухни «{label or cuisine_label(cuisine)}», "
+        f"которые обязательно стоит попробовать в этой стране (в кафе, ресторане или на рынке) на: "
+        f"{', '.join(names[meal] for meal in meals)} — самые знаковые и любимые местными, без фьюжна.\n"
+        "top — приём пищи, блюдо которого стоит попробовать сегодня в первую очередь (самое знаковое).\n"
+    ) if trip else (
         f"Составь меню на один день в одной кухне: {label or cuisine_label(cuisine)}.\n"
         f"Нужны типичные домашние блюда этой кухни на: {', '.join(names[meal] for meal in meals)} — то, что в "
         "этой стране действительно едят на этот приём пищи, без фьюжна и случайных комбинаций.\n"
+    )
+    return (
+        head +
         f"Типичные варианты:\n{lines}\n"
         "Выбери из них или другие столь же традиционные блюда этой кухни; все блюда разные.\n"
         + ("Это новое меню взамен показанного: предложи блюда, которых ещё не было, смелее бери "
@@ -211,16 +221,16 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     )
 
 
-def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="") -> dict:
+def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="", trip=False) -> dict:
     try:
         data = ai.llm_json(
-            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label), 500,
+            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label, trip), 500,
             tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 2,
+                "language": "ru", "schema_version": 2, "trip": trip,
             },
         )
     except Exception as error:
@@ -241,11 +251,11 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     available = []  # меню дня — популярные блюда из любых продуктов; из холодильника — «Из моих продуктов»
     meals = _settings().food_meals(cid)
     restrictions = _settings().food_restrictions(cid)
-    label = ""
-    if cuisine.startswith(LOCAL_PREFIX):
-        import vacation
-        label = vacation.local_cuisine_label(cid)
-    data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid), label)
+    import vacation
+    trip = vacation.active(cid)  # в отпуске — что попробовать в стране, а не что приготовить дома
+    label = vacation.local_cuisine_label(cid) if cuisine.startswith(LOCAL_PREFIX) else ""
+    data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid), label,
+                      trip)
     if label and not all(isinstance(data.get(meal), dict) and _clean(data[meal].get("name"), _NAME_MAX)
                          for meal in meals):
         # Кухни страны отпуска нет во встроенном списке блюд: без ответа AI — обычная кухня дня.
@@ -263,7 +273,16 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
         used.add(dish["name"].casefold())
         dishes[meal] = dish
     menu = {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
+    if trip:  # блюдо «попробовать сегодня» для «Моего дня»: отметка AI, без неё — ужин или последнее
+        top = str(data.get("top") or "").strip().casefold()
+        menu["top"] = top if top in dishes else ("dinner" if "dinner" in dishes else next(reversed(dishes), ""))
     return {**menu, "cuisine_label": label} if label else menu
+
+
+def trip_dish_today(cid) -> dict:
+    """Блюдо, которое в отпуске стоит попробовать сегодня, из готового меню дня (без сети и AI): {name, note}."""
+    menu = get_cached_day_menu(cid) or {}
+    return dict((menu.get("dishes") or {}).get(menu.get("top")) or {})
 
 
 def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:

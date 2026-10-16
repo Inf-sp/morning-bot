@@ -458,3 +458,41 @@ def test_country_music_is_up_to_three_local_artists_chart_first(monkeypatch):
 
     # Из чарта — только местные (Тейлор Свифт и Дрейк — нет), затем известные из AI; не больше трёх, без повторов.
     assert music == ["Tyla", "Kabza De Small", "Die Antwoord"]
+
+
+def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatch):
+    import day_menu
+    import menu
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская",
+                                                             "cuisine_intro": "Мясо на открытом огне."}}
+    prompts = []
+
+    def dishes(prompt, *_args, **_kwargs):
+        prompts.append(prompt)
+        return {"breakfast": {"name": "Руськи", "note": "сухари к кофе"},
+                "lunch": {"name": "Боботи", "note": "запечённый фарш с карри"},
+                "dinner": {"name": "Брай", "note": "мясо на открытом огне"}, "top": "dinner"}
+
+    monkeypatch.setattr(day_menu.ai, "llm_json", dishes)
+    monkeypatch.setattr(day_menu, "_settings", lambda: type("S", (), {
+        "food_meals": staticmethod(lambda _cid: ["breakfast", "lunch", "dinner"]),
+        "food_restrictions": staticmethod(lambda _cid: []),
+        "food_restrictions_prompt": staticmethod(lambda _cid: ""),
+        "cuisines": staticmethod(lambda _cid: [])})())
+    monkeypatch.setattr(store, "get_profile", lambda _cid: {})
+
+    built = day_menu.build_day_menu("42", cuisine="local_za")
+
+    assert "обязательно стоит попробовать в этой стране" in prompts[0] and '"top"' in prompts[0]
+    assert built["top"] == "dinner"
+    msg = menu._day_menu_message(built, "42")
+    assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
+        ["food_go_day_any"], ["m_menu"]]  # «Другие блюда» и «Главная», без рецептов «Завтрак / Обед / Ужин»
+
+
+def test_my_day_on_trip_shows_the_dish_to_try_today():
+    text = myday_ui.day_summary("Пт, 16 окт", "Кейптаун", vacation={
+        "try_dish": {"name": "Брай", "note": "Мясо на открытом огне"}}).text
+    assert "🍽 Попробовать сегодня: Брай — мясо на открытом огне" in text
+    assert "Попробовать" not in myday_ui.day_summary("Пт", "Алкмар").text  # дома строки нет
