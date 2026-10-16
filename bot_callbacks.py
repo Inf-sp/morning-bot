@@ -66,7 +66,7 @@ def _status_stages(data):
         return progress("⏳ Ищу рецепт...", "🥕 Сверяю продукты...", "🍳 Готовлю рецепт...", "📝 Пишу шаги...")
     if data in ("m_wardrobe", "w_look") or data.startswith(("w_lookst_", "w_with_")):
         return progress("👕 Открываю шкаф...", "🌦️ Смотрю на погоду...", "🎨 Подбираю цвета...", "🧩 Собираю образ...")
-    if data == "w_pack":
+    if data.startswith("w_pack"):
         return progress("🌦️ Смотрю погоду в поездке...", "👕 Перебираю шкаф...", "🧳 Складываю чемодан...",
                         "📝 Готовлю список...")
     if data.startswith("w_buy"):
@@ -439,7 +439,8 @@ ROUTES = (
     # «Новый образ»: выбор направления под образом, затем новый образ в этом стиле.
     R("w_pick", _swap_kb(lambda c: wardrobe.style_picker_kb())),
     R("w_card", _swap_kb(lambda c: wardrobe.build_wardrobe_keyboard(c.cid))),
-    R("w_pack", lambda c: wardrobe_suitcase.send(c.bot, c.cid)),  # «Собрать чемодан» в отпуске
+    R("w_pack", lambda c: wardrobe_suitcase.send(c.bot, c.cid)),  # «Собрать чемодан»: дома — куда и когда
+    R("w_pack_*", lambda c: wardrobe_suitcase.handle(c.bot, c.cid, c.data, c.q)),  # подтвердить / пересобрать
     R("w_lookst_*", _picked(lambda c: c.status(
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)))),
     R("w_*", lambda c: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data), sub="wardrobe"),

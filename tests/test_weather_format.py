@@ -486,3 +486,38 @@ def test_tomorrow_notification_has_city_country_flag_and_three_periods(monkeypat
     assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0]
     assert [line.split(":")[0].split(" ", 1)[1] for line in lines[2:5]] == ["Утром", "Днём", "Вечером"]
     assert len(lines) == 5 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога
+
+
+def test_period_weather_uses_forecast_soon_and_last_year_later(monkeypatch):
+    from datetime import date
+    import weather_provider
+    calls = []
+
+    class Response:
+        def __init__(self, daily):
+            self.daily = daily
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"daily": self.daily}
+
+    def fake_get(url, timeout, params):
+        calls.append((url, params["start_date"], params["end_date"]))
+        if "archive" in url:
+            return Response({"time": ["2026-01-05", "2026-01-06"], "temperature_2m_max": [27.4, 31.0],
+                             "precipitation_sum": [0, 3.2], "windspeed_10m_max": [6, 9]})
+        return Response({"time": ["2026-10-20", "2026-10-21"], "temperature_2m_max": [17.2, 24.0],
+                         "precipitation_probability_max": [80, 10], "precipitation_sum": [4, 0],
+                         "windspeed_10m_max": [5, 8.6]})
+
+    monkeypatch.setattr(weather_provider.requests, "get", fake_get)
+    today = date(2026, 10, 16)
+
+    soon = weather_provider.period_weather(-33.9, 18.4, date(2026, 10, 20), date(2026, 10, 21), today)
+    later = weather_provider.period_weather(-33.9, 18.4, date(2027, 1, 5), date(2027, 1, 6), today)
+
+    assert soon == {"tmin": 17, "tmax": 24, "rainy": 1, "days": 2, "wind": 9, "typical": False}
+    assert later["typical"] and later["rainy"] == 1  # архив: дождь — по выпавшим миллиметрам
+    assert calls[1] == ("https://archive-api.open-meteo.com/v1/archive", "2026-01-05", "2026-01-06")  # год назад

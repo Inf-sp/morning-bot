@@ -496,3 +496,18 @@ def test_my_day_on_trip_shows_the_dish_to_try_today():
         "try_dish": {"name": "Брай", "note": "Мясо на открытом огне"}}).text
     assert "🍽 Попробовать сегодня: Брай — мясо на открытом огне" in text
     assert "Попробовать" not in myday_ui.day_summary("Пт", "Алкмар").text  # дома строки нет
+
+
+def test_trip_period_from_city_and_dates_in_any_form():
+    today = date(2026, 10, 16)
+    split = vacation.split_city_and_period
+    assert split("Кейптаун, 20–27 октября", today) == ("Кейптаун", (date(2026, 10, 20), date(2026, 10, 27)))
+    assert split("Рим с 20 по 25 октября", today) == ("Рим", (date(2026, 10, 20), date(2026, 10, 25)))
+    assert split("Барселона на неделю с 5 ноября", today) == ("Барселона", (date(2026, 11, 5), date(2026, 11, 11)))
+    assert split("Рим 20 октября – 3 ноября", today) == ("Рим", (date(2026, 10, 20), date(2026, 11, 3)))
+    assert split("Лиссабон до 30 октября", today) == ("Лиссабон", (today, date(2026, 10, 30)))
+    assert split("Мадрид 1-5 января", today) == ("Мадрид", (date(2027, 1, 1), date(2027, 1, 5)))
+    assert split("Рим с 15 по 25 октября", today)[1] == (today, date(2026, 10, 25))  # поездка уже идёт
+    assert split("Кейптаун", today) == ("Кейптаун", None)
+    assert vacation.parse_period("с 1 по 30 марта и ещё месяц", today) is not None
+    assert vacation.parse_period("с 1 января по 1 мая", today) is None  # длиннее 60 дней

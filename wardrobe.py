@@ -447,6 +447,7 @@ def build_wardrobe_keyboard(cid=None):
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
         [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
         [("💳 Что докупить", "w_buy")],
+        [("🧳 Собрать чемодан", "w_pack")],  # дома — спросит, куда и когда едешь
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
     return _kb(rows)
@@ -812,6 +813,11 @@ async def send_wardrobe_zones(bot, cid, q=None):
             f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
         )])
+    import wardrobe_suitcase
+    saved = wardrobe_suitcase.saved_suitcase(cid)
+    if saved:  # подтверждённый чемодан в поездку — в «Мой шкаф»
+        place = saved["result"].get("place") or "поездка"
+        rows.append([InlineKeyboardButton(f"🧳 Чемодан · {place}", callback_data="w_pack_saved")])
     rows.append(nav_row("m_wardrobe"))
     msg = wardrobe_ui.wardrobe_home_screen(total)
     kb = InlineKeyboardMarkup(rows)

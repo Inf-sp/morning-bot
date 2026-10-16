@@ -488,29 +488,68 @@ def search_results(query, items):
 
 
 
-def suitcase_screen(data):
-    """«🧳 Чемодан · Кейптаун · 9 дней»: погода поездки, вещи шкафа по зонам («Футболки и рубашки: …»),
-    курсивом совет. Пустой data — кнопка вне отпуска."""
+def _trip_dates(start, end) -> str:
+    """«20–27 октября», «30 октября – 3 ноября»."""
+    from datetime import date
+    from util import _MONTHS
+    try:
+        first, last = date.fromisoformat(str(start)), date.fromisoformat(str(end))
+    except ValueError:
+        return ""
+    if first == last:
+        return f"{first.day} {_MONTHS[first.month - 1]}"
+    if first.month == last.month:
+        return f"{first.day}–{last.day} {_MONTHS[last.month - 1]}"
+    return f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
+
+
+def suitcase_screen(data, saved=False):
+    """«🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней»: погода поездки (дальше прогноза — «Обычно в эти дни»), вещи
+    шкафа по зонам («Футболки и рубашки: …»), курсивом совет. Пустой шкаф — базовый набор с пометкой; saved —
+    подтверждённый чемодан из «Мой шкаф»."""
+    data = data or {}
     b = MessageBuilder()
-    if not data:
-        b.title("🧳 Чемодан")
-        b.line("Собираю чемодан для поездки — включи «✈️ В отпуске» в Настройках.")
-        return b.build_stripped()
     days = int(data.get("days") or 0)
-    head = " · ".join(part for part in ("🧳 Чемодан", data.get("place"),
+    head = " · ".join(part for part in ("🧳 Чемодан", data.get("place"), _trip_dates(data.get("start"), data.get("end")),
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
+    if saved:
+        b.line("✅ Сохранён — открывается из «Мой шкаф».")
+        b.spacer()
     if data.get("weather"):
-        b.line(_upper_first(_finish_dot(data["weather"])))
+        weather = _finish_dot(data["weather"])
+        b.line(f"Обычно в эти дни: {weather}" if data.get("typical") else _upper_first(weather))
         b.spacer()
     groups = data.get("groups") or []
+    if data.get("basic") and groups:
+        b.line("В шкафу пока нет вещей — вот базовый набор под эту погоду:")
     for zone, names in groups:
         b.labeled_line(public_zone_name(zone), ", ".join(_lower_first(_clean_text(name)) for name in names),
                        lowercase=False)
     if not groups:
-        b.line("В шкафу пока нет вещей — добавь их в «Настроить шкаф», и я соберу чемодан.")
+        b.line("Под эту поездку из шкафа ничего не подошло — добавь вещи в «Настроить шкаф».")
     if str(data.get("tip") or "").strip():
         b.spacer()
         b.italic(_finish_dot(data["tip"]))
         b.newline()
+    return b.build_stripped()
+
+
+def suitcase_ask(not_understood=False):
+    """Вопрос перед сборкой чемодана дома: город и даты одной строкой."""
+    b = MessageBuilder()
+    b.title("🧳 Собрать чемодан")
+    if not_understood:
+        b.line("Не понял даты поездки.")
+        b.spacer()
+    b.line("Куда и когда едешь? Напиши город и даты — посмотрю погоду и соберу чемодан из твоего шкафа.")
+    b.spacer()
+    b.italic("Например: «Кейптаун, 20–27 октября» или «Барселона на неделю с 5 ноября».")
+    b.newline()
+    return b.build_stripped()
+
+
+def suitcase_city_not_found(city):
+    b = MessageBuilder()
+    b.line(f"Не нашёл город «{_clean_text(city)}». Напиши его ещё раз вместе с датами.")
     return b.build_stripped()

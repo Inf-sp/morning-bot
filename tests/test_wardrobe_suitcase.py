@@ -1,4 +1,6 @@
+import asyncio
 import os
+from datetime import date
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
@@ -18,18 +20,35 @@ CLOTHES = [
     ("Обувь", _item("Белые кеды")),
     ("Верхняя одежда", _item("Пуховик", (-20, 5))), ("Верхняя одежда", _item("Ветровка", (5, 26), rain_ok=True)),
 ]
+TRIP = {"city": "Кейптаун", "cc": "ZA", "lat": -33.9, "lon": 18.4, "start": "2026-10-20", "end": "2026-10-27"}
+
+
+class Bot:
+    def __init__(self):
+        self.sent = []
+
+    async def send_message(self, **kwargs):
+        self.sent.append(kwargs)
+
+
+def _memory_profile(monkeypatch):
+    profile = {}
+    monkeypatch.setattr(wardrobe_suitcase.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(wardrobe_suitcase.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+    return profile
 
 
 def test_ai_suitcase_keeps_only_real_wardrobe_items(monkeypatch):
-    monkeypatch.setattr(wardrobe_suitcase.ai, "llm_json",
-                        lambda *_a, **_k: {"items": [0, 2, 2, 99, "кроссовки", 4], "tip": "Вечером у океана прохладно"})
-    monkeypatch.setattr(wardrobe_suitcase.store, "get_settings", lambda _cid: {"city": "Кейптаун"})
-    monkeypatch.setattr(wardrobe_suitcase.vacation, "trip_weather_summary", lambda _cid: "")
+    prompts = []
+    monkeypatch.setattr(wardrobe_suitcase.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {
+        "items": [0, 2, 2, 99, "кроссовки", 4], "tip": "Вечером у океана прохладно"})
 
-    picked, tip = wardrobe_suitcase._ai_pick("42", CLOTHES, {}, 9)
+    picked, tip = wardrobe_suitcase._ai_pick("42", CLOTHES, TRIP, "", 8, avoid=["Пуховик"])
 
     assert picked == [0, 2, 4]  # несуществующий номер, повтор и придуманная вещь отброшены
     assert tip == "Вечером у океана прохладно"
+    assert "другой вариант" in prompts[0] and "2026-10-20 – 2026-10-27" in prompts[0]  # «Пересобрать»
 
 
 def test_rule_suitcase_fits_trip_weather_and_takes_rain_jacket():
@@ -40,33 +59,78 @@ def test_rule_suitcase_fits_trip_weather_and_takes_rain_jacket():
     assert {"Белая футболка", "Серая футболка", "Бежевые чиносы", "Джинсы", "Белые кеды"} <= set(names)
 
 
-def test_suitcase_screen_lists_wardrobe_by_zone_with_weather_and_tip():
-    msg = wardrobe_ui.suitcase_screen({
-        "place": "Кейптаун", "days": 9, "weather": "днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с",
-        "groups": [("Верх", ["Белая футболка", "Серая футболка"]), ("Верхняя одежда", ["Ветровка"])],
-        "tip": "Вечером у океана прохладно",
-    })
+def test_empty_wardrobe_gets_a_basic_set_for_the_trip_weather(monkeypatch):
+    monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: [])
+    monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 23, "tmax": 34, "rainy": 0,
+                                                                         "days": 8, "wind": 9, "typical": True})
 
-    assert msg.text == (
-        "🧳 Чемодан · Кейптаун · 9 дней\n\n"
-        "Днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с.\n\n"
-        "Футболки и рубашки: белая футболка, серая футболка\n"
-        "Куртки и ветровки: ветровка\n\n"
-        "Вечером у океана прохладно."
-    )
-    assert wardrobe_ui.suitcase_screen({}).text.startswith("🧳 Чемодан\n\n")
+    result = wardrobe_suitcase.pack("42", TRIP)
+
+    assert result["basic"] and result["days"] == 8 and result["typical"]
+    groups = dict(result["groups"])
+    assert groups["Верх"][0] == "футболки — 6" and "шорты — 2" in groups["Низ"] and "сандалии" in groups["Обувь"]
+    text = wardrobe_ui.suitcase_screen(result).text
+    assert text.startswith("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\nОбычно в эти дни: днём от +23°")
+    assert "В шкафу пока нет вещей — вот базовый набор под эту погоду:" in text
 
 
-def test_pack_button_only_on_vacation(monkeypatch):
+def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch):
+    import weather_location
+    profile = _memory_profile(monkeypatch)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "split_city_and_period",
+                        lambda text: ("Кейптаун", (date(2026, 10, 20), date(2026, 10, 27))) if "20" in text
+                        else (text, None))
+
+    async def geocode(name):
+        return {"latitude": -33.9, "longitude": 18.4, "name": "Кейптаун", "country_code": "za"}
+
+    monkeypatch.setattr(weather_location, "geocode", geocode)
+    monkeypatch.setattr(wardrobe_suitcase, "pack", lambda _cid, trip, avoid=(): {
+        "place": trip["city"], "start": trip["start"], "end": trip["end"], "days": 8,
+        "groups": [("Верх", ["Белая футболка"])], "avoid": list(avoid)})
+    bot = Bot()
+
+    asyncio.run(wardrobe_suitcase.send(bot, "42"))
+    assert wardrobe_suitcase.store.pending_input["42"] == "suitcase_trip"  # дома — сначала «Куда и когда?»
+    asyncio.run(wardrobe_suitcase.trip_entered(bot, "42", "Кейптаун когда-нибудь"))
+    assert bot.sent[-1]["text"].startswith("🧳 Собрать чемодан\n\nНе понял даты поездки.")
+    asyncio.run(wardrobe_suitcase.trip_entered(bot, "42", "Кейптаун, 20–27 октября"))
+
+    assert profile["suitcase_draft"]["trip"]["cc"] == "ZA" and "42" not in wardrobe_suitcase.store.pending_input
+    assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
+        ["w_pack_ok"], ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_again"))
+    assert profile["suitcase_draft"]["result"]["avoid"] == ["Белая футболка"]  # другой вариант, чем прошлый
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
+    assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
+    assert bot.sent[-1]["text"].startswith("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Сохранён")
+
+
+def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch):
+    profile = _memory_profile(monkeypatch)
+    profile["suitcase_saved"] = {"trip": TRIP, "result": {"place": "Кейптаун", "groups": [("Верх", ["Белая футболка"])]}}
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(wardrobe_suitcase, "vacation_trip", lambda _cid: {**TRIP, "start": "2026-10-21"})
+    monkeypatch.setattr(wardrobe_suitcase, "pack", lambda *_a: (_ for _ in ()).throw(AssertionError("rebuilt")))
+    bot = Bot()
+
+    asyncio.run(wardrobe_suitcase.send(bot, "42"))
+
+    assert "✅ Сохранён" in bot.sent[-1]["text"]  # собранный дома чемодан — без новой сборки
+    assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
+        ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+
+
+def test_pack_button_at_home_and_on_vacation(monkeypatch):
     def callbacks(markup):
         return [b.callback_data for row in markup.inline_keyboard for b in row]
 
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
-    assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard("42"))
+    assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[3] == "w_pack"  # дома — под «Что докупить»
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
     # В отпуске нет стилей и «Что докупить»: «Ещё вариант» — новый образ дня, ниже «Собрать чемодан».
     assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]
-    assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard())  # без чата — как дома
 
 
 def test_vacation_look_uses_only_packed_items_when_suitcase_has_a_full_outfit(monkeypatch):
@@ -75,16 +139,16 @@ def test_vacation_look_uses_only_packed_items_when_suitcase_has_a_full_outfit(mo
         "Низ": {"Джинсы": [{"name": "Джинсы"}, {"name": "Брюки"}]},
         "Обувь": {"Кеды": [{"name": "Белые кеды"}]},
     }}
-    profile = {"suitcase": {"key": "trip|abc", "result": {"groups": [
-        ["Верх", ["Белая футболка"]], ["Низ", ["Джинсы"]], ["Обувь", ["Белые кеды"]]]}}}
+    profile = _memory_profile(monkeypatch)
+    profile["suitcase_saved"] = {"trip": TRIP, "result": {"groups": [
+        ["Верх", ["Белая футболка"]], ["Низ", ["Джинсы"]], ["Обувь", ["Белые кеды"]]]}}
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
-    monkeypatch.setattr(wardrobe_suitcase.vacation, "trip_key", lambda _cid: "trip")
-    monkeypatch.setattr(wardrobe_suitcase.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(wardrobe_suitcase, "vacation_trip", lambda _cid: TRIP)
 
     packed = wardrobe_suitcase.packed_wardrobe("42", wardrobe_data)
     assert packed["zones"]["Верх"]["Футболки"] == [{"name": "Белая футболка"}]  # только из чемодана
 
-    profile["suitcase"]["result"]["groups"] = [["Верх", ["Белая футболка"]]]  # нет низа и обуви
+    profile["suitcase_saved"]["result"]["groups"] = [["Верх", ["Белая футболка"]]]  # нет низа и обуви
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
-    profile["suitcase"]["key"] = "other-trip|abc"  # чемодан прошлой поездки не в счёт
+    profile["suitcase_saved"]["trip"] = {**TRIP, "cc": "ES"}  # чемодан другой страны не в счёт
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data

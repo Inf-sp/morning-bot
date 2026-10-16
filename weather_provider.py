@@ -490,6 +490,41 @@ def _fetch_open_meteo(lat, lon):
     }
 
 
+_OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+_FORECAST_HORIZON_DAYS = 15  # Open-Meteo даёт прогноз на 16 дней вперёд, включая сегодня
+
+
+def period_weather(lat, lon, start, end, today) -> dict:
+    """Дневная погода поездки: {tmin, tmax, rainy, days, wind, typical}. Поездка в ближайшие 16 дней — прогноз
+    Open-Meteo (дальше горизонта — обрезается); позже — фактическая погода тех же дней год назад (архив,
+    typical=True: «обычно в эти дни»). Без ключа; сбой — исключение."""
+    from datetime import timedelta
+    typical = start > today + timedelta(days=_FORECAST_HORIZON_DAYS)
+    if typical:
+        first, last = start.replace(year=start.year - 1), end.replace(year=end.year - 1)
+        url, daily = _OPEN_METEO_ARCHIVE_URL, ("temperature_2m_max", "precipitation_sum", "windspeed_10m_max")
+    else:
+        first, last = start, min(end, today + timedelta(days=_FORECAST_HORIZON_DAYS))
+        url, daily = _OPEN_METEO_URL, ("temperature_2m_max", "precipitation_probability_max", "precipitation_sum",
+                                       "windspeed_10m_max")
+    response = requests.get(url, timeout=max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(12)), params={
+        "latitude": lat, "longitude": lon, "timezone": "auto", "wind_speed_unit": "ms", "daily": ",".join(daily),
+        "start_date": first.isoformat(), "end_date": last.isoformat(),
+    })
+    response.raise_for_status()
+    rows = (response.json() or {}).get("daily") or {}
+    highs = [value for value in rows.get("temperature_2m_max") or [] if value is not None]
+    if not highs:
+        raise ValueError("open-meteo: empty period")
+    count = len(rows.get("time") or highs)
+    chance, rain_mm = rows.get("precipitation_probability_max") or [], rows.get("precipitation_sum") or []
+    rainy = sum(1 for index in range(count)
+                if (index < len(chance) and (chance[index] or 0) >= 50)
+                or (typical and index < len(rain_mm) and (rain_mm[index] or 0) >= 1))
+    return {"tmin": round(min(highs)), "tmax": round(max(highs)), "rainy": rainy, "days": count,
+            "wind": round(max((value or 0) for value in rows.get("windspeed_10m_max") or [0])), "typical": typical}
+
+
 def _fallback_weather(key, cache_key, lat, lon, error):
     """OpenWeather недоступен или лимит исчерпан: сегодняшний кэш, затем Open-Meteo; иначе — исходная ошибка."""
     stale = _weather_cache_get(key, cache_key, max_age=_WX_STALE_TTL)

@@ -324,6 +324,7 @@ def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
         ["Повседневный", "Классический"],  # вместо «Новый образ» — две группы стиля
         ["💳 Что докупить"],
+        ["🧳 Собрать чемодан"],  # дома — спросит город и даты поездки
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
     assert [b.callback_data for b in wardrobe.build_wardrobe_keyboard().inline_keyboard[0]] == [

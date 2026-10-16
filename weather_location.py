@@ -15,8 +15,12 @@ from ui import weather as weather_ui
 _log = logging.getLogger(__name__)
 
 
-async def set_city_text(bot, cid, name, show_brief=True, announce=True, retry_kind="setcity"):
-    """Город по названию; True — сохранён. retry_kind — что ждать после «не нашёл»."""
+async def geocode(name) -> dict | None:
+    """Город по названию без смены настроек: {latitude, longitude, name, country, country_code} или None.
+
+    Варианты написания и официальное название (Питер → Санкт-Петербург, AI), затем OpenWeather и Nominatim.
+    Нужен и смене города, и чемодану в поездку.
+    """
     import re as _re
     raw = (name or "").strip()
     q = _re.sub(r"\s*-\s*", "-", raw)
@@ -38,59 +42,67 @@ async def set_city_text(bot, cid, name, show_brief=True, announce=True, retry_ki
         if official and official.lower() not in {value.lower() for value in variants}:
             variants.insert(0, official)
     except Exception:
-        _log.debug("set_city_text: ignored error", exc_info=True)
-    try:
-        result = None
+        _log.debug("geocode: ignored error", exc_info=True)
+    result = None
+    for value in variants:
+        if not config.WEATHER_API_KEY:
+            break
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                "https://api.openweathermap.org/geo/1.0/direct",
+                params={"q": value, "limit": 5, "appid": config.WEATHER_API_KEY},
+                timeout=20,
+            )
+            rows = response.json()
+        except Exception:
+            rows = []
+        if rows:
+            item = rows[0]
+            country_code = (item.get("country") or "").upper()
+            result = [{
+                "latitude": float(item["lat"]),
+                "longitude": float(item["lon"]),
+                "name": item.get("local_names", {}).get("ru") or item.get("name") or value,
+                "country": item.get("country") or "",
+                "country_code": country_code.lower(),
+            }]
+            break
+    if not result:
         for value in variants:
-            if not config.WEATHER_API_KEY:
-                break
             try:
                 response = await asyncio.to_thread(
                     requests.get,
-                    "https://api.openweathermap.org/geo/1.0/direct",
-                    params={"q": value, "limit": 5, "appid": config.WEATHER_API_KEY},
-                    timeout=20,
+                    "https://nominatim.openstreetmap.org/search",
+                    params={
+                        "q": value, "format": "json", "limit": 1,
+                        "accept-language": "ru",
+                    },
+                    headers={"User-Agent": "DM-bot"}, timeout=20,
                 )
                 rows = response.json()
             except Exception:
                 rows = []
             if rows:
                 item = rows[0]
-                country_code = (item.get("country") or "").upper()
+                display = item.get("display_name", value).split(",")
                 result = [{
                     "latitude": float(item["lat"]),
                     "longitude": float(item["lon"]),
-                    "name": item.get("local_names", {}).get("ru") or item.get("name") or value,
-                    "country": item.get("country") or "",
-                    "country_code": country_code.lower(),
+                    "name": display[0].strip(),
+                    "country": display[-1].strip(),
+                    "country_code": "",
                 }]
                 break
-        if not result:
-            for value in variants:
-                try:
-                    response = await asyncio.to_thread(
-                        requests.get,
-                        "https://nominatim.openstreetmap.org/search",
-                        params={
-                            "q": value, "format": "json", "limit": 1,
-                            "accept-language": "ru",
-                        },
-                        headers={"User-Agent": "DM-bot"}, timeout=20,
-                    )
-                    rows = response.json()
-                except Exception:
-                    rows = []
-                if rows:
-                    item = rows[0]
-                    display = item.get("display_name", value).split(",")
-                    result = [{
-                        "latitude": float(item["lat"]),
-                        "longitude": float(item["lon"]),
-                        "name": display[0].strip(),
-                        "country": display[-1].strip(),
-                        "country_code": "",
-                    }]
-                    break
+    return result[0] if result else None
+
+
+async def set_city_text(bot, cid, name, show_brief=True, announce=True, retry_kind="setcity"):
+    """Город по названию; True — сохранён. retry_kind — что ждать после «не нашёл»."""
+    raw = (name or "").strip()
+    try:
+        found = await geocode(raw)
+        result = [found] if found else None
         if not result:
             store.pending_input[str(cid)] = retry_kind
             msg = weather_ui.city_not_found(raw)

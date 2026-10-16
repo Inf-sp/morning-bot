@@ -57,6 +57,29 @@ def _month_number(word):
     return 0
 
 
+def _match_value(match, today):
+    """Одно совпадение _DATE_RE: ("date", день) — дата (прошедшая без года — в следующем году) или ("days", N) —
+    срок; не дата — None."""
+    if match["iso"]:
+        return "date", date.fromisoformat(match["iso"])
+    if match["dm"]:
+        year = int(match["yy"]) if match["yy"] else today.year
+        year += 2000 if year < 100 else 0
+        day = date(year, int(match["mm"]), int(match["dm"]))
+        return "date", day.replace(year=year + 1) if not match["yy"] and day < today else day
+    if match["d"]:
+        month = _month_number(match["month"])
+        if not month:
+            return None
+        day = date(int(match["y"] or today.year), month, int(match["d"]))
+        return "date", day.replace(year=day.year + 1) if not match["y"] and day < today else day
+    if match["n"]:
+        count = int(match["n"])
+        return "days", count * 7 if match["unit"].casefold().startswith("нед") else count
+    word = match["word"].casefold()
+    return "days", 30 if word == "месяц" else 14 if "две" in word else 7
+
+
 def parse_until(text, today=None):
     """Дата возвращения из текста: «до 20 октября», «20.10», «2026-10-20», «на неделю», «на 5 дней».
 
@@ -67,33 +90,69 @@ def parse_until(text, today=None):
     found = None
     for match in _DATE_RE.finditer(str(text or "")):
         try:
-            if match["iso"]:
-                day = date.fromisoformat(match["iso"])
-            elif match["dm"]:
-                year = int(match["yy"]) if match["yy"] else today.year
-                year += 2000 if year < 100 else 0
-                day = date(year, int(match["mm"]), int(match["dm"]))
-                if not match["yy"] and day < today:
-                    day = day.replace(year=year + 1)
-            elif match["d"]:
-                month = _month_number(match["month"])
-                if not month:
-                    continue
-                day = date(int(match["y"] or today.year), month, int(match["d"]))
-                if not match["y"] and day < today:
-                    day = day.replace(year=day.year + 1)
-            elif match["n"]:
-                count = int(match["n"])
-                day = today + timedelta(days=count * 7 if match["unit"].casefold().startswith("нед") else count)
-            else:
-                word = match["word"].casefold()
-                day = today + timedelta(days=30 if word == "месяц" else 14 if "две" in word else 7)
+            value = _match_value(match, today)
         except ValueError:
             continue
-        found = day
+        if value:
+            found = value[1] if value[0] == "date" else today + timedelta(days=value[1])
     if found is None or not today < found <= today + timedelta(days=366):
         return None
     return found
+
+
+# «20–27 октября», «с 15 по 25 октября» → «20 октября – 27 октября»: у первого дня месяц не написан.
+_RANGE_RE = re.compile(r"(\d{1,2})\s*(?:[–—-]|\bпо\b)\s*(\d{1,2})\s+([а-яё]+)", re.IGNORECASE)
+_TRIP_DAYS_DEFAULT, _TRIP_DAYS_MAX = 7, 60
+
+
+def parse_period(text, today=None):
+    """Даты поездки: (первый день, последний день) или None.
+
+    «20–27 октября», «с 20 по 27 октября», «20.10–27.10» — обе даты; «на неделю с 5 ноября» — начало и срок;
+    «до 27 октября» — с сегодня; только срок — с сегодня; одна дата — неделя с неё. Прошедшая дата без года —
+    в следующем году; поездка не в прошлом, не дальше года и не длиннее 60 дней.
+    """
+    today = today or datetime.now(config.TZ).date()
+    text = _RANGE_RE.sub(r"\1 \3 – \2 \3", str(text or ""))
+    dates, days = [], 0
+    for match in _DATE_RE.finditer(text):
+        try:
+            value = _match_value(match, today)
+        except ValueError:
+            continue
+        if value and value[0] == "date":
+            dates.append(value[1])
+        elif value:
+            days = value[1]
+    if len(dates) >= 2:
+        start, end = dates[0], dates[-1]
+    elif dates and days:
+        start, end = dates[0], dates[0] + timedelta(days=days - 1)
+    elif dates and re.search(r"\b(?:до|по)\s+\S*\d", text, re.IGNORECASE):
+        start, end = today, dates[0]
+    elif dates:
+        start, end = dates[0], dates[0] + timedelta(days=_TRIP_DAYS_DEFAULT - 1)
+    elif days:
+        start, end = today, today + timedelta(days=days - 1)
+    else:
+        return None
+    if start > end:  # «с 14 по 20 октября» 16-го: прошедшее начало ушло в следующий год — поездка уже идёт
+        start = start.replace(year=end.year)
+    start = max(start, today)
+    if not start <= end <= today + timedelta(days=366) or (end - start).days >= _TRIP_DAYS_MAX:
+        return None
+    return start, end
+
+
+def split_city_and_period(text, today=None):
+    """«Кейптаун, 20–27 октября» → («Кейптаун», (20 окт, 27 окт)); без дат — (текст, None)."""
+    period = parse_period(text, today)
+    if period is None:
+        return " ".join(str(text or "").split()), None
+    city = _DATE_RE.sub(" ", _RANGE_RE.sub(r"\1 \3 – \2 \3", str(text)))
+    for _ in range(4):
+        city = _DATE_GLUE_RE.sub("", city.strip())
+    return " ".join(city.split()).strip(" ,.–—-") or str(text).strip(), period
 
 
 def split_city_and_until(text, today=None):
