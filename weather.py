@@ -424,12 +424,13 @@ def forecast_periods(data, now, day=0):
     return periods
 
 
-def _period_line(period) -> str:
-    """«🌧️ Днём: до +18°C · Дождь 70% · Ветер 3–5 м/с» — строка части суток в прогнозе на завтра."""
+def _period_lines(period) -> list[str]:
+    """Блок части суток в прогнозе на завтра: «🌧️ Днём», ниже «· Температура до +18°C», «· Дождь 70%»,
+    «· Ветер 3–5 м/с» — каждое с новой строки."""
     rain = f"Дождь {period['rain']:.0f}%" if _rain_real(period["rain"], period["rain_mm"]) else "Без дождя"
     wind = "Сильный ветер" if max(period["winds"], default=0) > 10 else "Ветер"
-    return (f"{period['icon']} {period['label']}: до {period['tmax']:+.0f}°C · {rain} · "
-            f"{wind} {_speed_range(period['winds'])} м/с")
+    return [f"{period['icon']} {period['label']}", f"· Температура до {period['tmax']:+.0f}°C", f"· {rain}",
+            f"· {wind} {_speed_range(period['winds'])} м/с"]
 
 
 def today_outlook(data, now):
@@ -592,8 +593,10 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
                             _mean(_daytime_values(data, day_str, "cloudcover")))
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
-        # Утро, день и вечер отдельными строками; без почасовых данных — одна общая строка. Метео-итога нет.
-        main_lines = [_period_line(p) for p in forecast_periods(data, now, day=1)] \
+        # Утро, день и вечер — блоками через пустую строку ("" в списке — отступ); без почасовых данных — одна
+        # общая строка. Метео-итога нет.
+        blocks = [_period_lines(p) for p in forecast_periods(data, now, day=1)]
+        main_lines = [line for index, block in enumerate(blocks) for line in ([""] if index else []) + block] \
             or [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
         msg = weather_ui.day_forecast(header, main_lines, alert=alert)
         await bot.send_message(

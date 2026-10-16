@@ -63,10 +63,10 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки", "⚠️ Ошибки"], ["💾 Прислать копию базы", "🔁 Перезапустить бота"],
+        ["🔄 Обновить карточки"], ["💾 Прислать копию базы", "🔁 Перезапустить бота"],
         ["👥 Пользователи"], ["#️⃣ Главная"],
     ]
-    assert markup[0][1].callback_data == "adm_logs"
+    assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок на экране нет
 
 
 def test_admin_card_refresh_menu_has_all_cards():

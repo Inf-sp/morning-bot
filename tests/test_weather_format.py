@@ -169,12 +169,12 @@ def test_tomorrow_forecast_is_split_into_morning_day_and_evening():
     }
     late_evening = datetime(2026, 10, 15, 21, 0, tzinfo=weather.TZ)  # рассылка накануне вечером
 
-    lines = [weather._period_line(p) for p in weather.forecast_periods(data, late_evening, day=1)]
+    blocks = [weather._period_lines(p) for p in weather.forecast_periods(data, late_evening, day=1)]
 
-    assert [line.split(":")[0].split(" ", 1)[1] for line in lines] == ["Утром", "Днём", "Вечером"]  # весь день
-    assert lines[0].endswith("Утром: до +14°C · Без дождя · Ветер 3–5 м/с")
-    assert lines[1].endswith("Днём: до +18°C · Дождь 70% · Сильный ветер 11 м/с")
-    assert lines[2].endswith("Вечером: до +15°C · Без дождя · Ветер 4 м/с")
+    assert [block[0].split(" ", 1)[1] for block in blocks] == ["Утром", "Днём", "Вечером"]  # весь день
+    assert blocks[0][1:] == ["· Температура до +14°C", "· Без дождя", "· Ветер 3–5 м/с"]
+    assert blocks[1][1:] == ["· Температура до +18°C", "· Дождь 70%", "· Сильный ветер 11 м/с"]
+    assert blocks[2][1:] == ["· Температура до +15°C", "· Без дождя", "· Ветер 4 м/с"]
     assert weather.forecast_periods(data, late_evening, day=2) == []  # нет данных на этот день
 
 
@@ -483,9 +483,11 @@ def test_tomorrow_notification_has_city_country_flag_and_three_periods(monkeypat
     asyncio.run(weather.send_weather(RecordingBot(sent), "42", "tomorrow_plain"))
 
     lines = sent[0]["text"].split("\n")
-    assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0]
-    assert [line.split(":")[0].split(" ", 1)[1] for line in lines[2:5]] == ["Утром", "Днём", "Вечером"]
-    assert len(lines) == 5 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога
+    assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0] and lines[1] == ""
+    # Каждая часть суток — заголовок и три строки с «·», между частями — пустая строка.
+    assert [line.split(" ", 1)[1] for line in (lines[2], lines[7], lines[12])] == ["Утром", "Днём", "Вечером"]
+    assert lines[3:7] == ["· Температура до +12°C", "· Без дождя", "· Ветер 3 м/с", ""]
+    assert len(lines) == 16 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога
 
 
 def test_period_weather_uses_forecast_soon_and_last_year_later(monkeypatch):

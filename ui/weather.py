@@ -87,7 +87,10 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
     b.section(header)
     b.newline()
     for line in main_lines or []:
-        b.line(line)
+        if line:
+            b.line(line)
+        else:
+            b.spacer()  # пустая строка между частями суток
     if alert:
         b.embed(from_html(alert))
     elif fact:
