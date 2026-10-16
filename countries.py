@@ -377,7 +377,7 @@ def _artist_summary(name) -> str:
 
 
 def artist_summary(name, fetch=True) -> str:
-    """Описание артиста для карточки без AI (из чарта): кэш на месяц, сбой не кэшируется; нет данных — ""."""
+    """Описание артиста для карточки без AI (резерв «Музыки»): кэш на месяц, сбой не кэшируется; нет данных — ""."""
     return _person_cache(config.ARTIST_SUMMARY_KEY, _full_name(name), _artist_summary, fetch, ttl=_SUMMARY_TTL)
 
 

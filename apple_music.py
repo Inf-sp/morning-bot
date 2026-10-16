@@ -122,6 +122,16 @@ def top_tracks(artist, limit=3) -> list[str]:
     return [" ".join(str(row.get("title") or "").split()) for row in tracks if row.get("title")][:limit]
 
 
+def related_artists(artist, limit=20) -> list[dict]:
+    """Похожие артисты Deezer (без ключа): [{"name", "fans"}]; нет точного совпадения имени — []; сбой — исключение."""
+    found = _deezer_artist(artist)
+    if not found:
+        return []
+    rows = _deezer_json(f"artist/{int(found['id'])}/related", {"limit": limit}).get("data") or []
+    return [{"name": " ".join(str(row["name"]).split()), "fans": int(row.get("nb_fan") or 0)}
+            for row in rows if row.get("name")]
+
+
 # Типы релизов Deezer → подпись в «Новой музыке»; сборники (compile) — не новый релиз.
 _RECORD_TYPES = {"album": "", "ep": "EP", "single": "сингл"}
 

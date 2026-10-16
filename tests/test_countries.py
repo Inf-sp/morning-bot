@@ -235,7 +235,7 @@ def test_article_intro_keeps_two_sentences(monkeypatch):
             pass
 
         def json(self):
-            return {"extract": "Chase & Status — британский дуэт. Образован в 2003 году. Выпустил четыре альбома."}
+            return {"extract": "Chase & Sta\u0301tus — британский дуэт. Образован в 2003 году. Выпустил четыре альбома."}
 
     monkeypatch.setattr(wikidata_books.requests, "get", lambda url, **_kwargs: Response())
 

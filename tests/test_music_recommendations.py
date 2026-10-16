@@ -1,5 +1,7 @@
 import os
 import asyncio
+
+import pytest
 from datetime import date, timedelta
 
 from telegram import MessageEntity
@@ -276,8 +278,10 @@ def test_music_task_returns_a_usable_track(monkeypatch):
 
 
 
-def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_are_exhausted(monkeypatch):
+def test_music_falls_back_to_a_popular_related_artist_with_full_card_when_ai_and_local_lists_are_exhausted(
+        monkeypatch):
     import apple_music
+    import countries
     calls = []
     every_local = [item["artist"] for items in leisure_music._LOCAL_ARTIST_FALLBACKS.values() for item in items]
 
@@ -299,24 +303,36 @@ def test_music_falls_back_to_a_real_new_release_artist_when_ai_and_local_lists_a
     monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {})
     monkeypatch.setattr(leisure_music.store, "mutate_kv", lambda _key, change: change({})[1])
     monkeypatch.setattr(leisure_music.recommendation_stoplist, "values", lambda *_args: every_local)
-    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["indie", "electronic"])
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["electronic"])
     monkeypatch.setattr(leisure_music, "_with_country", same)
     monkeypatch.setattr(leisure_music, "_attach_track_links", same)
     monkeypatch.setattr(leisure_music, "_deliver_artist_card",
                         lambda _bot, _cid, msg, _kb, status: status.replace(msg.text))
-    monkeypatch.setattr(apple_music, "new_releases", lambda genre, _cc: [
-        {"title": "Bleeds", "artist": "Wednesday", "date": "2026-10-09", "url": "https://music.example/a"},
-    ] if genre == "electronic" else [])
-    import countries
-    monkeypatch.setattr(countries, "artist_summary",
-                        lambda name, fetch=True: "Wednesday — американская инди-рок-группа из Эшвилла.")
+    monkeypatch.setattr(apple_music, "new_releases", lambda *_a: pytest.fail("new releases are for Premieres only"))
+    monkeypatch.setattr(apple_music, "related_artists", lambda _seed: [
+        {"name": "Tiny Act", "fans": 900},  # без заметной аудитории — не «популярная группа»
+        {"name": "No Wiki Star", "fans": 2_000_000},  # без описания — сжатая карточка, пропускаем
+        {"name": "Glass Harbor", "fans": 900_000},
+    ])
+    monkeypatch.setattr(apple_music, "top_tracks", lambda name: ["Delilah", "Jungle", "Marea"])
+    monkeypatch.setattr(countries, "artist_summary", lambda name, fetch=True:
+                        "Glass Harbor — британский электронный дуэт." if name == "Glass Harbor" else "")
 
     asyncio.run(leisure_music.send_listen(object(), "42", force=True, status=Status()))
 
-    assert calls and "Не удалось подобрать" not in calls[0]
-    assert "Wednesday" in calls[0] and "Свежий альбом «Bleeds» вышел 9 октября." in calls[0]
-    assert "американская инди-рок-группа из Эшвилла" in calls[0]
+    assert calls and "Glass Harbor" in calls[0]
+    assert "британский электронный дуэт" in calls[0] and "Delilah" in calls[0]
+    assert "Свежий альбом" not in calls[0] and "No Wiki Star" not in calls[0]
 
+
+def test_cached_artist_card_without_description_is_picked_again(monkeypatch):
+    today = leisure_music.datetime.now(leisure_music.config.TZ).date().isoformat()
+    entry = {"date": today, "styles": ["electronic"], "item": {"artist": "The Avalanches", "fact": "Свежий альбом"}}
+    monkeypatch.setattr(leisure_music.store, "_load", lambda *_args: {"42": entry})
+    monkeypatch.setattr(leisure_music, "_music_styles", lambda _cid: ["electronic"])
+
+    assert leisure_music._cached_artist("42") is None
+    assert leisure_music._cached_artist("42", stale=True) is None
 
 def test_music_premieres_and_novelty_link_to_youtube_music():
     album = {"title": "Blue Rev", "artist": "Alvvays", "url": "https://music.apple.com/nl/album/1"}

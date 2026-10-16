@@ -471,10 +471,10 @@ def test_night_line_lists_failed_sections_and_reserve_artist(monkeypatch):
     bot_maintenance._night_failed(night, "leisure", "42")
     bot_maintenance._night_failed(night, "cooking", "42")
     bot_maintenance._save_night(night)
-    _put(admin.config.MUSIC_RECO_CACHE_KEY, {"42": {"item": {"artist": "Tinashe", "source": "chart"}}})
+    _put(admin.config.MUSIC_RECO_CACHE_KEY, {"42": {"item": {"artist": "Kehlani", "source": "related"}}})
 
     assert admin.night_line("42") == (
-        "🌙 Ночь: не собралось — Кухня, Досуг (концерты) · артист дня — из чарта, без AI"
+        "🌙 Ночь: не собралось — Кухня, Досуг (концерты) · артист дня — похожий на артистов твоих жанров, без AI"
     )
 
 

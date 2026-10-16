@@ -168,7 +168,8 @@ _NIGHT_SECTIONS = (
     ("wardrobe", "Гардероб"), ("cooking", "Кухня"), ("learning", "Обучение"),
     ("leisure", "Досуг"), ("myday", "Мой день"),
 )
-_ARTIST_SOURCES = {"local": "артист дня — из запасного списка", "chart": "артист дня — из чарта, без AI"}
+_ARTIST_SOURCES = {"local": "артист дня — из запасного списка",
+                   "related": "артист дня — похожий на артистов твоих жанров, без AI"}
 
 
 def night_line(cid):

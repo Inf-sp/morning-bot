@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -258,8 +258,8 @@ def _cached_artist(cid, stale=False):
     item = entry.get("item")
     styles = sorted(_music_styles(cid))
     if (not util.reco_date_ok(entry.get("date"), stale) or entry.get("styles") != styles
-            or not isinstance(item, dict)):
-        return None
+            or not isinstance(item, dict) or not str(item.get("desc") or "").strip()):
+        return None  # карточка без описания (старый резерв из свежих релизов) — сжатая, подбираем заново
     return dict(item)
 
 
@@ -709,7 +709,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
         data = next((found for style in selected_styles
                      if (found := _local_artist_fallback(hard_blocked, {"value": style}, recent=recent))), None)
     if not data or not data.get("artist"):
-        data = await _release_artist(cid, sorted(allowed_genres), known)
+        data = await _related_artist(sorted(allowed_genres), known)
     if (not data or not data.get("artist")) and not category:
         stale = _cached_artist(cid, stale=True)  # AI и резерв не дали нового — последний артист недели
         if stale and str(stale.get("artist") or "").lower() not in hard_blocked:
@@ -774,8 +774,8 @@ async def _most_popular(candidates):
     return max(ranked, key=lambda row: row[:2])[2] if ranked else None
 
 
-# Описание из Википедии — до 4 запросов с паузами MusicBrainz и Wikidata; не дождались — карточка без него,
-# а поток дописывает кэш, и следующий показ берёт описание сразу.
+# Описание из Википедии — до 4 запросов с паузами MusicBrainz и Wikidata; не дождались — берём следующего
+# кандидата, а поток дописывает кэш, и в следующий раз описание есть сразу.
 _SUMMARY_WAIT_SECONDS = 8
 
 
@@ -783,32 +783,41 @@ async def _bounded(coro, default, seconds):
     try:
         return await asyncio.wait_for(coro, seconds)
     except Exception:
-        _log.debug("send_listen: chart card detail unavailable", exc_info=True)
+        _log.debug("send_listen: reserve card detail unavailable", exc_info=True)
         return default
 
 
-async def _release_artist(cid, genres, known):
-    """Резерв без AI: реальный артист из свежих альбомов жанров (Apple Music, иначе Deezer) — не из любимых,
-    не скрытый и не показанный недавно, без DJ-миксов."""
+_POPULAR_FANS = 50_000  # «популярные группы»: похожий артист без заметной аудитории на Deezer в резерв не идёт
+_RELATED_SEEDS = 4  # проверенных артистов жанра, чьих «похожих» смотрим (2 запроса к Deezer на каждого)
+_CARD_TRACKS = 3
+_RELATED_TRIES = 3  # самых популярных кандидатов, для которых ищем описание (до _SUMMARY_WAIT_SECONDS каждый)
+
+
+async def _related_artist(genres, known):
+    """Резерв без AI: популярный артист, похожий (Deezer related) на проверенных артистов выбранных жанров, — не из
+    любимых, не скрытый и не показанный недавно. Только с описанием из Википедии и треками: сжатой карточки нет.
+    Новые релизы сюда не попадают — они в «Премьерах»."""
     import apple_music
     import countries
-    cc = (store.get_settings(cid).get("cc") or "NL").lower()
-    for genre in genres:
-        try:
-            releases = await asyncio.to_thread(apple_music.new_releases, genre, cc)
-        except Exception:
-            _log.warning("send_listen: releases unavailable genre=%s", genre, exc_info=True)
-            continue
-        for item in releases:
-            if item["artist"].lower() not in known:
-                released = date.fromisoformat(item["date"])
-                # Без AI карточка не пустая: описание из Википедии, реальные популярные треки и факт о свежем альбоме.
-                tracks, desc = await asyncio.gather(
-                    _bounded(asyncio.to_thread(apple_music.top_tracks, item["artist"]), [], 6),
-                    _bounded(asyncio.to_thread(countries.artist_summary, item["artist"]), "", _SUMMARY_WAIT_SECONDS),
-                )
-                return {"artist": item["artist"], "genre": genre, "tracks": tracks, "desc": desc, "source": "chart",
-                        "fact": f"Свежий альбом «{item['title']}» вышел {released.day} {util._MONTHS[released.month - 1]}."}
+    seeds = [(item["artist"], genre) for genre in genres for item in _LOCAL_ARTIST_FALLBACKS.get(genre, [])]
+    if not seeds:
+        return None
+    shift = datetime.now(config.TZ).timetuple().tm_yday % len(seeds)  # каждый день — другие «соседи»
+    pool = {}
+    for seed, genre in (seeds[shift:] + seeds[:shift])[:_RELATED_SEEDS]:
+        related = await _bounded(asyncio.to_thread(apple_music.related_artists, seed), [], 8)
+        for row in related:
+            key = row["name"].lower()
+            if key not in known and key not in pool and row["fans"] >= _POPULAR_FANS:
+                pool[key] = {**row, "genre": genre}
+    for row in sorted(pool.values(), key=lambda row: -row["fans"])[:_RELATED_TRIES]:
+        tracks, desc = await asyncio.gather(
+            _bounded(asyncio.to_thread(apple_music.top_tracks, row["name"]), [], 6),
+            _bounded(asyncio.to_thread(countries.artist_summary, row["name"]), "", _SUMMARY_WAIT_SECONDS),
+        )
+        if desc and len(tracks) >= _CARD_TRACKS:  # «С чего начать» — три трека, иначе карточка сжатая
+            return {"artist": row["name"], "genre": row["genre"], "tracks": tracks, "desc": desc,
+                    "source": "related"}
     return None
 
 

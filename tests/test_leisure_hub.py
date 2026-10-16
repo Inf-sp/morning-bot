@@ -542,7 +542,8 @@ def test_day_cards_stay_a_week_as_reserve_when_refresh_fails(monkeypatch):
     monkeypatch.setattr(leisure_hub.leisure_music, "_music_styles", lambda _cid: ["indie"])
     for age, expected in ((3, "Wolf Alice"), (config.RECO_STALE_DAYS, None)):
         memory[config.MUSIC_RECO_CACHE_KEY] = {"42": {
-            "date": (today - timedelta(days=age)).isoformat(), "styles": ["indie"], "item": {"artist": "Wolf Alice"}}}
+            "date": (today - timedelta(days=age)).isoformat(), "styles": ["indie"], "item": {"artist": "Wolf Alice",
+                                                                   "desc": "Британская альт-рок-группа."}}}
         assert leisure_hub.leisure_music._cached_artist("42") is None  # не сегодняшний — прогрев соберёт новый
         assert (leisure_hub.leisure_music._cached_artist("42", stale=True) or {}).get("artist") == expected
 

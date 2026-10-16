@@ -112,5 +112,6 @@ def article_intro(lang, title, sentences=2) -> str:
     response = requests.get(f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
                             headers=_HEADERS, timeout=_TIMEOUT_SECONDS)
     response.raise_for_status()
-    extract = " ".join(str(response.json().get("extract") or "").split())
+    # Знаки ударения русской Википедии («Уи́ллоу») в карточке не нужны.
+    extract = " ".join(str(response.json().get("extract") or "").replace("\u0301", "").split())
     return " ".join(_SENTENCE_END.split(extract)[:sentences])
