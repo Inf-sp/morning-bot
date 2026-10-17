@@ -53,7 +53,7 @@ def test_alert_card_is_russian_with_section_cause_and_time():
                                              "cause": "неисправный поезд", "situation": "меньше поездов",
                                              "extra": "до 30 минут дольше в пути"}).text
 
-    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal: меньше поездов\n\n"
+    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal\n\nМеньше поездов\n\n"
                     "Причина: Неисправный поезд.\n\nОжидается до 18:30 · до 30 минут дольше в пути")
 
 
@@ -97,7 +97,7 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
     assert bot.sent[-1]["text"].startswith(
-        "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal: поезда снова ходят.")
+        "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal\n\nПоезда снова ходят.")
     assert "\n\nПричина: Defecte trein." in bot.sent[-1]["text"]
     assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
@@ -243,6 +243,6 @@ def test_restored_card_has_blocks_with_bold_route_and_cause():
     bold = [message.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
             for e in message.entities if e.type == "bold"]
 
-    assert message.text == ("✅ Движение восстановлено\n\nAlkmaar - Den Helder: поезда снова ходят.\n\n"
+    assert message.text == ("✅ Движение восстановлено\n\nAlkmaar - Den Helder\n\nПоезда снова ходят.\n\n"
                             "Причина: Неисправный железнодорожный мост.\n\nСбой длился с 08:29 до 11:47")
-    assert bold == ["✅ Движение восстановлено", "Alkmaar - Den Helder:", "Причина:"]
+    assert bold == ["✅ Движение восстановлено", "Alkmaar - Den Helder", "Причина:"]

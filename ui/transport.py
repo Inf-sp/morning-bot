@@ -20,9 +20,13 @@ def _mentions(text, phrase, *, min_len) -> bool:
 
 
 def _route_line(b, route, text):
-    """«**Alkmaar – Den Helder:** текст» — участок жирным."""
-    b.bold(f"{route}:")
-    b.line(f" {text}")
+    """Участок жирным отдельной строкой («**Amsterdam Sloterdijk - Hoorn Kersenboogerd**»), через пустую строку —
+    что случилось, с заглавной: длинное название участка не сливается с причиной."""
+    b.bold(route)
+    b.newline()
+    b.spacer()
+    text = str(text or "").strip()
+    b.line(text[:1].upper() + text[1:])
 
 
 def _cause_line(b, cause):
