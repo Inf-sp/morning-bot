@@ -63,9 +63,11 @@ def color_pair_line(first, second, variant=0) -> str:
     return f"{first[:1].upper()}{first[1:]} и {second} — {ending}"
 
 
-def outfit_header(primary_style=""):
-    """Единый заголовок образа: эмодзи отражает выбранный стиль."""
+def outfit_header(primary_style="", trip_flag=""):
+    """Единый заголовок образа: эмодзи отражает выбранный стиль; в отпуске — флаг страны и «в отпуске»."""
     style = _clean_text(primary_style)
+    if trip_flag:
+        return f"{trip_flag} Надень сегодня в отпуске" + (f" · {style}" if style else "")
     emoji = outfit_emoji(style)
     return f"{emoji} Надень сегодня" + (f" · {style}" if style else "")
 
@@ -103,7 +105,7 @@ def render_wardrobe_message(look_data):
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
-    b.section(outfit_header(outfit_group(look_data)))
+    b.section(outfit_header(outfit_group(look_data), look_data.get("trip_flag") or ""))
 
     slots = _outfit_slots(look_data.get("items") or [])
     items = outfit_item_names(look_data)
@@ -356,14 +358,14 @@ def _trip_dates(start, end) -> str:
     return f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
 
 
-def suitcase_screen(data, saved=False):
+def suitcase_screen(data, saved=False, trip=False):
     """«🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней»: погода поездки (дальше прогноза — «Обычно в эти дни»), вещи
     шкафа по зонам («Футболки и рубашки: …»), курсивом совет. Пустой шкаф — базовый набор с пометкой; saved —
     подтверждённый чемодан; swaps — строка «Заменил: …» после «Подобрать замену» (только у черновика)."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
-    head = " · ".join(part for part in ("🧳 Чемодан", data.get("place"), _trip_dates(data.get("start"), data.get("end")),
+    head = " · ".join(part for part in ("🧳 Чемодан в отпуске" if trip else "🧳 Чемодан", data.get("place"), _trip_dates(data.get("start"), data.get("end")),
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
     if saved:
@@ -445,8 +447,8 @@ def suitcase_day_card(data, look, index, total, today=""):
     data, look = data or {}, look or {}
     days = int(data.get("days") or total or 0)
     b = MessageBuilder()
-    place = data.get("place")
-    b.title(f"{data.get('flag') or '👕'} Образы" + (f" · {place}" if place else ""))
+    place = data.get("place")  # план поездки — «в отпуске» и дома, пока чемодан собирается
+    b.title(f"{data.get('flag') or '👕'} Образы в отпуске" + (f" · {place}" if place else ""))
     when = _short_range(data.get("start"), data.get("end"))
     b.line(" · ".join(part for part in (when, f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "")
                       if part))

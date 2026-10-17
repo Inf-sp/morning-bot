@@ -430,7 +430,7 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
         concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
 
     text = msg.text
-    assert text.startswith("🍿 Досуг · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
                            "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n"
                            "Легенды: Miriam Makeba — Pata Pata · Black Coffee\n")
     assert ("Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n"
@@ -713,3 +713,44 @@ def test_trip_leisure_is_built_once_per_trip_from_tmdb_deezer_and_legends(monkey
     assert first["hits"] == [{"track": "Water", "artist": "Tyla"}]
     assert first["legends"] == [{"artist": "Miriam Makeba", "track": ""}]  # артист хита в легендах не повторяется
     assert vacation.trip_leisure("42") is not None and len(built) == 2  # на поездку — один раз
+
+
+def test_every_trip_screen_says_in_the_title_that_it_is_a_vacation():
+    from ui import leisure as leisure_ui
+    from ui import myday as myday_ui
+    from ui import settings as settings_ui
+    from ui import wardrobe as wardrobe_ui
+    trip = {"place": "Кейптаун", "start": "2026-10-20", "end": "2026-10-27", "days": 8, "flag": "🇿🇦",
+            "groups": [("Верх", ["Белая футболка"])]}
+
+    def title(msg):
+        return msg.text.split("\n", 1)[0]
+
+    assert title(wardrobe_ui.suitcase_day_card(trip, {"date": "2026-10-20", "items": ["Белая футболка"]}, 0, 8)) == \
+        "🇿🇦 Образы в отпуске · Кейптаун"
+    assert title(wardrobe_ui.render_wardrobe_message({"items": [{"name": "Белая футболка", "zone": "Верх"}],
+                                                      "primary_style": "Повседневный", "trip_flag": "🇿🇦"})) \
+        .startswith("🇿🇦 Надень сегодня в отпуске")
+    assert title(wardrobe_ui.render_wardrobe_message({"items": [{"name": "Белая футболка", "zone": "Верх"}],
+                                                      "primary_style": "Повседневный"})).startswith("🧢 Надень сегодня ·")
+    assert title(wardrobe_ui.suitcase_screen(trip, saved=True, trip=True)).startswith("🧳 Чемодан в отпуске · Кейптаун")
+    assert title(wardrobe_ui.suitcase_screen(trip, saved=True)).startswith("🧳 Чемодан · Кейптаун")  # дома
+    assert title(leisure_ui.trip_leisure_screen("Кейптаун", {}, flag="🇿🇦")) == "🇿🇦 Досуг в отпуске · Кейптаун"
+    assert title(myday_ui.day_summary("Суббота, 17 октября", "Кейптаун", country="ZA", flag="🇿🇦",
+                                      vacation={"country_lines": []})).startswith(
+        "Мой день в отпуске · Суббота, 17 октября · Кейптаун")
+    assert title(myday_ui.day_summary("Суббота, 17 октября", "Alkmaar")).startswith("Мой день · Суббота")
+    assert title(settings_ui.settings_trip("Кейптаун, ЮАР 🇿🇦")) == "🎚️ Настройки в отпуске"
+    assert title(settings_ui.settings_home("Alkmaar")) == "🎚️ Настройки"
+    # Кухня и Обучение уже были «… в отпуске».
+    from ui import menu as menu_ui
+    assert title(menu_ui.day_menu({"dishes": {}}, cuisine_label="Южноафриканская", flag="🇿🇦", trip=True)) == \
+        "🇿🇦 Пробуем в отпуске · Южноафриканская кухня"
+
+
+def test_daily_look_title_follows_the_vacation_flag(monkeypatch):
+    import wardrobe
+    saved, _places = _env(monkeypatch, CAPE)
+    assert "trip_flag" not in wardrobe._with_trip_flag("42", {"items": [], "trip_flag": "🇿🇦"})  # дома — без флага
+    saved["vacation"] = {"home": HOME, "cc": "ZA"}
+    assert wardrobe._with_trip_flag("42", {"items": []})["trip_flag"] == "🇿🇦"

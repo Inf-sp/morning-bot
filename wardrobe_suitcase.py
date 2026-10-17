@@ -463,7 +463,7 @@ def _edit_kb(draft):
 
 
 async def _show(bot, cid, result, kb, q=None, *, saved=False, msg=None):
-    msg = msg or wardrobe_ui.suitcase_screen(result, saved=saved)
+    msg = msg or wardrobe_ui.suitcase_screen(result, saved=saved, trip=vacation.active(cid))
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)

@@ -92,7 +92,7 @@ def settings_trip(trip="", home="", language="", summary=""):
     """Настройки в отпуске — только то, что верно в поездке: «Отпуск:», «Дома:», «Язык в поездке:» (если
     «Обучение» на языке страны), «Уведомления:» без рассылок на паузе."""
     b = MessageBuilder()
-    b.section(ui_label("settings", "Настройки"))
+    b.section(f"{ui_label('settings', 'Настройки')} в отпуске")
     b.spacer()
     b.labeled_line("Отпуск", trip or "—", lowercase=False)
     if home:

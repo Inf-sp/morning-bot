@@ -476,7 +476,7 @@ async def send_hub(bot, cid, q=None):
 
 def _trip_screen(cid, data):
     """Экран Досуга поездки из готовых кэшей: праздники и фестивали города, афиша поездки и концерты — только в даты
-    отпуска, без сети. Страна в заголовке — по-русски («ЮАР»), а не кодом."""
+    отпуска, без сети. Заголовок — «🇿🇦 Досуг в отпуске · Кейптаун» (без города — страна по-русски, не кодом)."""
     import countries
     import local_events
     import vacation
@@ -491,10 +491,9 @@ def _trip_screen(cid, data):
             seen.add(str(event.get("name") or "").casefold())
             events.append(event)
     concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
-    title = " ".join(part for part in (countries.name_ru(cc) or place.get("country") or cc, util.flag_from_cc(cc))
-                     if part)
-    return leisure_ui.trip_leisure_screen(title, data, sorted(events, key=lambda event: event.get("start", "")),
-                                          concerts)
+    where = place.get("city") or countries.name_ru(cc) or place.get("country") or cc
+    return leisure_ui.trip_leisure_screen(where, data, sorted(events, key=lambda event: event.get("start", "")),
+                                          concerts, flag=util.flag_from_cc(cc))
 
 
 async def send_concerts(bot, cid, q=None):

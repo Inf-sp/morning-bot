@@ -809,12 +809,12 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
         b.newline()
 
 
-def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
+def trip_leisure_screen(place, data, events=(), concerts=(), flag="") -> MessageSpec:
     """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт во
     время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк.
     Премьер, рекомендаций и кнопок разделов нет."""
     b = MessageBuilder()
-    b.title(f"🍿 Досуг · {place}".rstrip(" ·"))
+    b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · Кейптаун»
     data = data or {}
     _trip_titles(b, "Кино страны", data.get("films") or [])
     _trip_titles(b, "Сериалы страны", data.get("series") or [])

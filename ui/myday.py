@@ -116,9 +116,9 @@ def day_summary(
         place += f", {country}"
     if flag:
         place += f" {flag}"
-    b.bold(f"Мой день · {header} · {place}".rstrip(" ·"))
-    b.newline()
     vacation = vacation or {}
+    b.bold(f"Мой день{' в отпуске' if vacation else ''} · {header} · {place}".rstrip(" ·"))
+    b.newline()
     b.spacer()
 
     if weather_line:

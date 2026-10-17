@@ -192,6 +192,15 @@ def _get_cached_look(cid):
     return cached
 
 
+def _with_trip_flag(cid, look_data):
+    """В отпуске заголовок образа — «🇿🇦 Надень сегодня в отпуске»: флаг страны поездки; дома — без него."""
+    import util
+    import vacation
+    flag = (util.flag_from_cc(vacation.trip_cc(cid)) or "✈️") if vacation.active(cid) else ""
+    look_data = {key: value for key, value in look_data.items() if key != "trip_flag"}  # вернулся домой — без флага
+    return {**look_data, "trip_flag": flag} if flag else look_data
+
+
 def get_cached_outfit_summary(cid):
     """Эмодзи стиля и точный видимый список текущего образа для «Моего дня»; в отпуске с чемоданом — образ на
     сегодня из плана поездки (тот же, что в Гардеробе)."""
@@ -434,6 +443,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             # Образ собран раньше, чем строка о погоде стала обязательной: дописываем её сверху.
             reason = wardrobe_rules.weather_reason(weather_now[0], look_data.get("items") or [])
             look_data = {**look_data, "weather_reason": reason} if reason else look_data
+        look_data = _with_trip_flag(cid, look_data)
         text, entities = _build_look_message(look_data)
         store.last_answer[str(cid)] = text
         if look_data != original_look_data:
@@ -555,6 +565,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                                 else wardrobe_ui.outfit_group(look_data))
     look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
     look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
+    look_data = _with_trip_flag(cid, look_data)
     if kb is None:
         result_kb = build_wardrobe_keyboard(cid)
     text, entities = _build_look_message(look_data)

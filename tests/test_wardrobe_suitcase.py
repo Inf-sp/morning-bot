@@ -361,7 +361,7 @@ def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
 
     text = wardrobe_ui.suitcase_day_card(head, look, 0, 17, "2026-10-19").text
 
-    assert text == ("🇿🇦 Образы · Кейптаун\n\n19 окт — 4 ноя · 17 дней\n\nПн, 19 окт · сегодня\n🌧️ +18°C\n\n"
+    assert text == ("🇿🇦 Образы в отпуске · Кейптаун\n\n19 окт — 4 ноя · 17 дней\n\nПн, 19 окт · сегодня\n🌧️ +18°C\n\n"
                     "Бежевая футболка с оранжевым принтом\nБежевые строгие брюки\nБелые кеды")
     weather = {kind: wardrobe_ui._day_weather_line({"tmax": 18, "kind": kind, "icon": "☀️"})
                for kind in ("forecast", "early", "typical")}
@@ -448,7 +448,7 @@ def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it
 
     asyncio.run(wardrobe.send_home(bot, "42"))
 
-    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы · Кейптаун\n\n19–21 окт · 3 дня\n\nВт, 20 окт · сегодня")
+    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун\n\n19–21 окт · 3 дня\n\nВт, 20 окт · сегодня")
     today = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
     summary = wardrobe.get_cached_outfit_summary("42")["items"]
     assert summary == [name[:1].lower() + name[1:] for name in today]  # «Мой день» — тот же образ
