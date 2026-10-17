@@ -92,7 +92,8 @@ async def _show_added_items(bot, cid, items):
         return
     msg = wardrobe_ui.add_success(items[0]) if len(items) == 1 else wardrobe_ui.add_batch_success(items)
     if len(items) == 1:
-        rows = [[(delete_label("Удалить"), f"w_delete_{items[0]['id']}")]]
+        rows = [[(delete_label("Удалить"), f"w_delete_{items[0]['id']}")],
+                [("Собрать образ", f"w_with_{items[0]['id']}")]]  # образ дня с новой вещью, как из карточки вещи
     else:
         rows = [[(delete_label(f"Удалить: {public_item_name(item)[:28]}"), f"w_delete_{item['id']}")]
                 for item in items]
