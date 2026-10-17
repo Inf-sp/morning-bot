@@ -114,11 +114,20 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     rows = bot.sent[-1]["reply_markup"].inline_keyboard
     assert bot.sent[-1]["text"].startswith("🧳 Что не берёшь? · Кейптаун · 8 дней")
     assert [[b.text for b in row] for row in rows] == [
-        ["✅ Белая футболка"], ["Подобрать замену"], ["⬅️ Назад", "#️⃣ Главная"]]
+        ["Белая футболка"], ["Подобрать замену"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert [rows[0][0].callback_data, rows[2][0].callback_data] == ["w_pack_t:0", "w_pack_view"]
+    import telegram_runtime
+
+    def colors(markup):
+        return [[(b["text"], b.get("style")) for b in row]
+                for row in telegram_runtime._enhance_markup(markup)["inline_keyboard"]]
+
+    # Вещь «беру» — стандартного цвета, «Подобрать замену» — зелёная и остаётся под вещами.
+    assert colors(bot.sent[-1]["reply_markup"])[:2] == [[("Белая футболка", None)], [("Подобрать замену", "success")]]
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
     button = bot.sent[-1]["reply_markup"].inline_keyboard[0][0]
     assert button.text == "□ Белая футболка" and button.api_kwargs == {"style": "danger"}
+    assert colors(bot.sent[-1]["reply_markup"])[0] == [("Белая футболка", "danger")]  # «не беру» — красная
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))
     assert profile["suitcase_draft"]["result"]["groups"] == [("Верх", ["Серая футболка"])]
     assert "Заменил: белая футболка → серая футболка." in bot.sent[-1]["text"]

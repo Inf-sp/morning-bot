@@ -343,13 +343,16 @@ def _saved_kb(basic=False):
 
 
 def _edit_kb(draft):
-    """Вещи чемодана по одной в строке: «✅ X» — беру (зелёная), «□ X» красная — не беру."""
+    """Вещи чемодана по одной в строке: беру — стандартного цвета, нажал — красная «не беру» (`□ X`: если Telegram
+    не покажет цвет, значок отличит её). «Подобрать замену» — зелёная под вещами: цвет задан явно, поэтому
+    telegram_runtime не поднимает её наверх, как кнопки из _GREEN_RE."""
     removed = set(draft.get("removed") or [])
     rows = [[InlineKeyboardButton(f"□ {name[:40]}", callback_data=f"w_pack_t:{index}",
                                   api_kwargs={"style": "danger"})] if index in removed
-            else [InlineKeyboardButton(f"✅ {name[:40]}", callback_data=f"w_pack_t:{index}")]
+            else [InlineKeyboardButton(name[:40], callback_data=f"w_pack_t:{index}")]
             for index, (_zone, name) in enumerate(_flat(draft["result"]))]
-    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("Подобрать замену", callback_data="w_pack_swap")],
+    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("Подобрать замену", callback_data="w_pack_swap",
+                                                              api_kwargs={"style": "success"})],
                                  nav_row("w_pack_view")])
 
 
