@@ -769,54 +769,74 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
     return b.build_stripped(reply_markup=reply_markup)
 
 
-def _linked_names(b: MessageBuilder, label, names) -> None:
-    """«Слушают сейчас: Tyla · Kabza De Small» — имена ссылками на YouTube Music."""
-    names = [name for name in names or [] if str(name or "").strip()]
-    if not names:
+_TRIP_DURING_MAX, _TRIP_HOLIDAYS_MAX, _TRIP_CONCERTS_MAX = 6, 2, 2  # «Во время отпуска» — не длиннее 6 строк
+
+
+def _trip_titles(b: MessageBuilder, label, items) -> None:
+    """«Кино страны:» — по строке на фильм или сериал: название жирной ссылкой на трейлер · год · жанры."""
+    if not items:
         return
-    b.label(label)
-    b.text_line(" ")
-    for index, name in enumerate(names):
-        b.text_line(" · ") if index else None
-        b.link(name, youtube_music_link(name))
+    b.spacer()
+    b.bold(f"{label}:")
     b.newline()
+    for item in items:
+        b.text_line("- ")
+        b.bold_link(item["title"], trailer_link(item))
+        meta = [str(item.get("year") or ""), str(item.get("genres") or "").replace(", ", " · ")]
+        b.text_line("".join(f" · {value}" for value in meta if value.strip()))
+        b.newline()
+
+
+def _trip_music(b: MessageBuilder, hits, legends) -> None:
+    """«Хиты страны:» — «трек — артист» ссылками на YouTube Music; «Легенды:» строкой «артист — главный трек»."""
+    if hits:
+        b.spacer()
+        b.bold("Хиты страны:")
+        b.newline()
+        for hit in hits:
+            b.text_line("- ")
+            b.link(f"{hit['track']} — {hit['artist']}", youtube_music_link(hit["track"], hit["artist"]))
+            b.newline()
+    if legends:
+        if not hits:  # без хитов «Легенды» начинают свой блок; с хитами — сразу под ними
+            b.spacer()
+        b.label("Легенды")
+        b.text_line(" ")
+        for index, legend in enumerate(legends):
+            b.text_line(" · ") if index else None
+            name = f"{legend['artist']} — {legend['track']}" if legend.get("track") else legend["artist"]
+            b.link(name, youtube_music_link(legend.get("track") or "", legend["artist"]))
+        b.newline()
 
 
 def trip_leisure_screen(place, data, events=(), concerts=()) -> MessageSpec:
-    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: фильмы страны, музыка страны (до трёх местных артистов) и что идёт во время отпуска —
-    праздники, фестивали и события города, концерты твоих артистов. Премьер и рекомендаций нет."""
+    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт во
+    время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк.
+    Премьер, рекомендаций и кнопок разделов нет."""
     b = MessageBuilder()
     b.title(f"🍿 Досуг · {place}".rstrip(" ·"))
     data = data or {}
-    films = data.get("films") or []
-    if films:
-        b.bold("Фильмы страны:")
-        b.newline()
-        for film in films:
-            b.text_line("- ")
-            b.bold_link(film["title"], trailer_link(film))
-            meta = [str(film.get("year") or ""), str(film.get("genres") or "").replace(", ", " · ")]
-            b.text_line("".join(f" · {value}" for value in meta if value.strip()))
-            b.newline()
-    if data.get("music"):
-        b.spacer()
-        _linked_names(b, "Музыка страны", data["music"])
-    during = [("🎉", f"{day} — {name}", "") for day, name in data.get("holidays") or []]
+    _trip_titles(b, "Кино страны", data.get("films") or [])
+    _trip_titles(b, "Сериалы страны", data.get("series") or [])
+    _trip_music(b, data.get("hits") or [], data.get("legends") or [])
+    holidays = [("🎉", f"{day} — {name}", "") for day, name in (data.get("holidays") or [])[:_TRIP_HOLIDAYS_MAX]]
+    shows = [("🎫", concert.get("artist") or "", ", ".join(part for part in (
+        _event_date_label(concert.get("date")), concert.get("venue") or concert.get("city") or "") if part))
+        for concert in list(concerts or ())[:_TRIP_CONCERTS_MAX]]
+    afisha = []
     for event in events or ():
         start, end = _event_date_label(event.get("start")), _event_date_label(event.get("end"))
         when = start if not end or end == start else f"{start} – {end}"
-        during.append(("🎪", event.get("name") or "", f" — {when}" if when else ""))
-    for concert in concerts or ():
-        place_name = concert.get("venue") or concert.get("city") or ""
-        tail = ", ".join(part for part in (_event_date_label(concert.get("date")), place_name) if part)
-        during.append(("🎫", concert.get("artist") or "", f" — {tail}" if tail else ""))
+        afisha.append(("🎪", event.get("name") or "", ", ".join(part for part in (when, event.get("place") or "")
+                                                                 if part)))
+    during = [*holidays, *afisha[:max(0, _TRIP_DURING_MAX - len(holidays) - len(shows))], *shows]
     if during:
         b.spacer()
         b.bold("Во время отпуска:")
         b.newline()
         for emoji, name, tail in during:
-            b.line(f"{emoji} {name}{tail}")
-    if not films and not data.get("music") and not during:
+            b.line(f"{emoji} {name}" + (f" — {tail}" if tail else ""))
+    if not any(data.get(key) for key in ("films", "series", "hits", "legends")) and not during:
         b.line("Собираю досуг страны — загляни чуть позже.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
                                                                                      callback_data="m_menu")]]))

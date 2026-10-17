@@ -122,6 +122,25 @@ def top_tracks(artist, limit=3) -> list[str]:
     return [" ".join(str(row.get("title") or "").split()) for row in tracks if row.get("title")][:limit]
 
 
+_CHARTS_USER = "Deezer Charts"  # аккаунт Deezer с плейлистами «Top <страна>» — чарт песен страны
+
+
+def country_chart(country_en, limit=50) -> list[tuple]:
+    """Чарт песен страны — плейлист «Top <страна>» аккаунта Deezer Charts (без ключа): [(трек, артист)]; нет такого
+    плейлиста — []; сбой — исключение. Лента Apple Music по стране сейчас не отвечает."""
+    if not country_en:
+        return []
+    wanted = f"top {country_en}".casefold()
+    rows = _deezer_json("search/playlist", {"q": f"Top {country_en}", "limit": 10}).get("data") or []
+    playlist = next((row for row in rows if (row.get("user") or {}).get("name") == _CHARTS_USER
+                     and str(row.get("title") or "").casefold() == wanted), None)
+    if not playlist:
+        return []
+    tracks = _deezer_json(f"playlist/{int(playlist['id'])}/tracks", {"limit": limit}).get("data") or []
+    return [(" ".join(str(row["title"]).split()), " ".join(str(row["artist"]["name"]).split()))
+            for row in tracks if row.get("title") and (row.get("artist") or {}).get("name")]
+
+
 def related_artists(artist, limit=20) -> list[dict]:
     """Похожие артисты Deezer (без ключа): [{"name", "fans"}]; нет точного совпадения имени — []; сбой — исключение."""
     found = _deezer_artist(artist)

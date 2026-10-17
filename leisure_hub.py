@@ -475,18 +475,26 @@ async def send_hub(bot, cid, q=None):
 
 
 def _trip_screen(cid, data):
-    """Экран Досуга поездки из готовых кэшей: события города и концерты — только в даты отпуска, без сети."""
+    """Экран Досуга поездки из готовых кэшей: праздники и фестивали города, афиша поездки и концерты — только в даты
+    отпуска, без сети. Страна в заголовке — по-русски («ЮАР»), а не кодом."""
+    import countries
     import local_events
     import vacation
     place = store.get_settings(cid) or {}
     cc = str(place.get("cc") or "").upper()
     until = (vacation.state(cid) or {}).get("until") or "9999-12-31"
     today = _today_and_cc(cid)[0].isoformat()
-    events = [event for event in local_events.events(cid, fetch=False)
-              if event.get("end", "") >= today and event.get("start", "") <= until]
+    events, seen = [], set()
+    for event in [*local_events.events(cid, fetch=False), *local_events.trip_afisha(cid, fetch=False)]:
+        if (event.get("end", "") >= today and event.get("start", "") <= until
+                and str(event.get("name") or "").casefold() not in seen):
+            seen.add(str(event.get("name") or "").casefold())
+            events.append(event)
     concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
-    title = " ".join(part for part in (place.get("country") or cc, util.flag_from_cc(cc)) if part)
-    return leisure_ui.trip_leisure_screen(title, data, events, concerts)
+    title = " ".join(part for part in (countries.name_ru(cc) or place.get("country") or cc, util.flag_from_cc(cc))
+                     if part)
+    return leisure_ui.trip_leisure_screen(title, data, sorted(events, key=lambda event: event.get("start", "")),
+                                          concerts)
 
 
 async def send_concerts(bot, cid, q=None):
@@ -603,7 +611,7 @@ _WARM_STEP_LABELS = {
     "concerts": "концерты", "movie_premieres": "премьеры кино", "new_music": "новая музыка",
     "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
     "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
-    "details": "страны",
+    "details": "страны", "trip_afisha": "афиша поездки",
 }
 # Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
 failed_steps = {}
@@ -627,6 +635,7 @@ async def warm_hub_cache(cid):
         ("favorite_releases", lambda: _warm_favorite_releases(cid)),  # до описаний: им тоже нужна фраза
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
+        ("trip_afisha", lambda: _warm_trip_afisha(cid)),
     )
     failed = []
     for name, call in steps:
@@ -637,6 +646,14 @@ async def warm_hub_cache(cid):
             _log.exception("leisure hub warm failed cid=%s step=%s", cid, name)
     failed_steps[str(cid)] = failed
     return not failed
+
+
+async def _warm_trip_afisha(cid):
+    """В отпуске — афиша города на даты поездки (недельный кэш); дома ничего не делает."""
+    import local_events
+    import vacation
+    if vacation.active(cid):
+        await asyncio.to_thread(local_events.trip_afisha, cid)
 
 
 def is_ready(cid) -> bool:

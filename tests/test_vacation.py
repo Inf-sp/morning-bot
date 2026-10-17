@@ -7,6 +7,9 @@ import store
 import vacation
 
 REAL_TRIP_HOLIDAYS = vacation.trip_holidays
+import local_events  # noqa: E402
+
+REAL_LOCAL_SEARCH = local_events._search  # conftest подменяет поиск событий; тесту афиши нужен настоящий запрос
 from ui import myday as myday_ui
 from ui import vacation as vacation_ui
 
@@ -391,18 +394,26 @@ def test_guide_keeps_phrases_for_the_trip_days_and_traveller_tips():
     assert lines == {"Экстренный номер": "112", "Розетки": "тип M"}  # пустые пункты памятки не показываются
 
 
-def test_trip_leisure_keeps_only_verified_films_and_artists_of_the_country(monkeypatch):
+def test_country_films_and_series_come_from_tmdb_by_origin_country_and_artists_are_verified(monkeypatch):
     import countries
     import tmdb
-    films = {"District 9": {"id": 1, "name": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"},
-             "Inception": {"id": 2, "name": "Начало", "name_en": "Inception", "year": "2010"}}
-    monkeypatch.setattr(tmdb, "lookup_title", lambda title, *_a, **_k: films.get(title))
-    monkeypatch.setattr(tmdb, "detail", lambda movie_id, _kind: {"countries": ["ZA"] if movie_id == 1 else ["US"]})
+    calls = []
+
+    def discover(kind, region=None, sort_by="", **_kwargs):
+        calls.append((kind, region, sort_by))
+        return [{"id": index, "name": f"{kind} {index}", "name_en": f"{kind} en {index}", "year": "2009",
+                 "genres": "драма"} for index in range(1, 6)]
+
+    monkeypatch.setattr(tmdb, "discover", discover)
     monkeypatch.setattr(countries, "label", lambda cc: f"flag {cc}")
     monkeypatch.setattr(countries, "artist_label", lambda name, fetch=True: "flag ZA" if name == "Miriam Makeba" else "flag US")
 
-    picked = vacation._verified_films([{"title": "District 9"}, {"title": "Inception"}, {"title": "Выдумка"}], "ZA")
-    assert [film["title"] for film in picked] == ["Район №9"]  # американский и несуществующий — отброшены
+    films, series = vacation._country_titles("ZA", "movie", 3), vacation._country_titles("ZA", "tv", 2)
+
+    # Самые известные по стране производства — прямо из TMDb, без догадок AI.
+    assert calls == [("movie", "ZA", "vote_count.desc"), ("tv", "ZA", "vote_count.desc")]
+    assert [film["title"] for film in films] == ["movie 1", "movie 2", "movie 3"] and len(series) == 2
+    assert series[0]["kind"] == "tv" and films[0]["name_en"] == "movie en 1"
     assert vacation._verified_artists(["Miriam Makeba", "Taylor Swift"], "ZA") == ["Miriam Makeba"]
 
 
@@ -410,17 +421,33 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
     from ui import leisure as leisure_ui
     msg = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {
         "films": [{"id": 1, "title": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"}],
-        "music": ["Tyla", "Die Antwoord", "Miriam Makeba"],
+        "series": [{"id": 2, "title": "Кровь и вода", "name_en": "Blood & Water", "year": "2020", "kind": "tv"}],
+        "hits": [{"track": "Nayvee's Prayer", "artist": "DJ Zinhle"}],
+        "legends": [{"artist": "Miriam Makeba", "track": "Pata Pata"}, {"artist": "Black Coffee", "track": ""}],
         "holidays": [("24 сентября", "Heritage Day — День наследия")],
-    }, events=[{"name": "Cape Town Jazz Festival", "start": "2026-09-26", "end": "2026-09-27"}],
+    }, events=[{"name": "Cape Town Jazz Festival", "start": "2026-09-26", "end": "2026-09-27"},
+               {"name": "Tyla Live", "start": "2026-09-28", "end": "2026-09-28", "place": "Grand Arena"}],
         concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
 
     text = msg.text
-    assert text.startswith("🍿 Досуг · ЮАР 🇿🇦\n\nФильмы страны:\n- Район №9 · 2009 · фантастика")
-    assert "Музыка страны: Tyla · Die Antwoord · Miriam Makeba" in text and "Легенды" not in text
-    assert "Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n🎪 Cape Town Jazz Festival — 26 сентября" in text
-    assert "🎫 Muse — 30 сентября, Cape Town Stadium" in text
+    assert text.startswith("🍿 Досуг · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
+                           "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n"
+                           "Легенды: Miriam Makeba — Pata Pata · Black Coffee\n")
+    assert ("Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n"
+            "🎪 Cape Town Jazz Festival — 26 сентября – 27 сентября\n🎪 Tyla Live — 28 сентября, Grand Arena\n"
+            "🎫 Muse — 30 сентября, Cape Town Stadium") in text
+    links = {msg.text.encode("utf-16-le")[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le"): e.url
+             for e in msg.entities if e.type == "text_link"}
+    assert links["Nayvee's Prayer — DJ Zinhle"].startswith("https://music.youtube.com/search?q=Nayvee")
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["m_menu"]]
+
+    # «Во время отпуска» — не длиннее 6 строк: праздники (до 2) и концерты любимых (до 2) не теряются в афише.
+    many = [{"name": f"Show {i}", "start": "2026-10-01", "end": "2026-10-01"} for i in range(10)]
+    holidays = [(f"{i} октября", f"Праздник {i}") for i in range(1, 5)]
+    concerts = [{"artist": f"Band {i}", "date": "2026-10-02"} for i in range(4)]
+    text = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {"holidays": holidays}, many, concerts).text
+    during = text.split("Во время отпуска:\n", 1)[1].split("\n")
+    assert len(during) == 6 and [line[0] for line in during] == ["🎉", "🎉", "🎪", "🎪", "🎫", "🎫"]
 
 
 def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
@@ -444,20 +471,38 @@ def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
     assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")
 
 
-def test_country_music_is_up_to_three_local_artists_chart_first(monkeypatch):
+def test_country_hits_are_tracks_of_local_artists_from_the_deezer_chart(monkeypatch):
     import apple_music
     import countries
-    local = {"Tyla", "Kabza De Small", "Die Antwoord", "Black Coffee"}
+    local = {"DJ Zinhle", "Tyla", "Kabza De Small", "Black Coffee"}
     monkeypatch.setattr(countries, "label", lambda cc: f"flag {cc}")
     monkeypatch.setattr(countries, "artist_label", lambda name, fetch=True: "flag ZA" if name in local else "flag US")
-    monkeypatch.setattr(apple_music, "_feed", lambda _cc: [
-        {"artistName": "Taylor Swift"}, {"artistName": "Tyla"}, {"artistName": "Tyla"}, {"artistName": "Drake"},
-        {"artistName": "Kabza De Small"}])
 
-    music = vacation._verified_artists([*vacation._chart_artists("ZA"), "Die Antwoord", "Black Coffee"], "ZA")
+    def deezer(path, params):
+        if path == "search/playlist":
+            assert params["q"] == "Top South Africa"
+            return {"data": [{"id": 7, "title": "Top South Africa 2020", "user": {"name": "Deezer Best Of"}},
+                             {"id": 9, "title": "Top South Africa", "user": {"name": "Deezer Charts"}}]}
+        assert path == "playlist/9/tracks"
+        return {"data": [{"title": "Patient Zero", "artist": {"name": "Taylor Swift"}},
+                         {"title": "Nayvee's Prayer", "artist": {"name": "DJ Zinhle"}},
+                         {"title": "Water", "artist": {"name": "Tyla"}},
+                         {"title": "Push 2 Start", "artist": {"name": "Tyla"}},
+                         {"title": "Ordinary", "artist": {"name": "Alex Warren"}},
+                         {"title": "Sponono", "artist": {"name": "Kabza De Small"}},
+                         {"title": "Drive", "artist": {"name": "Black Coffee"}}]}
 
-    # Из чарта — только местные (Тейлор Свифт и Дрейк — нет), затем известные из AI; не больше трёх, без повторов.
-    assert music == ["Tyla", "Kabza De Small", "Die Antwoord"]
+    monkeypatch.setattr(apple_music, "_deezer_json", deezer)
+
+    hits = vacation._local_hits("ZA", "South Africa")
+
+    # Зарубежные хиты чарта страны отсеяны, по одному треку на артиста, не больше трёх.
+    assert hits == [{"track": "Nayvee's Prayer", "artist": "DJ Zinhle"}, {"track": "Water", "artist": "Tyla"},
+                    {"track": "Sponono", "artist": "Kabza De Small"}]
+    monkeypatch.setattr(apple_music, "top_tracks", lambda artist, limit=3: ["Pata Pata"] if artist == "Miriam Makeba" else [])
+    local.add("Miriam Makeba")
+    assert vacation._legends(["Tyla", "Miriam Makeba", "Black Coffee"], "ZA", {"tyla"}) == [
+        {"artist": "Miriam Makeba", "track": "Pata Pata"}, {"artist": "Black Coffee", "track": ""}]
 
 
 def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatch):
@@ -613,3 +658,58 @@ def test_settings_on_vacation_show_trip_home_trip_language_and_skip_paused_learn
     # «Обучение языку» в отпуске на паузе: не считается и не показывается следующим.
     assert "Уведомления: включено 1 · следующая: Погода на завтра" in text
     assert settings.notification_paused("42", "daily_words") and not settings.notification_paused("42", "evening_weather")
+
+
+def test_trip_afisha_merges_dated_web_events_and_city_concerts_and_does_not_cache_ai_failure(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "2026-10-30"}
+    kv = {}
+    monkeypatch.setattr(local_events.store, "_load", lambda _key: kv)
+    monkeypatch.setattr(local_events.store, "mutate_kv", lambda _key, change: kv.update(change(dict(kv))[0]))
+    monkeypatch.setattr(local_events, "datetime", type("Fixed", (), {
+        "now": staticmethod(lambda tz=None: __import__("datetime").datetime(2026, 10, 17, 9, tzinfo=tz))}))
+    queries = []
+    monkeypatch.setattr(local_events, "_search", REAL_LOCAL_SEARCH)
+    monkeypatch.setattr(local_events.research, "web_search", lambda query, **_k: queries.append(query) or [
+        {"url": "https://capetown.example/whats-on", "title": "What's on",
+         "content": "Cape Town Art Fair runs 24 October 2026 at the CTICC."}])
+    monkeypatch.setattr(local_events, "_ticketmaster_city", lambda *_a: [
+        {"name": "Tyla Live", "about": "", "start": "2026-10-20", "end": "2026-10-20", "url": "", "place": "Arena"}])
+
+    def down(*_a, **_k):
+        raise RuntimeError("AI down")
+
+    monkeypatch.setattr(local_events.ai, "llm_json", down)
+    assert local_events.trip_afisha("42") == [] and kv == {}  # сбой AI не запоминается на неделю
+
+    monkeypatch.setattr(local_events.ai, "llm_json", lambda prompt, *_a, **_k: {"events": [
+        {"name": "Cape Town Art Fair", "about": "ярмарка искусства", "start": "2026-10-24", "end": "2026-10-24",
+         "url": "https://capetown.example/whats-on", "evidence": "runs 24 October 2026"}]}
+        if "выставки" in prompt and "концерты" in prompt else {"events": []})
+    found = local_events.trip_afisha("42")
+
+    assert "concerts" in queries[-1] and "exhibitions" in queries[-1]  # афиша шире городских праздников
+    assert [event["name"] for event in found] == ["Tyla Live", "Cape Town Art Fair"]  # по дате
+    assert local_events.trip_afisha("42", fetch=False) == found  # экран читает кэш без сети
+    saved.pop("vacation")
+    assert local_events.trip_afisha("42", fetch=False) == []  # дома афиши поездки нет
+
+
+def test_trip_leisure_is_built_once_per_trip_from_tmdb_deezer_and_legends(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "2026-10-30"}
+    built = []
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation, "_country_titles", lambda cc, kind, limit: built.append((cc, kind, limit)) or [
+        {"id": 1, "title": f"{kind} title", "kind": kind}])
+    monkeypatch.setattr(vacation, "_local_hits", lambda cc, country: [{"track": "Water", "artist": "Tyla"}])
+    monkeypatch.setattr(vacation, "_country_legends", lambda _country: ["Tyla", "Miriam Makeba"])
+    monkeypatch.setattr(vacation, "_legends", lambda names, cc, skip: [
+        {"artist": name, "track": ""} for name in names if name.casefold() not in skip])
+
+    first = vacation.trip_leisure("42")
+
+    assert built == [("ZA", "movie", 3), ("ZA", "tv", 2)]
+    assert first["hits"] == [{"track": "Water", "artist": "Tyla"}]
+    assert first["legends"] == [{"artist": "Miriam Makeba", "track": ""}]  # артист хита в легендах не повторяется
+    assert vacation.trip_leisure("42") is not None and len(built) == 2  # на поездку — один раз
