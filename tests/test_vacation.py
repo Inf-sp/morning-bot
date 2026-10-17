@@ -433,9 +433,10 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
     assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
                            "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n"
                            "Легенды: Miriam Makeba — Pata Pata · Black Coffee\n")
-    assert ("Во время отпуска:\n🎉 24 сентября — Heritage Day — День наследия\n"
-            "🎪 Cape Town Jazz Festival — 26 сентября – 27 сентября\n🎪 Tyla Live — 28 сентября, Grand Arena\n"
-            "🎫 Muse — 30 сентября, Cape Town Stadium") in text
+    assert ("Во время отпуска:\n24 сентября — Heritage Day — День наследия\n"
+            "Cape Town Jazz Festival — 26 сентября – 27 сентября\nTyla Live — 28 сентября, Grand Arena\n"
+            "Muse — 30 сентября, Cape Town Stadium") in text  # без эмодзи
+    assert "Собираю" not in text
     links = {msg.text.encode("utf-16-le")[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le"): e.url
              for e in msg.entities if e.type == "text_link"}
     assert links["Nayvee's Prayer — DJ Zinhle"].startswith("https://music.youtube.com/search?q=Nayvee")
@@ -447,7 +448,11 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
     concerts = [{"artist": f"Band {i}", "date": "2026-10-02"} for i in range(4)]
     text = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {"holidays": holidays}, many, concerts).text
     during = text.split("Во время отпуска:\n", 1)[1].split("\n")
-    assert len(during) == 6 and [line[0] for line in during] == ["🎉", "🎉", "🎪", "🎪", "🎫", "🎫"]
+    assert during == ["1 октября — Праздник 1", "2 октября — Праздник 2", "Show 0 — 1 октября", "Show 1 — 1 октября",
+                      "Band 0 — 2 октября", "Band 1 — 2 октября"]
+    # Кино и музыка страны ещё собираются — подсказка сразу под заголовком, праздники уже видны.
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nСобираю кино и музыку страны — загляни чуть позже.\n\n"
+                           "Во время отпуска:\n")
 
 
 def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
@@ -517,7 +522,8 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
         prompts.append(prompt)
         return {"breakfast": {"name": "Руськи", "note": "сухари к кофе"},
                 "lunch": {"name": "Боботи", "note": "запечённый фарш с карри"},
-                "dinner": {"name": "Брай", "note": "мясо на открытом огне"}, "top": "dinner"}
+                "dinner": {"name": "Брай", "original": "Braai", "emoji": "🔥",
+                           "note": "Мясо на открытом огне. Главная традиция выходных"}, "top": "dinner"}
 
     monkeypatch.setattr(day_menu.ai, "llm_json", dishes)
     monkeypatch.setattr(day_menu, "_settings", lambda: type("S", (), {
@@ -530,25 +536,26 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
     built = day_menu.build_day_menu("42", cuisine="local_za")
 
     assert "обязательно стоит попробовать в этой стране" in prompts[0] and '"top"' in prompts[0]
-    assert built["top"] == "dinner"
+    assert built["top"] == "dinner" and '"original"' in prompts[0] and '"emoji"' in prompts[0]
+    assert built["dishes"]["dinner"]["original"] == "Braai" and built["dishes"]["breakfast"]["emoji"] == ""
     monkeypatch.setattr(vacation, "cuisine_facts", lambda _cid: ["Брай — национальная традиция: 24 сентября в ЮАР "
                                                                    "отмечают Национальный день брая"])
     msg = menu._day_menu_message(built, "42")
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
         ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
     # Одно блюдо — то, что стоит попробовать сегодня (top), жирным, ниже описание; без «Завтрак / Обед / Ужин».
-    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне.\n\nБрай\n"
-                        "Мясо на открытом огне.\n\nБрай — национальная традиция: 24 сентября в ЮАР отмечают "
+    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне.\n\n🔥 Брай · Braai\n"
+                        "Мясо на открытом огне. Главная традиция выходных.\n\nБрай — национальная традиция: 24 сентября в ЮАР отмечают "
                         "Национальный день брая.")
     utf16 = msg.text.encode("utf-16-le")  # смещения Telegram — в UTF-16: флаг 🇿🇦 занимает 4 единицы
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
-    assert "Брай" in bold and "Завтрак" not in msg.text and "Обед" not in msg.text
+    assert "🔥 Брай · Braai" in bold and "Завтрак" not in msg.text and "Обед" not in msg.text
 
 
 def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(monkeypatch):
     import day_menu
     profile = {"cooking_day_menu": {
-        "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner",
+        "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner", "trip_v": 2,
         "dishes": {"breakfast": {"name": "Руськи"}, "lunch": {"name": "Боботи"}, "dinner": {"name": "Брай"}}}}
     monkeypatch.setattr(store, "get_profile", lambda _cid: profile)
     monkeypatch.setattr(store, "mutate_profile", lambda _cid, change: profile.update(change(dict(profile))[0]))
@@ -713,6 +720,15 @@ def test_trip_leisure_is_built_once_per_trip_from_tmdb_deezer_and_legends(monkey
     assert first["hits"] == [{"track": "Water", "artist": "Tyla"}]
     assert first["legends"] == [{"artist": "Miriam Makeba", "track": ""}]  # артист хита в легендах не повторяется
     assert vacation.trip_leisure("42") is not None and len(built) == 2  # на поездку — один раз
+
+    # Источники упали — пустой сбор не остаётся на всю поездку: при открытии праздники видны, сбор — заново.
+    saved["vacation"]["leisure"] = {**first, "films": [], "series": [], "hits": [], "legends": [],
+                                    "holidays": [("4 ноября", "Election Day — День выборов")]}
+    started = []
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: True)
+    monkeypatch.setattr(vacation.util, "build_off_loop", lambda key, *_args: started.append(key))
+    assert vacation.trip_leisure("42")["holidays"] == [("4 ноября", "Election Day — День выборов")]
+    assert started == [("vacation_leisure", "42")]
 
 
 def test_every_trip_screen_says_in_the_title_that_it_is_a_vacation():

@@ -282,8 +282,9 @@ _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner"
 
 
 def _trip_menu(dish, *, cuisine_label, intro, flag, fact):
-    """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни, одно блюдо жирным с описанием, курсивом
-    факт о кухне страны; кнопки «Другое блюдо» и «Главная» — в поездке не готовим, рецептов нет."""
+    """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни, одно блюдо жирным — «🥩 Билтонг · Biltong»
+    (эмодзи и местное название, если есть) — с описанием, курсивом факт о кухне страны; кнопки «Другое блюдо» и
+    «Главная» — в поездке не готовим, рецептов нет."""
     b = MessageBuilder()
     b.section(f"{flag} Пробуем в отпуске · {cuisine_label} кухня")
     if intro:
@@ -291,7 +292,8 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact):
         b.line(intro)
     if (dish or {}).get("name"):
         b.spacer()
-        b.bold(dish["name"])
+        b.bold(" ".join(part for part in (dish.get("emoji"), " · ".join(
+            part for part in (dish["name"], dish.get("original")) if part)) if part))
         b.newline()
         note = _cooking_text(dish.get("note"))
         if note:

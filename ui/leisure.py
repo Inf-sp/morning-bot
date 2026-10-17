@@ -810,34 +810,34 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
 
 
 def trip_leisure_screen(place, data, events=(), concerts=(), flag="") -> MessageSpec:
-    """«🍿 Досуг · ЮАР 🇿🇦» в отпуске: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт во
-    время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк.
-    Премьер, рекомендаций и кнопок разделов нет."""
+    """«🇿🇦 Досуг в отпуске · Кейптаун»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
+    во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
+    без эмодзи. Пока кино и музыка страны собираются — строка-подсказка. Премьер, рекомендаций и кнопок разделов нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · Кейптаун»
     data = data or {}
+    if not any(data.get(key) for key in ("films", "series", "hits", "legends")):
+        b.line("Собираю кино и музыку страны — загляни чуть позже.")
     _trip_titles(b, "Кино страны", data.get("films") or [])
     _trip_titles(b, "Сериалы страны", data.get("series") or [])
     _trip_music(b, data.get("hits") or [], data.get("legends") or [])
-    holidays = [("🎉", f"{day} — {name}", "") for day, name in (data.get("holidays") or [])[:_TRIP_HOLIDAYS_MAX]]
-    shows = [("🎫", concert.get("artist") or "", ", ".join(part for part in (
-        _event_date_label(concert.get("date")), concert.get("venue") or concert.get("city") or "") if part))
+    holidays = [f"{day} — {name}" for day, name in (data.get("holidays") or [])[:_TRIP_HOLIDAYS_MAX]]
+    shows = [" — ".join(part for part in (concert.get("artist") or "", ", ".join(part for part in (
+        _event_date_label(concert.get("date")), concert.get("venue") or concert.get("city") or "") if part)) if part)
         for concert in list(concerts or ())[:_TRIP_CONCERTS_MAX]]
     afisha = []
     for event in events or ():
         start, end = _event_date_label(event.get("start")), _event_date_label(event.get("end"))
         when = start if not end or end == start else f"{start} – {end}"
-        afisha.append(("🎪", event.get("name") or "", ", ".join(part for part in (when, event.get("place") or "")
-                                                                 if part)))
+        tail = ", ".join(part for part in (when, event.get("place") or "") if part)
+        afisha.append(" — ".join(part for part in (event.get("name") or "", tail) if part))
     during = [*holidays, *afisha[:max(0, _TRIP_DURING_MAX - len(holidays) - len(shows))], *shows]
     if during:
         b.spacer()
         b.bold("Во время отпуска:")
         b.newline()
-        for emoji, name, tail in during:
-            b.line(f"{emoji} {name}" + (f" — {tail}" if tail else ""))
-    if not any(data.get(key) for key in ("films", "series", "hits", "legends")) and not during:
-        b.line("Собираю досуг страны — загляни чуть позже.")
+        for line in during:
+            b.line(line)
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
                                                                                      callback_data="m_menu")]]))
 
@@ -899,19 +899,6 @@ def _week_item(item, kind) -> tuple:
             (_movie_genres_for_line(item).replace(", ", " · "), item.get("country_label")), _item_value(item, "overview", ""))
 
 
-_PREMIERE_LABELS = {"movie": "Новые фильмы", "series": "Новые сериалы", "music": "Новая музыка"}
-_PREMIERE_ABOUT_MAX = 700
-
-
-def premieres_menu() -> MessageSpec:
-    """«🆕 Премьеры недели»: четыре вида, каждый открывает карточки-журнал (lz_prem_<вид>)."""
-    b = MessageBuilder()
-    b.title("🆕 Премьеры недели")
-    b.line("Что вышло на этой неделе — листай карточками.")
-    rows = _column_kb([(_PREMIERE_LABELS[kind], f"lz_prem_{kind}") for kind in WEEK_PAGES]).inline_keyboard
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*rows, nav_row("m_leisure")]))
-
-
 def week_items(kind, rows) -> list:
     """Пункты недели в порядке дней без повторов (одно имя и первая метка — один пункт)."""
     seen, items = set(), []
@@ -924,24 +911,20 @@ def week_items(kind, rows) -> list:
     return items
 
 
-def _premiere_about(text) -> str:
-    """Полное описание карточки премьеры: только русский текст, до ~700 символов по границе предложения."""
-    text = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
-    return clip(text, _PREMIERE_ABOUT_MAX) if re.search(r"[а-яё]", text, re.I) else ""
-
-
-def premiere_card(kind, items, index=0) -> MessageSpec:
-    """Карточка-журнал премьеры: «🎬 **Имя**» ссылкой, метаданные через «·», полное описание;
-    ← n/N → по кругу, «Назад» — в меню премьер. Картинку (постер, обложку) прикладывает обработчик."""
+def premiere_card(feed, index=0) -> MessageSpec:
+    """Карточка ленты «Премьеры» (feed — [(вид, пункт)], фильмы, сериалы и музыка вперемешку): «🎬 **Имя**» ссылкой,
+    метаданные через «·», описание в одно-два предложения; ← n/N → по кругу по всей ленте, «Назад» — в хаб.
+    Картинку (постер, обложку) прикладывает обработчик."""
+    b = MessageBuilder()
+    if not feed:
+        b.title("🆕 Премьеры недели")
+        b.line("Премьер на эту неделю пока нет.")
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+    index %= len(feed)
+    kind, item = feed[index]
     kind = kind if kind in WEEK_PAGES else "movie"
     emoji, _tab = _WEEK_TABS[kind]
-    b = MessageBuilder()
-    if not items:
-        b.title(f"{emoji} {_PREMIERE_LABELS[kind]}")
-        b.line("Премьер на эту неделю пока нет.")
-        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("lz_prem")]))
-    index %= len(items)
-    name, url, meta, about = _week_item(items[index], kind)
+    name, url, meta, about = _week_item(item, kind)
     name = " ".join(str(name or "").split())
     b.text_line(f"{emoji} ")
     b.bold_link(name, str(url).strip()) if str(url or "").strip() else b.bold(name)
@@ -951,18 +934,18 @@ def premiere_card(kind, items, index=0) -> MessageSpec:
     b.newline()
     if values:
         b.line(" · ".join(values))
-    about = _premiere_about(about)
+    about = _hub_about(item.get("note") or about)  # описание премьеры (AI), без него — начало описания источника
     if about:
         b.spacer()
         b.line(about)
     rows = []
-    if len(items) > 1:
+    if len(feed) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"lz_prem_{kind}_{(index - 1) % len(items)}"),
-            InlineKeyboardButton(f"{index + 1}/{len(items)}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"lz_prem_{kind}_{(index + 1) % len(items)}"),
+            InlineKeyboardButton("◀️", callback_data=f"lz_prem_{(index - 1) % len(feed)}"),
+            InlineKeyboardButton(f"{index + 1}/{len(feed)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"lz_prem_{(index + 1) % len(feed)}"),
         ])
-    rows.append(nav_row("lz_prem"))
+    rows.append(nav_row("m_leisure"))
     return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 

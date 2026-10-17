@@ -337,7 +337,7 @@ def test_cached_artist_card_without_description_is_picked_again(monkeypatch):
 def test_music_premieres_and_novelty_link_to_youtube_music():
     album = {"title": "Blue Rev", "artist": "Alvvays", "url": "https://music.apple.com/nl/album/1"}
 
-    for message in (leisure_ui.premiere_card("music", [album]), leisure_ui.novelty_card("music", album)):
+    for message in (leisure_ui.premiere_card([("music", album)]), leisure_ui.novelty_card("music", album)):
         links = [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK]
         assert links == ["https://music.youtube.com/search?q=Alvvays+Blue+Rev"]  # не Apple Music
 

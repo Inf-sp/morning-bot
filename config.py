@@ -158,6 +158,7 @@ GAME_CATALOG_KEY = "game_catalog.json"  # {язык: [загадки AI, про�
 PUBLIC_HOLIDAYS_KEY = "public_holidays.json"  # {cc|год: [праздники]} — резерв при сбое Nager.Date
 LOCAL_EVENTS_KEY = "local_events.json"  # {город|cc и afisha|город|cc: {ts, events[{name, about, start, end, url}]}} — неделя
 ALBUM_NOTES_KEY = "album_notes.json"  # {«артист|альбом»: {ts, value: короткое описание}} — «Новая музыка»
+PREMIERE_NOTES_KEY = "premiere_notes.json"  # {«вид|id|сезон»: {ts, value: 1–2 предложения}} — лента «Премьеры»
 COUNTRY_FACTS_KEY = "country_facts.json"  # {cc: {ts, value}} — факты о стране отпуска, 30 дней
 FX_RATES_KEY = "fx_rates.json"  # {"YYYY-MM-DD:ZAR": {ts, value}} — курс евро на день
 CONCERT_ARTIST_NOTES_KEY = "concert_artist_notes.json"  # {артист: короткая фраза, известность 1–10, ts}

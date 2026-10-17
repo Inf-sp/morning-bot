@@ -104,50 +104,74 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert [weekday for weekday, _item in films] == ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     assert [item["title"] for _weekday, item in films] == [f"Фильм {i}" for i in range(7)]  # топ-7 по популярности
 
-    menu_screen = leisure_ui.premieres_menu()
-    assert _labels(menu_screen.reply_markup) == [
-        ["Новые фильмы"], ["Новые сериалы"], ["Новая музыка"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(menu_screen.reply_markup)[:3] == ["lz_prem_movie", "lz_prem_series", "lz_prem_music"]
-
     items = leisure_ui.week_items("movie", films)
-    card = leisure_ui.premiere_card("movie", items, 0)
-    # Карточка-журнал: имя, метаданные, полное описание; ← 1/7 → по кругу, «Назад» — в меню премьер.
+    card = leisure_ui.premiere_card([("movie", item) for item in items], 0)
+    # Карточка ленты: имя, метаданные, описание; ← 1/7 → по кругу, «Назад» — в хаб.
     assert card.text == "🎬 Фильм 0\n\nОписание."
     assert _labels(card.reply_markup) == [["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(card.reply_markup) == ["lz_prem_movie_6", "noop", "lz_prem_movie_1", "lz_prem", "m_menu"]
+    assert _callbacks(card.reply_markup) == ["lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
     raw = card.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in card.entities]
     assert ("bold", "Фильм 0") in marked
 
-    # Сериалы — свой вид; без жанра или страны не попадают.
+    # Сериалы — без жанра или страны не попадают.
     series_items = leisure_ui.week_items("series", leisure_hub.week_data("42", "series", day=monday))
-    tab = leisure_ui.premiere_card("series", series_items)
+    tab = leisure_ui.premiere_card([("series", item) for item in series_items])
     assert tab.text == "📺 Суд\n\nдрама · 🇺🇸 USA · HBO\n\nОписание."
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
     assert _labels(tab.reply_markup) == [["⬅️ Назад", "#️⃣ Главная"]]  # одна премьера — без стрелок
 
-    album = leisure_ui.premiere_card("music", [{
+    album = leisure_ui.premiere_card([("music", {
         "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
-        "url": "https://music.example/a", "about": "Мечтательный инди-поп."}])
-    assert album.text == "🎧 Alvvays — «Blue Rev»\n\nИнди · 🇨🇦 CA\n\nМечтательный инди-поп."  # сначала исполнитель
-    empty = leisure_ui.premiere_card("music", [])
-    assert empty.text == "🎧 Новая музыка\n\nПремьер на эту неделю пока нет."
+        "url": "https://music.example/a", "about": "Мечтательный инди-поп.",
+        "note": "Мечтательный инди-поп с шумными гитарами. Третий альбом группы. Лишнее третье предложение."})])
+    # Сначала исполнитель; описание премьеры — не больше двух предложений.
+    assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nИнди · 🇨🇦 CA\n\n"
+                          "Мечтательный инди-поп с шумными гитарами. Третий альбом группы.")
+    empty = leisure_ui.premiere_card([])
+    assert empty.text == "🆕 Премьеры недели\n\nПремьер на эту неделю пока нет."
+    assert _callbacks(empty.reply_markup) == ["m_leisure", "m_menu"]
+
+
+def test_premieres_feed_mixes_three_best_of_each_kind_newest_first(monkeypatch):
+    import leisure_hub
+    from datetime import date
+
+    movies = [{"id": i + 1, "title": f"Фильм {i}", "overview": "Описание.", "popularity": 10 - i,
+               "date": f"2026-10-{8 + i:02d}"} for i in range(9)]
+    series = [{"kind": "tv", "id": 100 + i, "name": f"Сериал {i}", "overview": "Описание.", "genres": "Драма",
+               "origin_country": ["US"], "popularity": 9 - i, "release_date": day}
+              for i, day in enumerate(("2026-10-13", "2026-10-16", "2026-10-01", "2026-10-12"))]
+    albums = [{"title": f"Альбом {i}", "artist": f"A{i}", "date": day}
+              for i, day in enumerate(("2026-10-09", "2026-10-14", "2026-10-02", "2026-10-13"))]
+    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
+    monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: series)
+    monkeypatch.setattr(leisure_hub, "weekly_music", lambda *_a: albums)
+    monkeypatch.setattr(leisure_hub, "_notes", lambda _key: {"movie|1|": "Описание премьеры."})
+
+    feed = leisure_hub.premieres_feed("42", day=date(2026, 10, 14))
+
+    # По три лучших каждого вида; вышедшие — от самых новых, ещё не вышедший сериал — в конце.
+    names = [item.get("title") if kind != "series" else item["name"] for kind, item in feed]
+    assert names == ["Альбом 1", "Сериал 0", "Фильм 2", "Фильм 1", "Альбом 0", "Фильм 0", "Альбом 2", "Сериал 2",
+                     "Сериал 1"]
+    assert dict((item.get("title"), item["note"]) for _kind, item in feed)["Фильм 0"] == "Описание премьеры."
 
 
 def test_premiere_flip_replaces_photo_in_place(monkeypatch):
     import leisure_hub
-    films = [("Пн", {"title": "A", "poster": "a.jpg", "overview": "Первый."}),
-             ("Вт", {"title": "B", "poster": "b.jpg", "overview": "Второй."})]
-    monkeypatch.setattr(leisure_hub, "week_data", lambda *_a: films)
+    films = [("Пн", {"title": "A", "poster": "a.jpg", "overview": "Первый.", "note": "Первый."}),
+             ("Вт", {"title": "B", "poster": "b.jpg", "overview": "Второй.", "note": "Второй."})]
+    monkeypatch.setattr(leisure_hub, "premieres_feed", lambda *_a: [("movie", item) for _day, item in films])
     edited = []
 
     class Query:
         async def edit_message_media(self, **kwargs):
             edited.append(kwargs)
 
-    asyncio.run(leisure_hub.send_week_premieres(object(), "42", "movie_3", q=Query()))
+    asyncio.run(leisure_hub.send_week_premieres(object(), "42", "3", q=Query()))
 
     assert edited[0]["media"].media == "b.jpg" and "Второй." in edited[0]["media"].caption  # 3 % 2 → вторая
 
@@ -241,11 +265,12 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_series", step("series"))
     monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
+    monkeypatch.setattr(leisure_hub, "_warm_premiere_notes", step("premiere_notes"))
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
     assert leisure_hub.failed_steps["42"] == ["концерты"]
     assert calls == ["concerts", "movies", "music", "movie_reco", "tv_reco", "artist_reco",
-                     "series", "album_notes", "details"]
+                     "series", "album_notes", "details", "premiere_notes"]
 
 
 def test_premieres_and_library_submenus():
@@ -264,8 +289,7 @@ def test_premieres_and_library_submenus():
 def test_every_hub_and_submenu_button_has_a_route():
     markups = (
         leisure_ui.leisure_hub_kb(),
-        leisure_ui.premieres_menu().reply_markup,
-        leisure_ui.premiere_card("movie", [{"title": "A"}, {"title": "B"}]).reply_markup,
+        leisure_ui.premiere_card([("movie", {"title": "A"}), ("music", {"title": "B", "artist": "C"})]).reply_markup,
         leisure_ui.leisure_library_menu().reply_markup,
     )
     for data in {data for markup in markups for data in _callbacks(markup)}:
@@ -423,27 +447,58 @@ def test_series_card_and_genre_menu_stay_in_series():
         assert routing.resolve_callback_handler(data)["handled"], data
 
 
-def test_week_tab_without_country_fetches_it_in_background(monkeypatch):
+def test_premieres_open_waits_for_notes_and_fetches_country_in_background(monkeypatch):
     import leisure_hub
-    calls = []
+    calls, notes, shown = [], {}, []
 
-    def week(_cid, kind, _day=None, fetch=False):
-        calls.append((kind, fetch))
-        return [("Пт", {"title": "Blue Rev", "artist": "Alvvays", "about": "Мечтательный инди-поп."})]
+    def feed(_cid, _day=None, fetch=False):
+        calls.append(fetch)
+        return [("music", {"title": "Blue Rev", "artist": "Alvvays", "note": notes.get("blue rev", "")})]
 
-    async def show(*_args):
-        return None
+    async def describe(_feed):
+        notes["blue rev"] = "Мечтательный инди-поп."
 
-    monkeypatch.setattr(leisure_hub, "week_data", week)
+    async def show(_bot, _cid, msg, _image, _q=None):
+        shown.append(msg.text)
+
+    monkeypatch.setattr(leisure_hub, "premieres_feed", feed)
+    monkeypatch.setattr(leisure_hub, "describe_premieres", describe)
     monkeypatch.setattr(leisure_hub, "_show_card", show)
+    monkeypatch.setattr(leisure_hub, "_refresh_favorite_releases", lambda _cid: None)
 
     async def main():
-        await leisure_hub.send_week_premieres(None, "42", "music")
+        await leisure_hub.send_week_premieres(None, "notes-42")
         for _ in range(5):
             await asyncio.sleep(0.01)
 
     asyncio.run(main())
-    assert calls == [("music", False), ("music", True)]  # открытие — из кэша, страна — догрузка в фоне
+    assert shown[0].endswith("Мечтательный инди-поп.")  # открытие дождалось описания
+    assert calls == [False, False, True]  # открытие — из кэша, страна — догрузка в фоне
+
+
+def test_empty_hub_builds_day_cards_right_away(monkeypatch):
+    import leisure_hub
+    built = []
+    monkeypatch.setattr(leisure_hub, "today_data", lambda _cid: {
+        "picks": [{"name": "Дюна"}] if built else [], "outing": None, "city": "", "library": {}})
+
+    async def build(cid):
+        built.append(cid)
+
+    async def show(_bot, _cid, msg, _q=None):
+        built.append(msg.text)
+
+    monkeypatch.setattr(leisure_hub, "_build_cards", build)
+    monkeypatch.setattr(leisure_hub, "_show", show)
+    monkeypatch.setattr(leisure_hub.leisure_ui, "leisure_today_screen",
+                        lambda picks, **_kwargs: type("M", (), {"text": [pick["name"] for pick in picks]})())
+    import vacation
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+
+    asyncio.run(leisure_hub.send_hub(None, "cards-42"))
+
+    # Карточки стёрты (начало или конец отпуска) — хаб собирает их сразу, а не ждёт ночного прогрева.
+    assert built == ["cards-42", ["Дюна"]]
 
 
 def _today_picks(monkeypatch, *, rain=False, concert=True):

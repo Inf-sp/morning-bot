@@ -439,6 +439,8 @@ async def return_home(bot, cid, *, automatic=False):
                        home.get("country", ""), home.get("cc", ""))
     _save(cid, None)
     _reset_day_caches(cid)
+    import leisure_hub
+    leisure_hub.refresh_cards(cid)  # фильм, сериал и артист дня — сразу, а не ночным прогревом
     msg = vacation_ui.returned(home.get("city", ""), automatic=automatic)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     return True
@@ -771,7 +773,8 @@ _TRIP_HITS, _TRIP_LEGENDS = 3, 2
 # Разных артистов чарта страны, у которых проверяется страна (MusicBrainz — 1 запрос/с): в «Top <страна>» много
 # зарубежных хитов, местные бывают и в третьем десятке.
 _TRIP_CHART_CHECKS = 25
-_TRIP_LEISURE_VERSION = 3  # 3 — кино и сериалы страны из TMDb, хиты местных артистов с треками (Deezer), легенды
+_TRIP_LEISURE_VERSION = 4  # 4 — пустой сбор пересобирается при открытии; 3 — кино из TMDb, хиты Deezer
+_TRIP_CONTENT = ("films", "series", "hits", "legends")  # без них Досуг поездки собран не до конца
 
 
 def trip_leisure(cid) -> dict:
@@ -782,11 +785,12 @@ def trip_leisure(cid) -> dict:
     if not current:
         return {}
     saved = current.get("leisure")
-    if isinstance(saved, dict) and saved.get("cc") == current.get("cc") and saved.get("v") == _TRIP_LEISURE_VERSION:
+    fresh = isinstance(saved, dict) and saved.get("cc") == current.get("cc") and saved.get("v") == _TRIP_LEISURE_VERSION
+    if fresh and any(saved.get(key) for key in _TRIP_CONTENT):
         return saved
-    if util.on_event_loop():
+    if util.on_event_loop():  # без кино и музыки (сбой источников) — пересборка фоном, праздники пока остаются
         util.build_off_loop(("vacation_leisure", str(cid)), trip_leisure, cid)
-        return {}
+        return saved if fresh else {}
     cc = str(current.get("cc") or "").upper()
     country = store.get_settings(cid).get("country") or cc
     until = None
