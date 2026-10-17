@@ -66,6 +66,12 @@ def start_action(cid, section, action, *, budget_seconds=None) -> ActionTrace:
     return trace
 
 
+def detach_action() -> None:
+    """Фоновая задача живёт дольше действия пользователя: без его лимита времени (иначе через 15 с запросы
+    к TMDb и другим источникам перестают уходить, и фоновая сборка не может закончиться)."""
+    _current_action.set(None)
+
+
 def current_action() -> ActionTrace | None:
     return _current_action.get()
 

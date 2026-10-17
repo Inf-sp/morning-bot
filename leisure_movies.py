@@ -725,12 +725,11 @@ async def send_recos(bot, cid, kind, status=None):
         it, tm = _cached_movie(cid, kind, stale=True) or (it, tm)  # сбой подбора — последняя карточка недели
     if not it or not _of_kind(tm, kind):
         _log.warning(
-            "movie reco: no TMDb-backed pick (tmdb_key=%s, llm_item=%s)",
+            "movie reco: no TMDb-backed pick in time, finishing in background (tmdb_key=%s, llm_item=%s)",
             bool(config.TMDB_API_KEY), bool(it),
         )
-        await bot.send_message(
-            chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
-            reply_markup=_movie_home_only_kb()); return
+        await _deliver_later(bot, cid, kind, status)
+        return
     disp = _display_title(it, tm)
     movie_engine.mark_shown(cid, disp)
     store.last_recos[_rec_key(cid, kind)] = {"kind": kind, "items": [disp]}
@@ -747,6 +746,32 @@ async def send_recos(bot, cid, kind, status=None):
 
 
 _SOURCE = {"movie": "Кино", "tv": "Сериалы"}
+
+
+_LATER_TASKS = {}  # дособирается в фоне: повторное нажатие не запускает второй подбор
+
+
+async def _deliver_later(bot, cid, kind, status=None):
+    """Подбор не уложился в лимит действия (холодный кэш TMDb, медленный ответ): вместо ошибки — короткое
+    «пришлю чуть позже», фильм дособирается в фоне без лимита и приходит карточкой; не нашёлся — ошибка."""
+    text = "Подбираю дольше обычного — пришлю карточку, как только найду."
+    if status is not None:
+        await status.replace(text, reply_markup=_movie_home_only_kb())
+    else:
+        await bot.send_message(chat_id=cid, text=text, reply_markup=_movie_home_only_kb())
+    key = f"{cid}|{kind}"
+    if key in _LATER_TASKS and not _LATER_TASKS[key].done():
+        return
+
+    async def finish():
+        it, tm = await get_current_movie(cid, kind)  # кэширует карточку дня — дальше «🎬 Фильм» откроется сразу
+        if it and tm:
+            await send_current_movie(bot, cid, kind=kind)
+        else:
+            await bot.send_message(chat_id=cid, text="Не удалось подобрать. Попробуй ещё раз.",
+                                   reply_markup=_movie_home_only_kb())
+
+    _LATER_TASKS[key] = util.background(finish(), "movie pick later")
 
 
 async def send_current_movie(bot, cid, status=None, kind="movie"):

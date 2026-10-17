@@ -32,9 +32,16 @@ _OFF_LOOP_STARTED = {}
 OFF_LOOP_RETRY_SECONDS = 600
 
 
+async def _detached(coro):
+    import tracking  # задача — в копии контекста: действие пользователя и его лимит остаются у него
+    tracking.detach_action()
+    return await coro
+
+
 def background(coro, name="background"):
-    """Фоновая задача со ссылкой (без неё loop держит weakref и GC может её собрать) и логом ошибки."""
-    task = asyncio.create_task(coro)
+    """Фоновая задача со ссылкой (без неё loop держит weakref и GC может её собрать) и логом ошибки; без лимита
+    времени действия, из которого её запустили."""
+    task = asyncio.create_task(_detached(coro))
     _BACKGROUND_TASKS.add(task)
 
     def done(finished):
