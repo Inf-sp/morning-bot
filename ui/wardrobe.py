@@ -367,7 +367,7 @@ def suitcase_screen(data, saved=False):
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
     if saved:
-        b.line("✅ Сохранён — открывается кнопкой «Собрать чемодан».")
+        b.line("✅ Сохранён — открывается из Гардероба.")
         b.spacer()
     if data.get("weather"):
         weather = _finish_dot(data["weather"])

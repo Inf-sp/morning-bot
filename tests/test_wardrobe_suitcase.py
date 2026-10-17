@@ -134,7 +134,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
 
     # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
     asyncio.run(wardrobe_suitcase.send(bot, "42"))
-    assert "✅ Сохранён — открывается кнопкой «Собрать чемодан»." in bot.sent[-1]["text"]
+    assert "✅ Сохранён — открывается из Гардероба." in bot.sent[-1]["text"]
     assert "42" not in wardrobe_suitcase.store.pending_input
 
     # «Удалить подборку» — сразу, без подтверждения; дальше снова вопрос «Куда и когда едешь?».
@@ -166,7 +166,7 @@ def test_pack_button_at_home_and_on_vacation(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
     assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[2] == "w_pack"  # дома — под стилями
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
-    # В отпуске нет стилей: «Ещё вариант» — новый образ дня, ниже «Собрать чемодан».
+    # В отпуске нет стилей: «Ещё вариант» — новый образ дня, ниже «Мой чемодан».
     assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]
 
 

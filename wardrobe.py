@@ -229,9 +229,10 @@ def build_wardrobe_keyboard(cid=None):
     import vacation
     if cid is not None and vacation.active(cid):
         # В отпуске: «Ещё вариант» — новый образ дня из вещей чемодана по погоде поездки; без стилей и покупок.
+        # «Мой чемодан» — синяя (telegram_runtime._BLUE_RE): чемодан поездки уже есть или соберётся под неё.
         return _kb([
             [("Ещё вариант", "w_look")],
-            [("🧳 Собрать чемодан", "w_pack")],
+            [("🧳 Мой чемодан", "w_pack")],
             [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
         ])
     rows = [

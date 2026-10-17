@@ -461,7 +461,7 @@ def _cache_misses_ready_sections(cache, cid):
 
 def _day_menu_kb(cid=None):
     import vacation
-    trip = [[InlineKeyboardButton("🏠 Вернуться домой", callback_data="set_vachome")]] \
+    trip = [[InlineKeyboardButton("🏠 Вернуться из отпуска", callback_data="set_vachome")]] \
         if cid is not None and vacation.active(cid) else []
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],

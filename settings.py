@@ -366,10 +366,10 @@ def preferences_summary(cid) -> list:
 
 
 def vacation_button(cid):
-    """«✈️ В отпуске» или, пока отпуск идёт, «🏠 Вернуться домой»."""
+    """«✈️ В отпуске» или, пока отпуск идёт, «🏠 Вернуться из отпуска»."""
     import vacation
     if vacation.active(cid):
-        return InlineKeyboardButton("🏠 Вернуться домой", callback_data="set_vachome")
+        return InlineKeyboardButton("🏠 Вернуться из отпуска", callback_data="set_vachome")
     return InlineKeyboardButton("✈️ В отпуске", callback_data="set_vac")
 
 

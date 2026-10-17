@@ -277,3 +277,19 @@ def test_settings_and_home_stack_into_one_column_home_last():
         ["Настроить"], ["Главная"]]
     assert [[b["text"] for b in row] for row in telegram_runtime._enhance_markup(back)["inline_keyboard"]] == [
         ["Назад", "Главная"]]
+
+
+def test_trip_suitcase_and_return_buttons_are_blue(monkeypatch):
+    import myday
+    import vacation
+    import wardrobe
+
+    monkeypatch.setattr(vacation, "active", lambda _cid: True)
+    for markup, label in ((wardrobe.build_wardrobe_keyboard("42"), "Мой чемодан"),
+                          (myday._day_menu_kb("42"), "Вернуться из отпуска")):
+        styles = {button["text"]: button.get("style")
+                  for row in telegram_runtime._enhance_markup(markup)["inline_keyboard"] for button in row}
+        assert styles[label] == "primary"
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+    labels = [button.text for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard for button in row]
+    assert "🧳 Собрать чемодан" in labels and "🧳 Мой чемодан" not in labels  # дома — прежняя кнопка
