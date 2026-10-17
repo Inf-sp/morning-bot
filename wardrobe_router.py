@@ -20,6 +20,11 @@ def _settings_style(choice):
 
 
 async def handle_callback(bot, cid, q, data, status=None):
+    if data == "w_look":
+        import wardrobe_suitcase
+        if wardrobe_suitcase.trip_suitcase(cid):  # отпуск с чемоданом: «Ещё вариант» — другой образ на сегодня
+            await wardrobe_suitcase.handle(bot, cid, "w_pack_alt_today", q)
+            return
     if data == "w_look" or data.startswith(("w_lookst_", "w_with_")):
         # w_with_<id> — «Собрать образ» из карточки вещи: образ дня с этой вещью.
         anchor_id = data[len("w_with_"):] if data.startswith("w_with_") else None

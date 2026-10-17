@@ -193,7 +193,12 @@ def _get_cached_look(cid):
 
 
 def get_cached_outfit_summary(cid):
-    """Эмодзи стиля и точный видимый список текущего образа для «Моего дня»."""
+    """Эмодзи стиля и точный видимый список текущего образа для «Моего дня»; в отпуске с чемоданом — образ на
+    сегодня из плана поездки (тот же, что в Гардеробе)."""
+    import wardrobe_suitcase
+    planned = wardrobe_suitcase.today_look(cid)
+    if planned:
+        return {"emoji": "", "items": [wardrobe_ui._lower_first(_clean_text(name)) for name in planned]}
     cached = _get_cached_look(cid)
     if not cached:
         return {"emoji": "", "items": []}
@@ -265,8 +270,13 @@ def _cancel_wardrobe_input(cid):
 
 
 async def send_home(bot, cid, q=None, status=None):
-    """Главный экран раздела «Гардероб» — сразу образ на сегодня."""
+    """Главный экран раздела «Гардероб» — сразу образ на сегодня. В отпуске с сохранённым чемоданом этой страны —
+    образ на сегодня из плана поездки с листанием дней (wardrobe_suitcase.show_day)."""
     _cancel_wardrobe_input(cid)
+    import wardrobe_suitcase
+    if wardrobe_suitcase.trip_suitcase(cid):
+        await wardrobe_suitcase.show_day(bot, cid, q=q, trip=True, status=status)
+        return
     await send_looks(bot, cid, status=status, q=q)
 
 
@@ -277,7 +287,10 @@ class _WarmCacheStatus:
 
 
 async def warm_home_cache(cid):
-    """Собирает образ дня в кэш без отправки пользователю."""
+    """Собирает образ дня в кэш без отправки пользователю; в отпуске с чемоданом — план образов поездки."""
+    import wardrobe_suitcase
+    if wardrobe_suitcase.trip_suitcase(cid):
+        return bool(await asyncio.to_thread(wardrobe_suitcase.plan, cid))
     if not _get_cached_look(cid):
         await send_looks(None, cid, status=_WarmCacheStatus())
     # Для пустого шкафа постоянная карточка не нужна; сам прогрев всё равно успешен.

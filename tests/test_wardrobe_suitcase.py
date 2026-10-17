@@ -1,4 +1,6 @@
 import asyncio
+
+import pytest
 import os
 from datetime import date
 
@@ -227,40 +229,52 @@ def test_daily_looks_follow_each_day_weather_and_rotate_items():
                      ("Низ", "Джинсы"), ("Обувь", "Белые кеды"), ("Обувь", "Кроссовки"), ("Верх", "Пиджак не брал"))
     names = {"Белая футболка", "Серая футболка", "Бежевые чиносы", "Джинсы", "Белые кеды", "Кроссовки"}
     trip = {"start": "2026-10-20", "end": "2026-10-22"}
-    daily = [{"date": "2026-10-20", "tmax": 22, "tmin": 15, "rain": False, "wind": 3},
-             {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 5}]
+    daily = [{"date": "2026-10-20", "tmax": 22, "tmin": 15, "rain": False, "wind": 3, "code": 1, "kind": "forecast"},
+             {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 5, "code": 61, "kind": "forecast"}]
 
     looks = wardrobe_suitcase.daily_looks(closet, names, trip, daily)
 
     assert [look["date"] for look in looks] == ["2026-10-20", "2026-10-21", "2026-10-22"]
-    assert looks[1]["tmax"] == 19 and looks[1]["rain"] and looks[2]["tmax"] is None  # за прогнозом — без погоды
+    assert looks[1]["tmax"] == 19 and looks[1]["rain"] and looks[1]["icon"] == "🌧️"
+    assert looks[2]["tmax"] is None and looks[2]["icon"] == "🌡️"  # данных нет — без погоды
     assert all(len(look["items"]) == 3 and "Пиджак не брал" not in look["items"] for look in looks)
     assert set(looks[0]["items"]).isdisjoint(looks[1]["items"])  # вещи чередуются, а не повторяются подряд
-    text = wardrobe_ui.suitcase_looks_screen({"place": "Кейптаун", "days": 3}, looks).text
-    assert text.startswith("👕 Образы · Кейптаун · 3 дня\n\nВт 20 окт · +22° · ")
-    assert "\nСр 21 окт · +19°, дождь · " in text
 
 
-def test_trip_weather_keeps_each_day_for_daily_looks(monkeypatch):
+def test_trip_weather_has_every_day_with_reliability_and_last_year_after_the_horizon(monkeypatch):
     import weather_provider
+    calls = []
 
     class Response:
+        def __init__(self, url, params):
+            self.url, self.params = url, params
+
         def raise_for_status(self):
             pass
 
         def json(self):
-            return {"daily": {"time": ["2026-10-20", "2026-10-21"], "temperature_2m_max": [22.4, 18.6],
-                              "temperature_2m_min": [14.2, 12.8], "precipitation_probability_max": [10, 80],
-                              "precipitation_sum": [0, 4], "windspeed_10m_max": [3.2, 9.6]}}
+            if "archive" in self.url:  # хвост поездки за горизонтом — те же дни год назад
+                return {"daily": {"time": ["2025-11-03"], "temperature_2m_max": [25.1], "temperature_2m_min": [16],
+                                  "precipitation_sum": [0], "windspeed_10m_max": [5], "weathercode": [1]}}
+            days = 16
+            return {"daily": {"time": [f"d{i}" for i in range(days)], "temperature_2m_max": [20 + i for i in range(days)],
+                              "temperature_2m_min": [12] * days, "precipitation_probability_max": [80] * days,
+                              "precipitation_sum": [4] * days, "windspeed_10m_max": [3] * days,
+                              "weathercode": [61] * days}}
 
-    monkeypatch.setattr(weather_provider.requests, "get", lambda *_a, **_k: Response())
+    monkeypatch.setattr(weather_provider.requests, "get",
+                        lambda url, timeout=None, params=None: calls.append((url, params)) or Response(url, params))
 
-    found = weather_provider.period_weather(1, 2, date(2026, 10, 20), date(2026, 10, 21), date(2026, 10, 16))
+    found = weather_provider.period_weather(1, 2, date(2026, 10, 18), date(2026, 11, 3), date(2026, 10, 18))
 
-    assert found["rainy"] == 1 and found["tmin"] == 19 and found["tmax"] == 22
-    assert found["daily"] == [
-        {"date": "2026-10-20", "tmax": 22, "tmin": 14, "rain": False, "wind": 3},
-        {"date": "2026-10-21", "tmax": 19, "tmin": 13, "rain": True, "wind": 10}]
+    daily = found["daily"]
+    assert [day["date"] for day in daily][:2] == ["2026-10-18", "2026-10-19"] and len(daily) == 17  # без пропусков
+    assert [day["kind"] for day in daily[:8]] == ["forecast"] * 8  # неделя вперёд — прогноз
+    assert {day["kind"] for day in daily[8:16]} == {"early"}  # дальше — предварительно
+    assert daily[16] == {"date": "2026-11-03", "tmax": 25, "tmin": 16, "rain": False, "wind": 5, "code": 1,
+                         "kind": "typical"}
+    assert calls[1][1]["start_date"] == "2025-11-03" and calls[1][1]["end_date"] == "2025-11-03"
+    assert found["rainy"] == 16 and not found["typical"]  # сводка — по прогнозу, без хвоста прошлого года
 
 
 def test_declined_items_never_come_back_after_confirm_rebuild_or_new_pack(monkeypatch):
@@ -337,5 +351,123 @@ def test_daily_looks_use_daytime_low_and_never_leave_a_day_empty():
                                        wardrobe_suitcase._day_context(daily[0]), [], "")
     assert all({"Бежевые брюки", "Белые кеды"} <= set(look["items"]) for look in looks)  # кеды — из шкафа
     assert all(any("рубашка" in name for name in look["items"]) for look in looks)
-    assert "образ" not in wardrobe_ui.suitcase_looks_screen({"place": "Кейптаун", "days": 3}, looks).text.split(
-        "\n", 1)[1]
+
+
+
+def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
+    head = {"place": "Кейптаун", "start": "2026-10-19", "end": "2026-11-04", "days": 17, "flag": "🇿🇦"}
+    look = {"date": "2026-10-19", "tmax": 18, "kind": "forecast", "icon": "🌧️",
+            "items": ["бежевая футболка с оранжевым принтом", "Бежевые строгие брюки", "белые кеды"]}
+
+    text = wardrobe_ui.suitcase_day_card(head, look, 0, 17, "2026-10-19").text
+
+    assert text == ("🇿🇦 Образы · Кейптаун\n\n19 окт — 4 ноя · 17 дней\n\nПн, 19 окт · сегодня\n🌧️ +18°C\n\n"
+                    "Бежевая футболка с оранжевым принтом\nБежевые строгие брюки\nБелые кеды")
+    weather = {kind: wardrobe_ui._day_weather_line({"tmax": 18, "kind": kind, "icon": "☀️"})
+               for kind in ("forecast", "early", "typical")}
+    assert weather == {"forecast": "☀️ +18°C", "early": "🌡️ ≈+18°C · предварительно", "typical": "🌡️ обычно +18°C"}
+    assert wardrobe_ui._day_weather_line({"tmax": None}) == "🌡️ погода уточнится"
+    assert wardrobe_ui._short_range("2026-10-20", "2026-10-27") == "20–27 окт"
+
+
+def test_early_and_typical_days_are_dressed_by_temperature_without_rain():
+    for kind in ("early", "typical"):
+        ctx = wardrobe_suitcase._day_context({"tmax": 15, "tmin": 9, "rain": True, "wind": 12, "kind": kind})
+        assert not ctx["has_rain"] and not ctx["strong_wind"]
+    assert wardrobe_suitcase._day_context({"tmax": 15, "rain": True, "kind": "forecast"})["has_rain"]
+
+
+SAVED = {"trip": {**TRIP, "start": "2026-10-19", "end": "2026-10-21"},
+         "result": {"place": "Кейптаун", "start": "2026-10-19", "end": "2026-10-21", "days": 3,
+                    "groups": [("Верх", ["Белая футболка", "Серая футболка"]), ("Низ", ["Бежевые чиносы", "Джинсы"]),
+                               ("Обувь", ["Белые кеды"])]}}
+TRIP_CLOSET = {"zones": {
+    "Верх": {"Все": [{"id": "w", "name": "Белая футболка", "zone": "Верх", "temp_range": [5, 35]},
+                     {"id": "g", "name": "Серая футболка", "zone": "Верх", "temp_range": [5, 35]}]},
+    "Низ": {"Все": [{"id": "c", "name": "Бежевые чиносы", "zone": "Низ", "temp_range": [5, 35]},
+                    {"id": "j", "name": "Джинсы", "zone": "Низ", "temp_range": [5, 35]}]},
+    "Обувь": {"Все": [{"id": "s", "name": "Белые кеды", "zone": "Обувь", "temp_range": [5, 35]}]}}}
+TRIP_DAYS = [{"date": f"2026-10-{day}", "tmax": 21, "tmin": 15, "rain": False, "wind": 3, "code": 1,
+              "kind": "forecast"} for day in (19, 20, 21)]
+
+
+def _trip_env(monkeypatch, today=date(2026, 10, 20)):
+    import copy
+    profile = _memory_profile(monkeypatch)
+    profile["suitcase_saved"] = copy.deepcopy(SAVED)
+    fetched = []
+    monkeypatch.setattr(wardrobe_suitcase, "_today", lambda: today)
+    monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda trip: fetched.append(trip) or {"daily": TRIP_DAYS})
+    monkeypatch.setattr(wardrobe_suitcase.store, "load_wardrobe", lambda _cid: TRIP_CLOSET)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(wardrobe_suitcase, "vacation_trip", lambda _cid: {**SAVED["trip"], "start": today.isoformat()})
+    return profile, fetched
+
+
+def test_plan_is_kept_while_paging_and_recomputed_next_day_or_after_suitcase_change(monkeypatch):
+    profile, fetched = _trip_env(monkeypatch)
+
+    first = wardrobe_suitcase.plan("42")
+    assert len(first) == 3 and wardrobe_suitcase.plan("42") == first and len(fetched) == 1  # листание — без пересчёта
+
+    monkeypatch.setattr(wardrobe_suitcase, "_today", lambda: date(2026, 10, 21))
+    assert wardrobe_suitcase.plan("42", fetch=False) == first and len(fetched) == 1  # «Мой день» — без сети
+    wardrobe_suitcase.plan("42")
+    assert len(fetched) == 2  # новый день — свежий прогноз
+
+    profile["suitcase_saved"]["result"]["groups"][0] = ("Верх", ["Белая футболка"])  # чемодан поменяли
+    wardrobe_suitcase.plan("42")
+    assert len(fetched) == 3
+
+
+def test_day_card_pages_in_a_circle_from_the_suitcase_and_from_the_trip_wardrobe(monkeypatch):
+    _trip_env(monkeypatch)
+    bot = Bot()
+
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_looks"))  # открывается на сегодняшнем дне
+    rows = bot.sent[-1]["reply_markup"].inline_keyboard
+    assert "Вт, 20 окт · сегодня" in bot.sent[-1]["text"]
+    assert [b.callback_data for b in rows[0]] == ["w_pack_day_0", "noop", "w_pack_day_2"] and rows[0][1].text == "2 из 3"
+    assert [b.callback_data for b in rows[1]] == ["w_pack_saved", "m_menu"]
+
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_day_2"))
+    assert "Ср, 21 окт\n" in bot.sent[-1]["text"]
+    assert [b.callback_data for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == [
+        "w_pack_day_1", "noop", "w_pack_day_0"]  # по кругу
+
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_trip_0"))
+    assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
+        ["w_pack_trip_2", "noop", "w_pack_trip_1"], ["w_pack_alt_0"], ["w_pack"], ["w_closet", "m_menu"]]
+
+
+def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it(monkeypatch):
+    import wardrobe
+    profile, _fetched = _trip_env(monkeypatch)
+    monkeypatch.setattr(wardrobe, "send_looks", lambda *_a, **_k: pytest.fail("в отпуске с чемоданом — план"))
+    bot = Bot()
+
+    asyncio.run(wardrobe.send_home(bot, "42"))
+
+    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы · Кейптаун\n\n19–21 окт · 3 дня\n\nВт, 20 окт · сегодня")
+    today = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
+    summary = wardrobe.get_cached_outfit_summary("42")["items"]
+    assert summary == [name[:1].lower() + name[1:] for name in today]  # «Мой день» — тот же образ
+
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_alt_today"))
+    changed = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
+    assert changed != today and len(changed) == 3  # другой комплект из вещей чемодана, сохранён в плане
+    assert bot.sent[-1]["text"].count("сегодня") == 1
+
+
+def test_trip_wardrobe_without_suitcase_keeps_the_daily_look(monkeypatch):
+    import wardrobe
+    _memory_profile(monkeypatch)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
+    calls = []
+
+    async def looks(*_a, **_k):
+        calls.append(1)
+
+    monkeypatch.setattr(wardrobe, "send_looks", looks)
+    asyncio.run(wardrobe.send_home(Bot(), "42"))
+    assert calls == [1]

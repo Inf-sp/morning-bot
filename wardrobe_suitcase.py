@@ -7,7 +7,9 @@ Open-Meteo, а для поездки дальше 16 дней — те же дн
 «✅ Подтвердить» (сохраняется один чемодан — его открывает «Собрать чемодан», в отпуске образ дня собирается из него)
 или «Пересобрать»: вещи чемодана кнопками — зелёная «беру», нажал — красная «не беру»; «Подобрать замену» ставит
 вместо красных вещи той же зоны из шкафа под погоду поездки. Отклонённые вещи запоминаются за поездкой и больше не
-предлагаются. У подтверждённого чемодана — «Образы на каждый день» и «Удалить подборку».
+предлагаются. У подтверждённого чемодана — «Образы на каждый день» (карточка дня с листанием; план хранится с
+чемоданом и пересчитывается раз в день по свежему прогнозу) и «Удалить подборку». В отпуске Гардероб открывает
+образ на сегодня из этого плана.
 """
 import hashlib
 import json
@@ -224,10 +226,13 @@ def _day_context(day) -> dict:
     tmax, tmin, wind = day.get("tmax"), day.get("tmin"), day.get("wind")
     low = round((tmin + tmax) / 2) if tmin is not None and tmax is not None else tmax
     hot, warm = tmax is not None and tmax >= 24, tmax is not None and 17 <= tmax < 24
-    strong = wind is not None and wind >= _STRONG_WIND_MS
-    tags = [tag for tag, on in (("rain", day.get("rain")), ("strong_wind", strong), ("hot", hot), ("warm", warm),
+    # Дождь и ветер — только по прогнозу на неделю: дальше («предварительно», «обычно») образ — по температуре.
+    reliable = day.get("kind") in (None, "forecast")
+    rain = reliable and bool(day.get("rain"))
+    strong = reliable and wind is not None and wind >= _STRONG_WIND_MS
+    tags = [tag for tag, on in (("rain", rain), ("strong_wind", strong), ("hot", hot), ("warm", warm),
                                 ("cool", tmax is not None and not hot and not warm)) if on]
-    return {"tmin": low, "tmax": tmax, "has_rain": bool(day.get("rain")), "wind_ms": wind,
+    return {"tmin": low, "tmax": tmax, "has_rain": rain, "wind_ms": wind if reliable else None,
             "strong_wind": strong, "sunny": False, "hot": hot, "warm": warm, "tags": tags}
 
 
@@ -263,19 +268,40 @@ def _least_worn(w, worn) -> list:
     return picked
 
 
+def _day_icon(day) -> str:
+    """Значок погоды дня — как в прогнозе бота; у предварительного и «обычного» дня — 🌡️, дождя заранее нет."""
+    if day.get("tmax") is None or day.get("kind") not in (None, "forecast"):
+        return "🌡️"
+    import weather
+    return weather.weather_icon(day.get("code"), day.get("tmax"), 70 if day.get("rain") else 0, day.get("wind") or 0)
+
+
+def _day_weather(day) -> dict:
+    """Погода дня, которую хранит образ: по ней «Ещё вариант» подбирает другой комплект, экран рисует строку."""
+    return {"tmax": day.get("tmax"), "tmin": day.get("tmin"), "rain": bool(day.get("rain")), "wind": day.get("wind"),
+            "code": day.get("code"), "kind": day.get("kind") or ("forecast" if day.get("tmax") is not None else ""),
+            "icon": _day_icon(day)}
+
+
+def _day_outfits(w, day) -> list:
+    """Лучшие комплекты дня по ступеням погоды (_day_contexts): первая ступень, где они есть."""
+    from wardrobe_outfit import top_outfits
+    return next((found for ctx in _day_contexts(day) if (found := top_outfits(w, ctx, [], "", limit=_LOOK_CHOICES))),
+                [])
+
+
 def daily_looks(wardrobe, names, trip, daily) -> list:
-    """Образ на каждый день поездки из вещей чемодана: [{date, tmax, rain, items}]. Погода — по дню (за горизонтом
-    прогноза — без неё); строгий подбор пуст — правила погоды смягчаются ступенями (_day_contexts). Из лучших
-    комплектов дня берётся тот, что меньше повторяет вчерашний и чаще надетые вещи."""
-    from wardrobe_outfit import outfit_display_order, top_outfits
+    """Образ на каждый день поездки из вещей чемодана: [{date, items, погода дня (_day_weather)}]. Строгий подбор
+    пуст — правила погоды смягчаются ступенями (_day_contexts). Из лучших комплектов дня берётся тот, что меньше
+    повторяет вчерашний и чаще надетые вещи."""
+    from wardrobe_outfit import outfit_display_order
     w = _suitcase_closet(wardrobe, names)
     by_date = {day.get("date"): day for day in daily or []}
     start = date.fromisoformat(trip["start"])
     worn, yesterday, looks = Counter(), set(), []
     for offset in range(trip_days(trip)):
         day = by_date.get((start + timedelta(days=offset)).isoformat()) or {}
-        outfits = next((found for ctx in _day_contexts(day)
-                        if (found := top_outfits(w, ctx, [], "", limit=_LOOK_CHOICES))), [])
+        outfits = _day_outfits(w, day)
         if outfits:
             items = min(enumerate(outfits), key=lambda pair: (
                 len({item.get("name") for item in pair[1]} & yesterday),
@@ -285,8 +311,88 @@ def daily_looks(wardrobe, names, trip, daily) -> list:
         items = sorted(items, key=outfit_display_order)
         yesterday = {item.get("name") for item in items}
         worn.update(yesterday)
-        looks.append({"date": (start + timedelta(days=offset)).isoformat(), "tmax": day.get("tmax"),
-                      "rain": bool(day.get("rain")), "items": [item.get("name") for item in items]})
+        looks.append({"date": (start + timedelta(days=offset)).isoformat(), **_day_weather(day),
+                      "items": [item.get("name") for item in items]})
+    return looks
+
+
+# ---------- план образов на поездку ----------
+
+def _names_key(result) -> str:
+    return hashlib.sha1("|".join(sorted(name for _zone, name in _flat(result))).encode("utf-8")).hexdigest()[:10]
+
+
+def trip_suitcase(cid) -> dict:
+    """Сохранённый чемодан страны текущего отпуска (не базовый набор) — его план показывает Гардероб; иначе {}."""
+    if not vacation.active(cid):
+        return {}
+    saved, cc = saved_suitcase(cid), vacation_trip(cid)["cc"]
+    usable = saved and cc and (saved.get("trip") or {}).get("cc") == cc and not saved["result"].get("basic")
+    return saved if usable else {}
+
+
+def _save_plan(cid, key, plan):
+    def change(profile):
+        saved = profile.get("suitcase_saved") or {}
+        if not saved.get("result") or _names_key(saved["result"]) != key:
+            return profile, None  # чемодан успели поменять — старый план не записываем
+        return {**profile, "suitcase_saved": {**saved, "plan": plan}}, None
+    store.mutate_profile(cid, change)
+
+
+def plan(cid, *, fetch=True) -> list:
+    """Образы на каждый день поездки сохранённого чемодана. Считаются один раз и хранятся с чемоданом — при листании
+    не меняются; пересчёт раз в день по свежему прогнозу и при изменении чемодана. fetch=False — только сохранённый
+    план, без сети (вчерашний тоже годится: в нём все дни поездки)."""
+    saved = saved_suitcase(cid)
+    if not saved or saved["result"].get("basic"):
+        return []
+    key, current = _names_key(saved["result"]), saved.get("plan") or {}
+    if current.get("key") == key and (current.get("date") == _today().isoformat() or not fetch):
+        return list(current.get("looks") or [])
+    if not fetch:
+        return []
+    trip = saved["trip"]
+    daily = _weather(trip).get("daily") or saved["result"].get("daily") or []
+    looks = daily_looks(store.load_wardrobe(cid), {name for _zone, name in _flat(saved["result"])}, trip, daily)
+    _save_plan(cid, key, {"key": key, "date": _today().isoformat(), "looks": looks})
+    return looks
+
+
+def _today_index(looks) -> int:
+    today = _today().isoformat()
+    return next((index for index, look in enumerate(looks) if look.get("date") == today), 0)
+
+
+def today_look(cid) -> list:
+    """Вещи образа на сегодня из плана отпуска — для «Моего дня»; без сети. Нет плана или сегодня не день поездки —
+    []."""
+    if not trip_suitcase(cid):
+        return []
+    today = _today().isoformat()
+    return next((list(look.get("items") or []) for look in plan(cid, fetch=False) if look.get("date") == today), [])
+
+
+def another_look(cid, index) -> list:
+    """«Ещё вариант» для дня плана: следующий из лучших комплектов дня по кругу, не повторяя показанный; план
+    сохраняется с новым образом. Возвращает план."""
+    from wardrobe_outfit import outfit_display_order
+    looks = plan(cid)
+    saved = saved_suitcase(cid)
+    if not looks or not saved:
+        return looks
+    index %= len(looks)
+    names = {name for _zone, name in _flat(saved["result"])}
+    options = [[item.get("name") for item in sorted(outfit, key=outfit_display_order)]
+               for outfit in _day_outfits(_suitcase_closet(store.load_wardrobe(cid), names), looks[index])]
+    current = set(looks[index].get("items") or [])
+    position = next((number for number, option in enumerate(options) if set(option) == current), -1)
+    fresh = next((option for option in options[position + 1:] + options[:position + 1] if set(option) != current),
+                 None)
+    if fresh:
+        looks = [*looks[:index], {**looks[index], "items": fresh}, *looks[index + 1:]]
+        key = _names_key(saved["result"])
+        _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
     return looks
 
 
@@ -444,20 +550,47 @@ async def _swap(bot, cid, draft, q=None):
     await _show(bot, cid, result, _draft_kb(), q)
 
 
-async def _looks(bot, cid, q=None):
+def _pager(prefix, index, total) -> list:
+    return [InlineKeyboardButton("◀️", callback_data=f"{prefix}{(index - 1) % total}"),
+            InlineKeyboardButton(f"{index + 1} из {total}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"{prefix}{(index + 1) % total}")]
+
+
+def _day_kb(index, total, trip=False):
+    """Листание дней по кругу. Из чемодана — «Назад» к нему; в Гардеробе отпуска — «Ещё вариант» для этого дня,
+    «Мой чемодан», «Настроить шкаф | Главная»."""
+    if not trip:
+        return InlineKeyboardMarkup([_pager("w_pack_day_", index, total), nav_row("w_pack_saved")])
+    return InlineKeyboardMarkup([
+        _pager("w_pack_trip_", index, total),
+        [InlineKeyboardButton("Ещё вариант", callback_data=f"w_pack_alt_{index}")],
+        [InlineKeyboardButton("🧳 Мой чемодан", callback_data="w_pack")],
+        [InlineKeyboardButton("🎚️ Настроить шкаф", callback_data="w_closet"),
+         InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ])
+
+
+async def _deliver(bot, cid, msg, kb, q=None, status=None):
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=kb)
+        return
+    await _show(bot, cid, {}, kb, q, msg=msg)
+
+
+async def show_day(bot, cid, index=None, q=None, *, trip=False, status=None, looks=None):
+    """Карточка дня плана: index — номер дня (по кругу), без него — сегодня (до поездки — первый день); trip — в
+    Гардеробе отпуска. Плана нет (нет чемодана или погоды и вещей) — экран чемодана."""
     import asyncio
     saved = saved_suitcase(cid)
-    if not saved or saved["result"].get("basic"):
-        await send(bot, cid)
+    looks = looks if looks is not None else await asyncio.to_thread(plan, cid)
+    if not saved or not looks:
+        await send(bot, cid, q)
         return
-    result, trip = saved["result"], saved["trip"]
-    names = {name for _zone, name in _flat(result)}
-    daily = result.get("daily")
-    if daily is None:  # чемодан сохранён до погоды по дням
-        daily = (await asyncio.to_thread(_weather, trip)).get("daily") or []
-    looks = await asyncio.to_thread(daily_looks, store.load_wardrobe(cid), names, trip, daily)
-    msg = wardrobe_ui.suitcase_looks_screen(result, looks)
-    await _show(bot, cid, result, InlineKeyboardMarkup([nav_row("w_pack_saved")]), q, msg=msg)
+    index = _today_index(looks) if index is None else index % len(looks)
+    import util
+    head = {**saved["result"], "flag": util.flag_from_cc(saved["trip"].get("cc") or "")}
+    msg = wardrobe_ui.suitcase_day_card(head, looks[index], index, len(looks), _today().isoformat())
+    await _deliver(bot, cid, msg, _day_kb(index, len(looks), trip), q, status)
 
 
 def _forget(cid):
@@ -480,7 +613,19 @@ async def handle(bot, cid, data, q=None):
             await send(bot, cid, q)
         return
     if data == "w_pack_looks":
-        await _looks(bot, cid, q)
+        await show_day(bot, cid, q=q)
+        return
+    if data.startswith(("w_pack_day_", "w_pack_trip_")):  # листание дней: из чемодана / в Гардеробе отпуска
+        number = data.rsplit("_", 1)[1]
+        await show_day(bot, cid, int(number) if number.isdigit() else None, q, trip=data.startswith("w_pack_trip_"))
+        return
+    if data.startswith("w_pack_alt_"):  # «Ещё вариант» в Гардеробе отпуска — для показанного дня, «today» — сегодня
+        import asyncio
+        number = data.rsplit("_", 1)[1]
+        looks = await asyncio.to_thread(plan, cid)
+        index = int(number) if number.isdigit() else _today_index(looks)
+        looks = await asyncio.to_thread(another_look, cid, index)
+        await show_day(bot, cid, index, q, trip=True, looks=looks)
         return
     if data == "w_pack_del":  # сразу, без подтверждения: сообщение чемодана становится вопросом о новой поездке
         _forget(cid)

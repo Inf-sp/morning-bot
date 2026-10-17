@@ -411,27 +411,60 @@ def suitcase_edit_screen(data):
 
 _WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 _MONTHS_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
-_LOOK_DAYS_SHOWN = 31  # длиннее — сообщение не влезет в Telegram; образы всё равно идут по кругу
 
 
-def suitcase_looks_screen(data, looks):
-    """«👕 Образы · Кейптаун · 8 дней»: по строке на день — «Пн 20 окт · +22°, дождь · футболка, чиносы, кеды»."""
+def _short_range(start, end) -> str:
+    """«19 окт — 4 ноя», в одном месяце — «19–25 окт»."""
     from datetime import date
+    try:
+        first, last = date.fromisoformat(str(start)), date.fromisoformat(str(end))
+    except ValueError:
+        return ""
+    if (first.year, first.month) == (last.year, last.month):
+        return f"{first.day}–{last.day} {_MONTHS_SHORT[last.month - 1]}"
+    return f"{first.day} {_MONTHS_SHORT[first.month - 1]} — {last.day} {_MONTHS_SHORT[last.month - 1]}"
+
+
+def _day_weather_line(look) -> str:
+    """«🌧️ +18°C» по прогнозу на неделю; дальше — «🌡️ ≈+18°C · предварительно», после горизонта прогноза —
+    «🌡️ обычно +18°C» (те же дни год назад); без данных — «🌡️ погода уточнится»."""
+    tmax = look.get("tmax")
+    if tmax is None:
+        return "🌡️ погода уточнится"
+    if look.get("kind") == "early":
+        return f"🌡️ ≈{tmax:+d}°C · предварительно"
+    if look.get("kind") == "typical":
+        return f"🌡️ обычно {tmax:+d}°C"
+    return f"{look.get('icon') or '🌡️'} {tmax:+d}°C"
+
+
+def suitcase_day_card(data, look, index, total, today=""):
+    """Образ одного дня поездки: «🇿🇦 Образы · Кейптаун», «19 окт — 4 ноя · 17 дней», жирным «Пн, 19 окт ·
+    сегодня», строка погоды, вещи — каждая с новой строки, с заглавной, без эмодзи. Листание — кнопками."""
+    from datetime import date
+    data, look = data or {}, look or {}
+    days = int(data.get("days") or total or 0)
     b = MessageBuilder()
-    b.title(_suitcase_head("👕 Образы", data))
-    if (data or {}).get("typical"):
-        b.line("Погода — как обычно в эти дни.")
-        b.spacer()
-    for look in looks[:_LOOK_DAYS_SHOWN]:
-        day = date.fromisoformat(look["date"])
-        weather = (f"{look['tmax']:+d}°" + (", дождь" if look.get("rain") else "")) if look.get("tmax") is not None \
-            else ""
-        items = ", ".join(_lower_first(_clean_text(name)) for name in look.get("items") or []) \
-            or "в шкафу нет вещей для образа"
-        b.line(" · ".join(part for part in (f"{_WEEKDAYS[day.weekday()]} {day.day} {_MONTHS_SHORT[day.month - 1]}",
-                                            weather, items) if part))
-    if len(looks) > _LOOK_DAYS_SHOWN:
-        b.line(f"…и ещё {len(looks) - _LOOK_DAYS_SHOWN} дн. — образы повторяются по кругу.")
+    place = data.get("place")
+    b.title(f"{data.get('flag') or '👕'} Образы" + (f" · {place}" if place else ""))
+    when = _short_range(data.get("start"), data.get("end"))
+    b.line(" · ".join(part for part in (when, f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "")
+                      if part))
+    b.spacer()
+    try:
+        day = date.fromisoformat(str(look.get("date")))
+        title = f"{_WEEKDAYS[day.weekday()]}, {day.day} {_MONTHS_SHORT[day.month - 1]}"
+    except ValueError:
+        title = f"День {index + 1}"
+    b.bold(title + (" · сегодня" if look.get("date") == today else ""))
+    b.newline()
+    b.line(_day_weather_line(look))
+    b.spacer()
+    items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
+    for item in items:
+        b.line(item)
+    if not items:
+        b.line("В шкафу нет вещей для образа.")
     return b.build_stripped()
 
 

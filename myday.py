@@ -682,7 +682,11 @@ async def _prepare_outfit(bot, cid):
         return  # блок «Образ дня» выключен — образ не готовим
     try:
         if not wardrobe.get_cached_outfit_summary(cid).get("items"):
-            await wardrobe.send_looks(bot, cid, silent=True)
+            import wardrobe_suitcase
+            if wardrobe_suitcase.trip_suitcase(cid):  # отпуск с чемоданом — образ на сегодня из плана поездки
+                await asyncio.to_thread(wardrobe_suitcase.plan, cid)
+            else:
+                await wardrobe.send_looks(bot, cid, silent=True)
     except Exception as e:
         _log.warning("myday: outfit prep failed: %s", e)
 

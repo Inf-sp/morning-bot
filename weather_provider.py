@@ -494,44 +494,82 @@ _OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 _FORECAST_HORIZON_DAYS = 15  # Open-Meteo даёт прогноз на 16 дней вперёд, включая сегодня
 
 
-def period_weather(lat, lon, start, end, today) -> dict:
-    """Дневная погода поездки: {tmin, tmax, rainy, days, wind, typical, daily}. Поездка в ближайшие 16 дней — прогноз
-    Open-Meteo (дальше горизонта — обрезается); позже — фактическая погода тех же дней год назад (архив,
-    typical=True: «обычно в эти дни»). daily — по дням поездки [{date, tmax, tmin, rain, wind}] для образов на
-    каждый день. Без ключа; сбой — исключение."""
-    from datetime import timedelta
-    typical = start > today + timedelta(days=_FORECAST_HORIZON_DAYS)
-    if typical:
-        first, last = start.replace(year=start.year - 1), end.replace(year=end.year - 1)
-        url, daily = _OPEN_METEO_ARCHIVE_URL, ("temperature_2m_max", "temperature_2m_min", "precipitation_sum",
-                                               "windspeed_10m_max")
-    else:
-        first, last = start, min(end, today + timedelta(days=_FORECAST_HORIZON_DAYS))
-        url, daily = _OPEN_METEO_URL, ("temperature_2m_max", "temperature_2m_min", "precipitation_probability_max",
-                                       "precipitation_sum", "windspeed_10m_max")
-    response = requests.get(url, timeout=max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(12)), params={
-        "latitude": lat, "longitude": lon, "timezone": "auto", "wind_speed_unit": "ms", "daily": ",".join(daily),
-        "start_date": first.isoformat(), "end_date": last.isoformat(),
-    })
-    response.raise_for_status()
-    rows = (response.json() or {}).get("daily") or {}
-    highs = [value for value in rows.get("temperature_2m_max") or [] if value is not None]
-    if not highs:
-        raise ValueError("open-meteo: empty period")
-    count = len(rows.get("time") or highs)
-    chance, rain_mm = rows.get("precipitation_probability_max") or [], rows.get("precipitation_sum") or []
-    wet = [(index < len(chance) and (chance[index] or 0) >= 50)
-           or (typical and index < len(rain_mm) and (rain_mm[index] or 0) >= 1) for index in range(count)]
+_RELIABLE_DAYS = 7  # прогноз дальше недели — предварительный: образ без расчёта на дождь, на экране «≈»
 
-    def day_value(key, index):
+
+def _last_year(day):
+    """Тот же день год назад (29 февраля — 28-е)."""
+    try:
+        return day.replace(year=day.year - 1)
+    except ValueError:
+        return day.replace(year=day.year - 1, day=28)
+
+
+def _period_rows(lat, lon, first, last, archive) -> dict:
+    """Суточные ряды Open-Meteo за даты: прогноз или архив (без вероятности осадков); сбой — исключение."""
+    daily = ("temperature_2m_max", "temperature_2m_min", "precipitation_sum", "windspeed_10m_max", "weathercode")
+    response = requests.get(
+        _OPEN_METEO_ARCHIVE_URL if archive else _OPEN_METEO_URL,
+        timeout=max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(12)), params={
+            "latitude": lat, "longitude": lon, "timezone": "auto", "wind_speed_unit": "ms",
+            "daily": ",".join(daily if archive else (*daily, "precipitation_probability_max")),
+            "start_date": first.isoformat(), "end_date": last.isoformat(),
+        })
+    response.raise_for_status()
+    return (response.json() or {}).get("daily") or {}
+
+
+def _days(rows, first_day, today, archive) -> list:
+    """[{date, tmax, tmin, rain, wind, code, kind}] — даты поездки с first_day; kind: forecast (до недели вперёд),
+    early (прогноз дальше недели), typical (те же дни год назад)."""
+    from datetime import timedelta
+
+    def value(key, index):
         values = rows.get(key) or []
         return round(values[index]) if index < len(values) and values[index] is not None else None
 
-    days = [{"date": (start + timedelta(days=index)).isoformat(), "tmax": day_value("temperature_2m_max", index),
-             "tmin": day_value("temperature_2m_min", index), "rain": wet[index],
-             "wind": day_value("windspeed_10m_max", index)}
-            for index in range(count) if day_value("temperature_2m_max", index) is not None]
-    return {"tmin": round(min(highs)), "tmax": round(max(highs)), "rainy": sum(wet), "days": count,
+    chance, rain_mm = rows.get("precipitation_probability_max") or [], rows.get("precipitation_sum") or []
+    out = []
+    for index in range(len(rows.get("time") or rows.get("temperature_2m_max") or [])):
+        day = first_day + timedelta(days=index)
+        if value("temperature_2m_max", index) is None:
+            continue
+        wet = ((index < len(rain_mm) and (rain_mm[index] or 0) >= 1) if archive
+               else (index < len(chance) and (chance[index] or 0) >= 50))
+        kind = "typical" if archive else "forecast" if (day - today).days <= _RELIABLE_DAYS else "early"
+        out.append({"date": day.isoformat(), "tmax": value("temperature_2m_max", index),
+                    "tmin": value("temperature_2m_min", index), "rain": wet,
+                    "wind": value("windspeed_10m_max", index), "code": value("weathercode", index), "kind": kind})
+    return out
+
+
+def period_weather(lat, lon, start, end, today) -> dict:
+    """Дневная погода поездки: {tmin, tmax, rainy, days, wind, typical, daily}. Сводка — по прогнозу Open-Meteo на
+    ближайшие 16 дней; поездка целиком позже — по фактической погоде тех же дней год назад (архив, typical=True:
+    «обычно в эти дни»). daily — каждый день поездки [{date, tmax, tmin, rain, wind, code, kind}] для образов: дни
+    после горизонта прогноза — по прошлому году (kind typical), без пропусков. Без ключа; сбой — исключение."""
+    from datetime import timedelta
+    horizon = today + timedelta(days=_FORECAST_HORIZON_DAYS)
+    typical = start > horizon
+    if typical:
+        rows = _period_rows(lat, lon, _last_year(start), _last_year(end), archive=True)
+        days = _days(rows, start, today, archive=True)
+    else:
+        rows = _period_rows(lat, lon, start, min(end, horizon), archive=False)
+        days = _days(rows, start, today, archive=False)
+        if end > horizon:  # хвост поездки за горизонтом прогноза — те же дни год назад; сбой — без хвоста
+            tail = horizon + timedelta(days=1)
+            try:
+                days += _days(_period_rows(lat, lon, _last_year(tail), _last_year(end), archive=True), tail,
+                              today, archive=True)
+            except Exception:
+                _log.warning("open-meteo: trip tail unavailable", exc_info=True)
+    highs = [value for value in rows.get("temperature_2m_max") or [] if value is not None]
+    if not highs:
+        raise ValueError("open-meteo: empty period")
+    summary = days if typical else [day for day in days if day["kind"] != "typical"]  # сводка — без хвоста
+    return {"tmin": round(min(highs)), "tmax": round(max(highs)), "rainy": sum(day["rain"] for day in summary),
+            "days": len(rows.get("time") or highs),
             "wind": round(max((value or 0) for value in rows.get("windspeed_10m_max") or [0])), "typical": typical,
             "daily": days}
 
