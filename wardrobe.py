@@ -377,7 +377,7 @@ def has_wardrobe_items(cid) -> bool:
 def _no_outfit_screen(result_kb, alternative=False, anchored=False):
     if anchored:
         return (
-            "С этой вещью полный образ пока не собрать: в шкафу не хватает верха, низа или обуви.",
+            "С этой вещью полный образ пока не собрать: в шкафу не хватает подходящих к ней верха, низа или обуви.",
             result_kb,
         )
     if alternative:

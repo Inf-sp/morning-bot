@@ -49,10 +49,12 @@ _LIGHT_BASE_MARKERS = ("футболк", "майк", "лонгслив", "топ
 _BASE_TOP_MARKERS = (
     "футболк", "майк", "рубаш", "лонгслив", "поло", "топ", "водолазк",
 )
-# Кофты (худи, свитеры, кардиганы) — тоже второй слой: под ними всегда футболка.
+# Кофты (худи, свитеры, кардиганы, флис) — тоже второй слой: под ними всегда футболка. Флис — средний тёплый
+# слой, даже если в шкафу записан курткой: под ветровку, дождевик или парку в холод, сам — в прохладу.
+_FLEECE_MARKERS = ("флис", "fleece")
 _LAYER_MARKERS = (
     "жилет", "кардиган", "overshirt", "оверши", "shacket", "шакет",
-    "пиджак", "блейзер", "свитер", "джемпер", "свитш", "худи", "толстовк", "кофт",
+    "пиджак", "блейзер", "свитер", "джемпер", "свитш", "худи", "толстовк", "кофт", *_FLEECE_MARKERS,
 )
 _OUTERWEAR_MARKERS = (
     "куртк", "ветровк", "пальто", "плащ", "дождевик", "парка", "пуховик",
@@ -146,14 +148,70 @@ def outfit_display_order(item):
     }.get(item.get("zone"), 9))
 
 
-_HOODIE_MARKERS = ("худи", "свитш", "толстов")
+# ---------- логика комплекта: что с чем не носят (§ docs/wardrobe.md «Оценка комплекта») ----------
+# Толстый слой: в комплекте только один (худи + флис, свитер + худи — нельзя); жилет, овершот, пиджак — лёгкие.
+_THICK_MARKERS = ("худи", "свитш", "толстов", "свитер", "джемпер", "пуловер", "кардиган", "кофт", *_FLEECE_MARKERS)
+_LIGHT_LAYER_MARKERS = ("жилет", "overshirt", "оверши", "shacket", "шакет", "пиджак", "блейзер")
+# Мягкое и спортивное (худи, свитшот, флис) — поверх футболки, лонгслива или водолазки, не поверх рубашки.
+_KNIT_OVER_SHIRT = ("худи", "свитш", "толстов", *_FLEECE_MARKERS)
+_SPORTY_MARKERS = ("худи", "свитш", "толстов", "джоггер", "спортив", "трениров", "треник", "sport",
+                   *_FLEECE_MARKERS)
+_FORMAL_MARKERS = ("строг", "костюмн", "пиджак", "блейзер", "оксфорд", "дерби", "броги", "туфл", "делов",
+                   "офисн", "formal", "business")
 
 
-def _hoodie_with_shirt(items):
-    """Худи, свитшот и толстовка носятся поверх футболки или лонгслива, не поверх рубашки."""
-    facts = [_item_facts(item) for item in items]
-    return (any(marker in fact for fact in facts for marker in _HOODIE_MARKERS)
-            and any("рубаш" in fact for fact in facts))
+def _kind_facts(item):
+    """Что это за вещь: название, подкатегория, материал и формальность — без стиля из предпочтений
+    («Классический» — вкус пользователя, а не строгость вещи)."""
+    return " ".join(str(item.get(key) or "") for key in ("name", "subcategory", "material", "formality")).casefold()
+
+
+def _is_thick_layer(item):
+    if outfit_role(item) != "layer":
+        return False
+    facts = _kind_facts(item)
+    return any(marker in facts for marker in _THICK_MARKERS) or (
+        item.get("zone") == "Кофты" and not any(marker in facts for marker in _LIGHT_LAYER_MARKERS))
+
+
+def outfit_conflicts(items) -> list:
+    """Нарушения логики комплекта; пусто — комплект логичен. Не больше одного толстого слоя; худи и флис — не
+    поверх рубашки; спортивное не со строгим; не больше одного заметного элемента (цветной акцент или рисунок)."""
+    clothes = [item for item in items if item.get("zone") != "Аксессуары"]
+    facts = [_kind_facts(item) for item in clothes]
+
+    def has(markers):
+        return any(marker in fact for fact in facts for marker in markers)
+
+    found = []
+    if sum(_is_thick_layer(item) for item in clothes) > 1:
+        found.append("два толстых слоя")
+    if has(_KNIT_OVER_SHIRT) and has(("рубаш",)):
+        found.append("худи или флис поверх рубашки")
+    if has(_SPORTY_MARKERS) and has(_FORMAL_MARKERS):
+        found.append("спортивное со строгим")
+    if rules.statement_count(clothes) > 1:
+        found.append("больше одного заметного элемента")
+    return found
+
+
+def _soft_conflicts(items) -> list:
+    """Мягкие нарушения цвета: отсекаются, если есть варианты без них, но образа никогда не лишают. ИИ-стилист
+    выбирает из оставшихся — бежевая футболка под фиолетовым флисом ему уже не попадётся, если есть серая."""
+    found = []
+    if rules._warm_base_with_cold_accent(items):
+        found.append("тёплая база под холодный цвет")
+    if rules._earth_neighbours(items):
+        found.append("землистые цвета рядом")
+    return found
+
+
+def _least_conflicts(combos):
+    """Комплекты без нарушений логики; если без них не собрать — с наименьшим числом: сначала жёстких, затем
+    мягких (образ всё равно будет)."""
+    counted = [((len(outfit_conflicts(combo)), len(_soft_conflicts(combo))), combo) for combo in combos]
+    fewest = min((count for count, _combo in counted), default=(0, 0))
+    return [combo for count, combo in counted if count == fewest]
 
 
 def is_complete_outfit(items):
@@ -172,14 +230,16 @@ def _completed_layered_combos(combo, candidates, selected_styles=None):
     if is_complete_outfit(combo):
         return [combo]
     combo_ids = {item.get("id") for item in combo if item.get("id")}
-    base_tops = _top_candidates([
+    base_tops = [
         item
         for pool in candidates.values()
         for item in pool
         if outfit_role(item) == "base_top"
         and (not item.get("id") or item.get("id") not in combo_ids)
-    ], selected_styles=selected_styles)
-    return [combo + [base_top] for base_top in base_tops]
+    ]
+    # Под слой — подходящий верх: под фиолетовый флис серая футболка, а не рубашка или бежевая с рисунком.
+    fitting = [item for item in base_tops if not outfit_conflicts(combo + [item])] or base_tops
+    return [combo + [base_top] for base_top in _top_candidates(fitting, selected_styles=selected_styles)]
 
 
 def _is_layerable_shirt(item):
@@ -394,40 +454,6 @@ def count_outfits(w):
     return total
 
 
-def outfits_with_item(w, item, limit=3):
-    """До ``limit`` готовых образов с новой вещью: только реальные вещи шкафа.
-
-    Возвращает списки остальных вещей комплекта; разные образы по возможности
-    не повторяют одни и те же вещи.
-    """
-    import itertools
-
-    role = outfit_role(item)
-    zone = item.get("zone")
-    cold = role == "outerwear"
-    pools = _count_pools(w, _COUNT_DAYS[1 if cold else 0][0], cold)
-    slot = {"Низ": 1, "Обувь": 2}.get(zone)
-    if cold:
-        slot = 3
-    elif zone == "Верх" and role not in ("layer", "outerwear"):
-        slot = 0
-    if slot is not None:
-        pools[slot] = [item]
-    extra = 0 if slot is not None else _bright_count(item)
-    valid = [
-        [it for it in combo if it is not item]
-        for combo in itertools.islice(itertools.product(*pools), 2000)
-        if sum(_bright_count(it) for it in combo) + extra <= _MAX_BRIGHT_COLORS
-    ]
-    found, used = [], set()
-    while valid and len(found) < limit:
-        best = min(valid, key=lambda others: len({id(it) for it in others} & used))
-        valid.remove(best)
-        used |= {id(it) for it in best}
-        found.append([public_item_name(it) for it in best])
-    return found
-
-
 def choose_outfit_style(items, selected_styles):
     """Главный стиль комплекта; при равенстве сохраняет порядок настроек."""
     selected = [style for style in (selected_styles or []) if str(style).strip()]
@@ -456,7 +482,9 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
         score += 3
     for it in items:
         tr = it.get("temp_range")
-        if tr and tmax is not None and tr[0] <= tmax <= tr[1]:
+        # Бонус «по погоде» — только верху, низу и обуви: кофта и куртка добавляются, когда их требует погода
+        # (бонусы выше и обязательная верхняя одежда), а не потому, что ещё одна вещь даёт ещё +5.
+        if tr and tmax is not None and tr[0] <= tmax <= tr[1] and outfit_role(it) not in ("layer", "outerwear"):
             score += 5
         if it.get("zone") == "Аксессуары":
             # Подходящий аксессуар должен выигрывать у пустого optional-слота;
@@ -540,6 +568,7 @@ def _top_candidates(items, limit=3, selected_styles=None):
 
 
 TOP_OUTFITS = 6  # столько разных комплектов видит ИИ-стилист
+_POOL_WIDTH, _POOL_WIDE = 3, 5  # вещей зоны в переборе; второй проход — если в первом все комплекты нелогичны
 
 
 FRESH_DAYS = 2           # образы этих дней ИИ-стилист не повторяет
@@ -587,36 +616,51 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
     if any(not candidates.get(z) and z != anchor_zone for z in required):
         return []
 
+    def _zone_items(zone):
+        """Вещи зоны; с закреплённой вещью — сначала те, что с ней не спорят (с флисом — не рубашки)."""
+        items = candidates.get(zone) or []
+        if anchor is None:
+            return items
+        return [it for it in items if not outfit_conflicts([anchor, it])] or items
+
     def _pool(zone, top):
         return [anchor] if zone == anchor_zone else top
 
-    def _combos():
+    def _combos(width):
         import itertools
-        pools = [_pool(z, _top_candidates(candidates.get(z) or [], selected_styles=selected_styles))
+        pools = [_pool(z, _top_candidates(_zone_items(z), limit=width, selected_styles=selected_styles))
                  for z in required]
         optional_zones = [z for z in ("Кофты", "Верхняя одежда") if candidates.get(z) or z == anchor_zone]
         for zone in optional_zones:
-            top = _top_candidates(candidates.get(zone) or [], limit=2, selected_styles=selected_styles)
+            top = _top_candidates(_zone_items(zone), limit=width - 1, selected_styles=selected_styles)
             # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.
             mandatory = zone == "Верхняя одежда" and rules.needs_outerwear(weather_ctx)
             pools.append(_pool(zone, top if mandatory else [None] + top))
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]
 
+    def _complete(width):
+        # Финальная программная проверка комплектности: жилет, кардиган или
+        # overshirt не может стать единственным верхом. Если базовый верх есть в
+        # шкафу, добавляем его в вариант и только затем считаем общий score.
+        built = [
+            complete
+            for combo in _combos(width)
+            for complete in _completed_layered_combos(combo, candidates, selected_styles)
+        ]
+        built = _with_light_shirt_layers(built, candidates, weather_ctx, selected_styles)
+        if anchor:
+            built = [combo for combo in built if any(it.get("id") == anchor_id for it in combo)]
+        return _least_conflicts(built)
+
     previous_item_ids = set(previous_item_ids or [])
-    raw_combos = list(_combos())
-    # Финальная программная проверка комплектности: жилет, кардиган или
-    # overshirt не может стать единственным верхом. Если базовый верх есть в
-    # шкафу, добавляем его в вариант и только затем считаем общий score.
-    combos = [
-        complete
-        for combo in raw_combos
-        for complete in _completed_layered_combos(combo, candidates, selected_styles)
-    ]
-    combos = _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles)
-    combos = [combo for combo in combos if not _hoodie_with_shirt(combo)]
-    if anchor:
-        combos = [combo for combo in combos if any(it.get("id") == anchor_id for it in combo)]
+    combos = _complete(_POOL_WIDTH)
+    if combos and (outfit_conflicts(combos[0]) or _soft_conflicts(combos[0])):
+        # В топ-3 зон логичного комплекта нет — шире: четвёртая-пятая вещь может его дать.
+        combos = _complete(_POOL_WIDE)
+    if anchor and combos and outfit_conflicts(combos[0]):
+        # «Собрать образ» с вещью: нелогичный комплект (худи поверх рубашки) хуже честного «не собрать».
+        return []
     if previous_item_ids:
         # «Новый образ» должен менять основу комплекта, а не одну случайную вещь:
         # минимум две замены; маленькому шкафу оставляем честную одну замену.

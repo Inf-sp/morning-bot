@@ -174,19 +174,62 @@ def harmony_score(items):
         pool = family_set | shade_set
         if first in pool and second in pool and first != second:
             score += 1.5
-    if _earth_top_and_bottom(items):
-        score -= _MUDDY_PENALTY
+    score -= _MUDDY_PENALTY * _earth_neighbours(items)
+    score -= _WARM_WITH_COLD_PENALTY * _warm_base_with_cold_accent(items)
     return score
 
 
 _MUDDY_PENALTY = 5  # сильнее бонусов «база» и «проверенная пара»: такой комплект проигрывает контрастному
+# Соседние слои: верх и низ, верх и кофта, кофта и куртка (без кофты — верх и куртка).
+_NEIGHBOUR_ZONES = (("Верх", "Низ"), ("Верх", "Кофты"), ("Кофты", "Верхняя одежда"))
 
 
-def _earth_top_and_bottom(items) -> bool:
-    """Верх и низ оба землистых тонов (коричневая рубашка + оливковые брюки): тёплые приглушённые цвета рядом
-    сливаются — образу не хватает контраста. Землистый цвет хорош с нейтральным или тёмно-синим."""
-    by_zone = {item.get("zone"): color_family(main_color(item)) for item in items}
-    return by_zone.get("Верх") == "earth" and by_zone.get("Низ") == "earth"
+def _earth_neighbours(items) -> int:
+    """Сколько пар соседних слоёв обе землистых тонов (коричневая рубашка + оливковые брюки, коричневое худи +
+    оливковый флис): тёплые приглушённые цвета рядом сливаются. Землистый хорош с нейтральным или тёмно-синим."""
+    earth = {}
+    for item in items:
+        earth[item.get("zone")] = earth.get(item.get("zone")) or color_family(main_color(item)) == "earth"
+    pairs = [*_NEIGHBOUR_ZONES, *([("Верх", "Верхняя одежда")] if "Кофты" not in earth else [])]
+    return sum(1 for first, second in pairs if earth.get(first) and earth.get(second))
+
+
+# Холодные цветные акценты, к которым нужна холодная база (серый, чёрный, белый, тёмно-синий, деним). Синий,
+# голубой и зелёный с бежевым — классика, они не в счёт.
+_COLD_ACCENTS = ("фиолет", "сирен", "лаванд", "мят", "бирюз")
+_WARM_BASE = ("беж", "кремов", "молоч", "экрю", "айвори", "песоч", "кэмел", "камел", "слонов")
+_WARM_WITH_COLD_PENALTY = 4  # бежевая футболка под фиолетовый флис проигрывает серой и чёрной
+
+
+def _warm_base_with_cold_accent(items) -> int:
+    """Сколько вещей тёплой базы (бежевый, кремовый, землистые) рядом с холодным акцентом (фиолетовый, мятный…)."""
+    colors = [main_color(item).casefold() for item in items if item.get("zone") != "Аксессуары"]
+    if not any(marker in color for color in colors for marker in _COLD_ACCENTS):
+        return 0
+    return sum(1 for color in colors if not any(marker in color for marker in _COLD_ACCENTS)
+               and (color_family(color) == "earth" or any(marker in color for marker in _WARM_BASE)))
+
+
+_PATTERNS = ("рисун", "принт", "надпис", "логотип", "клет", "полос", "камуфл", "цветоч", "горош", "орнамент",
+             "узор", "леопард", "графич")
+
+
+def _accent(item) -> str:
+    """Цветной акцент вещи — корень цвета («фиолет», «бордов»), чтобы тон в тон считался одним; база — ""."""
+    color = main_color(item).casefold()
+    family = color_family(color)
+    if family not in ("cool", "warm"):
+        return ""
+    return next((marker for marker in dict(_FAMILIES)[family] if marker in color), family)
+
+
+def statement_count(items) -> int:
+    """Заметные элементы комплекта: каждая вещь с рисунком или узором и каждый разный цветной акцент (тон в тон —
+    один). Больше одного — образ перегружен: бежевая футболка с рисунком под фиолетовым флисом."""
+    clothes = [item for item in items if item.get("zone") != "Аксессуары"]
+    patterned = [item for item in clothes if _has(item, _PATTERNS)]
+    accents = {_accent(item) for item in clothes if not any(item is other for other in patterned)} - {""}
+    return len(patterned) + len(accents)
 
 
 # ---------- строка-причина ----------
