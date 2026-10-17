@@ -743,7 +743,7 @@ def test_every_trip_screen_says_in_the_title_that_it_is_a_vacation():
         return msg.text.split("\n", 1)[0]
 
     assert title(wardrobe_ui.suitcase_day_card(trip, {"date": "2026-10-20", "items": ["Белая футболка"]}, 0, 8)) == \
-        "🇿🇦 Образы в отпуске · Кейптаун"
+        "🇿🇦 Образы в отпуске"  # город — строкой ниже: «Кейптаун · 8 дней»
     assert title(wardrobe_ui.render_wardrobe_message({"items": [{"name": "Белая футболка", "zone": "Верх"}],
                                                       "primary_style": "Повседневный", "trip_flag": "🇿🇦"})) \
         .startswith("🇿🇦 Надень сегодня в отпуске")

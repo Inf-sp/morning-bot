@@ -84,15 +84,31 @@ def _fits(item, weather) -> bool:
     return low <= weather["tmax"] and high >= weather["tmin"]
 
 
+_RAIN_SHARE = 0.4  # непромокаемое — только если дождь хотя бы в 40% дней: пара дождливых дней — не повод
+_HOT_DAY, _COOL_EVENING = 26, 18  # днём от +26° нужна вещь для жары, вечером до +18° — кофта или ветровка
+
+
+def _rainy_trip(weather) -> bool:
+    days = int(weather.get("days") or 0)
+    return bool(days) and int(weather.get("rainy") or 0) >= days * _RAIN_SHARE
+
+
+def _evening_low(weather):
+    """Самое прохладное утро или вечер поездки — ночной минимум по дням; без дней — минимум дневных."""
+    lows = [day["tmin"] for day in weather.get("daily") or [] if day.get("tmin") is not None]
+    return round(min(lows)) if lows else weather.get("tmin")
+
+
 def rule_pick(clothes, weather, days) -> list:
     """Набор без AI: по зонам, по погоде — индексы вещей из clothes."""
     cold = weather.get("tmin", 20) < 18
+    rainy = _rainy_trip(weather)
     want = {"Верх": min(days, 6), "Кофты": 2 if cold else 0, "Низ": min(max(2, days // 3), 4), "Обувь": 2,
-            "Верхняя одежда": 1 if cold or weather.get("rainy") else 0}
+            "Верхняя одежда": 1 if cold or rainy else 0}
     picked = []
     for zone, count in want.items():
         fitting = [i for i, (item_zone, item) in enumerate(clothes) if item_zone == zone and _fits(item, weather)]
-        if weather.get("rainy") and zone == "Верхняя одежда":
+        if rainy and zone == "Верхняя одежда":
             fitting.sort(key=lambda i: not clothes[i][1].get("rain_ok"))  # непромокаемое — первым
         picked.extend(fitting[:count])
     return picked
@@ -115,6 +131,47 @@ def _with_required_zones(clothes, picked, weather) -> list:
     return picked
 
 
+def _cover_weather(clothes, picked, weather) -> tuple:
+    """Чек-лист под погоду поездки: вещь для жары (днём от +26°), кофта или ветровка (утром и вечером до +18° или
+    ветер от 8 м/с), непромокаемое (дождь хотя бы в 40% дней). Есть в шкафу — добавляется в чемодан, нет — строка
+    «не хватает». → (индексы, [чего не хватает])."""
+    picked, gaps = list(picked), []
+    if "tmax" not in weather:
+        return picked, gaps
+
+    def ensure(zones, fits, gap):
+        if any(clothes[i][0] in zones and fits(clothes[i][1]) for i in picked):
+            return
+        spare = next((i for i, (zone, item) in enumerate(clothes) if zone in zones and fits(item)), None)
+        gaps.append(gap) if spare is None else picked.append(spare)
+
+    hot, evening, wind = weather["tmax"], _evening_low(weather), int(weather.get("wind") or 0)
+    if hot >= _HOT_DAY:
+        ensure(("Низ",), lambda item: "шорт" in item["name"].casefold() or _fits(item, {"tmin": hot, "tmax": hot}),
+               f"шорт или лёгких брюк (днём до {hot:+d}°)")
+    if evening is not None and (evening <= _COOL_EVENING or wind >= _STRONG_WIND_MS):
+        ensure(("Кофты", "Верхняя одежда"), lambda item: _fits(item, {"tmin": evening, "tmax": evening}),
+               f"кофты или ветровки (утром и вечером до {evening:+d}°" + (f", ветер до {wind} м/с)" if
+                                                                          wind >= _STRONG_WIND_MS else ")"))
+    if _rainy_trip(weather):
+        ensure(("Верхняя одежда",), lambda item: bool(item.get("rain_ok")),
+               f"непромокаемой куртки (дождь в {weather['rainy']} из {weather['days']} дней)")
+    return picked, gaps
+
+
+def _weather_tip(weather) -> str:
+    """Совет без AI по цифрам поездки: жара днём, прохладные утро и вечер, ветер; без выразительной погоды — ""."""
+    if "tmax" not in weather:
+        return ""
+    hot, evening, wind = weather["tmax"], _evening_low(weather), int(weather.get("wind") or 0)
+    day = f"Днём до {hot:+d}° — лёгкие вещи и защита от солнца" if hot >= _HOT_DAY else ""
+    cool = (f"утром и вечером до {evening:+d}°" + (" и ветрено" if wind >= _STRONG_WIND_MS else "")
+            + " — кофта или ветровка под рукой") if evening is not None and (
+        evening <= _COOL_EVENING or wind >= _STRONG_WIND_MS) else ""
+    tip = ", ".join(part for part in (day, cool) if part)
+    return f"{tip[:1].upper()}{tip[1:]}." if tip else ""
+
+
 def basic_set(weather, days) -> list:
     """Пустой шкаф: базовый набор под погоду поездки — [(зона, [что взять])]."""
     warm, cold = weather.get("tmax", 22) >= 22, weather.get("tmin", 15) < 14
@@ -124,7 +181,7 @@ def basic_set(weather, days) -> list:
         ("Кофты", ["тёплая кофта или худи — 1"] if weather.get("tmin", 15) < 18 else []),
         ("Низ", [*(["шорты — 2"] if warm else []), f"брюки или джинсы — {1 if warm else 2}"]),
         ("Обувь", ["удобные кроссовки", *(["сандалии"] if warm else [])]),
-        ("Верхняя одежда", ["непромокаемая ветровка"] if weather.get("rainy") else ["тёплая куртка"] if cold
+        ("Верхняя одежда", ["непромокаемая ветровка"] if _rainy_trip(weather) else ["тёплая куртка"] if cold
          else ["лёгкая ветровка"] if weather.get("tmin", 15) < 18 else []),
     ]
     return [(zone, items) for zone, items in groups if items]
@@ -142,8 +199,11 @@ def _ai_pick(cid, clothes, trip, weather_text, days, avoid=()) -> tuple:
         + secure.wrap_untrusted(json.dumps(data, ensure_ascii=False), "поездка") + "\n"
         + secure.wrap_untrusted("\n".join(listing), "шкаф") + "\n"
         "Выбери номера вещей: сколько нужно на эти дни и эту погоду (если прогноз короче поездки — дальше типичная "
-        "погода сезона), без лишнего, сочетающиеся между собой." + other + " tip — одно короткое практичное "
-        'предложение по-русски про погоду поездки. JSON: {"items": [номера], "tip": ""}'
+        "погода сезона), без лишнего, сочетающиеся между собой; непромокаемое — только если дождь почти каждый "
+        "день, при паре дождливых дней хватит ветровки." + other + " tip — одна конкретная фраза по-русски, что "
+        "учесть при сборах под эти цифры: жара днём, прохладные утро и вечер, ветер, солнце («Днём до +34° — лёгкие "
+        "вещи и защита от солнца, вечера прохладные и ветреные — ветровка под рукой»), без общих слов. "
+        'JSON: {"items": [номера], "tip": ""}'
     )
     try:
         answer = ai.llm_json(prompt, 600, tier="cheap", module="wardrobe", fallback_allowed=True,
@@ -173,13 +233,16 @@ def pack(cid, trip, avoid=(), declined=()) -> dict:
     if not clothes:  # шкаф пуст — базовый набор под погоду
         result["groups"] = basic_set(weather, days)
         return result
-    picked, tip = _ai_pick(cid, clothes, trip, line, days, avoid)
+    evening = _evening_low(weather)
+    ai_line = line + (f", утром и вечером до {evening:+d}°" if line and evening is not None else "")
+    picked, tip = _ai_pick(cid, clothes, trip, ai_line, days, avoid)
     if not picked:
         picked = rule_pick(clothes, weather, days)
-    picked = _with_required_zones(clothes, picked, weather)
+    picked, gaps = _cover_weather(clothes, _with_required_zones(clothes, picked, weather), weather)
     groups = [(zone, [clothes[i][1]["name"] for i in picked if clothes[i][0] == zone]) for zone in CLOTHING_ZONES]
     # Погода остаётся в чемодане: замены и образы по дням не ходят в сеть снова.
-    return {**result, "groups": [(zone, names) for zone, names in groups if names], "tip": tip,
+    return {**result, "groups": [(zone, names) for zone, names in groups if names], "tip": tip or _weather_tip(weather),
+            "gaps": gaps,
             "wx": {key: weather[key] for key in ("tmin", "tmax", "rainy") if key in weather},
             "daily": weather.get("daily") or []}
 
@@ -294,7 +357,7 @@ def daily_looks(wardrobe, names, trip, daily) -> list:
     """Образ на каждый день поездки из вещей чемодана: [{date, items, погода дня (_day_weather)}]. Строгий подбор
     пуст — правила погоды смягчаются ступенями (_day_contexts). Из лучших комплектов дня берётся тот, что меньше
     повторяет вчерашний и чаще надетые вещи."""
-    from wardrobe_outfit import outfit_display_order
+    from wardrobe_outfit import build_sock_recommendation, outfit_display_order
     w = _suitcase_closet(wardrobe, names)
     by_date = {day.get("date"): day for day in daily or []}
     start = date.fromisoformat(trip["start"])
@@ -312,7 +375,7 @@ def daily_looks(wardrobe, names, trip, daily) -> list:
         yesterday = {item.get("name") for item in items}
         worn.update(yesterday)
         looks.append({"date": (start + timedelta(days=offset)).isoformat(), **_day_weather(day),
-                      "items": [item.get("name") for item in items]})
+                      "items": [item.get("name") for item in items], "socks": build_sock_recommendation(items)})
     return looks
 
 
@@ -340,6 +403,9 @@ def _save_plan(cid, key, plan):
     store.mutate_profile(cid, change)
 
 
+_PLAN_VERSION = 2  # 2 — у образа дня носки
+
+
 def plan(cid, *, fetch=True) -> list:
     """Образы на каждый день поездки сохранённого чемодана. Считаются один раз и хранятся с чемоданом — при листании
     не меняются; пересчёт раз в день по свежему прогнозу и при изменении чемодана. fetch=False — только сохранённый
@@ -348,14 +414,15 @@ def plan(cid, *, fetch=True) -> list:
     if not saved or saved["result"].get("basic"):
         return []
     key, current = _names_key(saved["result"]), saved.get("plan") or {}
-    if current.get("key") == key and (current.get("date") == _today().isoformat() or not fetch):
+    if current.get("key") == key and (not fetch or (current.get("v") == _PLAN_VERSION
+                                                    and current.get("date") == _today().isoformat())):
         return list(current.get("looks") or [])
     if not fetch:
         return []
     trip = saved["trip"]
     daily = _weather(trip).get("daily") or saved["result"].get("daily") or []
     looks = daily_looks(store.load_wardrobe(cid), {name for _zone, name in _flat(saved["result"])}, trip, daily)
-    _save_plan(cid, key, {"key": key, "date": _today().isoformat(), "looks": looks})
+    _save_plan(cid, key, {"key": key, "v": _PLAN_VERSION, "date": _today().isoformat(), "looks": looks})
     return looks
 
 
@@ -376,21 +443,23 @@ def today_look(cid) -> list:
 def another_look(cid, index) -> list:
     """«Ещё вариант» для дня плана: следующий из лучших комплектов дня по кругу, не повторяя показанный; план
     сохраняется с новым образом. Возвращает план."""
-    from wardrobe_outfit import outfit_display_order
+    from wardrobe_outfit import build_sock_recommendation, outfit_display_order
     looks = plan(cid)
     saved = saved_suitcase(cid)
     if not looks or not saved:
         return looks
     index %= len(looks)
     names = {name for _zone, name in _flat(saved["result"])}
-    options = [[item.get("name") for item in sorted(outfit, key=outfit_display_order)]
+    outfits = [sorted(outfit, key=outfit_display_order)
                for outfit in _day_outfits(_suitcase_closet(store.load_wardrobe(cid), names), looks[index])]
+    options = [[item.get("name") for item in outfit] for outfit in outfits]
     current = set(looks[index].get("items") or [])
     position = next((number for number, option in enumerate(options) if set(option) == current), -1)
-    fresh = next((option for option in options[position + 1:] + options[:position + 1] if set(option) != current),
-                 None)
-    if fresh:
-        looks = [*looks[:index], {**looks[index], "items": fresh}, *looks[index + 1:]]
+    fresh = next((number for number in [*range(position + 1, len(options)), *range(position + 1)]
+                  if set(options[number]) != current), None)
+    if fresh is not None:
+        look = {**looks[index], "items": options[fresh], "socks": build_sock_recommendation(outfits[fresh])}
+        looks = [*looks[:index], look, *looks[index + 1:]]
         key = _names_key(saved["result"])
         _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
     return looks
@@ -462,8 +531,8 @@ def _edit_kb(draft):
                                  nav_row("w_pack_view")])
 
 
-async def _show(bot, cid, result, kb, q=None, *, saved=False, msg=None):
-    msg = msg or wardrobe_ui.suitcase_screen(result, saved=saved, trip=vacation.active(cid))
+async def _show(bot, cid, result, kb, q=None, *, saved=False, just_saved=False, msg=None):
+    msg = msg or wardrobe_ui.suitcase_screen(result, saved=saved, trip=vacation.active(cid), just_saved=just_saved)
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -635,7 +704,7 @@ async def handle(bot, cid, data, q=None):
         store.mutate_profile(cid, lambda p: ({**p, "suitcase_saved": {
             "trip": draft["trip"], "result": draft["result"], "declined": draft.get("declined") or [],
             "saved": _today().isoformat()}}, None))
-        await _show(bot, cid, draft["result"], _saved_kb(draft["result"].get("basic")), q, saved=True)
+        await _show(bot, cid, draft["result"], _saved_kb(draft["result"].get("basic")), q, saved=True, just_saved=True)
         return
     if data == "w_pack_edit" and saved_suitcase(cid):
         saved = saved_suitcase(cid)  # сохранённый правится через черновик: «Подтвердить» заменит его

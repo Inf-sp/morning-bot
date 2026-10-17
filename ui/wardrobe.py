@@ -2,6 +2,7 @@ import re
 
 from .builder import MessageBuilder
 from .text import ru_plural
+from util import _WEEKDAYS
 from wardrobe_model import public_zone_name, zone_of
 
 
@@ -358,40 +359,66 @@ def _trip_dates(start, end) -> str:
     return f"{first.day} {_MONTHS[first.month - 1]} – {last.day} {_MONTHS[last.month - 1]}"
 
 
-def suitcase_screen(data, saved=False, trip=False):
-    """«🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней»: погода поездки (дальше прогноза — «Обычно в эти дни»), вещи
-    шкафа по зонам («Футболки и рубашки: …»), курсивом совет. Пустой шкаф — базовый набор с пометкой; saved —
-    подтверждённый чемодан; swaps — строка «Заменил: …» после «Подобрать замену» (только у черновика)."""
+def _suitcase_count(zone, names) -> str:
+    count = len(names)
+    return (f"{count} {ru_plural(count, 'пара', 'пары', 'пар')}" if zone == "Обувь"
+            else f"{count} {_pluralize_items(count)}")
+
+
+def suitcase_screen(data, saved=False, trip=False, just_saved=False):
+    """Чек-лист чемодана: «🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней», погода поездки (дальше прогноза —
+    «Обычно в эти дни»), конкретный совет под неё; по категориям — жирный заголовок, сколько вещей и вещи через
+    запятую; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф — базовый набор с пометкой.
+    just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном открытии её нет); swaps —
+    «Заменил: …» после «Подобрать замену» (только у черновика)."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
     head = " · ".join(part for part in ("🧳 Чемодан в отпуске" if trip else "🧳 Чемодан", data.get("place"), _trip_dates(data.get("start"), data.get("end")),
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
-    if saved:
-        b.line("✅ Сохранён — открывается из Гардероба.")
+    if just_saved:
+        b.line("✅ Чемодан сохранён.")
         b.spacer()
-    if data.get("weather"):
-        weather = _finish_dot(data["weather"])
+    weather = _finish_dot(data["weather"]) if data.get("weather") else ""
+    if weather:
         b.line(f"Обычно в эти дни: {weather}" if data.get("typical") else _upper_first(weather))
-        b.spacer()
+    if str(data.get("tip") or "").strip():
+        b.line(_finish_dot(_upper_first(_clean_text(data["tip"]))))
     groups = data.get("groups") or []
-    if data.get("basic") and groups:
+    basic = bool(data.get("basic"))
+    if basic and groups:
+        b.spacer()
         b.line("В шкафу пока нет вещей — вот базовый набор под эту погоду:")
     for zone, names in groups:
-        b.labeled_line(public_zone_name(zone), ", ".join(_lower_first(_clean_text(name)) for name in names),
-                       lowercase=False)
+        b.spacer()
+        b.bold(public_zone_name(zone))
+        b.newline()
+        if not basic:
+            b.line(_suitcase_count(zone, names))
+        listed = ", ".join(_lower_first(_clean_text(name)) for name in names)
+        b.line(_upper_first(listed))
     if not groups:
+        b.spacer()
         b.line("Под эту поездку из шкафа ничего не подошло — добавь вещи в «Настроить шкаф».")
+    gaps = [_clean_text(gap) for gap in data.get("gaps") or [] if _clean_text(gap)]
+    if gaps and not basic:
+        b.spacer()
+        b.line(f"Не хватает: {', '.join(gaps)} — в шкафу таких нет.")
     swaps = [] if saved else data.get("swaps") or []
     if swaps:
         b.spacer()
         changes = [f"{_lower_first(_clean_text(old))} → {_lower_first(_clean_text(new))}" if new
                    else f"{_lower_first(_clean_text(old))} — убрал, замены нет" for old, new in swaps]
         b.line(f"Заменил: {'; '.join(changes)}.")
-    if str(data.get("tip") or "").strip():
+    if groups and not basic:
+        shoes = sum(len(names) for zone, names in groups if zone == "Обувь")
+        things = sum(len(names) for zone, names in groups if zone != "Обувь")
+        total = " и ".join(part for part in (
+            f"{things} {_pluralize_items(things)}" if things else "",
+            f"{shoes} {ru_plural(shoes, 'пара', 'пары', 'пар')} обуви" if shoes else "") if part)
         b.spacer()
-        b.italic(_finish_dot(data["tip"]))
+        b.italic(f"Всего в списке: {total}")
         b.newline()
     return b.build_stripped()
 
@@ -411,60 +438,52 @@ def suitcase_edit_screen(data):
     return b.build_stripped()
 
 
-_WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-_MONTHS_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+_HOT_LOOK, _COOL_LOOK, _WINDY_LOOK = 24, 17, 8  # как у подбора образа дня поездки (wardrobe_suitcase._day_context)
 
 
-def _short_range(start, end) -> str:
-    """«19 окт — 4 ноя», в одном месяце — «19–25 окт»."""
-    from datetime import date
-    try:
-        first, last = date.fromisoformat(str(start)), date.fromisoformat(str(end))
-    except ValueError:
+def _day_condition(look) -> str:
+    """Пометка об условиях, когда они влияют на выбор вещей: «Жарко», «Прохладно, ветрено», «Дождь»; только по
+    прогнозу на неделю, в обычный день — ""."""
+    tmax, wind = look.get("tmax"), look.get("wind") or 0
+    if tmax is None or look.get("kind") not in (None, "", "forecast"):
         return ""
-    if (first.year, first.month) == (last.year, last.month):
-        return f"{first.day}–{last.day} {_MONTHS_SHORT[last.month - 1]}"
-    return f"{first.day} {_MONTHS_SHORT[first.month - 1]} — {last.day} {_MONTHS_SHORT[last.month - 1]}"
-
-
-def _day_weather_line(look) -> str:
-    """«🌧️ +18°C» по прогнозу на неделю; дальше — «🌡️ ≈+18°C · предварительно», после горизонта прогноза —
-    «🌡️ обычно +18°C» (те же дни год назад); без данных — «🌡️ погода уточнится»."""
-    tmax = look.get("tmax")
-    if tmax is None:
-        return "🌡️ погода уточнится"
-    if look.get("kind") == "early":
-        return f"🌡️ ≈{tmax:+d}°C · предварительно"
-    if look.get("kind") == "typical":
-        return f"🌡️ обычно {tmax:+d}°C"
-    return f"{look.get('icon') or '🌡️'} {tmax:+d}°C"
+    parts = ["жарко" if tmax >= _HOT_LOOK else "прохладно" if tmax < _COOL_LOOK else "",
+             "дождь" if look.get("rain") else "", "ветрено" if wind >= _WINDY_LOOK else ""]
+    text = ", ".join(part for part in parts if part)
+    return _upper_first(text)
 
 
 def suitcase_day_card(data, look, index, total, today=""):
-    """Образ одного дня поездки: «🇿🇦 Образы · Кейптаун», «19 окт — 4 ноя · 17 дней», жирным «Пн, 19 окт ·
-    сегодня», строка погоды, вещи — каждая с новой строки, с заглавной, без эмодзи. Листание — кнопками."""
+    """Образ одного дня поездки: «🇿🇦 Образы в отпуске», под ним «Кейптаун · 17 дней»; жирным день недели (поездка
+    дольше недели — «· день N»; «· сегодня»), пометка об условиях, если она влияет на выбор, и вещи списком «- …»,
+    как в «Надень сегодня», носки — последними. Дат и температуры нет. Листание — кнопками."""
     from datetime import date
     data, look = data or {}, look or {}
     days = int(data.get("days") or total or 0)
     b = MessageBuilder()
-    place = data.get("place")  # план поездки — «в отпуске» и дома, пока чемодан собирается
-    b.title(f"{data.get('flag') or '👕'} Образы в отпуске" + (f" · {place}" if place else ""))
-    when = _short_range(data.get("start"), data.get("end"))
-    b.line(" · ".join(part for part in (when, f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "")
-                      if part))
+    b.bold(f"{data.get('flag') or '👕'} Образы в отпуске")
+    b.newline()
+    b.line(" · ".join(part for part in (data.get("place"), f"{days} {ru_plural(days, 'день', 'дня', 'дней')}"
+                                        if days else "") if part))
     b.spacer()
     try:
-        day = date.fromisoformat(str(look.get("date")))
-        title = f"{_WEEKDAYS[day.weekday()]}, {day.day} {_MONTHS_SHORT[day.month - 1]}"
+        title = _WEEKDAYS[date.fromisoformat(str(look.get("date"))).weekday()]
     except ValueError:
-        title = f"День {index + 1}"
-    b.bold(title + (" · сегодня" if look.get("date") == today else ""))
+        title = ""
+    title = " · ".join(part for part in (title, f"день {index + 1}" if total > 7 or not title else "",
+                                        "сегодня" if look.get("date") == today else "") if part)
+    b.bold(_upper_first(title))
     b.newline()
-    b.line(_day_weather_line(look))
+    condition = _day_condition(look)
+    if condition:
+        b.line(condition)
     b.spacer()
     items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
+    socks = _upper_first(_clean_text(look.get("socks")))
+    if socks and items and not any("носк" in item.casefold() for item in items):
+        items.append(socks)
     for item in items:
-        b.line(item)
+        b.line(f"- {item}")
     if not items:
         b.line("В шкафу нет вещей для образа.")
     return b.build_stripped()
