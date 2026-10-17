@@ -22,6 +22,7 @@ NOTIF_TYPES = [
     ("ns_disruptions",  "Поезда NS"),
     ("flight_deals",    "Дешёвые билеты"),
     ("holidays",        "Праздники и события"),
+    ("trip_day",        "План дня в отпуске"),  # только в отпуске (notification_available)
 ]
 
 CUISINE_OPTIONS = [
@@ -113,12 +114,13 @@ NOTIF_TIMES = {
     "evening_weather": (EVENING_WEATHER_TIME, ("18:00", "20:00", "21:00")),
     "weekend_events":  ("10:00", ("09:00", "10:00", "18:00")),
     "holidays":        ("18:00", ("18:00",)),  # накануне праздника или местного события
+    "trip_day":        ("09:00", ("08:00", "09:00", "10:00")),  # «Мой день в отпуске» утром
 }
 _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
-    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и события",
+    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и события", "trip_day": "План дня в отпуске",
 }
 
 
@@ -220,7 +222,7 @@ def notif_on(cid, kind):
     # До появления переключателя погодные предупреждения приходили всем.
     # Сохраняем это поведение для старых профилей, пока пользователь сам их
     # не отключит.
-    if kind in ("weather_warn", "ns_disruptions", "holidays"):
+    if kind in ("weather_warn", "ns_disruptions", "holidays", "trip_day"):  # план дня в отпуске — тоже сразу
         # Сбои NS включены по умолчанию: без города в Нидерландах они всё равно молчат.
         return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
@@ -518,6 +520,9 @@ async def _send_scheduled_notification(bot, cid, kind):
         await flight_deals.check_user(bot, cid)
     elif kind == "holidays":
         await _send_holidays_eve(bot, cid)
+    elif kind == "trip_day" and notification_available(cid, kind):
+        import myday  # утром в отпуске — сводка «Мой день в отпуске»: погода, образ, что попробовать, фраза дня
+        await myday.send_plany(bot, cid, reply_markup=InlineKeyboardMarkup([notif_row()]))
 
 
 async def _send_holidays_eve(bot, cid):
@@ -581,6 +586,7 @@ _ADMIN_NOTIFICATION_META = {
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
     "holidays":        ("накануне 18:00, если есть праздник", "Праздники и события"),
+    "trip_day":        ("09:00, в отпуске", "План дня в отпуске"),
 }
 
 
@@ -603,7 +609,10 @@ def notification_paused(cid, kind) -> bool:
 
 
 def notification_available(cid, kind) -> bool:
-    """«Поезда NS» и «Дешёвые билеты» (вылет из Амстердама) — только для Нидерландов."""
+    """«Поезда NS» и «Дешёвые билеты» (вылет из Амстердама) — только для Нидерландов; «План дня» — в отпуске."""
+    if kind == "trip_day":
+        import vacation
+        return vacation.active(cid)
     if kind in ("ns_disruptions", "flight_deals"):
         return str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL"
     return True

@@ -691,9 +691,10 @@ async def _prepare_outfit(bot, cid):
         _log.warning("myday: outfit prep failed: %s", e)
 
 
-async def send_plany(bot, cid, force=False, show_loading=True, status=None):
+async def send_plany(bot, cid, force=False, show_loading=True, status=None, reply_markup=None):
     """Собирает и отправляет сводку «Мой день». При inline-действии статус
-    остаётся кнопкой под исходным экраном, а готовая сводка приходит отдельно."""
+    остаётся кнопкой под исходным экраном, а готовая сводка приходит отдельно.
+    reply_markup — свои кнопки (утренняя рассылка в отпуске: «Настроить уведомления | Главная»)."""
     import time as _time
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache = None if force else _load_day_cache(cid, today)
@@ -723,7 +724,7 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None):
         return
     await bot.send_message(
         chat_id=cid, text=cached["text"], entities=cached.get("entities"),
-        reply_markup=_day_menu_kb(cid),
+        reply_markup=reply_markup or _day_menu_kb(cid),
     )
 
 

@@ -111,35 +111,45 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 18, "tmax": 24, "rainy": 0})
 
-    # «Пересобрать» — вещи чемодана кнопками: зелёная «беру», нажал — красная «не беру».
+    # «Пересобрать» — вещи чемодана кнопками; нажал — вещь уходит сразу, без «Подобрать замену».
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_again"))
     rows = bot.sent[-1]["reply_markup"].inline_keyboard
     assert bot.sent[-1]["text"].startswith("🧳 Что не берёшь? · Кейптаун · 8 дней")
     assert [[b.text for b in row] for row in rows] == [
-        ["Белая футболка"], ["Подобрать замену"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert [rows[0][0].callback_data, rows[2][0].callback_data] == ["w_pack_t:0", "w_pack_view"]
+        ["✅ Добавить вещь в чемодан"], ["Белая футболка"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert [rows[0][0].callback_data, rows[1][0].callback_data, rows[2][0].callback_data] == [
+        "w_pack_add", "w_pack_t:0", "w_pack_view"]
     import telegram_runtime
 
     def colors(markup):
         return [[(b["text"], b.get("style")) for b in row]
                 for row in telegram_runtime._enhance_markup(markup)["inline_keyboard"]]
 
-    # Вещь «беру» — стандартного цвета, «Подобрать замену» — зелёная и остаётся под вещами.
-    assert colors(bot.sent[-1]["reply_markup"])[:2] == [[("Белая футболка", None)], [("Подобрать замену", "success")]]
+    assert colors(bot.sent[-1]["reply_markup"])[:2] == [[("Добавить вещь в чемодан", "success")],
+                                                       [("Белая футболка", None)]]
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
-    button = bot.sent[-1]["reply_markup"].inline_keyboard[0][0]
-    assert button.text == "□ Белая футболка" and button.api_kwargs == {"style": "danger"}
-    assert colors(bot.sent[-1]["reply_markup"])[0] == [("Белая футболка", "danger")]  # «не беру» — красная
-    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))
+    assert profile["suitcase_draft"]["result"]["groups"] == [] and profile["suitcase_draft"]["declined"] == [
+        "Белая футболка"]  # ушла сразу и больше не предлагается
+    # «Добавить вещь в чемодан» → категория → вещи шкафа; нажал — вещь в чемодане, зелёная.
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_add"))
+    zones = bot.sent[-1]["reply_markup"].inline_keyboard
+    assert bot.sent[-1]["text"].startswith("🧳 Добавить в чемодан · Кейптаун")
+    assert [row[0].text for row in zones][:2] == ["Футболки и рубашки", "Брюки и шорты"]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_z:0"))
+    assert [row[0].text for row in bot.sent[-1]["reply_markup"].inline_keyboard][:2] == [
+        "□ Белая футболка", "□ Серая футболка"]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_a:0:1"))
+    assert bot.sent[-1]["reply_markup"].inline_keyboard[1][0].text == "✅ Серая футболка"
     assert profile["suitcase_draft"]["result"]["groups"] == [("Верх", ["Серая футболка"])]
-    assert "Заменил: белая футболка → серая футболка." in bot.sent[-1]["text"]
-    assert profile["suitcase_draft"]["removed"] == []
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_a:0:0"))  # отклонённую можно вернуть вручную
+    assert profile["suitcase_draft"]["declined"] == []
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_a:0:0"))
+    assert profile["suitcase_draft"]["declined"] == ["Белая футболка"]
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
     assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Чемодан сохранён.\n\n"
                                     "Футболки и рубашки\n1 вещь\nСерая футболка\n\nВсего в списке: 1 вещь")
-    assert "Заменил" not in bot.sent[-1]["text"]
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
@@ -201,20 +211,6 @@ def test_vacation_look_uses_only_packed_items_when_suitcase_has_a_full_outfit(mo
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
     profile["suitcase_saved"]["trip"] = {**TRIP, "cc": "ES"}  # чемодан другой страны не в счёт
     assert wardrobe_suitcase.packed_wardrobe("42", wardrobe_data) is wardrobe_data
-
-
-def test_swap_takes_a_same_zone_item_for_the_weather_and_never_a_declined_one():
-    groups = [("Верх", ["Белая футболка"]), ("Обувь", ["Белые кеды"]), ("Верхняя одежда", ["Ветровка"])]
-
-    new_groups, swaps = wardrobe_suitcase.swap_items(
-        CLOTHES, groups, ["Белая футболка", "Белые кеды", "Ветровка"], {"tmin": 18, "tmax": 24},
-        declined=["Серая футболка"])
-
-    # Серая футболка уже была отклонена, другой обуви нет, пуховик не по погоде — честно «замены нет».
-    assert new_groups == []
-    assert swaps == [("Белая футболка", ""), ("Белые кеды", ""), ("Ветровка", "")]
-    assert wardrobe_suitcase.swap_items(CLOTHES, groups, ["Белая футболка"], {"tmin": 18, "tmax": 24})[0][0] == (
-        "Верх", ["Серая футболка"])
 
 
 def _closet(*items):
@@ -290,15 +286,11 @@ def test_declined_items_never_come_back_after_confirm_rebuild_or_new_pack(monkey
     # «Пересобрать» сохранённого: отказ из прошлого раза переходит в черновик.
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_edit"))
     assert profile["suitcase_draft"]["declined"] == ["Белая футболка"]
-    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
-    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_view"))  # «Назад» без замены — отметка остаётся
-    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_again"))
-    assert profile["suitcase_draft"]["removed"] == [0]
-    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))
-    # Других футболок нет (белая отклонена раньше) — верх берётся любой свободный, а не отклонённый.
-    assert "Белая футболка" not in [name for _zone, names in profile["suitcase_draft"]["result"]["groups"]
-                                    for name in names]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))  # серая футболка — сразу из чемодана
+    assert profile["suitcase_draft"]["result"]["groups"] == [("Низ", ["Джинсы"])]
     assert profile["suitcase_draft"]["declined"] == ["Белая футболка", "Серая футболка"]
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_swap"))  # старая кнопка — просто список вещей
+    assert bot.sent[-1]["text"].startswith("🧳 Что не берёшь?")
 
     # Новая сборка на ту же поездку: отклонённых вещей не видит ни AI, ни запасной подбор.
     seen = []
@@ -320,15 +312,6 @@ def test_pack_always_has_top_bottom_and_shoes(monkeypatch):
 
     assert groups["Верх"] == ["Белая футболка", "Серая футболка"]
     assert groups["Низ"] == ["Бежевые чиносы"] and groups["Обувь"] == ["Белые кеды"]
-
-
-def test_swap_keeps_the_last_shoes_when_no_pair_fits_the_weather():
-    clothes = [("Обувь", _item("Белые кеды")), ("Обувь", _item("Зимние ботинки", (-20, 5)))]
-
-    groups, swaps = wardrobe_suitcase.swap_items(clothes, [("Обувь", ["Белые кеды"])], ["Белые кеды"],
-                                                 {"tmin": 18, "tmax": 24})
-
-    assert groups == [("Обувь", ["Зимние ботинки"])] and swaps == [("Белые кеды", "Зимние ботинки")]
 
 
 def test_daily_looks_use_daytime_low_and_never_leave_a_day_empty():

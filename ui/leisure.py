@@ -927,10 +927,15 @@ def week_items(kind, rows) -> list:
     return items
 
 
+_PREMIERE_TYPE = {"movie": "Фильм", "series": "Сериал", "music": "Музыкальный альбом"}
+_RELEASE_TYPES = {"сингл": "Сингл", "EP": "EP"}
+
+
 def premiere_card(feed, index=0) -> MessageSpec:
     """Карточка ленты «Премьеры» (feed — [(вид, пункт)], фильмы, сериалы и музыка вперемешку): «🎬 **Имя**» ссылкой,
-    метаданные через «·», описание в одно-два предложения; ← n/N → по кругу по всей ленте, «Назад» — в хаб.
-    Картинку (постер, обложку) прикладывает обработчик."""
+    первой в метаданных — что это (Фильм, Сериал, Музыкальный альбом), описание в одно-два предложения; сверху
+    красная «Не интересно» (lz_prem_x_<n>), ← n/N → по кругу по всей ленте, «Назад» — в хаб. Картинку (постер,
+    обложку) прикладывает обработчик."""
     b = MessageBuilder()
     if not feed:
         b.title("🆕 Премьеры недели")
@@ -948,13 +953,16 @@ def premiere_card(feed, index=0) -> MessageSpec:
     if kind == "music" and values:  # «Alvvays — «Blue Rev»» в заголовке, дальше жанр и страна
         b.text_line(f" {values.pop(0)}")
     b.newline()
-    if values:
-        b.line(" · ".join(values))
+    # Что это за карточка — первым: «Фильм · драма · 🇩🇪 DE»; у сингла и EP вместо «Музыкальный альбом» — их тип.
+    release = next((value for value in values if value in _RELEASE_TYPES), "") if kind == "music" else ""
+    values = [_RELEASE_TYPES.get(release) or _PREMIERE_TYPE[kind], *(value for value in values if value != release)]
+    b.line(" · ".join(values))
     about = _hub_about(item.get("note") or about)  # описание премьеры (AI), без него — начало описания источника
     if about:
         b.spacer()
         b.line(about)
-    rows = []
+    rows = [[InlineKeyboardButton("Не интересно", callback_data=f"lz_prem_x_{index}",
+                                  api_kwargs={"style": "danger"})]]
     if len(feed) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_prem_{(index - 1) % len(feed)}"),

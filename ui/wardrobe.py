@@ -369,8 +369,7 @@ def suitcase_screen(data, saved=False, trip=False, just_saved=False):
     """Чек-лист чемодана: «🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней», погода поездки (дальше прогноза —
     «Обычно в эти дни»), конкретный совет под неё; по категориям — жирный заголовок, сколько вещей и вещи через
     запятую; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф — базовый набор с пометкой.
-    just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном открытии её нет); swaps —
-    «Заменил: …» после «Подобрать замену» (только у черновика)."""
+    just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном открытии её нет)."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
@@ -405,12 +404,6 @@ def suitcase_screen(data, saved=False, trip=False, just_saved=False):
     if gaps and not basic:
         b.spacer()
         b.line(f"Не хватает: {', '.join(gaps)} — в шкафу таких нет.")
-    swaps = [] if saved else data.get("swaps") or []
-    if swaps:
-        b.spacer()
-        changes = [f"{_lower_first(_clean_text(old))} → {_lower_first(_clean_text(new))}" if new
-                   else f"{_lower_first(_clean_text(old))} — убрал, замены нет" for old, new in swaps]
-        b.line(f"Заменил: {'; '.join(changes)}.")
     if groups and not basic:
         shoes = sum(len(names) for zone, names in groups if zone == "Обувь")
         things = sum(len(names) for zone, names in groups if zone != "Обувь")
@@ -430,11 +423,26 @@ def _suitcase_head(title, data):
 
 
 def suitcase_edit_screen(data):
-    """«Пересобрать»: вещи чемодана кнопками — зелёная «беру», красная «не беру»."""
+    """«Пересобрать»: вещи чемодана кнопками — нажал, и вещь уходит сразу; «Добавить вещь в чемодан» — из шкафа."""
     b = MessageBuilder()
     b.title(_suitcase_head("🧳 Что не берёшь?", data))
-    b.line("Нажми на вещь, которую не берёшь, — она станет красной. Потом «Подобрать замену»: поставлю вместо неё "
-           "вещь той же категории из шкафа под погоду поездки.")
+    b.line("Нажми на вещь, которую не берёшь, — уберу её сразу. Чтобы взять другую, нажми «Добавить вещь в чемодан».")
+    return b.build_stripped()
+
+
+def suitcase_add_screen(data):
+    """Категории шкафа для «Добавить вещь в чемодан»."""
+    b = MessageBuilder()
+    b.title(_suitcase_head("🧳 Добавить в чемодан", data))
+    b.line("Выбери категорию — покажу вещи из шкафа.")
+    return b.build_stripped()
+
+
+def suitcase_add_zone_screen(data, zone):
+    """Вещи одной категории: зелёные — уже в чемодане; нажми, чтобы положить или убрать."""
+    b = MessageBuilder()
+    b.title(_suitcase_head(f"🧳 {public_zone_name(zone)}", data))
+    b.line("Зелёные — уже в чемодане. Нажми на вещь, чтобы положить её или убрать.")
     return b.build_stripped()
 
 

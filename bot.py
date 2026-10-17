@@ -452,6 +452,18 @@ async def job_holidays(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_holidays failed for cid=%s", cid)
 
 
+async def job_trip_day(context: ContextTypes.DEFAULT_TYPE):
+    """Утром в отпуске — план дня: сводка «Мой день в отпуске» (дома не приходит)."""
+    for cid in access.get_allowed_cids():
+        if (not settings.notif_on(cid, "trip_day") or not _slot_due(context, cid, "trip_day")
+                or not settings.notification_available(cid, "trip_day")):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, "trip_day")
+        except Exception:
+            logging.exception("job_trip_day failed for cid=%s", cid)
+
+
 async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
     """Одно напоминание после 72 часов; новый цикл начинается с новой активности."""
     for cid, since_ts in tracking.due_inactivity_reminders(access.get_allowed_cids()):
@@ -662,6 +674,7 @@ def _build_application():
         ("daily_words", job_daily_words, tuple(range(7))),
         ("evening_weather", job_evening_weather, tuple(range(7))),
         ("holidays", job_holidays, tuple(range(7))),
+        ("trip_day", job_trip_day, tuple(range(7))),
     )
     for kind, job, days in notification_jobs:
         for slot in settings.NOTIF_TIMES[kind][1]:

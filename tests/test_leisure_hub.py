@@ -107,9 +107,10 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     items = leisure_ui.week_items("movie", films)
     card = leisure_ui.premiere_card([("movie", item) for item in items], 0)
     # Карточка ленты: имя, метаданные, описание; ← 1/7 → по кругу, «Назад» — в хаб.
-    assert card.text == "🎬 Фильм 0\n\nОписание."
-    assert _labels(card.reply_markup) == [["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(card.reply_markup) == ["lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
+    assert card.text == "🎬 Фильм 0\n\nФильм\n\nОписание."  # что это за карточка — первой строкой метаданных
+    assert _labels(card.reply_markup) == [["Не интересно"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert _callbacks(card.reply_markup) == ["lz_prem_x_0", "lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
+    assert card.reply_markup.inline_keyboard[0][0].api_kwargs == {"style": "danger"}
     raw = card.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in card.entities]
     assert ("bold", "Фильм 0") in marked
@@ -117,18 +118,18 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Сериалы — без жанра или страны не попадают.
     series_items = leisure_ui.week_items("series", leisure_hub.week_data("42", "series", day=monday))
     tab = leisure_ui.premiere_card([("series", item) for item in series_items])
-    assert tab.text == "📺 Суд\n\nдрама · 🇺🇸 USA · HBO\n\nОписание."
+    assert tab.text == "📺 Суд\n\nСериал · драма · 🇺🇸 USA · HBO\n\nОписание."
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
-    assert _labels(tab.reply_markup) == [["⬅️ Назад", "#️⃣ Главная"]]  # одна премьера — без стрелок
+    assert _labels(tab.reply_markup) == [["Не интересно"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
 
     album = leisure_ui.premiere_card([("music", {
         "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
         "url": "https://music.example/a", "about": "Мечтательный инди-поп.",
         "note": "Мечтательный инди-поп с шумными гитарами. Третий альбом группы. Лишнее третье предложение."})])
     # Сначала исполнитель; описание премьеры — не больше двух предложений.
-    assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nИнди · 🇨🇦 CA\n\n"
+    assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nМузыкальный альбом · Инди · 🇨🇦 CA\n\n"
                           "Мечтательный инди-поп с шумными гитарами. Третий альбом группы.")
     empty = leisure_ui.premiere_card([])
     assert empty.text == "🆕 Премьеры недели\n\nПремьер на эту неделю пока нет."
@@ -776,3 +777,25 @@ def test_premiere_without_russian_overview_is_described_from_english(monkeypatch
 
     assert "A double agent hunts a mole." in prompts[0]  # без русского описания — по английскому
     assert saved["movie|7|"]["value"] == "Шпионский триллер о двойном агенте."
+
+
+
+def test_not_interested_hides_the_premiere_for_good(monkeypatch):
+    import leisure_hub
+    hidden = []
+    monkeypatch.setattr("recommendation_stoplist.add", lambda cid, kind, value, reason: hidden.append((kind, value)))
+    leisure_hub.hide_premiere("42", "series", {"name": "Суд"})
+    leisure_hub.hide_premiere("42", "music", {"title": "Blue Rev", "artist": "Alvvays"})
+    assert hidden == [("movie", "Суд"), ("album", "Blue Rev")]
+
+    movies = [{"id": 1, "title": "Дюна", "overview": "О."}, {"id": 2, "title": "Майор Гром", "overview": "О."}]
+    monkeypatch.setattr(leisure_hub.leisure_movies, "_movie_premieres_cache_get", lambda *_a, **_k: movies)
+    monkeypatch.setattr(leisure_hub, "_cached_series", lambda *_a: [])
+    monkeypatch.setattr("recommendation_stoplist.values", lambda _cid, kind: ["дюна"] if kind == "movie" else [])
+    pools = leisure_hub._pools("42", datetime.now(config.TZ).date())
+    assert [item["title"] for item in pools["movies"][0]] == ["Майор Гром"]  # скрытая — ни в ленте, ни в хабе
+
+
+def test_single_premiere_says_it_is_a_single():
+    card = leisure_ui.premiere_card([("music", {"title": "Hit", "artist": "A", "genre_label": "сингл"})])
+    assert card.text.split("\n")[2] == "Сингл"

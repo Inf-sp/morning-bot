@@ -330,15 +330,40 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     # Сериал без жанра или страны не попадает ни в хаб, ни в «Премьеры».
     series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)
               and item.get("genres") and countries.title_countries(item)]
+    hidden_titles = _hidden(cid, "movie")  # «Не интересно» в «Премьерах» — не в ленте, не в хабе, не в «Моём дне»
+    movies = [item for item in movies if _identity(item.get("title")) not in hidden_titles]
+    series = [item for item in series if _identity(item.get("name")) not in hidden_titles]
     pools = {
         "movies": ([m for m in movies if m.get("overview")] or movies, _popularity, 0),
         "series": ([s for s in series if s.get("overview")] or series, _popularity, 0),
     }
     if music:
-        notes = _album_notes()
+        notes, hidden_albums = _album_notes(), _hidden(cid, "album")
         pools["music"] = ([{**item, "about": notes.get(_album_key(item), "")}
-                           for item in weekly_music(cid, cc, today)], None, _FRIDAY)
+                           for item in weekly_music(cid, cc, today)
+                           if _identity(item.get("title")) not in hidden_albums], None, _FRIDAY)
     return pools
+
+
+# Вид премьеры → тип стоп-листа (как у «Новинки»: фильмы и сериалы — «movie», альбомы — «album»).
+_PREMIERE_STOP = {"movie": "movie", "series": "movie", "music": "album"}
+
+
+def _identity(value) -> str:
+    return " ".join(str(value or "").casefold().split())
+
+
+def _hidden(cid, stop_kind) -> set:
+    import recommendation_stoplist
+    return {_identity(value) for value in recommendation_stoplist.values(cid, stop_kind)}
+
+
+def hide_premiere(cid, kind, item):
+    """«Не интересно» под премьерой: в стоп-лист навсегда — по названию, как «Новинка»."""
+    import recommendation_stoplist
+    title = item.get("name") if kind == "series" else item.get("title")
+    if str(title or "").strip():
+        recommendation_stoplist.add(cid, _PREMIERE_STOP.get(kind, "movie"), title, "hidden")
 
 
 def _with_labels(data, fetch=False) -> dict:
@@ -638,6 +663,11 @@ async def send_week_premieres(bot, cid, arg="", q=None):
     (premieres_feed), ← n/N → по кругу в том же сообщении (lz_prem_<n>). Старые кнопки вида (lz_prem_movie,
     lz_prem_movie_3) открывают ленту на первой карточке этого вида."""
     feed = await asyncio.to_thread(premieres_feed, cid)
+    if arg.startswith("x_"):  # «Не интересно»: премьера уходит навсегда, на её месте — следующая
+        arg = arg[2:]
+        if feed and arg.isdigit():
+            await asyncio.to_thread(hide_premiere, cid, *feed[int(arg) % len(feed)])
+            feed = await asyncio.to_thread(premieres_feed, cid)
     if any(not item.get("note") for _kind, item in feed):
         task = _NOTES_TASKS.get(str(cid))
         if task is None or task.done():

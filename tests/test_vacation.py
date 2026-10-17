@@ -770,3 +770,25 @@ def test_daily_look_title_follows_the_vacation_flag(monkeypatch):
     assert "trip_flag" not in wardrobe._with_trip_flag("42", {"items": [], "trip_flag": "🇿🇦"})  # дома — без флага
     saved["vacation"] = {"home": HOME, "cc": "ZA"}
     assert wardrobe._with_trip_flag("42", {"items": []})["trip_flag"] == "🇿🇦"
+
+
+def test_trip_day_plan_comes_in_the_morning_only_on_vacation(monkeypatch):
+    import myday
+    import settings
+    sent, active = [], [False]
+
+    async def plany(_bot, _cid, reply_markup=None, **_kwargs):
+        sent.append(reply_markup)
+
+    monkeypatch.setattr(myday, "send_plany", plany)
+    monkeypatch.setattr(vacation, "active", lambda _cid: active[0])
+
+    assert not settings.notification_available("42", "trip_day")  # дома пункта в «Уведомлениях» нет
+    asyncio.run(settings._send_scheduled_notification(object(), "42", "trip_day"))
+    assert sent == []
+    active[0] = True
+    assert settings.notification_available("42", "trip_day") and settings.notif_time("42", "trip_day") == "09:00"
+    asyncio.run(settings._send_scheduled_notification(object(), "42", "trip_day"))
+    # Сводка «Мой день в отпуске» с кнопками рассылки: «Настроить уведомления | Главная».
+    assert [b.callback_data for row in sent[0].inline_keyboard for b in row][-1] == "m_menu"
+    assert len(sent[0].inline_keyboard[0]) == 2
