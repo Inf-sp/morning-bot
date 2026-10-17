@@ -81,6 +81,7 @@ def _day_menu_message(menu, cid=None):
     if cid is not None and not vacation.active(cid):  # в отпуске холодильник остался дома
         stats = {"products": len(_fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))),
                  "meals": len(settings.food_meals(cid))}
+    trip = cid is not None and vacation.active(cid)
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
         # Описание кухни: дома — из списка кухонь; кухня страны отпуска — из гида поездки.
@@ -88,9 +89,19 @@ def _day_menu_message(menu, cid=None):
         or (vacation.local_cuisine_intro(cid) if cid is not None
             and str(menu.get("cuisine") or "").startswith(day_menu.LOCAL_PREFIX) else ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),
-        show_mine=cid is None or not vacation.active(cid), stats=stats,
-        trip=cid is not None and vacation.active(cid),
+        show_mine=cid is None or not vacation.active(cid), stats=stats, trip=trip,
+        # В отпуске — одно блюдо, которое стоит попробовать, и факт о кухне страны.
+        trip_dish=day_menu.trip_dish(menu) if trip else None,
+        fact=vacation.cuisine_fact(cid, int(menu.get("trip_index") or 0)) if trip else "",
     )
+
+
+async def send_trip_dish(bot, cid, status=None, q=None):
+    """«Другое блюдо» в отпуске: следующее блюдо набора, набор кончился — новый."""
+    import asyncio
+    import day_menu
+    menu = await asyncio.to_thread(day_menu.next_trip_dish, cid)
+    await _deliver(bot, cid, _day_menu_message(menu, cid), status, q)
 
 
 async def _with_food_status(bot, cid, status, q, build):

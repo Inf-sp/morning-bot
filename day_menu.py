@@ -279,6 +279,33 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     return {**menu, "cuisine_label": label} if label else menu
 
 
+def _trip_order(menu) -> list:
+    """Порядок блюд «Пробуем в отпуске»: сначала блюдо дня (top), затем остальные приёмы пищи набора."""
+    dishes = (menu or {}).get("dishes") or {}
+    top = (menu or {}).get("top")
+    return [*([top] if top in dishes else []), *(meal for meal in MEALS if meal in dishes and meal != top)]
+
+
+def trip_dish(menu) -> dict:
+    """Блюдо на экране «Пробуем в отпуске» — текущее по номеру trip_index (по кнопке «Другое блюдо»)."""
+    order = _trip_order(menu)
+    if not order:
+        return {}
+    return dict(menu["dishes"][order[int(menu.get("trip_index") or 0) % len(order)]] or {})
+
+
+def next_trip_dish(cid, now=None) -> dict:
+    """«Другое блюдо»: следующее блюдо сегодняшнего набора без AI; набор кончился — новый (AI, без повторов)."""
+    menu = get_cached_day_menu(cid, now)
+    if menu:
+        index = int(menu.get("trip_index") or 0) + 1
+        if index < len(_trip_order(menu)):
+            menu = {**menu, "trip_index": index}
+            store.mutate_profile(cid, lambda profile: ({**profile, "cooking_day_menu": menu}, None))
+            return menu
+    return get_day_menu(cid, now, refresh=True)
+
+
 def trip_dish_today(cid) -> dict:
     """Блюдо, которое в отпуске стоит попробовать сегодня, из готового меню дня (без сети и AI): {name, note}."""
     menu = get_cached_day_menu(cid) or {}

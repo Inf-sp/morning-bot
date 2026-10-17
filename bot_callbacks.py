@@ -461,6 +461,9 @@ ROUTES = (
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
                                                          show_mine=not vacation.active(c.cid)))),
     R("food_go_*", _picked(_food_recipe)),
+    # «Другое блюдо» в отпуске: следующее блюдо на месте прежнего.
+    R("food_trip_next", _replaced(lambda c: c.status(
+        lambda status: menu.send_trip_dish(c.bot, c.cid, status=status)))),
     R("m_menu", _main_menu),
     # Погодное предупреждение остаётся в истории, «Мой день» — отдельным сообщением.
     R("weather_myday", lambda c: c.status(lambda status: myday.send_plany(c.bot, c.cid, status=status))),

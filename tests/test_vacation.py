@@ -432,11 +432,12 @@ def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
 def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
     import menu
     saved, _places = _env(monkeypatch, CAPE)
+    monkeypatch.setattr(vacation, "cuisine_facts", lambda _cid: [])
     saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская",
                                                              "cuisine_intro": "Мясо на открытом огне и пряные карри."}}
     text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
                                         "dishes": {"lunch": {"name": "Брай", "note": "мясо на открытом огне"}}}, "42").text
-    assert text.startswith("🇿🇦 Меню на сегодня · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")
+    assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")
 
 
 def test_country_music_is_up_to_three_local_artists_chart_first(monkeypatch):
@@ -481,9 +482,52 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
 
     assert "обязательно стоит попробовать в этой стране" in prompts[0] and '"top"' in prompts[0]
     assert built["top"] == "dinner"
+    monkeypatch.setattr(vacation, "cuisine_facts", lambda _cid: ["Брай — национальная традиция: 24 сентября в ЮАР "
+                                                                   "отмечают Национальный день брая"])
     msg = menu._day_menu_message(built, "42")
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
-        ["food_go_day_any"], ["m_menu"]]  # «Другие блюда» и «Главная», без рецептов «Завтрак / Обед / Ужин»
+        ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
+    # Одно блюдо — то, что стоит попробовать сегодня (top), жирным, ниже описание; без «Завтрак / Обед / Ужин».
+    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне.\n\nБрай\n"
+                        "Мясо на открытом огне.\n\nБрай — национальная традиция: 24 сентября в ЮАР отмечают "
+                        "Национальный день брая.")
+    utf16 = msg.text.encode("utf-16-le")  # смещения Telegram — в UTF-16: флаг 🇿🇦 занимает 4 единицы
+    bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
+    assert "Брай" in bold and "Завтрак" not in msg.text and "Обед" not in msg.text
+
+
+def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(monkeypatch):
+    import day_menu
+    profile = {"cooking_day_menu": {
+        "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner",
+        "dishes": {"breakfast": {"name": "Руськи"}, "lunch": {"name": "Боботи"}, "dinner": {"name": "Брай"}}}}
+    monkeypatch.setattr(store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(store, "mutate_profile", lambda _cid, change: profile.update(change(dict(profile))[0]))
+    monkeypatch.setattr(day_menu, "_settings", lambda: type("S", (), {
+        "food_meals": staticmethod(lambda _cid: ["breakfast", "lunch", "dinner"])})())
+    refreshed = []
+    monkeypatch.setattr(day_menu, "get_day_menu", lambda cid, now=None, refresh=False, cuisine=None: refreshed.append(
+        refresh) or {"dishes": {"lunch": {"name": "Потжи"}}})
+
+    shown = [day_menu.trip_dish(profile["cooking_day_menu"])["name"]]
+    for _press in range(2):
+        shown.append(day_menu.trip_dish(day_menu.next_trip_dish("42"))["name"])
+    assert shown == ["Брай", "Руськи", "Боботи"] and not refreshed  # сначала блюдо дня, затем остальные — без AI
+    assert day_menu.trip_dish(day_menu.next_trip_dish("42"))["name"] == "Потжи" and refreshed == [True]
+
+
+def test_cuisine_facts_are_built_once_per_trip_and_rotate(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA"}
+    calls = []
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: calls.append(1) or {
+        "facts": ["Боботи считают национальным блюдом ЮАР", "Билтонг — вяленое мясо, его едят как снек", "no"]})
+
+    assert vacation.cuisine_facts("42") == ["Боботи считают национальным блюдом ЮАР",
+                                            "Билтонг — вяленое мясо, его едят как снек"]  # без кириллицы — мимо
+    assert vacation.cuisine_facts("42") and calls == [1]  # на поездку — один запрос
+    day = date(2026, 10, 17)
+    assert vacation.cuisine_fact("42", 0, day) != vacation.cuisine_fact("42", 1, day)  # «Другое блюдо» — другой факт
 
 
 def test_my_day_on_trip_shows_the_dish_to_try_today():
