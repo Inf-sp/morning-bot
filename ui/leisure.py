@@ -729,7 +729,25 @@ def _today_name(b: MessageBuilder, pick, meta=True) -> None:
         b.text_line(" · " + " · ".join(values))
 
 
-def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_markup=None) -> MessageSpec:
+def _read_block(b: MessageBuilder, read) -> None:
+    """«Прочитать за 2 минуты:» — заголовок статьи жирной ссылкой · источник · EN · N мин, ниже предложение."""
+    b.spacer()
+    b.bold("Прочитать за 2 минуты:")
+    b.newline()
+    b.bold_link(" ".join(str(read.get("title") or "").split()), str(read.get("link") or ""))
+    minutes = int(read.get("minutes") or 0)
+    meta = [read.get("source"), read.get("lang"), f"{minutes} мин" if minutes else ""]
+    b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
+    b.newline()
+    if str(read.get("about") or "").strip():
+        b.line(_finish_sentence(str(read["about"]).strip()))
+
+
+def _finish_sentence(text) -> str:
+    return text if text[-1:] in ".!?…" else f"{text}."
+
+
+def leisure_today_screen(picks, *, city="", outing=None, library=None, read=None, reply_markup=None) -> MessageSpec:
     """«🍿 Досуг на сегодня · Alkmaar»: главная карточка (первая, обычно фильм) без подписи — имя, метаданные,
     длительность и описание одним абзацем через «•»; остальные — «- Имя · сериал · …», событие рядом (если есть),
     статистика библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
@@ -762,6 +780,8 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, reply_mar
         if tail:
             b.text_line(f" — {tail}")
         b.newline()
+    if read and str(read.get("title") or "").strip() and str(read.get("link") or "").startswith("http"):
+        _read_block(b, read)
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))
@@ -858,14 +878,16 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="") -> Message
                                                                                      callback_data="m_menu")]]))
 
 
-def leisure_hub_kb():
-    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»."""
+def leisure_hub_kb(read=False):
+    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»; под ними, если на
+    экране статья, — «Другая статья»."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
+        *([[InlineKeyboardButton("Другая статья", callback_data="lz_read_next")]] if read else []),
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

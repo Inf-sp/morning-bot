@@ -538,8 +538,10 @@ def today_data(cid, day=None) -> dict:
         if pick and pick["name"]:
             picks.append(pick)
     outing = None if _evening_rain(cid, today) else _outing(cid, today)
+    import leisure_reads
     return {
         "picks": picks, "outing": outing, "city": store.get_settings(cid).get("city") or "",
+        "read": leisure_reads.current(cid, today),
         "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
                     "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
     }
@@ -589,11 +591,21 @@ async def send_hub(bot, cid, q=None):
             except Exception:
                 _log.info("leisure hub: day cards not ready cid=%s", cid)
             data = await asyncio.to_thread(today_data, cid)
+    if not data.get("read"):  # статьи на сегодня ещё нет (ночной прогрев не успел) — фоном, к следующему открытию
+        import leisure_reads
+        util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     msg = leisure_ui.leisure_today_screen(
-        data["picks"], city=data["city"], outing=data["outing"], library=data["library"],
-        reply_markup=leisure_ui.leisure_hub_kb(),
+        data["picks"], city=data["city"], outing=data["outing"], library=data["library"], read=data.get("read"),
+        reply_markup=leisure_ui.leisure_hub_kb(read=bool(data.get("read"))),
     )
     await _show(bot, cid, msg, q)
+
+
+async def next_read(bot, cid, q=None):
+    """«Другая статья» под хабом: следующая статья набора дня на месте, без сети."""
+    import leisure_reads
+    await asyncio.to_thread(leisure_reads.advance, cid)
+    await send_hub(bot, cid, q)
 
 
 _CARDS_WAIT = 25  # пустой хаб ждёт карточки дня не дольше; остальное дособирается в фоне
@@ -770,6 +782,7 @@ _WARM_STEP_LABELS = {
     "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
     "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
     "details": "страны", "trip_afisha": "афиша поездки", "premiere_notes": "описания премьер",
+    "reads": "статья дня",
 }
 # Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
 failed_steps = {}
@@ -794,6 +807,7 @@ async def warm_hub_cache(cid):
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
         ("premiere_notes", lambda: _warm_premiere_notes(cid)),  # после стран и релизов: лента уже готова
+        ("reads", lambda: asyncio.to_thread(_reads_build, cid)),
         ("trip_afisha", lambda: _warm_trip_afisha(cid)),
     )
     failed = []
@@ -805,6 +819,11 @@ async def warm_hub_cache(cid):
             _log.exception("leisure hub warm failed cid=%s step=%s", cid, name)
     failed_steps[str(cid)] = failed
     return not failed
+
+
+def _reads_build(cid):
+    import leisure_reads
+    return leisure_reads.build(cid)
 
 
 async def _warm_premiere_notes(cid):

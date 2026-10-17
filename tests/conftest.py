@@ -79,3 +79,13 @@ def _no_wikidata_network(monkeypatch):
     monkeypatch.setattr(wikidata_books, "_get", lambda _params: (_ for _ in ()).throw(
         wikidata_books._Unavailable()))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_rss_reads(monkeypatch):
+    """Ленты статей «Прочитать за 2 минуты» в тестах не запрашиваются; нужный тест подставит свои."""
+    import leisure_reads
+
+    monkeypatch.setattr(leisure_reads, "_feed", lambda _source, _url: [])
+    monkeypatch.setattr(leisure_reads, "_minutes", lambda _link: None)
+    yield

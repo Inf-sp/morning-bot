@@ -52,7 +52,8 @@ def _clean_link(link):
 
 
 def parse_feed(xml_text, source):
-    """RSS 2.0 или Atom → [{id, title, link, source}]; битый XML → []."""
+    """RSS 2.0 или Atom → [{id, title, link, source, summary, date}]; битый XML → []. summary — анонс как есть
+    (может быть с HTML), date — pubDate / published / updated строкой."""
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
@@ -62,20 +63,24 @@ def parse_feed(xml_text, source):
         title = " ".join(str(node.findtext("title") or "").split())
         link = str(node.findtext("link") or "").strip()
         guid = str(node.findtext("guid") or "").strip()
-        items.append({"title": title, "link": link, "guid": guid})
+        items.append({"title": title, "link": link, "guid": guid, "summary": node.findtext("description") or "",
+                      "date": str(node.findtext("pubDate") or "").strip()})
     for node in root.iter(f"{_ATOM}entry"):
         title = " ".join(str(node.findtext(f"{_ATOM}title") or "").split())
         link_node = node.find(f"{_ATOM}link")
         link = str(link_node.get("href") if link_node is not None else "").strip()
-        items.append({"title": title, "link": link, "guid": str(node.findtext(f"{_ATOM}id") or "").strip()})
+        items.append({"title": title, "link": link, "guid": str(node.findtext(f"{_ATOM}id") or "").strip(),
+                      "summary": node.findtext(f"{_ATOM}summary") or node.findtext(f"{_ATOM}content") or "",
+                      "date": str(node.findtext(f"{_ATOM}published") or node.findtext(f"{_ATOM}updated")
+                                  or "").strip()})
     out = []
     for item in items:
         link = _clean_link(item["link"])
         if not item["title"] or not link.startswith("http"):
             continue
         # guid вроде «…/?p=612105» — id как есть; у ссылки срезаем utm-метки.
-        out.append({"id": item["guid"] or link,
-                    "title": item["title"], "link": item["link"].strip(), "source": source})
+        out.append({"id": item["guid"] or link, "title": item["title"], "link": item["link"].strip(),
+                    "source": source, "summary": item["summary"], "date": item["date"]})
     return out
 
 
