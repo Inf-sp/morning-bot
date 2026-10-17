@@ -756,3 +756,23 @@ def test_music_premieres_check_favorite_releases_in_background_once(monkeypatch)
     profile["hub_music_fav"] = {"date": "2026-10-16", "items": []}
     leisure_hub._refresh_favorite_releases("42")  # сегодня уже проверено
     assert len(started) == 1
+
+
+def test_premiere_without_russian_overview_is_described_from_english(monkeypatch):
+    import leisure_hub
+    import tmdb
+    prompts, saved = [], {}
+
+    async def fake_json(prompt, *_args, **_kwargs):
+        prompts.append(prompt)
+        return {"items": [{"id": 0, "about": "Шпионский триллер о двойном агенте."}]}
+
+    monkeypatch.setattr(leisure_hub, "_notes", lambda _key: {})
+    monkeypatch.setattr(tmdb, "english_overview", lambda tmdb_id, kind: "A double agent hunts a mole." if tmdb_id == 7 else "")
+    monkeypatch.setattr(leisure_hub.ai, "allm_json", fake_json)
+    monkeypatch.setattr(leisure_hub.store, "mutate_kv", lambda _key, change: saved.update(change({})[0]))
+
+    asyncio.run(leisure_hub.describe_premieres([("movie", {"id": 7, "title": "Крот", "overview": ""})]))
+
+    assert "A double agent hunts a mole." in prompts[0]  # без русского описания — по английскому
+    assert saved["movie|7|"]["value"] == "Шпионский триллер о двойном агенте."

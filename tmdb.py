@@ -476,6 +476,17 @@ def _english_title(tmdb_id, kind):
     return str(data.get("title") or data.get("name") or "").strip()
 
 
+def english_overview(tmdb_id, kind="movie") -> str:
+    """Описание на английском — резерв, когда русского в TMDb нет (кэш на неделю); сбой — ""."""
+    if not config.TMDB_API_KEY or not tmdb_id or kind not in ("movie", "tv"):
+        return ""
+    cached = util.ttl_get("tmdb_overview_en", f"{kind}|{tmdb_id}", 7 * 86400)
+    if cached is not None:
+        return cached
+    data = _get(f"/{kind}/{tmdb_id}", {}, timeout=8, language="en-US") or {}
+    return util.ttl_set("tmdb_overview_en", f"{kind}|{tmdb_id}", str(data.get("overview") or "").strip())
+
+
 def trailer_url(tmdb_id, kind="movie"):
     """Официальный YouTube-трейлер (youtube.com/watch).
 

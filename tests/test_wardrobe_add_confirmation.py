@@ -111,3 +111,24 @@ def test_accessory_is_not_added_to_the_wardrobe(monkeypatch):
 
     assert stored_items == []
     assert bot.messages[0]["text"].startswith("В шкаф добавляю только одежду и обувь.")
+
+
+def test_added_items_offer_a_look_with_each_new_item(monkeypatch):
+    import asyncio
+    import wardrobe_management
+
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    items = [{"id": "it_1", "name": "Коричневая вельветовая рубашка", "zone": "Верх", "subcategory": "Рубашки"},
+             {"id": "it_2", "name": "Синие джинсы", "zone": "Низ", "subcategory": "Джинсы"}]
+    asyncio.run(wardrobe_management._show_added_items(Bot(), "42", items[:1]))
+    asyncio.run(wardrobe_management._show_added_items(Bot(), "42", items))
+
+    one, many = ([button.callback_data for row in message["reply_markup"].inline_keyboard for button in row]
+                 for message in sent)
+    assert one[:2] == ["w_delete_it_1", "w_with_it_1"]  # «Собрать образ» — сразу под «Удалить»
+    assert many[:4] == ["w_delete_it_1", "w_delete_it_2", "w_with_it_1", "w_with_it_2"]

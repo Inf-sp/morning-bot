@@ -138,6 +138,10 @@ _PREMIERE_TYPES = {"movie": "фильм", "series": "сериал", "music": "а
 _PREMIERE_NOTE_MAX = 300
 
 
+async def _no_text():
+    return ""
+
+
 async def describe_premieres(feed):
     """Описания ленты «Премьеры»: одно-два понятных предложения по-русски на каждую премьеру — один AI-запрос на
     новые, хранятся полгода."""
@@ -145,6 +149,13 @@ async def describe_premieres(feed):
     missing = [(kind, item) for kind, item in feed if _premiere_key(kind, item) not in known][:12]
     if not missing:
         return
+    import tmdb  # без русского описания TMDb — английское, чтобы AI писал по сути, а не только по жанру
+    english = await asyncio.gather(*(
+        asyncio.to_thread(tmdb.english_overview, item.get("id"), "tv" if kind == "series" else "movie")
+        if kind != "music" and not re.search(r"[а-яё]", str(item.get("overview") or ""), re.I) else _no_text()
+        for kind, item in missing), return_exceptions=True)
+    missing = [(kind, {**item, "overview": text}) if isinstance(text, str) and text else (kind, item)
+               for (kind, item), text in zip(missing, english)]
     source = [{"id": index, "type": _PREMIERE_TYPES.get(kind, kind),
                "title": item.get("title") or item.get("name") or "", "artist": item.get("artist") or "",
                "season": item.get("season_number") or "",
