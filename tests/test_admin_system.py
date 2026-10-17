@@ -63,9 +63,9 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки"], ["💾 Прислать копию базы", "🔁 Перезапустить бота"],
+        ["🔄 Обновить карточки"], ["💾 Прислать копию базы"], ["🔁 Перезапустить бота"],
         ["👥 Пользователи"], ["#️⃣ Главная"],
-    ]
+    ]  # админка — все кнопки в один столбец
     assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок на экране нет
 
 
@@ -75,9 +75,10 @@ def test_admin_card_refresh_menu_has_all_cards():
     asyncio.run(admin.send_card_refresh_menu(bot, "42"))
 
     markup = bot.sent[0]["reply_markup"].inline_keyboard
-    assert [row[0].text for row in markup[:-1]] == [
+    assert [row[0].text for row in markup[:-2]] == [
         "☀️ Мой день", "👔 Гардероб", "🥣 Кухня", "🧠 Обучение", "🍿 Досуг",
     ]
+    assert all(len(row) == 1 for row in markup)  # один столбец, «Назад» и «Главная» — отдельными строками
     assert bot.sent[0]["text"].startswith("🔄 Обновить карточки")
 
 
@@ -111,7 +112,7 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
-    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад"], ["#️⃣ Главная"]]
     assert all("Скопировать" not in button for row in labels for button in row)
 
 
@@ -400,7 +401,7 @@ def test_api_check_screen_shows_results_and_buttons(monkeypatch):
     assert "✅ Gemini · 1,2 с" in bot.sent[0]["text"]
     markup = bot.sent[0]["reply_markup"].inline_keyboard
     assert [[(b.text, b.callback_data) for b in row] for row in markup] == [
-        [("🩺 Проверить снова", "adm_api_check")], [("⬅️ Назад", "adm_home"), ("#️⃣ Главная", "m_menu")],
+        [("🩺 Проверить снова", "adm_api_check")], [("⬅️ Назад", "adm_home")], [("#️⃣ Главная", "m_menu")],
     ]
 
 

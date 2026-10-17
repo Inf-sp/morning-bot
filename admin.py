@@ -35,9 +35,16 @@ _log = logging.getLogger(__name__)
 DAY = 86400
 _MONTHS_RU = ("", "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
+def _one_column(markup):
+    """Админка — все кнопки в один столбец, включая «Назад» и «Главная» (по просьбе владельца)."""
+    if markup is None:
+        return None
+    return InlineKeyboardMarkup([[button] for row in markup.inline_keyboard for button in row])
+
+
 async def _show(bot, cid, msg, reply_markup=None, q=None):
     await rich_delivery.show(
-        bot, cid, msg, reply_markup=reply_markup, query=q,
+        bot, cid, msg, reply_markup=_one_column(reply_markup), query=q,
     )
 
 
@@ -479,9 +486,9 @@ async def create_invite(bot, cid, q=None):
     code = access.create_invite()
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
-    kb = InlineKeyboardMarkup([
+    kb = _one_column(InlineKeyboardMarkup([
         nav_row("adm_users"),
-    ])
+    ]))
     msg = ui.invite_created(link)
     if q is not None and getattr(q, "message", None) is not None:
         try:
