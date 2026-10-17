@@ -114,9 +114,13 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
 
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
-    # Не грамматика, а что пригодится в поездке: ситуация дня, произношение, факт о языке курсивом.
-    assert msg.text.startswith("🇿🇦 Африкаанс в поездке\n\nСитуация: ")
-    assert "Een koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)" in msg.text
+    # Не грамматика, а что пригодится в поездке: ситуация дня цитатой — название и фразы с произношением.
+    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nСитуация:\nСитуация ")
+    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\nDankie! → Спасибо! (данки)\n" in msg.text
+    utf16 = msg.text.encode("utf-16-le")
+    quote = next(utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")
+                 for e in msg.entities if e.type == "blockquote")
+    assert quote.startswith("Ситуация ") and quote.endswith("Dankie! → Спасибо! (данки)")  # всё — в цитате
     assert "Произношение" not in msg.text and "Грамматика" not in msg.text  # в поездке — только фразы и факт
     assert msg.text.endswith("Африкаанс вырос из нидерландского XVII века.")
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
