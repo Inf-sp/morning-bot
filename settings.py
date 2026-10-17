@@ -173,7 +173,8 @@ def next_notification(cid, now=None) -> str:
     now = now or datetime.now(config.TZ)
     best = None
     for kind in NOTIF_TIMES:
-        if kind in ("weather_warn", "holidays") or not notification_available(cid, kind) or not notif_on(cid, kind):
+        if (kind in ("weather_warn", "holidays") or not notification_available(cid, kind) or not notif_on(cid, kind)
+                or notification_paused(cid, kind)):
             continue
         hour, minute = map(int, notif_time(cid, kind).split(":"))
         for offset in range(8):
@@ -294,7 +295,7 @@ def notification_markup(kind: str, rows, *, enabled: bool = True) -> InlineKeybo
 def settings_summary(cid) -> str:
     """«включено 4 · следующая: Погода на завтра сегодня в 20:00»."""
     enabled = sum(1 for kind, _label in NOTIF_TYPES
-                  if notification_available(cid, kind) and notif_on(cid, kind))
+                  if notification_available(cid, kind) and notif_on(cid, kind) and not notification_paused(cid, kind))
     if not enabled:
         return "выключены"
     upcoming = next_notification(cid)
@@ -325,12 +326,12 @@ async def send_home(bot, cid, q=None):
     city = " · ".join(part for part in (data.get("city"), data.get("country")) if part)
     import vacation
     trip = vacation.state(cid)
-    if trip:  # в отпуске — только то, что нужно в поездке: вернуться домой и уведомления
+    if trip:  # в отпуске — только то, что нужно в поездке: вернуться из отпуска и уведомления
         rows = [[vacation_button(cid)], rows[3], rows[-1]]
-        home = (trip.get("home") or {}).get("city", "")
-        city += " · ✈️ отпуск" + (f" {vacation.until_label(cid)}" if vacation.until_label(cid) else "") \
-            + (f", дома {home}" if home else "")
-    msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid))
+        msg = settings_ui.settings_trip(_trip_place_line(cid, data), (trip.get("home") or {}).get("city", ""),
+                                        _trip_language_line(cid), settings_summary(cid))
+    else:
+        msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -340,6 +341,25 @@ async def send_home(bot, cid, q=None):
             _log.debug("send_home: ignored error", exc_info=True)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=markup, transient=True)
+
+
+def _trip_place_line(cid, place) -> str:
+    """«Кейптаун, ЮАР 🇿🇦 · до 4 ноября» — страна по-русски, не кодом."""
+    import countries
+    import util
+    import vacation
+    cc = str(place.get("cc") or "").upper()
+    where = ", ".join(part for part in (place.get("city"), countries.name_ru(cc) or cc) if part)
+    return " · ".join(part for part in (" ".join(part for part in (where, util.flag_from_cc(cc)) if part),
+                                        vacation.until_label(cid)) if part)
+
+
+def _trip_language_line(cid) -> str:
+    """В отпуске «Обучение» — на языке страны: «Африкаанс — фразы на каждый день»; иначе обычный язык обучения."""
+    import vacation
+    if vacation.replaces_learning(cid):
+        return f"{vacation.guide(cid).get('language_ru') or 'Местный язык'} — фразы на каждый день"
+    return ""
 
 
 _NOT_SET = "не выбрано"
@@ -572,6 +592,14 @@ def _time_sort_key(value: str) -> int:
     if not m:
         return 9999
     return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def notification_paused(cid, kind) -> bool:
+    """«Обучение языку» на паузе, пока в отпуске «Обучение» — на языке страны: не приходит и не считается."""
+    if kind != "daily_words":
+        return False
+    import vacation
+    return vacation.replaces_learning(cid)
 
 
 def notification_available(cid, kind) -> bool:

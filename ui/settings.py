@@ -88,6 +88,26 @@ def settings_home(city="", language="", summary=""):
     return b.build_stripped()
 
 
+def settings_trip(trip="", home="", language="", summary=""):
+    """Настройки в отпуске — только то, что верно в поездке: «Отпуск:», «Дома:», «Язык в поездке:» (если
+    «Обучение» на языке страны), «Уведомления:» без рассылок на паузе."""
+    b = MessageBuilder()
+    b.section(ui_label("settings", "Настройки"))
+    b.spacer()
+    b.labeled_line("Отпуск", trip or "—", lowercase=False)
+    if home:
+        b.labeled_line("Дома", home, lowercase=False)
+    if language:
+        b.labeled_line("Язык в поездке", language, lowercase=False)
+    if summary:
+        b.labeled_line("Уведомления", summary)
+    b.spacer()
+    b.italic("В отпуске здесь только то, что нужно в поездке. Предпочтения, город и данные разделов вернутся "
+             "после отпуска.")
+    b.newline()
+    return b.build_stripped()
+
+
 def preferences_home(summary=()):
     """Все предпочтения из разделов: «Кухни: Итальянская, Японская»; ниже кнопки для изменения."""
     b = MessageBuilder()

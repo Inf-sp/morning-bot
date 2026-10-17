@@ -87,6 +87,11 @@ def country_by_name(text) -> tuple:
 _SHORT_CODES = {"US": "USA", "GB": "UK", "AE": "UAE"}
 
 
+def name_ru(cc) -> str:
+    """Название страны по-русски по коду («ZA» → «ЮАР»); нет в таблице — ""."""
+    return (_table().get(str(cc or "").upper()) or [""])[0]
+
+
 def short_label(cc) -> str:
     """Страна кратко, без флага: «USA», «UK», «NL»; без кода — ""."""
     cc = str(cc or "").upper()

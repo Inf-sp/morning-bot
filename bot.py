@@ -361,7 +361,7 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
     for cid in access.get_allowed_cids():
         if not settings.notif_on(cid, "daily_words") or not _slot_due(context, cid, "daily_words"):
             continue
-        if vacation.replaces_learning(cid):
+        if settings.notification_paused(cid, "daily_words"):
             continue  # в отпуске «Обучение» — на языке страны, рассылка слов на паузе
         try:
             await settings.send_scheduled_notification(context.bot, cid, "daily_words")

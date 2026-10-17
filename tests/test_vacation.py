@@ -543,3 +543,25 @@ def test_vacation_has_no_suitcase_button_without_a_current_trip(monkeypatch):
     asyncio.run(vacation.ask_city(bot, "42"))
 
     assert bot.sent[-1]["reply_markup"] is None  # поездка уже закончилась — только вопрос о городе
+
+
+def test_settings_on_vacation_show_trip_home_trip_language_and_skip_paused_learning(monkeypatch):
+    import countries
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "until": "2026-11-04", "cc": "ZA"}
+    monkeypatch.setattr(countries, "_table", lambda: {"ZA": ["ЮАР", "africa"]})
+    monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: True)
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"language_ru": "Африкаанс"})
+    on = {"daily_words", "evening_weather"}
+    monkeypatch.setattr(settings, "notif_on", lambda _cid, kind: kind in on)
+    bot = Bot()
+
+    asyncio.run(settings.send_home(bot, "42"))
+
+    text = bot.sent[-1]["text"]
+    assert "Отпуск: Кейптаун, ЮАР 🇿🇦 · до 4 ноября\nДома: Алкмар\nЯзык в поездке: Африкаанс — фразы на каждый день" \
+        in text
+    assert "ZA ·" not in text and "Язык обучения" not in text and "кнопкой «Настроить»" not in text
+    # «Обучение языку» в отпуске на паузе: не считается и не показывается следующим.
+    assert "Уведомления: включено 1 · следующая: Погода на завтра" in text
+    assert settings.notification_paused("42", "daily_words") and not settings.notification_paused("42", "evening_weather")
