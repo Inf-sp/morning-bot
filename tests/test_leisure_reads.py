@@ -1,4 +1,4 @@
-"""«Прочитать за 2 минуты» в хабе Досуга: одна статья, темы по очереди, время чтения, «Другая статья»."""
+"""«Прочитать» в хабе Досуга: одна статья, темы по очереди, время чтения, «Другая статья»."""
 import os
 from datetime import date, datetime
 
@@ -66,7 +66,7 @@ def test_hub_shows_one_read_with_source_language_minutes_and_a_change_button():
     read = {"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "source": "Quanta", "lang": "EN",
             "minutes": 6, "about": "Как сверхмассивные чёрные дыры набирают массу так быстро"}
     msg = leisure_ui.leisure_today_screen([], read=read, library={"movies": 2, "artists": 1})
-    assert ("Прочитать за 2 минуты:\nHow Black Holes Grow Up · Quanta · EN · 6 мин\n"
+    assert ("Прочитать:\nHow Black Holes Grow Up · Quanta · EN · 6 мин\n"
             "Как сверхмассивные чёрные дыры набирают массу так быстро.\n\nТвоя библиотека") in msg.text
     links = [entity.url for entity in msg.entities if entity.type == "text_link"]
     assert links == ["https://q.example/bh"]

@@ -83,7 +83,7 @@ def _no_wikidata_network(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_rss_reads(monkeypatch):
-    """Ленты статей «Прочитать за 2 минуты» в тестах не запрашиваются; нужный тест подставит свои."""
+    """Ленты статей «Прочитать» в тестах не запрашиваются; нужный тест подставит свои."""
     import leisure_reads
 
     monkeypatch.setattr(leisure_reads, "_feed", lambda _source, _url: [])

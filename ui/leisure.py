@@ -730,9 +730,9 @@ def _today_name(b: MessageBuilder, pick, meta=True) -> None:
 
 
 def _read_block(b: MessageBuilder, read) -> None:
-    """«Прочитать за 2 минуты:» — заголовок статьи жирной ссылкой · источник · EN · N мин, ниже предложение."""
+    """«Прочитать:» — заголовок статьи жирной ссылкой · источник · EN · N мин, ниже предложение."""
     b.spacer()
-    b.bold("Прочитать за 2 минуты:")
+    b.bold("Прочитать:")
     b.newline()
     b.bold_link(" ".join(str(read.get("title") or "").split()), str(read.get("link") or ""))
     minutes = int(read.get("minutes") or 0)
