@@ -107,7 +107,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
 
     assert profile["suitcase_draft"]["trip"]["cc"] == "ZA" and "42" not in wardrobe_suitcase.store.pending_input
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_ok"], ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_ok"], ["w_pack_add"], ["w_pack_again"], ["m_wardrobe", "m_menu"]]
     monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 18, "tmax": 24, "rainy": 0})
 
@@ -116,7 +116,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     rows = bot.sent[-1]["reply_markup"].inline_keyboard
     assert bot.sent[-1]["text"].startswith("🧳 Что не берёшь? · Кейптаун · 8 дней")
     assert [[b.text for b in row] for row in rows] == [
-        ["✅ Добавить вещь в чемодан"], ["Белая футболка"], ["⬅️ Назад", "#️⃣ Главная"]]
+        ["✅ Добавить ещё вещь"], ["Белая футболка"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert [rows[0][0].callback_data, rows[1][0].callback_data, rows[2][0].callback_data] == [
         "w_pack_add", "w_pack_t:0", "w_pack_view"]
     import telegram_runtime
@@ -125,7 +125,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
         return [[(b["text"], b.get("style")) for b in row]
                 for row in telegram_runtime._enhance_markup(markup)["inline_keyboard"]]
 
-    assert colors(bot.sent[-1]["reply_markup"])[:2] == [[("Добавить вещь в чемодан", "success")],
+    assert colors(bot.sent[-1]["reply_markup"])[:2] == [[("Добавить ещё вещь", "success")],
                                                        [("Белая футболка", None)]]
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_t:0"))
     assert profile["suitcase_draft"]["result"]["groups"] == [] and profile["suitcase_draft"]["declined"] == [
@@ -151,7 +151,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Чемодан сохранён.\n\n"
                                     "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
 
     # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
@@ -178,7 +178,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
@@ -186,7 +186,13 @@ def test_pack_button_at_home_and_on_vacation(monkeypatch):
         return [b.callback_data for row in markup.inline_keyboard for b in row]
 
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {})
     assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[2] == "w_pack"  # дома — под стилями
+    labels = [[b.text for b in row] for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard]
+    assert labels[1] == ["🧳 Собрать чемодан"]
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": TRIP, "result": {"groups": []}})
+    labels = [[b.text for b in row] for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard]
+    assert labels[1] == ["🧳 Чемодан в отпуск"]  # чемодан уже собран
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
     # В отпуске нет стилей: «Ещё вариант» — новый образ дня, ниже «Мой чемодан».
     assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]
@@ -484,6 +490,44 @@ def test_suitcase_checklist_adds_missing_weather_items_or_names_the_gap():
     # Погода и совет — одной строкой, дождливые дни — без «из 13 дней»; категории — «Обувь (1 пара): …».
     assert text == ("🧳 Чемодан · ЮАР · 17 дней\n\nДнём от +16° до +34°, 3 дождливых дня, ветер до 8 м/с. "
                     "Днём жарко, вечера ветреные.\n\n"
-                    "Футболки и рубашки (2 вещи): белая футболка, серая футболка\nОбувь (1 пара): белые кеды\n\n"
+                    "Футболки и рубашки (2 вещи): белая футболка, серая футболка\n\nОбувь (1 пара): белые кеды\n\n"
                     "Не хватает: шорт или лёгких брюк (днём до +34°) — в шкафу таких нет.\n\n"
                     "Всего в списке: 2 вещи и 1 пара обуви")
+
+
+
+def test_add_more_goes_straight_into_the_saved_suitcase(monkeypatch):
+    profile = _memory_profile(monkeypatch)
+    profile["suitcase_saved"] = {"trip": TRIP, "declined": ["Серая футболка"],
+                                 "result": {"place": "Кейптаун", "days": 8, "groups": [("Верх", ["Белая футболка"])]}}
+    monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
+    bot = Bot()
+
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_add_s"))
+    zones = bot.sent[-1]["reply_markup"].inline_keyboard
+    assert zones[0][0].callback_data == "w_pack_z:0:s" and zones[-1][0].callback_data == "w_pack_saved"
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_z:0:s"))
+    asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_a:0:1:s"))  # серая футболка — сразу в чемодан
+
+    saved = wardrobe_suitcase.saved_suitcase("42")
+    assert saved["result"]["groups"] == [("Верх", ["Белая футболка", "Серая футболка"])]
+    assert saved["declined"] == [] and "suitcase_draft" not in profile  # без черновика и «Подтвердить»
+    rows = bot.sent[-1]["reply_markup"].inline_keyboard
+    assert rows[1][0].text == "✅ Серая футболка" and rows[-1][0].callback_data == "w_pack_add_s"
+
+
+def test_raincoat_is_swapped_for_a_windbreaker_when_rain_is_rare():
+    clothes = [("Верх", _item("Белая футболка", (15, 35))), ("Низ", _item("Джинсы")), ("Обувь", _item("Белые кеды")),
+               ("Верхняя одежда", _item("Дождевик", (5, 25), rain_ok=True)),
+               ("Верхняя одежда", _item("Чёрная ветровка", (5, 26)))]
+    dry = {"tmin": 16, "tmax": 24, "rainy": 3, "days": 16, "wind": 8}
+
+    picked = wardrobe_suitcase._without_raincoat(clothes, [0, 1, 2, 3], dry)
+    assert [clothes[i][1]["name"] for i in picked] == ["Белая футболка", "Джинсы", "Белые кеды", "Чёрная ветровка"]
+    assert wardrobe_suitcase._without_raincoat(clothes, [0, 3], {**dry, "rainy": 8}) == [0, 3]  # часто дождь
+    only_raincoat = clothes[:4]
+    assert wardrobe_suitcase._without_raincoat(only_raincoat, [0, 3], dry) == [0, 3]  # другой нет — остаётся
+    # Слой на прохладные вечера чек-лист тоже берёт не дождевик.
+    picked, _gaps = wardrobe_suitcase._cover_weather(clothes, [0, 1, 2], {**dry, "daily": [{"tmin": 10}]})
+    assert clothes[picked[-1]][1]["name"] == "Чёрная ветровка"

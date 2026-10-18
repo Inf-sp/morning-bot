@@ -77,9 +77,10 @@ def country_by_name(text) -> tuple:
     if not wanted:
         return "", ""
     for cc, row in _table().items():
-        names = [str(value).casefold() for value in (row[0], row[2] if len(row) > 2 else "") if value]
+        names = [str(value).casefold() for value in (row[0], row[2] if len(row) > 2 else "", _SHORT_RU.get(cc))
+                 if value]
         if wanted in names:
-            return cc, row[0]
+            return cc, name_ru(cc)
     return "", ""
 
 
@@ -87,9 +88,14 @@ def country_by_name(text) -> tuple:
 _SHORT_CODES = {"US": "USA", "GB": "UK", "AE": "UAE"}
 
 
+# Привычные короткие названия вместо длинных из датасета («Южно-Африканская Республика» → «ЮАР») — для заголовков.
+_SHORT_RU = {"ZA": "ЮАР", "US": "США", "AE": "ОАЭ", "CF": "ЦАР", "CD": "ДР Конго", "DO": "Доминикана"}
+
+
 def name_ru(cc) -> str:
-    """Название страны по-русски по коду («ZA» → «ЮАР»); нет в таблице — ""."""
-    return (_table().get(str(cc or "").upper()) or [""])[0]
+    """Название страны по-русски по коду, привычное и короткое («ZA» → «ЮАР»); нет в таблице — ""."""
+    code = str(cc or "").upper()
+    return _SHORT_RU.get(code) or (_table().get(code) or [""])[0]
 
 
 def short_label(cc) -> str:

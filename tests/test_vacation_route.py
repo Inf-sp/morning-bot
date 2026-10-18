@@ -134,13 +134,17 @@ def test_suitcase_route_has_weather_by_city_and_each_day_knows_its_city(monkeypa
     result = {"place": "Кейптаун", "cc": "ZA", "countries": ["ZA"], "start": "2026-10-19", "end": "2026-11-03",
               "days": 16, "groups": [("Верх", ["Белая футболка"])], "daily": weather["daily"],
               "wx": {key: weather[key] for key in wardrobe_suitcase._WX_KEYS}, "legs_wx": weather["legs"]}
-    text = wardrobe_ui.suitcase_screen(wardrobe_suitcase._view(result)).text
-    assert text.startswith(
+    msg = wardrobe_ui.suitcase_screen(wardrobe_suitcase._view(result))
+    # Город — жирным, абзац на город, совет — своим абзацем.
+    assert msg.text.startswith(
         "🧳 Чемодан · ЮАР · 19 октября – 3 ноября · 16 дней\n\n"
-        "Кейптаун, 19–26 октября: днём от +16° до +24°, 1 дождливый день, ветер до 8 м/с.\n"
-        "Йоханнесбург, 27 октября – 3 ноября: днём от +22° до +34°, 1 дождливый день, ветер до 8 м/с.\n"
+        "Кейптаун, 19–26 октября: днём от +16° до +24°, 1 дождливый день, ветер до 8 м/с.\n\n"
+        "Йоханнесбург, 27 октября – 3 ноября: днём от +22° до +34°, 1 дождливый день, ветер до 8 м/с.\n\n"
         "Днём до +34° — лёгкие вещи и защита от солнца, утром и вечером до +12° и ветрено — кофта или ветровка "
         "под рукой.\n\nФутболки и рубашки (1 вещь): белая футболка")
+    raw = msg.text.encode("utf-16-le")
+    bold = [raw[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
+    assert "Кейптаун" in bold and "Йоханнесбург" in bold
 
     closet = {"zones": {zone: {"Все": [{"id": name, "name": name, "zone": zone, "temp_range": [5, 35]}]}
                         for zone, name in (("Верх", "Белая футболка"), ("Низ", "Джинсы"), ("Обувь", "Белые кеды"))}}
@@ -191,3 +195,10 @@ def test_suitcase_route_typed_at_home_is_built_with_every_city(monkeypatch):
         ("Кейптаун", first.isoformat(), (moving - timedelta(days=1)).isoformat()),
         ("Йоханнесбург", moving.isoformat(), end.isoformat())]
     assert "42" not in store.pending_input
+
+
+
+def test_country_names_are_short_in_headers():
+    import countries
+    assert countries.name_ru("ZA") == "ЮАР" and countries.name_ru("us") == "США"  # не «Южно-Африканская Республика»
+    assert vacation.countries_label(["ZA", "ZA"]) == "ЮАР"

@@ -249,10 +249,13 @@ def build_wardrobe_keyboard(cid=None):
             [("🧳 Мой чемодан", "w_pack")],
             [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
         ])
+    import wardrobe_suitcase
+    # Чемодан уже собран — «Чемодан в отпуск» (откроет его); нет — «Собрать чемодан» (спросит, куда и когда едешь).
+    packed = cid is not None and bool(wardrobe_suitcase.saved_suitcase(cid))
     rows = [
         # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
         [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
-        [("🧳 Собрать чемодан", "w_pack")],  # дома — спросит, куда и когда едешь
+        [("🧳 Чемодан в отпуск" if packed else "🧳 Собрать чемодан", "w_pack")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
     return _kb(rows)
