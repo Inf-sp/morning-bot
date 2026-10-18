@@ -73,3 +73,26 @@ def test_hub_shows_one_read_with_source_language_minutes_and_a_change_button():
     callbacks = [b.callback_data for row in leisure_ui.leisure_hub_kb(read=True).inline_keyboard for b in row]
     assert callbacks[5] == "lz_read_next" and "lz_read_next" not in [
         b.callback_data for row in leisure_ui.leisure_hub_kb().inline_keyboard for b in row]
+
+
+def test_old_day_set_is_rebuilt_with_a_teaser_and_the_same_articles(monkeypatch):
+    profile = _profile(monkeypatch)
+    now = datetime(2026, 10, 18, 9, tzinfo=config.TZ)
+    profile["hub_reads"] = {"date": "2026-10-18", "index": 0, "seen": {"https://q.example/bh": "2026-10-18"},
+                            "items": [{"title": "How Black Holes Grow Up", "link": "https://q.example/bh",
+                                       "about": "Старое одно предложение"}]}  # версия 1
+    item = {"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "summary": "", "source": "Quanta",
+            "date": "Sat, 17 Oct 2026 10:00:00 +0000"}
+    monkeypatch.setattr(leisure_reads, "_feed", lambda source, _url: [item] if source == "Quanta" else [])
+    prompts = []
+    teaser = "Чёрные дыры росли быстрее, чем допускают модели. Новые наблюдения подсказывают почему."
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {
+        "items": [{"id": 0, "about": teaser}]})
+
+    assert leisure_reads.current("42", now.date()) is None  # старый вид не показывается — хаб пересоберёт фоном
+    entry = leisure_reads.build("42", now)
+
+    assert "одно-два коротких предложения" in prompts[0] and "захотелось" in prompts[0]
+    assert entry["v"] == 2 and entry["items"][0]["link"] == "https://q.example/bh"  # та же статья, не «показанная»
+    assert entry["items"][0]["about"] == teaser
+    assert leisure_reads.build("42", now) is not None and len(prompts) == 1  # новый вид — без повторной сборки
