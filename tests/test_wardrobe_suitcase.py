@@ -148,7 +148,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
     assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
-    assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Чемодан сохранён.\n\n"
+    assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n"  # без «✅ Чемодан сохранён»
                                     "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]

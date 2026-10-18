@@ -391,21 +391,17 @@ def _weather_block(b: MessageBuilder, data) -> None:
         b.line(line)
 
 
-def suitcase_screen(data, saved=False, trip=False, just_saved=False):
+def suitcase_screen(data, saved=False, trip=False):
     """Чек-лист чемодана: «🧳 Чемодан · ЮАР · 19 октября – 4 ноября · 17 дней» (страна поездки, а не город),
     погода поездки и конкретный совет одной строкой (маршрут — абзац на город, город жирным), категории — «Обувь
     (2 пары): белые кеды, …» абзацем на категорию; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф —
-    базовый набор с пометкой. just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном
-    открытии её нет)."""
+    базовый набор с пометкой. Строки «сохранён» нет: что чемодан сохранён, видно по его кнопкам."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
     head = " · ".join(part for part in ("🧳 Чемодан в отпуске" if trip else "🧳 Чемодан", data.get("place"), _trip_dates(data.get("start"), data.get("end")),
                                        f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part)
     b.title(head)
-    if just_saved:
-        b.line("✅ Чемодан сохранён.")
-        b.spacer()
     _weather_block(b, data)
     groups = data.get("groups") or []
     basic = bool(data.get("basic"))

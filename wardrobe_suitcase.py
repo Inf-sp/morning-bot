@@ -689,9 +689,8 @@ async def _add_flow(bot, cid, data, q=None):
                 msg=wardrobe_ui.suitcase_add_zone_screen(_view(suitcase["result"]), zone))
 
 
-async def _show(bot, cid, result, kb, q=None, *, saved=False, just_saved=False, msg=None):
-    msg = msg or wardrobe_ui.suitcase_screen(_view(result), saved=saved, trip=vacation.active(cid),
-                                             just_saved=just_saved)
+async def _show(bot, cid, result, kb, q=None, *, saved=False, msg=None):
+    msg = msg or wardrobe_ui.suitcase_screen(_view(result), saved=saved, trip=vacation.active(cid))
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -871,7 +870,7 @@ async def handle(bot, cid, data, q=None):
         store.mutate_profile(cid, lambda p: ({**p, "suitcase_saved": {
             "trip": draft["trip"], "result": draft["result"], "declined": draft.get("declined") or [],
             "saved": _today().isoformat()}}, None))
-        await _show(bot, cid, draft["result"], _saved_kb(draft["result"].get("basic")), q, saved=True, just_saved=True)
+        await _show(bot, cid, draft["result"], _saved_kb(draft["result"].get("basic")), q, saved=True)
         return
     if data == "w_pack_edit" and saved_suitcase(cid):
         saved = saved_suitcase(cid)  # сохранённый правится через черновик: «Подтвердить» заменит его
