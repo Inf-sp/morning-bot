@@ -5,10 +5,11 @@ Open-Meteo, а для поездки дальше 16 дней — те же дн
 по номерам из списка шкафа — код оставляет только существующие номера, придуманные вещи не попадают; без AI — набор
 по зонам и погоде; пустой шкаф — базовый набор под погоду. В чемодане всегда есть верх, низ и обувь. Черновик можно
 «✅ Подтвердить» (сохраняется один чемодан — его открывает «Собрать чемодан», в отпуске образ дня собирается из него)
-или «Пересобрать»: вещи чемодана кнопками — нажал, и вещь уходит сразу; «Добавить вещь в чемодан» — вещи шкафа по
-категориям, нажал — вещь в чемодане. Отклонённые вещи запоминаются за поездкой и больше не предлагаются. У подтверждённого чемодана — «Образы на каждый день» (карточка дня с листанием; план хранится с
-чемоданом и пересчитывается раз в день по свежему прогнозу) и «Удалить подборку». В отпуске Гардероб открывает
-образ на сегодня из этого плана.
+или дополнить: «Добавить ещё вещь» — вещи шкафа по категориям, нажал — вещь в чемодане, нажал зелёную — убрал
+(старая кнопка «Пересобрать» из истории чата открывает «Что не берёшь?» — вещи чемодана, нажал — убрал). Отклонённые
+вещи запоминаются за поездкой и больше не предлагаются. У подтверждённого чемодана — «Добавить ещё вещь» (сразу в
+него), «Образы на каждый день» (карточка дня с листанием; план хранится с чемоданом и пересчитывается раз в день по
+свежему прогнозу) и «Удалить подборку». В отпуске Гардероб открывает образ на сегодня из этого плана.
 """
 import hashlib
 import json
@@ -248,7 +249,7 @@ def basic_set(weather, days) -> list:
 
 
 def _ai_pick(cid, clothes, trip, weather_text, days, avoid=()) -> list:
-    """Номера вещей от AI; сбой или пустой ответ — []. avoid — вещи прошлого варианта («Пересобрать»). Совет к погоде
+    """Номера вещей от AI; сбой или пустой ответ — []. avoid — вещи прошлого варианта. Совет к погоде
     пишет код (_weather_tip), не AI."""
     listing = [f"{i}. {item['name']} ({zone}, {item.get('warmth') or 'обычные'})" for i, (zone, item) in enumerate(clothes)]
     data = {"города": vacation.route_label(vacation.trip_legs(trip)) or trip.get("city", ""),
@@ -605,22 +606,22 @@ def _set_draft(cid, draft):
 _ADD_LABEL = "✅ Добавить ещё вещь"  # зелёная, первой под списком (как все «Добавить…»)
 
 
-def _draft_kb():
+def _draft_kb(basic=False):
+    """Черновик: «Подтвердить» и «Добавить ещё вещь» (в категориях вещь и кладётся, и убирается — отдельного
+    «Пересобрать» нет); у базового набора пустого шкафа добавлять нечего."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Подтвердить", callback_data="w_pack_ok")],
-        [InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add")],
-        [InlineKeyboardButton("Пересобрать", callback_data="w_pack_again")],
+        *([] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add")]]),
         nav_row("m_wardrobe"),
     ])
 
 
 def _saved_kb(basic=False):
-    """Сохранённый чемодан: «Добавить ещё вещь» кладёт вещи сразу в него (w_pack_add_s); у базового набора пустого
-    шкафа добавлять нечего."""
+    """Сохранённый чемодан: «Добавить ещё вещь» кладёт и убирает вещи сразу в нём (w_pack_add_s) — отдельного
+    «Пересобрать» нет; у базового набора пустого шкафа добавлять нечего."""
     rows = [] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add_s")],
                              [InlineKeyboardButton("👕 Образы на каждый день", callback_data="w_pack_looks")]]
-    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("Пересобрать", callback_data="w_pack_edit")],
-                                 [InlineKeyboardButton("❌ Удалить подборку", callback_data="w_pack_del")],
+    return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("❌ Удалить подборку", callback_data="w_pack_del")],
                                  nav_row("m_wardrobe")])
 
 
@@ -642,11 +643,11 @@ def _closet_by_zone(cid) -> dict:
 
 
 def _add_zones_kb(cid, result, suffix=""):
-    """Категории шкафа, где есть вещи вне чемодана; «Назад» — к чемодану (suffix «:s» — сохранённый)."""
-    packed = {name for _zone, name in _flat(result)}
+    """Все категории шкафа с вещами (и те, где всё уже в чемодане: там вещь убирают); «Назад» — к чемодану
+    (suffix «:s» — сохранённый)."""
+    closet = _closet_by_zone(cid)
     rows = [[InlineKeyboardButton(public_zone_name(zone), callback_data=f"w_pack_z:{number}{suffix}")]
-            for number, zone in enumerate(CLOTHING_ZONES)
-            if any(name not in packed for name in _closet_by_zone(cid).get(zone) or [])]
+            for number, zone in enumerate(CLOTHING_ZONES) if closet.get(zone)]
     return InlineKeyboardMarkup([*rows, nav_row("w_pack_saved" if suffix else "w_pack_view")])
 
 
@@ -705,7 +706,7 @@ async def _build_and_show(bot, cid, trip, q=None, avoid=()):
     declined = _declined_for(cid, trip)
     result = await asyncio.to_thread(pack, cid, trip, avoid, declined)
     _save_draft(cid, trip, result, declined)
-    await _show(bot, cid, result, _draft_kb(), q)
+    await _show(bot, cid, result, _draft_kb(result.get("basic")), q)
 
 
 async def _show_saved(bot, cid, saved, q=None):
@@ -730,7 +731,7 @@ async def send(bot, cid, q=None):
         return
     draft = _profile(cid).get("suitcase_draft") or {}
     if draft.get("date") == _today().isoformat() and _trip_key(draft.get("trip") or {}) == _trip_key(trip):
-        await _show(bot, cid, draft["result"], _draft_kb(), q)
+        await _show(bot, cid, draft["result"], _draft_kb(draft["result"].get("basic")), q)
         return
     await _build_and_show(bot, cid, trip, q)
 
@@ -902,7 +903,7 @@ async def handle(bot, cid, data, q=None):
         await _edit(bot, cid, draft, q)
         return
     if data == "w_pack_view" and draft.get("result"):
-        await _show(bot, cid, draft["result"], _draft_kb(), q)
+        await _show(bot, cid, draft["result"], _draft_kb(draft["result"].get("basic")), q)
         return
     await send(bot, cid)  # черновика нет (старая кнопка) — начинаем заново
 

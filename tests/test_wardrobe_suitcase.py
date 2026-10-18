@@ -107,7 +107,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
 
     assert profile["suitcase_draft"]["trip"]["cc"] == "ZA" and "42" not in wardrobe_suitcase.store.pending_input
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_ok"], ["w_pack_add"], ["w_pack_again"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_ok"], ["w_pack_add"], ["m_wardrobe", "m_menu"]]  # «Пересобрать» нет — его закрывает «Добавить»
     monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 18, "tmax": 24, "rainy": 0})
 
@@ -151,7 +151,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n"  # без «✅ Чемодан сохранён»
                                     "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
 
     # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
@@ -178,7 +178,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
@@ -507,6 +507,9 @@ def test_add_more_goes_straight_into_the_saved_suitcase(monkeypatch):
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_add_s"))
     zones = bot.sent[-1]["reply_markup"].inline_keyboard
     assert zones[0][0].callback_data == "w_pack_z:0:s" and zones[-1][0].callback_data == "w_pack_saved"
+    # Видны все категории шкафа — и те, где всё уже в чемодане: там вещь можно убрать.
+    assert [row[0].text for row in zones[:-1]] == ["Футболки и рубашки", "Брюки и шорты", "Куртки и ветровки",
+                                                   "Обувь"]
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_z:0:s"))
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_a:0:1:s"))  # серая футболка — сразу в чемодан
 
