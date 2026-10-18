@@ -605,11 +605,15 @@ def _time_sort_key(value: str) -> int:
 
 
 def notification_paused(cid, kind) -> bool:
-    """«Обучение языку» на паузе, пока в отпуске «Обучение» — на языке страны: не приходит и не считается."""
+    """«Обучение языку» в отпуске на паузе — рассылки в поездке только про её страну: не приходит и не считается.
+    Исключение — язык страны тот, что ты учишь (Великобритания при изучении английского)."""
     if kind != "daily_words":
         return False
     import vacation
-    return vacation.replaces_learning(cid)
+    if not vacation.active(cid):
+        return False
+    code = vacation.guide(cid).get("language_code") or ""  # гид ещё не собран — тоже пауза
+    return not code or code != (store.get_learning_language(cid) or "")
 
 
 def notification_available(cid, kind) -> bool:

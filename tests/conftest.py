@@ -89,3 +89,12 @@ def _no_rss_reads(monkeypatch):
     monkeypatch.setattr(leisure_reads, "_feed", lambda _source, _url: [])
     monkeypatch.setattr(leisure_reads, "_minutes", lambda _link: None)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_trip_facts_ai(monkeypatch):
+    """Факты дня поездки (кухня, язык, культура) в тестах не запрашиваются у AI; нужный тест вернёт настоящие."""
+    import vacation
+
+    monkeypatch.setattr(vacation, "trip_facts", lambda _cid, _topic: [])
+    yield

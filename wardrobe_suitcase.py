@@ -446,7 +446,7 @@ def daily_looks(wardrobe, names, trip, daily) -> list:
     """Образ на каждый день поездки из вещей чемодана: [{date, items, погода дня (_day_weather)}]. Строгий подбор
     пуст — правила погоды смягчаются ступенями (_day_contexts). Из лучших комплектов дня берётся тот, что меньше
     повторяет вчерашний и чаще надетые вещи."""
-    from wardrobe_outfit import build_sock_recommendation, outfit_display_order
+    from wardrobe_outfit import outfit_display_order
     w = _suitcase_closet(wardrobe, names)
     by_date = {day.get("date"): day for day in daily or []}
     start = date.fromisoformat(trip["start"])
@@ -468,7 +468,7 @@ def daily_looks(wardrobe, names, trip, daily) -> list:
         city = next((leg.get("city") for leg in reversed(legs) if str(leg.get("start") or "") <= when),
                     trip.get("city"))  # город этого дня маршрута (день переезда — уже следующий)
         looks.append({"date": when, **_day_weather(day), "city": city or "",
-                      "items": [item.get("name") for item in items], "socks": build_sock_recommendation(items)})
+                      "items": [item.get("name") for item in items]})
     return looks
 
 
@@ -501,7 +501,7 @@ def _save_plan(cid, key, plan):
     store.mutate_profile(cid, change)
 
 
-_PLAN_VERSION = 2  # 2 — у образа дня носки
+_PLAN_VERSION = 2  # 2 — новый вид образа дня (носки в старых планах экран не показывает)
 
 
 def plan(cid, *, fetch=True) -> list:
@@ -541,7 +541,7 @@ def today_look(cid) -> list:
 def another_look(cid, index) -> list:
     """«Ещё вариант» для дня плана: следующий из лучших комплектов дня по кругу, не повторяя показанный; план
     сохраняется с новым образом. Возвращает план."""
-    from wardrobe_outfit import build_sock_recommendation, outfit_display_order
+    from wardrobe_outfit import outfit_display_order
     looks = plan(cid)
     saved = saved_suitcase(cid)
     if not looks or not saved:
@@ -556,7 +556,7 @@ def another_look(cid, index) -> list:
     fresh = next((number for number in [*range(position + 1, len(options)), *range(position + 1)]
                   if set(options[number]) != current), None)
     if fresh is not None:
-        look = {**looks[index], "items": options[fresh], "socks": build_sock_recommendation(outfits[fresh])}
+        look = {**looks[index], "items": options[fresh]}
         looks = [*looks[:index], look, *looks[index + 1:]]
         key = _names_key(saved["result"])
         _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})

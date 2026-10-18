@@ -824,7 +824,8 @@ def movie_list_screen(title, items) -> MessageSpec:
 
 
 def _trip_music(b: MessageBuilder, hits, legends) -> None:
-    """«Хиты страны:» — «трек — артист» ссылками на YouTube Music; «Легенды:» строкой «артист — главный трек»."""
+    """«Хиты страны:» — «трек — артист», «Легенды:» — «артист — главный трек»: списками, как кино и сериалы, по
+    строке на пункт со ссылкой на YouTube Music."""
     if hits:
         b.spacer()
         b.bold("Хиты страны:")
@@ -834,22 +835,22 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
             b.link(f"{hit['track']} — {hit['artist']}", youtube_music_link(hit["track"], hit["artist"]))
             b.newline()
     if legends:
-        if not hits:  # без хитов «Легенды» начинают свой блок; с хитами — сразу под ними
-            b.spacer()
-        b.label("Легенды")
-        b.text_line(" ")
-        for index, legend in enumerate(legends):
-            b.text_line(" · ") if index else None
+        b.spacer()
+        b.bold("Легенды:")
+        b.newline()
+        for legend in legends:
+            b.text_line("- ")
             name = f"{legend['artist']} — {legend['track']}" if legend.get("track") else legend["artist"]
             b.link(name, youtube_music_link(legend.get("track") or "", legend["artist"]))
-        b.newline()
+            b.newline()
 
 
-def trip_leisure_screen(place, data, events=(), concerts=(), flag="", library=None) -> MessageSpec:
+def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="") -> MessageSpec:
     """«🇿🇦 Досуг в отпуске · ЮАР»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
     во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
-    без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом — библиотека. Премьер,
-    рекомендаций и кнопок разделов нет."""
+    без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом footer: твои артисты из этой
+    страны или факт дня о её культуре (библиотека целиком здесь не пишется). Премьер, рекомендаций и кнопок разделов
+    нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     data = data or {}
@@ -875,9 +876,9 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", library=No
         b.newline()
         for line in during:
             b.line(line)
-    if library:  # как дома: «Твоя библиотека · 58 фильмов · 42 артиста»
+    if str(footer or "").strip():  # «Твои артисты отсюда: …» или факт дня о культуре страны — курсивом
         b.spacer()
-        b.italic(library_stats_line(library.get("movies"), library.get("artists")))
+        b.italic(_finish_sentence(str(footer).strip()))
         b.newline()
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
                                                                                      callback_data="m_menu")]]))

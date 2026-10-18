@@ -631,7 +631,8 @@ async def _build_cards(cid):
 
 def _trip_screen(cid, data):
     """Экран Досуга поездки из готовых кэшей: праздники и фестивали города, афиша поездки и концерты — только в даты
-    отпуска, без сети. Заголовок — «🇿🇦 Досуг в отпуске · ЮАР» (страны маршрута по-русски), внизу — библиотека."""
+    отпуска, без сети. Заголовок — «🇿🇦 Досуг в отпуске · ЮАР» (страны маршрута по-русски), внизу — твои артисты
+    этой страны или факт дня о её культуре."""
     import countries
     import local_events
     import vacation
@@ -648,10 +649,22 @@ def _trip_screen(cid, data):
     concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
     # Заголовок — страна (страны маршрута), а не город: «🇿🇦 Досуг в отпуске · ЮАР».
     where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or place.get("city") or cc
-    library = {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
-               "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])}
     return leisure_ui.trip_leisure_screen(where, data, sorted(events, key=lambda event: event.get("start", "")),
-                                          concerts, flag=util.flag_from_cc(cc), library=library)
+                                          concerts, flag=util.flag_from_cc(cc), footer=_trip_footer(cid, cc))
+
+
+_TRIP_ARTISTS_SHOWN = 5
+
+
+def _trip_footer(cid, cc) -> str:
+    """Низ Досуга поездки: «Твои артисты отсюда: Tyla, Black Coffee» — если в «Моих артистах» есть артисты этой страны
+    (страна — из кэша MusicBrainz, без сети), иначе факт дня о культуре страны."""
+    import countries
+    import vacation
+    target = countries.label(cc)
+    mine = [name for name in leisure_music._ensure_artists(cid)
+            if target and countries.artist_label(name, fetch=False) == target][:_TRIP_ARTISTS_SHOWN]
+    return f"Твои артисты отсюда: {', '.join(mine)}" if mine else vacation.fact_of_day(cid, "culture")
 
 
 async def send_concerts(bot, cid, q=None):

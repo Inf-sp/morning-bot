@@ -1,9 +1,9 @@
-"""ИИ-стилист: выбирает один из готовых комплектов кода и цвет носков.
+"""ИИ-стилист: выбирает один из готовых комплектов кода.
 
 Код уже отсеял всё, что не подходит по погоде, и отсортировал комплекты по
 сочетаемости. ИИ выбирает между проверенными вариантами с учётом стиля,
-предпочтений и трендов недели. Ответ проверяется: номер только из списка,
-носки не синие. Иначе — None, и карточку собирают правила кода.
+предпочтений и трендов недели. Ответ проверяется: номер только из списка.
+Иначе — None, и карточку собирают правила кода. Носки бот не советует: это решение пользователя.
 """
 import logging
 from datetime import date, timedelta
@@ -37,7 +37,6 @@ _STYLE_QUERY = {
 }
 _SEASONS = ("winter", "winter", "spring", "spring", "spring", "summer",
             "summer", "summer", "fall", "fall", "fall", "winter")
-_BLUE = ("син", "голуб", "navy", "blue", "индиго")
 
 
 # ---------- тренды недели ----------
@@ -144,20 +143,11 @@ def _prompt(outfits, ctx, styles, prefs_text, trends):
 Комплекты:
 {looks}
 
-socks — цвет носков одним прилагательным во множественном числе («бордовые»): в тон брюкам или обуви
-либо осознанный акцент к образу; не синие и не голубые.
-JSON без Markdown: {{"choice":1,"socks":""}}"""
-
-
-def _valid_socks(value):
-    text = str(value or "").strip().casefold().removesuffix(" носки").strip()
-    if not text or len(text.split()) > 2 or any(marker in text for marker in _BLUE):
-        return ""
-    return f"{text[:1].upper()}{text[1:]} носки"
+JSON без Markdown: {{"choice":1}}"""
 
 
 def choose(outfits, ctx, styles, prefs_text, trends):
-    """{index, socks} или None — тогда карточку собирают правила кода."""
+    """{index} или None — тогда карточку собирают правила кода."""
     if len(outfits) < 2:
         return None
     try:
@@ -167,7 +157,7 @@ def choose(outfits, ctx, styles, prefs_text, trends):
             cache_context={
                 "scenario": "wardrobe_stylist", "outfits": [[it.get("id") for it in o] for o in outfits],
                 "weather": _weather_line(ctx), "styles": list(styles), "preferences": prefs_text,
-                "trends": list(trends), "language": "ru", "schema_version": 2,
+                "trends": list(trends), "language": "ru", "schema_version": 3,
             },
         )
     except Exception as exc:
@@ -181,5 +171,4 @@ def choose(outfits, ctx, styles, prefs_text, trends):
         return None
     if not 0 <= index < len(outfits):
         return None
-    socks = _valid_socks(data.get("socks"))
-    return {"index": index, "socks": socks} if socks else None
+    return {"index": index}

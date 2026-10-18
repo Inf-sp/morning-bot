@@ -7,6 +7,7 @@ import store
 import vacation
 
 REAL_TRIP_HOLIDAYS = vacation.trip_holidays
+REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты дня; тесту фактов нужен настоящий сбор
 import local_events  # noqa: E402
 
 REAL_LOCAL_SEARCH = local_events._search  # conftest подменяет поиск событий; тесту афиши нужен настоящий запрос
@@ -117,13 +118,13 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
 
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
-    # Не грамматика, а что пригодится в поездке: ситуация дня цитатой — название и фразы с произношением.
-    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nСитуация:\nСитуация ")
-    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\nDankie! → Спасибо! (данки)\n" in msg.text
+    # Не грамматика, а что пригодится в поездке: «Ситуация: …» одной строкой, ниже цитатой фразы через пустую строку.
+    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nСитуация: ситуация ")
+    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\n\nDankie! → Спасибо! (данки)\n" in msg.text
     utf16 = msg.text.encode("utf-16-le")
     quote = next(utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")
                  for e in msg.entities if e.type == "blockquote")
-    assert quote.startswith("Ситуация ") and quote.endswith("Dankie! → Спасибо! (данки)")  # всё — в цитате
+    assert quote.startswith("Een koffie") and quote.endswith("Dankie! → Спасибо! (данки)")  # фразы — в цитате
     assert "Произношение" not in msg.text and "Грамматика" not in msg.text  # в поездке — только фразы и факт
     assert msg.text.endswith("Африкаанс вырос из нидерландского XVII века.")
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
@@ -431,8 +432,8 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
 
     text = msg.text
     assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
-                           "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n"
-                           "Легенды: Miriam Makeba — Pata Pata · Black Coffee\n")
+                           "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n\n"
+                           "Легенды:\n- Miriam Makeba — Pata Pata\n- Black Coffee\n")  # списком, как сериалы
     assert ("Во время отпуска:\n24 сентября — Heritage Day — День наследия\n"
             "Cape Town Jazz Festival — 26 сентября – 27 сентября\nTyla Live — 28 сентября, Grand Arena\n"
             "Muse — 30 сентября, Cape Town Stadium") in text  # без эмодзи
@@ -468,7 +469,6 @@ def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
 def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
     import menu
     saved, _places = _env(monkeypatch, CAPE)
-    monkeypatch.setattr(vacation, "cuisine_facts", lambda _cid: [])
     saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская",
                                                              "cuisine_intro": "Мясо на открытом огне и пряные карри."}}
     text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
@@ -538,8 +538,8 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
     assert "обязательно стоит попробовать в этой стране" in prompts[0] and '"top"' in prompts[0]
     assert built["top"] == "dinner" and '"original"' in prompts[0] and '"emoji"' in prompts[0]
     assert built["dishes"]["dinner"]["original"] == "Braai" and built["dishes"]["breakfast"]["emoji"] == ""
-    monkeypatch.setattr(vacation, "cuisine_facts", lambda _cid: ["Брай — национальная традиция: 24 сентября в ЮАР "
-                                                                   "отмечают Национальный день брая"])
+    monkeypatch.setattr(vacation, "trip_facts", lambda _cid, topic: ["Брай — национальная традиция: 24 сентября в "
+                                                                       "ЮАР отмечают Национальный день брая"])
     msg = menu._day_menu_message(built, "42")
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
         ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
@@ -572,18 +572,25 @@ def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(mo
     assert day_menu.trip_dish(day_menu.next_trip_dish("42"))["name"] == "Потжи" and refreshed == [True]
 
 
-def test_cuisine_facts_are_built_once_per_trip_and_rotate(monkeypatch):
+def test_trip_facts_are_one_per_day_and_built_once_per_topic_and_country(monkeypatch):
     saved, _places = _env(monkeypatch, CAPE)
-    saved["vacation"] = {"home": HOME, "cc": "ZA"}
-    calls = []
-    monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: calls.append(1) or {
-        "facts": ["Боботи считают национальным блюдом ЮАР", "Билтонг — вяленое мясо, его едят как снек", "no"]})
+    monkeypatch.setattr(vacation, "trip_facts", REAL_TRIP_FACTS)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "since": "2026-10-17", "until": "2026-11-03",
+                         "cuisine_facts": {"cc": "ZA", "items": ["Блюдо «билтонг» — это вяленое мясо"]}}  # старые
+    prompts = []
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {
+        "facts": [f"В ЮАР {index + 2} кулинарных традиций" for index in range(17)] + ["no", "В ЮАР 2 кулинарных традиций"]})
 
-    assert vacation.cuisine_facts("42") == ["Боботи считают национальным блюдом ЮАР",
-                                            "Билтонг — вяленое мясо, его едят как снек"]  # без кириллицы — мимо
-    assert vacation.cuisine_facts("42") and calls == [1]  # на поездку — один запрос
-    day = date(2026, 10, 17)
-    assert vacation.cuisine_fact("42", 0, day) != vacation.cuisine_fact("42", 1, day)  # «Другое блюдо» — другой факт
+    facts = vacation.trip_facts("42", "cuisine")
+
+    assert len(facts) == 17 and "no" not in facts  # без повторов и латиницы
+    # По факту на каждый день поездки: 17 октября – 3 ноября — 18 дней.
+    assert "18 разных коротких интересных фактов о кухне" in prompts[0] and "не пересказывай" in prompts[0]
+    assert vacation.trip_facts("42", "cuisine") == facts and len(prompts) == 1  # на поездку — один запрос
+    days = [vacation.fact_of_day("42", "cuisine", date(2026, 10, 17 + index)) for index in range(3)]
+    assert days == facts[:3]  # свой факт на каждый день
+    vacation.trip_facts("42", "culture")
+    assert len(prompts) == 2 and "о культуре и досуге" in prompts[1]  # у темы — свой набор
 
 
 def test_my_day_on_trip_shows_the_dish_to_try_today():
@@ -793,3 +800,42 @@ def test_trip_day_plan_comes_in_the_morning_only_on_vacation(monkeypatch):
     # Сводка «Мой день в отпуске» с кнопками рассылки: «Настроить уведомления | Главная».
     assert [b.callback_data for row in sent[0].inline_keyboard for b in row][-1] == "m_menu"
     assert len(sent[0].inline_keyboard[0]) == 2
+
+
+def test_trip_kitchen_intro_is_one_short_sentence_without_the_cuisine_name():
+    from ui import menu as menu_ui
+    long_intro = ("Южноафриканская кухня — это яркое смешение кулинарных традиций, где европейские, азиатские и "
+                  "африканские мотивы гармонично сочетаются. Её любят за разнообразие вкусов.")
+    assert menu_ui._short_intro(long_intro) == ("Яркое смешение кулинарных традиций, где европейские, азиатские и "
+                                                "африканские мотивы гармонично сочетаются.")
+    assert menu_ui._short_intro("Кухня Южной Африки — это мясо на огне и карри. Второе.") == "Мясо на огне и карри."
+    assert menu_ui._short_intro("Мясо на открытом огне и пряные карри.") == "Мясо на открытом огне и пряные карри."
+
+
+def test_trip_leisure_footer_names_your_artists_from_the_country_or_a_culture_fact(monkeypatch):
+    import countries
+    import leisure_hub
+    saved, _places = _env(monkeypatch, CAPE)
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": ""}
+    monkeypatch.setattr(countries, "label", lambda cc: f"flag {str(cc).upper()}")
+    labels = {"Tyla": "flag ZA", "Muse": "flag GB"}
+    monkeypatch.setattr(countries, "artist_label", lambda name, fetch=True: labels.get(name, ""))
+    monkeypatch.setattr(leisure_hub.leisure_music, "_ensure_artists", lambda _cid: ["Muse", "Tyla"])
+    monkeypatch.setattr(vacation, "fact_of_day", lambda _cid, topic, today=None: f"факт о теме {topic}")
+
+    assert leisure_hub._trip_footer("42", "ZA") == "Твои артисты отсюда: Tyla"  # не вся библиотека
+    labels["Tyla"] = "flag US"
+    assert leisure_hub._trip_footer("42", "ZA") == "факт о теме culture"  # своих отсюда нет — факт дня о культуре
+
+
+def test_learning_notification_pauses_on_vacation_unless_it_is_the_country_language(monkeypatch):
+    saved, _places = _env(monkeypatch, CAPE)
+    monkeypatch.setattr(store, "get_learning_language", lambda _cid: "en")
+    assert not settings.notification_paused("42", "daily_words")  # дома — как обычно
+    saved["vacation"] = {"home": HOME, "cc": "ZA", "until": "", "guide": {"v": vacation._GUIDE_VERSION}}
+    assert settings.notification_paused("42", "daily_words")  # язык страны ещё неизвестен — пауза
+    saved["vacation"]["guide"] = {"v": vacation._GUIDE_VERSION, "language_code": "af"}
+    assert settings.notification_paused("42", "daily_words")  # африкаанс, а учишь английский — пауза
+    saved["vacation"]["guide"] = {"v": vacation._GUIDE_VERSION, "language_code": "en"}
+    assert not settings.notification_paused("42", "daily_words")  # язык страны — тот, что учишь
+    assert not settings.notification_paused("42", "evening_weather")

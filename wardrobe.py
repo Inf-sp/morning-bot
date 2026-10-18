@@ -24,7 +24,6 @@ from wardrobe_model import (
 )
 from wardrobe_outfit import (
     build_how_to_wear,
-    build_sock_recommendation,
     build_style_tip,
     choose_outfit_style,
     fresh_outfits,
@@ -557,7 +556,6 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             for it in best_sorted
         ],
         "style_tip": fallback_tip,
-        "sock_recommendation": build_sock_recommendation(best_sorted, (pick or {}).get("socks", "")),
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
         "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
         "weather": weather_signature(weather_ctx, flags),

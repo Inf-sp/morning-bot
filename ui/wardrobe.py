@@ -100,25 +100,15 @@ def render_wardrobe_message(look_data):
 
     Погода — одной строкой-причиной сверху и только когда она повлияла на выбор.
 
-    look_data: {primary_style, items[{name, zone}], sock_recommendation,
-                how_to_wear[], weather_reason}
+    look_data: {primary_style, items[{name, zone}], how_to_wear[], weather_reason}
     """
     look_data = look_data or {}
     b = MessageBuilder()
     primary_style = _clean_text(look_data.get("primary_style"))
     b.section(outfit_header(outfit_group(look_data), look_data.get("trip_flag") or ""))
 
-    slots = _outfit_slots(look_data.get("items") or [])
+    # Носки бот не советует — это решение пользователя (сохранённые раньше рекомендации не показываются).
     items = outfit_item_names(look_data)
-    selected_socks = next(
-        (item for item in slots["Аксессуары"] if "носк" in item.casefold()), "",
-    )
-    # Носки — последним пунктом списка. Кэш прошлой версии хранил «Жёлтые — пояснение».
-    socks = _upper_first(_clean_text(look_data.get("sock_recommendation") or selected_socks))
-    if " — " in socks:
-        socks = f"{socks.split(' — ', 1)[0]} носки"
-    if socks:
-        items.append(socks)
     weather_reason = _clean_text(look_data.get("weather_reason"))
     # Старые сохранённые образы хранят строку со значком погоды.
     for icon in ("☂️", "💨", "🌡️", "☀️"):
@@ -481,7 +471,8 @@ def _day_condition(look) -> str:
 def suitcase_day_card(data, look, index, total, today=""):
     """Образ одного дня поездки: «🇿🇦 Образы в отпуске · ЮАР · 17 дней» (страна, не город); жирным день недели
     (поездка дольше недели — «· день N»; «· сегодня»; город этого дня), пометка об условиях, если она влияет на выбор,
-    вещи списком «- …», как в «Надень сегодня», носки — последними; курсивом «Твой чемодан · 12 вещей · 17 образов».
+    вещи списком «- …», как в «Надень сегодня» (носков нет — их выбирает пользователь); курсивом «Твой чемодан ·
+    12 вещей · 17 образов».
     Дат и температуры нет. Листание — кнопками."""
     from datetime import date
     data, look = data or {}, look or {}
@@ -503,9 +494,6 @@ def suitcase_day_card(data, look, index, total, today=""):
         b.line(condition)
     b.spacer()
     items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
-    socks = _upper_first(_clean_text(look.get("socks")))
-    if socks and items and not any("носк" in item.casefold() for item in items):
-        items.append(socks)
     for item in items:
         b.line(f"- {item}")
     if not items:

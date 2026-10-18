@@ -208,20 +208,18 @@ def learning_menu(home: dict):
 
 
 def _trip_learning(home: dict):
-    """«🇿🇦 Обучение в отпуске · Африкаанс»: «Ситуация:», ниже цитатой название ситуации дня и три фразы с
-    переводом и произношением; курсивом факт о языке. Грамматики и строки «Произношение» в поездке нет."""
+    """«🇿🇦 Обучение в отпуске · Африкаанс»: «Ситуация: транспорт», ниже цитатой три фразы с переводом и
+    произношением через пустую строку; курсивом факт дня о языке. Грамматики и строки «Произношение» в поездке нет."""
     b = MessageBuilder()
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
     situation = home.get("situation") or {}
     if situation.get("phrases"):
-        b.bold("Ситуация:")
-        b.newline()
-        title = str(situation.get("title") or "").strip()
-        lines = [title[:1].upper() + title[1:]] if title else []
+        b.labeled_line("Ситуация", str(situation.get("title") or "").strip())  # «Ситуация: транспорт»
+        lines = []
         for phrase in situation["phrases"]:
             say = f" ({phrase['say']})" if phrase.get("say") else ""
             lines.append(f"{phrase['text']} → {phrase['ru']}{say}")
-        b.quote("\n".join(lines))
+        b.quote("\n\n".join(lines))  # фразы диалога — через пустую строку
         b.newline()
     else:
         b.line("Готовлю фразы для поездки — загляни чуть позже.")
@@ -281,12 +279,24 @@ _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "d
 _MEAL_NAMES = (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"))
 
 
+# «Южноафриканская кухня — это …» / «Кухня Южной Африки — это …»: название уже в заголовке — не повторяем.
+_INTRO_NAME_RE = re.compile(r"^[^.!?—]{0,60}?кухн[яиеу]\b[^—.!?]{0,40}?\s*[—–-]\s*(?:это\s+)?", re.IGNORECASE)
+
+
+def _short_intro(text) -> str:
+    """Описание кухни в одно короткое предложение без повтора её названия."""
+    first = re.split(r"(?<=[.!?…])\s+", " ".join(str(text or "").split()))[0]
+    first = _INTRO_NAME_RE.sub("", first, count=1).strip()
+    return _with_period(first[:1].upper() + first[1:]) if first else ""
+
+
 def _trip_menu(dish, *, cuisine_label, intro, flag, fact):
-    """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни, одно блюдо жирным — «🥩 Билтонг · Biltong»
-    (эмодзи и местное название, если есть) — с описанием, курсивом факт о кухне страны; кнопки «Другое блюдо» и
-    «Главная» — в поездке не готовим, рецептов нет."""
+    """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни одним коротким предложением без повтора
+    названия, одно блюдо жирным — «🥩 Билтонг · Biltong» (эмодзи и местное название, если есть) — с описанием, курсивом
+    факт дня о кухне страны; кнопки «Другое блюдо» и «Главная» — в поездке не готовим, рецептов нет."""
     b = MessageBuilder()
     b.section(f"{flag} Пробуем в отпуске · {cuisine_label} кухня")
+    intro = _short_intro(intro)
     if intro:
         b.spacer()
         b.line(intro)

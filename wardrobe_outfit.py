@@ -796,54 +796,6 @@ def build_how_to_wear(items, style_tip=""):
     return actions[:3]
 
 
-# Носки — цветной акцент к низу и обуви; синий почти не предлагаем.
-_SOCK_ACCENTS = (
-    (("джинс", "деним", "син", "голуб"), "Жёлтые носки"),
-    (("олив", "зелён", "зелен", "хаки"), "Бордовые носки"),
-    (("беж", "корич", "песоч", "кэмел"), "Зелёные носки"),
-    (("чёрн", "черн", "тём", "темн", "графит"), "Горчичные носки"),
-    (("сер",), "Бордовые носки"),
-)
-
-
-def _color_facts(item):
-    return f"{_item_facts(item)} {' '.join(map(str, item.get('colors') or []))}".casefold()
-
-
-# Носки в тон низу или обуви — когда цветной акцент в образе уже есть.
-_SOCK_TONES = (
-    (("чёрн", "черн", "графит"), "Чёрные носки"),
-    (("сер", "джинс", "деним", "син", "голуб"), "Серые носки"),
-    (("беж", "песоч", "кремов", "молоч", "экрю", "бел"), "Бежевые носки"),
-    (("корич", "шоколад", "коньяч", "мокко", "табач"), "Коричневые носки"),
-    (("олив", "хаки"), "Оливковые носки"),
-)
-
-
-def build_sock_recommendation(items, suggested=""):
-    """Носки последней строкой списка: носки из шкафа, проверенный совет стилиста,
-    в тон низу, если акцент уже есть, иначе цвет-акцент к низу и обуви. Синие не предлагаются."""
-    selected = next((item for item in items
-                     if item.get("zone") == "Аксессуары" and "носк" in _item_facts(item)), None)
-    if selected:
-        return public_item_name(selected)
-    if suggested:
-        return suggested
-
-    has_accent = any(
-        rules.color_family(rules.main_color(item)) in ("cool", "warm", "other")
-        for item in items if item.get("zone") in ("Верх", "Верхняя одежда")
-    )
-    # Сначала низ, затем обувь: носки продолжают линию брюк.
-    for zone in ("Низ", "Обувь"):
-        facts = " ".join(_color_facts(item) for item in items if item.get("zone") == zone)
-        socks = next((socks for markers, socks in (_SOCK_TONES if has_accent else _SOCK_ACCENTS)
-                      if any(marker in facts for marker in markers)), None)
-        if socks:
-            return socks
-    return "Серые носки" if has_accent else "Жёлтые носки"
-
-
 _COLOR_CLAIM_MARKERS = (
     "бел", "чёрн", "черн", "сер", "беж", "син", "голуб", "красн", "зелён",
     "зелен", "корич", "бордов", "жёлт", "желт", "оранж", "розов", "фиолет",

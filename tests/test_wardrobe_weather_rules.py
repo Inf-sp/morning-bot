@@ -9,7 +9,7 @@ import store
 import wardrobe_rules as rules
 import wardrobe_stylist
 from ui.wardrobe import render_wardrobe_message
-from wardrobe_outfit import build_sock_recommendation, pick_best_outfit, top_outfits
+from wardrobe_outfit import pick_best_outfit, top_outfits
 from wardrobe_weather import wear_window
 
 NOW = datetime(2026, 10, 9, 9, 30)
@@ -131,12 +131,6 @@ def test_two_earth_tones_on_top_and_bottom_lose_to_a_contrast():
     assert muddy < rules.harmony_score(look("коричневый", "бежевый", "чёрный"))
 
 
-def test_socks_follow_trousers_when_top_is_the_accent():
-    items = [_it("t", "Верх", "Бордовый свитер", "бордовый"), JEANS, SNEAKERS]
-    assert build_sock_recommendation(items) == "Серые носки"
-    assert build_sock_recommendation(items, "Бордовые носки") == "Бордовые носки"
-
-
 OUTFITS = [[TEE, JEANS, SNEAKERS], [TEE, JEANS, SUEDE]]
 
 
@@ -150,11 +144,10 @@ def _stylist(monkeypatch, answer):
 
 
 def test_stylist_answer_is_validated(monkeypatch):
-    good = {"choice": 2, "socks": "бордовые"}
-    assert _stylist(monkeypatch, good) == {"index": 1, "socks": "Бордовые носки"}
+    good = {"choice": 2}
+    assert _stylist(monkeypatch, good) == {"index": 1}  # только комплект: носки — решение пользователя
+    assert _stylist(monkeypatch, {"choice": 2, "socks": "тёмно-синие"}) == {"index": 1}  # старый ответ — не повод
     assert _stylist(monkeypatch, {**good, "choice": 7}) is None
-    assert _stylist(monkeypatch, {**good, "socks": "тёмно-синие"}) is None
-    assert _stylist(monkeypatch, {**good, "socks": "очень яркие неоновые"}) is None
     assert _stylist(monkeypatch, RuntimeError("down")) is None
     assert _stylist(monkeypatch, None) is None
 
@@ -196,7 +189,7 @@ def test_card_shows_weather_then_items_then_style_like_cooking():
     assert msg.text.splitlines() == [
         "🧢 Надень сегодня · Повседневный", "",
         "Дождь с 13:00, лучше выбрать непромокаемую верхнюю одежду.", "",
-        "- Белая футболка", "- Серые носки", "",
+        "- Белая футболка", "",  # носков нет: их выбирает пользователь
         "Городской стиль — это свободный крой, удобные кеды и утилитарные детали.",
     ]
     assert "☂️" not in render_wardrobe_message({"items": [{"name": "Футболка", "zone": "Верх"}]}).text
@@ -247,7 +240,7 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
 
     assert set(saved["ids"]) == {"tee", "jeans", "sneakers", "rain"}
     assert saved["look"]["weather_reason"].startswith("Дождь и порывы ветра до 12 м/с, лучше выбрать")
-    assert saved["look"]["sock_recommendation"] and "main_accent" not in saved["look"]
+    assert "sock_recommendation" not in saved["look"] and "main_accent" not in saved["look"]
 
 
 def test_weather_suggests_accessories_instead_of_wardrobe_items():

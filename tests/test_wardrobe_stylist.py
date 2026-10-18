@@ -17,7 +17,6 @@ from ui.wardrobe import (
 from wardrobe_model import normalize_parsed_item
 from wardrobe_outfit import (
     build_how_to_wear,
-    build_sock_recommendation,
     build_style_tip,
     outfit_display_order,
     pick_best_outfit,
@@ -62,14 +61,15 @@ def test_outfit_card_shows_three_base_items_without_weather_intro():
     assert "- Белая футболка" in message.text
     assert "- Широкие брюки" in message.text
     assert "- Белые кеды" in message.text
-    assert message.text.split("\n\n")[1].endswith("- Белые кеды\n- Белые носки")
+    assert message.text.split("\n\n")[1].endswith("- Белые кеды")  # носков нет: их выбирает пользователь
+    assert "носки" not in message.text
     assert "Как носить:" not in message.text
     assert "Главный акцент" not in message.text
     assert "белые носки поддержат" not in message.text
     assert "Полезно:" not in message.text
 
 
-def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
+def test_layered_outfit_gets_concrete_wearing_actions():
     items = [
         {"name": "Зелёная рубашка с длинным рукавом", "zone": "Верх", "colors": ["зелёный"]},
         {"name": "Белая футболка", "zone": "Верх", "colors": ["белый"]},
@@ -82,23 +82,6 @@ def test_layered_outfit_gets_concrete_wearing_actions_and_sock_color():
         "Рукава слегка подвернуть",
         "Футболку оставить навыпуск",
     ]
-    # Зелёная рубашка уже акцент — носки в тон низу, а не второй цвет.
-    assert build_sock_recommendation(items) == "Оливковые носки"
-
-
-def test_socks_are_a_colour_accent_and_never_blue():
-    def socks(bottom, shoe="Белые кеды"):
-        return build_sock_recommendation([
-            {"name": bottom, "zone": "Низ"}, {"name": shoe, "zone": "Обувь"},
-        ])
-
-    assert socks("Синие джинсы") == "Жёлтые носки"
-    assert socks("Чёрные брюки", "Чёрные ботинки") == "Горчичные носки"
-    assert socks("Бежевые чиносы") == "Зелёные носки"
-    assert all(not socks(bottom).startswith(("Син", "Голуб")) for bottom in ("Синие джинсы", "Серые брюки", "Белые шорты"))
-    assert build_sock_recommendation([
-        {"name": "Синие носки", "zone": "Аксессуары"},
-    ]) == "Синие носки"
 
 
 def test_outfit_card_does_not_show_legacy_fashion_rebus():
@@ -146,7 +129,7 @@ def test_outfit_card_shows_selected_accessories_after_main_items():
 
     assert "- Брюки" in message.text
     assert "- Кеды" in message.text
-    assert message.text.endswith("- Кеды\n- Синие носки")
+    assert message.text.endswith("- Кеды") and "носки" not in message.text  # носки — решение пользователя
     assert "Главный акцент" not in message.text
     assert "🧦" not in message.text
 
@@ -164,7 +147,7 @@ def test_outfit_card_puts_each_selected_top_on_its_own_line():
     assert "Голубая рубашка, Белая футболка" not in message.text
 
 
-def test_selected_accessory_is_listed_before_socks():
+def test_selected_accessory_is_listed_and_no_socks_advice():
     message = render_wardrobe_message({
         "items": [
             {"name": "Белая футболка", "zone": "Верх"},
@@ -174,7 +157,7 @@ def test_selected_accessory_is_listed_before_socks():
         "sock_recommendation": "Белые носки",
     })
 
-    assert message.text.endswith("- Чёрные брюки\n- Серебристый браслет\n- Белые носки")
+    assert message.text.endswith("- Чёрные брюки\n- Серебристый браслет")
 
 
 def test_outfit_card_shows_outerwear_as_an_extra_only_when_selected():
@@ -579,13 +562,13 @@ def test_generic_style_tip_has_a_broader_safe_rotation():
 
 
 
-def test_old_cached_sock_line_is_shown_as_last_item():
+def test_old_cached_sock_line_is_not_shown():
     message = render_wardrobe_message({
         "items": [{"name": "Брюки", "zone": "Низ"}],
         "sock_recommendation": "Жёлтые — контраст с синим низом",
     })
 
-    assert message.text.endswith("- Брюки\n- Жёлтые носки")
+    assert message.text.endswith("- Брюки") and "носки" not in message.text  # решение пользователя
 
 
 def test_any_number_of_styles_can_be_selected(monkeypatch):
@@ -627,6 +610,6 @@ def test_accessories_are_in_the_list_and_old_accent_is_hidden():
     })
 
     assert text.split("\n\n")[1] == (
-        "- Белая футболка\n- Синие джинсы\n- Белые кеды\n- Серые часы\n- Чёрная кепка\n- Жёлтые носки"
+        "- Белая футболка\n- Синие джинсы\n- Белые кеды\n- Серые часы\n- Чёрная кепка"
     )
     assert "Главный акцент" not in text and "Спокойная палитра" not in text

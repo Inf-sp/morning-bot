@@ -92,7 +92,7 @@ def _day_menu_message(menu, cid=None):
         show_mine=cid is None or not vacation.active(cid), stats=stats, trip=trip,
         # В отпуске — одно блюдо, которое стоит попробовать, и факт о кухне страны.
         trip_dish=day_menu.trip_dish(menu) if trip else None,
-        fact=vacation.cuisine_fact(cid, int(menu.get("trip_index") or 0)) if trip else "",
+        fact=vacation.fact_of_day(cid, "cuisine") if trip else "",  # факт дня о кухне — один на день
     )
 
 
