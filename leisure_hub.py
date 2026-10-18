@@ -591,8 +591,8 @@ async def send_hub(bot, cid, q=None):
             except Exception:
                 _log.info("leisure hub: day cards not ready cid=%s", cid)
             data = await asyncio.to_thread(today_data, cid)
-    if not data.get("read"):  # статьи на сегодня ещё нет (ночной прогрев не успел) — фоном, к следующему открытию
-        import leisure_reads
+    if not (data.get("read") or {}).get("about"):  # статьи или её анонса ещё нет — фоном, к следующему открытию
+        import leisure_reads  # (не чаще раза в 10 минут: build_off_loop)
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     msg = leisure_ui.leisure_today_screen(
         data["picks"], city=data["city"], outing=data["outing"], library=data["library"], read=data.get("read"),

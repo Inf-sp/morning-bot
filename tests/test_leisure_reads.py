@@ -96,3 +96,37 @@ def test_old_day_set_is_rebuilt_with_a_teaser_and_the_same_articles(monkeypatch)
     assert entry["v"] == 2 and entry["items"][0]["link"] == "https://q.example/bh"  # та же статья, не «показанная»
     assert entry["items"][0]["about"] == teaser
     assert leisure_reads.build("42", now) is not None and len(prompts) == 1  # новый вид — без повторной сборки
+
+
+def test_long_or_list_shaped_teaser_is_kept_not_dropped(monkeypatch):
+    long_teaser = ("Платформа Ondesign показывает, как команды On — от архитекторов до стилистов — придумывают вещи "
+                   "для спорта и города. Внутри — эскизы, споры и прототипы, которые обычно остаются за кадром. "
+                   "Третье предложение уже лишнее и только растягивает анонс до неприличной длины, его не будет, "
+                   "потому что два предложения — это всё, что помещается в блок «Прочитать».")
+    items = [{"title": "On’s new editorial platform", "link": "https://n.example/on", "summary": "Ondesign goes…"}]
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda *_a, **_k: [{"id": "0", "about": long_teaser}])
+
+    about = leisure_reads._about_ru(items)["https://n.example/on"]
+
+    assert len(long_teaser) > leisure_reads._ABOUT_MAX and len(about) <= leisure_reads._ABOUT_MAX
+    assert about.endswith("за кадром.") and "Третье" not in about  # по границе предложения, не обрыв
+
+
+def test_missing_teaser_is_filled_later_with_one_request(monkeypatch):
+    profile = _profile(monkeypatch)
+    now = datetime(2026, 10, 18, 12, tzinfo=config.TZ)
+    profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": "2026-10-18", "index": 0, "seen": {}, "items": [
+        {"title": "On’s new editorial platform", "link": "https://n.example/on", "summary": "Ondesign goes…",
+         "about": ""},
+        {"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "about": "Уже есть анонс."}]}
+    asked = []
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda prompt, *_a, **_k: asked.append(prompt) or {
+        "items": [{"id": 0, "about": "Как команды On придумывают вещи для спорта и города."}]})
+
+    entry = leisure_reads.build("42", now)
+
+    assert [item["about"] for item in entry["items"]] == ["Как команды On придумывают вещи для спорта и города.",
+                                                          "Уже есть анонс."]
+    assert "On’s new editorial platform" in asked[0] and "Black Holes" not in asked[0]  # только статья без анонса
+    leisure_reads.build("42", now)
+    assert len(asked) == 1  # анонсы на месте — без повторного запроса

@@ -123,8 +123,21 @@ def _minutes(link) -> int | None:
     return minutes_of(response.text)
 
 
+def _teaser(text) -> str:
+    """Анонс не длиннее _ABOUT_MAX: длинный ответ AI обрезается по границе предложения (одно-два), а не теряется."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= _ABOUT_MAX:
+        return text
+    out = ""
+    for sentence in re.split(r"(?<=[.!?…])\s+", text)[:2]:
+        if len(f"{out} {sentence}".strip()) > _ABOUT_MAX:
+            break
+        out = f"{out} {sentence}".strip()
+    return out or text[:_ABOUT_MAX].rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
+
+
 def _about_ru(items) -> dict:
-    """{ссылка: одно предложение по-русски о чём статья} — один AI-запрос на набор; сбой — {}."""
+    """{ссылка: анонс по-русски в одно-два предложения} — один AI-запрос на статьи без анонса; сбой — {}."""
     source = [{"id": index, "title": item["title"], "about": _plain(item.get("summary"))[:500]}
               for index, item in enumerate(items)]
     prompt = (
@@ -141,22 +154,25 @@ def _about_ru(items) -> dict:
     except Exception:
         _log.warning("reads: about AI failed", exc_info=True)
         return {}
+    rows = data.get("items") if isinstance(data, dict) else data if isinstance(data, list) else []
     result = {}
-    for value in (data.get("items") if isinstance(data, dict) else []) or []:
-        if not isinstance(value, dict) or not str(value.get("id", "")).isdigit():
-            continue
-        index, about = int(value["id"]), " ".join(str(value.get("about") or "").split())
-        if index < len(items) and re.search(r"[а-яё]", about, re.I) and len(about) <= _ABOUT_MAX:
-            result[items[index]["link"]] = about
+    for value in rows or []:
+        number = str(value.get("id", "")).strip() if isinstance(value, dict) else ""
+        about = _teaser(value.get("about")) if number.isdigit() else ""
+        if number.isdigit() and int(number) < len(items) and re.search(r"[а-яё]", about, re.I):
+            result[items[int(number)]["link"]] = about
+    if not result:
+        _log.warning("reads: about AI gave nothing usable items=%s", len(items))
     return result
 
 
 def build(cid, now=None) -> dict:
-    """Набор статей дня (ночной прогрев, сеть и AI — вне обработчика). Уже собран сегодня — как есть."""
+    """Набор статей дня (ночной прогрев, сеть и AI — вне обработчика). Уже собран сегодня — как есть; у статей без
+    анонса (AI не ответил при сборке) он дописывается одним запросом."""
     now = now or datetime.now(config.TZ)
     saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
     if saved.get("date") == now.date().isoformat() and saved.get("items") and saved.get("v") == _VERSION:
-        return saved
+        return _with_teasers(cid, saved)
     cutoff = (now.date() - timedelta(days=_SEEN_DAYS)).isoformat()
     # Сегодняшние статьи в «показанные» не считаются: пересборка набора старого вида возьмёт те же самые.
     seen = {link: day for link, day in (saved.get("seen") or {}).items() if cutoff <= day < now.date().isoformat()}
@@ -167,9 +183,22 @@ def build(cid, now=None) -> dict:
         return saved
     about = _about_ru(picked)
     items = [{"title": item["title"], "link": item["link"], "source": item["source"], "lang": "EN",
+              "summary": _plain(item.get("summary"))[:500],  # анонс RSS — чтобы дописать русский, если AI не ответил
               "minutes": _minutes(item["link"]), "about": about.get(item["link"], "")} for item in picked]
     entry = {"v": _VERSION, "date": now.date().isoformat(), "items": items, "index": 0,
              "seen": {**seen, **{item["link"]: now.date().isoformat() for item in items}}}
+    store.mutate_profile(cid, lambda profile: ({**profile, PROFILE_KEY: entry}, None))
+    return entry
+
+
+def _with_teasers(cid, saved) -> dict:
+    """Дописать анонсы статьям, у которых их нет; AI снова не ответил — набор как есть."""
+    missing = [item for item in saved["items"] if not item.get("about")]
+    about = _about_ru(missing) if missing else {}
+    if not about:
+        return saved
+    entry = {**saved, "items": [{**item, "about": item.get("about") or about.get(item["link"], "")}
+                                for item in saved["items"]]}
     store.mutate_profile(cid, lambda profile: ({**profile, PROFILE_KEY: entry}, None))
     return entry
 
