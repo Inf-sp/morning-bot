@@ -43,13 +43,13 @@ def _parse_day(value):
 
 
 def _horizon(cid) -> int:
-    """Дней вперёд: дома — 14; в отпуске — до даты возвращения, но не больше 30 (без даты — 30)."""
+    """Дней вперёд: дома — 14; в отпуске — пока ты в этом городе (до переезда по маршруту или возвращения), но не
+    больше 30 (без даты — 30)."""
     import vacation
     if not vacation.active(cid):
         return _HORIZON_DAYS
-    try:
-        until = date.fromisoformat((vacation.state(cid) or {}).get("until") or "")
-    except ValueError:
+    until = vacation.city_until(cid)
+    if until is None:
         return _TRIP_HORIZON_DAYS
     return max(1, min(_TRIP_HORIZON_DAYS, (until - datetime.now(config.TZ).date()).days))
 

@@ -52,10 +52,10 @@ def test_ai_suitcase_keeps_only_real_wardrobe_items(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {
         "items": [0, 2, 2, 99, "кроссовки", 4], "tip": "Вечером у океана прохладно"})
 
-    picked, tip = wardrobe_suitcase._ai_pick("42", CLOTHES, TRIP, "", 8, avoid=["Пуховик"])
+    picked = wardrobe_suitcase._ai_pick("42", CLOTHES, TRIP, "", 8, avoid=["Пуховик"])
 
     assert picked == [0, 2, 4]  # несуществующий номер, повтор и придуманная вещь отброшены
-    assert tip == "Вечером у океана прохладно"
+    assert "tip" not in prompts[0]  # совет к погоде пишет код, не AI
     assert "другой вариант" in prompts[0] and "2026-10-20 – 2026-10-27" in prompts[0]  # «Пересобрать»
 
 
@@ -149,7 +149,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
     assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n✅ Чемодан сохранён.\n\n"
-                                    "Футболки и рубашки\n1 вещь\nСерая футболка\n\nВсего в списке: 1 вещь")
+                                    "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
@@ -176,7 +176,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     asyncio.run(wardrobe_suitcase.send(bot, "42"))
 
-    assert "Белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
+    assert "белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_looks"], ["w_pack_edit"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
 
@@ -296,7 +296,7 @@ def test_declined_items_never_come_back_after_confirm_rebuild_or_new_pack(monkey
     seen = []
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: WARM)
     monkeypatch.setattr(wardrobe_suitcase, "_ai_pick", lambda _cid, clothes, *_a: seen.extend(
-        item["name"] for _zone, item in clothes) or ([], ""))
+        item["name"] for _zone, item in clothes) or [])
     result = wardrobe_suitcase.pack("42", trip, declined=wardrobe_suitcase._declined_for("42", trip))
     names = [name for _zone, group in result["groups"] for name in group]
     assert "Белая футболка" not in seen and "Серая футболка" not in seen
@@ -306,7 +306,7 @@ def test_declined_items_never_come_back_after_confirm_rebuild_or_new_pack(monkey
 def test_pack_always_has_top_bottom_and_shoes(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: WARM)
-    monkeypatch.setattr(wardrobe_suitcase, "_ai_pick", lambda *_a: ([0, 1], "Возьми солнцезащитный крем."))
+    monkeypatch.setattr(wardrobe_suitcase, "_ai_pick", lambda *_a: [0, 1])
 
     groups = dict(wardrobe_suitcase.pack("42", TRIP)["groups"])
 
@@ -339,16 +339,19 @@ def test_daily_looks_use_daytime_low_and_never_leave_a_day_empty():
 
 
 def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
-    head = {"place": "Кейптаун", "start": "2026-10-19", "end": "2026-11-04", "days": 17, "flag": "🇿🇦"}
+    head = {"place": "ЮАР", "start": "2026-10-19", "end": "2026-11-04", "days": 17, "flag": "🇿🇦", "items": 12}
     look = {"date": "2026-10-19", "tmax": 18, "kind": "forecast", "icon": "🌧️", "rain": True, "socks": "Серые носки",
+            "city": "Кейптаун",
             "items": ["бежевая футболка с оранжевым принтом", "Бежевые строгие брюки", "белые кеды"]}
 
     text = wardrobe_ui.suitcase_day_card(head, look, 0, 17, "2026-10-19").text
 
     # Без дат и температуры: день недели (поездка дольше недели — «день N»), пометка, только когда влияет на выбор,
     # вещи списком, как в «Надень сегодня», носки — последними.
-    assert text == ("🇿🇦 Образы в отпуске\n\nКейптаун · 17 дней\n\nПонедельник · день 1 · сегодня\nДождь\n\n"
-                    "- Бежевая футболка с оранжевым принтом\n- Бежевые строгие брюки\n- Белые кеды\n- Серые носки")
+    # В заголовке — страна и дни, в строке дня — город этого дня; внизу курсивом — чемодан.
+    assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\nПонедельник · день 1 · сегодня · Кейптаун\nДождь\n\n"
+                    "- Бежевая футболка с оранжевым принтом\n- Бежевые строгие брюки\n- Белые кеды\n- Серые носки"
+                    "\n\nТвой чемодан · 12 вещей · 17 образов")
     conditions = {kind: wardrobe_ui._day_condition({"tmax": 15, "wind": 9, "kind": kind})
                   for kind in ("forecast", "early", "typical")}
     assert conditions == {"forecast": "Прохладно, ветрено", "early": "", "typical": ""}  # дальше прогноза — без пометки
@@ -412,12 +415,12 @@ def test_day_card_pages_in_a_circle_from_the_suitcase_and_from_the_trip_wardrobe
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_looks"))  # открывается на сегодняшнем дне
     rows = bot.sent[-1]["reply_markup"].inline_keyboard
-    assert "Вторник · сегодня" in bot.sent[-1]["text"]  # 3 дня — без «день N»
+    assert "Вторник · сегодня · Кейптаун" in bot.sent[-1]["text"]  # 3 дня — без «день N»
     assert [b.callback_data for b in rows[0]] == ["w_pack_day_0", "noop", "w_pack_day_2"] and rows[0][1].text == "2 из 3"
     assert [b.callback_data for b in rows[1]] == ["w_pack_saved", "m_menu"]
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_day_2"))
-    assert "Среда\n" in bot.sent[-1]["text"]
+    assert "Среда · Кейптаун\n" in bot.sent[-1]["text"]
     assert [b.callback_data for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == [
         "w_pack_day_1", "noop", "w_pack_day_0"]  # по кругу
 
@@ -434,7 +437,7 @@ def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it
 
     asyncio.run(wardrobe.send_home(bot, "42"))
 
-    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске\n\nКейптаун · 3 дня\n\nВторник · сегодня")
+    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун · 3 дня\n\nВторник · сегодня · Кейптаун")
     today = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
     summary = wardrobe.get_cached_outfit_summary("42")["items"]
     assert summary == [name[:1].lower() + name[1:] for name in today]  # «Мой день» — тот же образ
@@ -474,10 +477,13 @@ def test_suitcase_checklist_adds_missing_weather_items_or_names_the_gap():
     assert wardrobe_suitcase._weather_tip(hot_trip) == ("Днём до +34° — лёгкие вещи и защита от солнца, утром и "
                                                        "вечером до +12° и ветрено — кофта или ветровка под рукой.")
 
-    text = wardrobe_ui.suitcase_screen({"place": "Кейптаун", "days": 17, "groups": [
+    text = wardrobe_ui.suitcase_screen({"place": "ЮАР", "days": 17, "groups": [
         ("Верх", ["Белая футболка", "Серая футболка"]), ("Обувь", ["Белые кеды"])],
+        "wx": {"tmin": 16, "tmax": 34, "rainy": 3, "days": 13, "wind": 8},
         "gaps": gaps, "tip": "днём жарко, вечера ветреные"}).text
-    assert text == ("🧳 Чемодан · Кейптаун · 17 дней\n\nДнём жарко, вечера ветреные.\n\n"
-                    "Футболки и рубашки\n2 вещи\nБелая футболка, серая футболка\n\nОбувь\n1 пара\nБелые кеды\n\n"
+    # Погода и совет — одной строкой, дождливые дни — без «из 13 дней»; категории — «Обувь (1 пара): …».
+    assert text == ("🧳 Чемодан · ЮАР · 17 дней\n\nДнём от +16° до +34°, 3 дождливых дня, ветер до 8 м/с. "
+                    "Днём жарко, вечера ветреные.\n\n"
+                    "Футболки и рубашки (2 вещи): белая футболка, серая футболка\nОбувь (1 пара): белые кеды\n\n"
                     "Не хватает: шорт или лёгких брюк (днём до +34°) — в шкафу таких нет.\n\n"
                     "Всего в списке: 2 вещи и 1 пара обуви")

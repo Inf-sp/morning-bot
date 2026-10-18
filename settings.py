@@ -346,12 +346,16 @@ async def send_home(bot, cid, q=None):
 
 
 def _trip_place_line(cid, place) -> str:
-    """«Кейптаун, ЮАР 🇿🇦 · до 4 ноября» — страна по-русски, не кодом."""
+    """«Кейптаун, ЮАР 🇿🇦 · до 4 ноября» — страна по-русски, не кодом; маршрут — «Кейптаун → Йоханнесбург, ЮАР 🇿🇦 ·
+    до 3 ноября»."""
     import countries
     import util
     import vacation
     cc = str(place.get("cc") or "").upper()
-    where = ", ".join(part for part in (place.get("city"), countries.name_ru(cc) or cc) if part)
+    legs = (vacation.state(cid) or {}).get("legs") or []
+    where = ", ".join(part for part in (
+        vacation.route_label(legs) if legs else place.get("city"),
+        vacation.countries_label(vacation.trip_countries(cid)) if legs else countries.name_ru(cc) or cc) if part)
     return " · ".join(part for part in (" ".join(part for part in (where, util.flag_from_cc(cc)) if part),
                                         vacation.until_label(cid)) if part)
 

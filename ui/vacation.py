@@ -1,12 +1,26 @@
 """Тексты режима «✈️ В отпуске»: вход, возвращение и блок «Страна»."""
 from .builder import MessageBuilder
+from .text import ru_plural
+
+ROUTE_EXAMPLE = "«Кейптаун до 27 октября, далее Йоханнесбург до 3 ноября»"
+
+
+def weather_line(found) -> str:
+    """«днём от +16° до +34°, 3 дождливых дня, ветер до 8 м/с» (без дождя — «без дождя») или "". Число дней прогноза
+    не пишется: оно меньше дней поездки, если поездка дальше горизонта прогноза."""
+    if "tmax" not in (found or {}):
+        return ""
+    rainy = int(found.get("rainy") or 0)
+    rain = f"{rainy} {ru_plural(rainy, 'дождливый день', 'дождливых дня', 'дождливых дней')}" if rainy else "без дождя"
+    return f"днём от {found['tmin']:+d}° до {found['tmax']:+d}°, {rain}, ветер до {int(found.get('wind') or 0)} м/с"
 
 
 def ask_city():
     b = MessageBuilder()
     b.section("✈️ В отпуске")
     b.spacer()
-    b.line("Напиши город, куда едешь, и сроки, например «Cape Town до 20 октября».")
+    b.line("Напиши город, куда едешь, и сроки, например «Cape Town до 20 октября». Несколько городов — маршрутом: "
+           f"{ROUTE_EXAMPLE}.")
     b.spacer()
     b.italic("Погода, праздники, кухня, концерты и премьеры переключатся на эту страну, "
              "«Обучение» — на язык страны, а в «Моём дне» появятся факты о ней.")
@@ -14,12 +28,13 @@ def ask_city():
     return b.build_stripped()
 
 
-def suitcase_trip_label(trip):
-    """Кнопка поездки сохранённого чемодана на экране «В отпуске»: «🧳 Кейптаун · до 27 октября»."""
+def suitcase_trip_label(trip, route=""):
+    """Кнопка поездки сохранённого чемодана на экране «В отпуске»: «🧳 Кейптаун · до 27 октября»; маршрут —
+    «🧳 Кейптаун → Йоханнесбург · до 3 ноября»."""
     from datetime import date
     from util import _MONTHS
     end = date.fromisoformat(trip["end"])
-    return f"🧳 {trip['city']} · до {end.day} {_MONTHS[end.month - 1]}"
+    return f"🧳 {route or trip['city']} · до {end.day} {_MONTHS[end.month - 1]}"
 
 
 def ask_city_in_country(country, flag=""):
@@ -46,6 +61,18 @@ def ask_days(city, flag="", facts=()):
     b.italic("До какого дня отпуск? В этот день я сам верну домашний город. "
              "Можно написать дату в чат, например «20 октября» или «20.10».")
     b.newline()
+    return b.build_stripped()
+
+
+def route_not_understood():
+    b = MessageBuilder()
+    b.line(f"Не понял маршрут. Напиши города с датами переезда, например {ROUTE_EXAMPLE}.")
+    return b.build_stripped()
+
+
+def route_city_not_found(city):
+    b = MessageBuilder()
+    b.line(f"Не нашёл город «{city}». Напиши маршрут ещё раз, например {ROUTE_EXAMPLE}.")
     return b.build_stripped()
 
 

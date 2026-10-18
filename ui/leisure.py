@@ -845,12 +845,13 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
         b.newline()
 
 
-def trip_leisure_screen(place, data, events=(), concerts=(), flag="") -> MessageSpec:
-    """«🇿🇦 Досуг в отпуске · Кейптаун»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
+def trip_leisure_screen(place, data, events=(), concerts=(), flag="", library=None) -> MessageSpec:
+    """«🇿🇦 Досуг в отпуске · ЮАР»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
     во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
-    без эмодзи. Пока кино и музыка страны собираются — строка-подсказка. Премьер, рекомендаций и кнопок разделов нет."""
+    без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом — библиотека. Премьер,
+    рекомендаций и кнопок разделов нет."""
     b = MessageBuilder()
-    b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · Кейптаун»
+    b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     data = data or {}
     if not any(data.get(key) for key in ("films", "series", "hits", "legends")):
         b.line("Собираю кино и музыку страны — загляни чуть позже.")
@@ -874,6 +875,10 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="") -> Message
         b.newline()
         for line in during:
             b.line(line)
+    if library:  # как дома: «Твоя библиотека · 58 фильмов · 42 артиста»
+        b.spacer()
+        b.italic(library_stats_line(library.get("movies"), library.get("artists")))
+        b.newline()
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
                                                                                      callback_data="m_menu")]]))
 

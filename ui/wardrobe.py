@@ -365,11 +365,30 @@ def _suitcase_count(zone, names) -> str:
             else f"{count} {_pluralize_items(count)}")
 
 
+def _weather_lines(data) -> list:
+    """Погода поездки и совет. Один город — одной строкой: «Днём от +16° до +34°, 3 дождливых дня, ветер до 8 м/с.
+    Днём до +34° — …»; маршрут — по строке на город с его датами, совет — отдельной строкой."""
+    from .vacation import weather_line
+    tip = _finish_dot(_upper_first(_clean_text(data.get("tip")))) if _clean_text(data.get("tip")) else ""
+    legs = [leg for leg in data.get("legs_wx") or [] if "tmax" in leg]
+    if len(legs) > 1:
+        lines = [f"{leg.get('city')}, {_trip_dates(leg.get('start'), leg.get('end'))}: "
+                 f"{'обычно ' if leg.get('typical') else ''}{weather_line(leg)}." for leg in legs]
+        return [*lines, *([tip] if tip else [])]
+    weather = weather_line(data.get("wx") or {}) or _clean_text(data.get("weather"))
+    if weather:
+        weather = f"Обычно в эти дни: {_finish_dot(weather)}" if data.get("typical") else _finish_dot(
+            _upper_first(weather))
+    line = " ".join(part for part in (weather, tip) if part)
+    return [line] if line else []
+
+
 def suitcase_screen(data, saved=False, trip=False, just_saved=False):
-    """Чек-лист чемодана: «🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней», погода поездки (дальше прогноза —
-    «Обычно в эти дни»), конкретный совет под неё; по категориям — жирный заголовок, сколько вещей и вещи через
-    запятую; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф — базовый набор с пометкой.
-    just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном открытии её нет)."""
+    """Чек-лист чемодана: «🧳 Чемодан · ЮАР · 19 октября – 4 ноября · 17 дней» (страна поездки, а не город),
+    погода поездки и конкретный совет одной строкой (маршрут — по строке на город), категории — «Обувь (2 пары):
+    белые кеды, …» по строке на категорию; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф —
+    базовый набор с пометкой. just_saved — строка «✅ Чемодан сохранён» сразу после «Подтвердить» (при повторном
+    открытии её нет)."""
     data = data or {}
     b = MessageBuilder()
     days = int(data.get("days") or 0)
@@ -379,24 +398,18 @@ def suitcase_screen(data, saved=False, trip=False, just_saved=False):
     if just_saved:
         b.line("✅ Чемодан сохранён.")
         b.spacer()
-    weather = _finish_dot(data["weather"]) if data.get("weather") else ""
-    if weather:
-        b.line(f"Обычно в эти дни: {weather}" if data.get("typical") else _upper_first(weather))
-    if str(data.get("tip") or "").strip():
-        b.line(_finish_dot(_upper_first(_clean_text(data["tip"]))))
+    for line in _weather_lines(data):
+        b.line(line)
     groups = data.get("groups") or []
     basic = bool(data.get("basic"))
-    if basic and groups:
+    if groups:
         b.spacer()
+    if basic and groups:
         b.line("В шкафу пока нет вещей — вот базовый набор под эту погоду:")
     for zone, names in groups:
-        b.spacer()
-        b.bold(public_zone_name(zone))
-        b.newline()
-        if not basic:
-            b.line(_suitcase_count(zone, names))
         listed = ", ".join(_lower_first(_clean_text(name)) for name in names)
-        b.line(_upper_first(listed))
+        label = public_zone_name(zone) if basic else f"{public_zone_name(zone)} ({_suitcase_count(zone, names)})"
+        b.labeled_line(label, listed, lowercase=False)
     if not groups:
         b.spacer()
         b.line("Под эту поездку из шкафа ничего не подошло — добавь вещи в «Настроить шкаф».")
@@ -462,24 +475,23 @@ def _day_condition(look) -> str:
 
 
 def suitcase_day_card(data, look, index, total, today=""):
-    """Образ одного дня поездки: «🇿🇦 Образы в отпуске», под ним «Кейптаун · 17 дней»; жирным день недели (поездка
-    дольше недели — «· день N»; «· сегодня»), пометка об условиях, если она влияет на выбор, и вещи списком «- …»,
-    как в «Надень сегодня», носки — последними. Дат и температуры нет. Листание — кнопками."""
+    """Образ одного дня поездки: «🇿🇦 Образы в отпуске · ЮАР · 17 дней» (страна, не город); жирным день недели
+    (поездка дольше недели — «· день N»; «· сегодня»; город этого дня), пометка об условиях, если она влияет на выбор,
+    вещи списком «- …», как в «Надень сегодня», носки — последними; курсивом «Твой чемодан · 12 вещей · 17 образов».
+    Дат и температуры нет. Листание — кнопками."""
     from datetime import date
     data, look = data or {}, look or {}
     days = int(data.get("days") or total or 0)
     b = MessageBuilder()
-    b.bold(f"{data.get('flag') or '👕'} Образы в отпуске")
-    b.newline()
-    b.line(" · ".join(part for part in (data.get("place"), f"{days} {ru_plural(days, 'день', 'дня', 'дней')}"
-                                        if days else "") if part))
-    b.spacer()
+    b.title(" · ".join(part for part in (f"{data.get('flag') or '👕'} Образы в отпуске", data.get("place"),
+                                         f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part))
     try:
         title = _WEEKDAYS[date.fromisoformat(str(look.get("date"))).weekday()]
     except ValueError:
         title = ""
     title = " · ".join(part for part in (title, f"день {index + 1}" if total > 7 or not title else "",
-                                        "сегодня" if look.get("date") == today else "") if part)
+                                        "сегодня" if look.get("date") == today else "",
+                                        _clean_text(look.get("city") or data.get("city"))) if part)
     b.bold(_upper_first(title))
     b.newline()
     condition = _day_condition(look)
@@ -494,6 +506,11 @@ def suitcase_day_card(data, look, index, total, today=""):
         b.line(f"- {item}")
     if not items:
         b.line("В шкафу нет вещей для образа.")
+    packed = int(data.get("items") or 0)
+    if packed:
+        b.spacer()
+        b.italic(f"Твой чемодан · {packed} {_pluralize_items(packed)} · {total} {_outfits_word(total)}")
+        b.newline()
     return b.build_stripped()
 
 
@@ -506,7 +523,8 @@ def suitcase_ask(not_understood=False):
         b.spacer()
     b.line("Куда и когда едешь? Напиши город и даты — посмотрю погоду и соберу чемодан из твоего шкафа.")
     b.spacer()
-    b.italic("Например: «Кейптаун, 20–27 октября» или «Барселона на неделю с 5 ноября».")
+    b.italic("Например: «Кейптаун, 20–27 октября», «Барселона на неделю с 5 ноября» или маршрутом — «Кейптаун "
+             "19–27 октября, далее Йоханнесбург до 3 ноября».")
     b.newline()
     return b.build_stripped()
 

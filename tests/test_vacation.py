@@ -277,7 +277,7 @@ def test_trip_weather_summary_counts_only_vacation_days(monkeypatch):
 
     summary = vacation.trip_weather_summary("42")
     # Только дни отпуска (до 14-го): 15-е с +30° и ливнем не считается.
-    assert summary.endswith("днём от +17° до +24°, дождь в 1 из 3 дней, ветер до 9 м/с")
+    assert summary.endswith("днём от +17° до +24°, 1 дождливый день, ветер до 9 м/с")  # без «из N дней»
     assert summary.startswith("Кейптаун (ZA), до 14 октября")
 
 
@@ -742,8 +742,9 @@ def test_every_trip_screen_says_in_the_title_that_it_is_a_vacation():
     def title(msg):
         return msg.text.split("\n", 1)[0]
 
-    assert title(wardrobe_ui.suitcase_day_card(trip, {"date": "2026-10-20", "items": ["Белая футболка"]}, 0, 8)) == \
-        "🇿🇦 Образы в отпуске"  # город — строкой ниже: «Кейптаун · 8 дней»
+    assert title(wardrobe_ui.suitcase_day_card({**trip, "place": "ЮАР"}, {"date": "2026-10-20",
+                                                                         "items": ["Белая футболка"]}, 0, 8)) == \
+        "🇿🇦 Образы в отпуске · ЮАР · 8 дней"  # страна, а не город
     assert title(wardrobe_ui.render_wardrobe_message({"items": [{"name": "Белая футболка", "zone": "Верх"}],
                                                       "primary_style": "Повседневный", "trip_flag": "🇿🇦"})) \
         .startswith("🇿🇦 Надень сегодня в отпуске")

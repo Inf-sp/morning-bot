@@ -144,15 +144,175 @@ def parse_period(text, today=None):
     return start, end
 
 
+def _strip_dates(text) -> str:
+    """Город без дат и связок: «Кейптаун с 19 до 27 октября» → «Кейптаун»."""
+    city = _DATE_RE.sub(" ", _RANGE_RE.sub(r"\1 \3 – \2 \3", str(text or "")))
+    for _ in range(4):
+        city = _DATE_GLUE_RE.sub("", city.strip())
+    return " ".join(city.split()).strip(" ,.–—-")
+
+
 def split_city_and_period(text, today=None):
     """«Кейптаун, 20–27 октября» → («Кейптаун», (20 окт, 27 окт)); без дат — (текст, None)."""
     period = parse_period(text, today)
     if period is None:
         return " ".join(str(text or "").split()), None
-    city = _DATE_RE.sub(" ", _RANGE_RE.sub(r"\1 \3 – \2 \3", str(text)))
-    for _ in range(4):
-        city = _DATE_GLUE_RE.sub("", city.strip())
-    return " ".join(city.split()).strip(" ,.–—-") or str(text).strip(), period
+    return _strip_dates(text) or str(text).strip(), period
+
+
+# ---------- маршрут из нескольких городов ----------
+
+_ROUTE_MAX = 5  # городов в одной поездке
+_ROUTE_SPLIT_RE = re.compile(r"\s*(?:[;\n]|→|->|\b(?:далее|потом|затем|после\s+этого|а\s+после)\b)\s*",
+                             re.IGNORECASE)
+
+
+def _date_values(text, today) -> list:
+    """[("date", день) | ("days", N)] по порядку в тексте."""
+    values = []
+    for match in _DATE_RE.finditer(_RANGE_RE.sub(r"\1 \3 – \2 \3", str(text or ""))):
+        try:
+            value = _match_value(match, today)
+        except ValueError:
+            continue
+        if value:
+            values.append(value)
+    return values
+
+
+def route_segments(text, today=None) -> list:
+    """«Кейптаун до 27 октября, далее Йоханнесбург до 3 ноября» → по строке на город. Границы — «далее / потом /
+    затем», «;», «→», новая строка и запятая после даты перед новым городом («…27 октября, Йоханнесбург…»);
+    запятая между городом и датами («Кейптаун, 20–27 октября») границей не считается."""
+    today = today or datetime.now(config.TZ).date()
+    segments = []
+    for part in _ROUTE_SPLIT_RE.split(str(text or "")):
+        current = ""
+        for chunk in part.split(","):
+            if current and _date_values(current, today) and _strip_dates(chunk):
+                segments.append(current)
+                current = chunk
+            else:
+                current = f"{current},{chunk}" if current else chunk
+        if current.strip(" ,."):
+            segments.append(current)
+    return [" ".join(segment.split()).strip(" ,.") for segment in segments if segment.strip(" ,.")]
+
+
+def looks_like_route(text, today=None) -> bool:
+    """Несколько городов: явный разделитель («далее», «→», «;», новая строка) или хотя бы два города с датами через
+    запятую. «Cape Town до 20 октября, с друзьями» — один город."""
+    today = today or datetime.now(config.TZ).date()
+    segments = route_segments(text, today)
+    if len(segments) < 2:
+        return False
+    return bool(_ROUTE_SPLIT_RE.search(str(text or "").strip())) or sum(
+        1 for segment in segments if _date_values(segment, today)) >= 2
+
+
+def parse_route(text, today=None, *, until_mode=False) -> dict | None:
+    """Маршрут из 2–5 городов: {"legs": [{"city": текст, "start": день, "end": последний день в городе}],
+    "until": день возвращения или None}; один город или непонятные даты — None.
+
+    Дата у города — день переезда: в этот день ты уже в следующем городе. У последнего города — конец поездки
+    (чемодан, день включается) или день возвращения домой (until_mode — отпуск: начинается сегодня, последний день
+    в городе — накануне; без даты — отпуск без даты возвращения)."""
+    today = today or datetime.now(config.TZ).date()
+    segments = route_segments(text, today)
+    if not 2 <= len(segments) <= _ROUTE_MAX:
+        return None
+    stops, previous = [], None
+    for index, segment in enumerate(segments):
+        values = _date_values(segment, today)
+        dates = [value[1] for value in values if value[0] == "date"]
+        days = next((value[1] for value in values if value[0] == "days"), 0)
+        explicit = dates[0] if len(dates) >= 2 or (dates and re.search(r"\bс\s+\d", segment, re.I)) else None
+        start = today if until_mode and index == 0 else explicit or previous or today
+        boundary = dates[-1] if dates and (len(dates) >= 2 or not explicit) else None
+        if boundary is None and days:
+            boundary = start + timedelta(days=days)
+        city = _strip_dates(segment)
+        if not city or (boundary is None and not (until_mode and index == len(segments) - 1)):
+            return None
+        stops.append({"city": city, "start": start, "boundary": boundary, "days": bool(days and not dates)})
+        previous = boundary
+    legs = [{"city": stop["city"], "start": stop["start"], "end": nxt["start"] - timedelta(days=1)}
+            for stop, nxt in zip(stops, stops[1:])]
+    last = stops[-1]
+    until = last["boundary"] if until_mode else None
+    end = (None if last["boundary"] is None else last["boundary"] - timedelta(days=1)) if until_mode else (
+        last["boundary"] - timedelta(days=1) if last["days"] else last["boundary"])
+    legs.append({"city": last["city"], "start": last["start"], "end": end})
+    final = until or end or legs[-1]["start"]
+    if (any(leg["end"] is not None and leg["end"] < leg["start"] for leg in legs) or legs[0]["start"] < today
+            or final > today + timedelta(days=366) or (final - legs[0]["start"]).days >= _TRIP_DAYS_MAX):
+        return None
+    return {"legs": legs, "until": until}
+
+
+def trip_legs(trip) -> list:
+    """Города поездки по порядку: [{city, cc, lat, lon, start, end}]; поездка из одного города — она сама."""
+    legs = [leg for leg in (trip or {}).get("legs") or [] if isinstance(leg, dict) and leg.get("lat") is not None]
+    return legs or [{key: (trip or {}).get(key) for key in ("city", "cc", "lat", "lon", "start", "end")}]
+
+
+def route_label(legs) -> str:
+    """«Кейптаун → Йоханнесбург»; один город — его название."""
+    return " → ".join(str(leg.get("city") or "") for leg in legs or [] if leg.get("city"))
+
+
+def countries_label(codes) -> str:
+    """Страны поездки по-русски для заголовков: «ЮАР», «ЮАР и Намибия», «ЮАР, Намибия и Ботсвана»."""
+    import countries
+    names = list(dict.fromkeys(countries.name_ru(code) or str(code or "").upper()
+                               for code in codes or () if str(code or "").strip()))
+    return " и ".join(names) if len(names) <= 2 else f"{', '.join(names[:-1])} и {names[-1]}"
+
+
+async def geocode_legs(legs) -> tuple:
+    """Координаты и страна каждого города маршрута: (города, "") или ([], город, который не нашёлся)."""
+    import weather_location
+    found_legs = []
+    for leg in legs:
+        found = await weather_location.geocode(leg["city"])
+        if not found:
+            return [], leg["city"]
+        found_legs.append({**leg, "city": found.get("name") or leg["city"], "country": found.get("country") or "",
+                           "cc": str(found.get("country_code") or "").upper(),
+                           "lat": found["latitude"], "lon": found["longitude"]})
+    return found_legs, ""
+
+
+def _iso_legs(legs) -> list:
+    return [{**leg, **{key: leg[key].isoformat() if hasattr(leg.get(key), "isoformat") else (leg.get(key) or "")
+                       for key in ("start", "end")}} for leg in legs]
+
+
+def current_leg(cid, today=None) -> dict:
+    """Город отпуска на сегодня по маршруту (день переезда — уже следующий); без маршрута — {}."""
+    today = (today or datetime.now(config.TZ).date()).isoformat()
+    legs = (state(cid) or {}).get("legs") or []
+    return next((leg for leg in reversed(legs) if str(leg.get("start") or "") <= today), legs[0] if legs else {})
+
+
+def city_until(cid):
+    """День, когда ты уезжаешь из текущего города отпуска: переезд по маршруту или возвращение домой; без даты —
+    None."""
+    current = state(cid) or {}
+    legs, today = current.get("legs") or [], datetime.now(config.TZ).date().isoformat()
+    later = [leg for leg in legs if str(leg.get("start") or "") > today]
+    value = (later[0]["start"] if later else "") or current.get("until") or ""
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def trip_countries(cid) -> list:
+    """Коды стран отпуска по маршруту (без маршрута — страна отпуска)."""
+    current = state(cid) or {}
+    return list(dict.fromkeys(str(leg.get("cc") or "").upper() for leg in current.get("legs") or [] if leg.get("cc"))
+                ) or ([str(current.get("cc") or "").upper()] if current.get("cc") else [])
 
 
 def split_city_and_until(text, today=None):
@@ -243,7 +403,8 @@ async def ask_city(bot, cid):
     msg = vacation_ui.ask_city()
     trip = suitcase_trip(cid)
     markup = InlineKeyboardMarkup([[InlineKeyboardButton(
-        vacation_ui.suitcase_trip_label(trip), callback_data="set_vac_trip")]]) if trip else None
+        vacation_ui.suitcase_trip_label(trip, route_label(trip.get("legs") or [])), callback_data="set_vac_trip")]]
+    ) if trip else None
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=markup)
 
 
@@ -259,9 +420,17 @@ async def start_suitcase_trip(bot, cid, q=None):
         await ask_city(bot, cid)
         return
     home = _pending_home.pop(str(cid), None) or (state(cid) or {}).get("home") or dict(store.get_settings(cid))
-    cc = str(trip.get("cc") or "").upper()
-    store.set_settings(cid, trip["lat"], trip["lon"], trip["city"], cc, cc.lower())
-    await _start(bot, cid, home, date.fromisoformat(trip["end"]))
+    legs = trip.get("legs") or []
+    today = datetime.now(config.TZ).date().isoformat()
+    first = next((leg for leg in reversed(legs) if str(leg.get("start") or "") <= today), legs[0] if legs else trip)
+    _set_place(cid, first)
+    await _start(bot, cid, home, date.fromisoformat(trip["end"]), legs=legs)
+
+
+def _set_place(cid, leg):
+    """Город отпуска (или города маршрута) — в Настройки: погода, «Мой день», афиша читают его."""
+    cc = str(leg.get("cc") or "").upper()
+    store.set_settings(cid, leg["lat"], leg["lon"], leg["city"], leg.get("country") or cc, cc.lower())
 
 
 async def city_entered(bot, cid, text):
@@ -270,6 +439,9 @@ async def city_entered(bot, cid, text):
     import countries
     import util
     home = _pending_home.pop(str(cid), None) or (state(cid) or {}).get("home") or dict(store.get_settings(cid))
+    if looks_like_route(text):  # «Кейптаун до 27 октября, далее Йоханнесбург до 3 ноября»
+        await _start_route(bot, cid, home, text)
+        return
     city_text, until = split_city_and_until(text)
     cc, country = countries.country_by_name(city_text)
     if cc:
@@ -293,12 +465,28 @@ async def city_entered(bot, cid, text):
     await _start(bot, cid, home, until)
 
 
-async def _start(bot, cid, home, until):
-    """Город отпуска уже сохранён: отпуск начат; с датой возвращения — готово, без неё — вопрос о сроке."""
+async def _start_route(bot, cid, home, text):
+    """Маршрут из нескольких городов: города ищутся геокодером, отпуск — с первого; в день переезда город
+    переключается сам (finish_due). Не понял или не нашёл город — просим маршрут ещё раз."""
+    route = parse_route(text, until_mode=True)
+    legs, missing = await geocode_legs(route["legs"]) if route else ([], "")
+    if not legs:
+        _pending_home[str(cid)] = home
+        store.pending_input[str(cid)] = "vacation_city"
+        msg = vacation_ui.route_city_not_found(missing) if missing else vacation_ui.route_not_understood()
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        return
+    _set_place(cid, legs[0])
+    await _start(bot, cid, home, route["until"], legs=_iso_legs(legs))
+
+
+async def _start(bot, cid, home, until, legs=None):
+    """Город отпуска уже сохранён: отпуск начат; с датой возвращения — готово, без неё — вопрос о сроке.
+    legs — маршрут из нескольких городов."""
     import asyncio
     place = store.get_settings(cid)
     _save(cid, {"home": home, "until": "", "cc": str(place.get("cc") or "").upper(),
-                "since": datetime.now(config.TZ).date().isoformat()})
+                "since": datetime.now(config.TZ).date().isoformat(), **({"legs": legs} if legs else {})})
     _reset_day_caches(cid)
     if until:
         await _finish(bot, cid, until)
@@ -359,8 +547,8 @@ async def _finish(bot, cid, until):
     except Exception:
         _log.warning("vacation holidays failed cid=%s", cid, exc_info=True)
         holidays = None
-    msg = vacation_ui.started(place_label(place), until_label(cid), (current["home"] or {}).get("city", ""),
-                              holidays)
+    where = route_label(current.get("legs") or []) if current.get("legs") else place_label(place)
+    msg = vacation_ui.started(where, until_label(cid), (current["home"] or {}).get("city", ""), holidays)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
     import myday
     await myday.send_plany(bot, cid)
@@ -458,6 +646,25 @@ async def finish_due(bot, today=None):
                 await return_home(bot, cid, automatic=True)
             except Exception:
                 _log.exception("vacation: automatic return failed cid=%s", cid)
+        elif current and current.get("legs"):
+            try:
+                switch_leg(cid, today)
+            except Exception:
+                _log.exception("vacation: leg switch failed cid=%s", cid)
+
+
+def switch_leg(cid, today=None) -> bool:
+    """День переезда по маршруту: город отпуска — следующий (погода, «Мой день», афиша, концерты); другая страна —
+    её язык, кухня, кино и музыка. Сводка дня и карточки пересобираются. True — город сменился."""
+    leg = current_leg(cid, today)
+    place = store.get_settings(cid) or {}
+    if not leg or str(leg.get("city") or "") == str(place.get("city") or ""):
+        return False
+    _set_place(cid, leg)
+    _save(cid, {**(state(cid) or {}), "cc": str(leg.get("cc") or "").upper()})
+    _reset_day_caches(cid)
+    util.background(_warm_trip_leisure(cid), "vacation next city warm")
+    return True
 
 
 def until_label(cid) -> str:
@@ -503,15 +710,12 @@ def trip_weather(cid) -> dict:
 
 
 def trip_weather_line(found) -> str:
-    """«днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
-    if "tmax" not in (found or {}):
-        return ""
-    return (f"днём от {found['tmin']:+d}° до {found['tmax']:+d}°, дождь в {found['rainy']} из {found['days']} дней, "
-            f"ветер до {found['wind']} м/с")
+    """«днём от +17° до +24°, 2 дождливых дня, ветер до 9 м/с» или "" (`ui/vacation.weather_line`)."""
+    return vacation_ui.weather_line(found)
 
 
 def trip_weather_summary(cid) -> str:
-    """«Кейптаун (ZA), до 20 октября; днём от +17° до +24°, дождь в 2 из 7 дней, ветер до 9 м/с» или ""."""
+    """«Кейптаун (ZA), до 20 октября; днём от +17° до +24°, 2 дождливых дня, ветер до 9 м/с» или ""."""
     found = trip_weather(cid)
     line = trip_weather_line(found)
     return f"{found.get('head', '')}; {line}" if line else found.get("head", "")
@@ -648,7 +852,9 @@ def guide(cid) -> dict:
     if not current:
         return {}
     saved = current.get("guide")
-    if isinstance(saved, dict) and saved.get("v") == _GUIDE_VERSION:
+    # Другая страна маршрута — свой язык и кухня (у гида без страны — прежняя, он собран для неё).
+    if (isinstance(saved, dict) and saved.get("v") == _GUIDE_VERSION
+            and saved.get("cc", current.get("cc")) == current.get("cc")):
         return saved
     if util.on_event_loop():  # сеть и AI не ждём в обработчике: собираем фоном, пока — обычный режим
         util.build_off_loop(("vacation_guide", str(cid)), guide, cid)
@@ -692,7 +898,8 @@ JSON: {{"language_ru":"","language_code":"","cuisine_ru":"","cuisine_intro":"","
         return {}
     result = _clean_guide(data, days)
     if result:
-        _save(cid, {**current, "guide": result})
+        result = {**result, "cc": current.get("cc")}
+        _save(cid, {**(state(cid) or current), "guide": result})
     return result
 
 
