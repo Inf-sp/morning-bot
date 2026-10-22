@@ -152,7 +152,7 @@ def test_vacation_quiz_is_a_translation_poll(monkeypatch):
     assert poll["options"][poll["correct_option_id"]] == "Фраза " + term.split()[-1]
 
 
-def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
+def test_vacation_cuisine_known_or_local_without_home_fallback(monkeypatch):
     saved, _places = _env(monkeypatch, CAPE)
     saved["vacation"] = {"home": HOME, "cc": "IT"}
     assert day_menu.day_cuisine("42", date(2026, 10, 12)) == "italian"
@@ -175,9 +175,11 @@ def test_vacation_cuisine_known_or_local_with_home_fallback(monkeypatch):
     menu = day_menu.build_day_menu("42", cuisine="local_za")
     assert menu["cuisine_label"] == "Южноафриканская" and menu["dishes"]["lunch"]["name"] == "Bobotie lunch"
 
-    monkeypatch.setattr(day_menu, "_ai_dishes", lambda *_a, **_k: {})
-    fallback = day_menu.build_day_menu("42", cuisine="local_za")
-    assert not fallback["cuisine"].startswith("local_") and "cuisine_label" not in fallback
+    attempts = []
+    monkeypatch.setattr(day_menu, "_ai_dishes", lambda *_a, **_k: attempts.append(1) or {})
+    empty = day_menu.build_day_menu("42", cuisine="local_za")
+    # В отпуске домашнюю кухню не подставляем: та же кухня страны, без блюд, ещё одна попытка AI.
+    assert empty["cuisine"] == "local_za" and empty["dishes"] == {} and len(attempts) == 2
 
 
 def test_country_block_and_summary_lines():
@@ -554,6 +556,8 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
 
 def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(monkeypatch):
     import day_menu
+    monkeypatch.setattr(vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(vacation, "cuisine", lambda _cid: "local_za")
     profile = {"cooking_day_menu": {
         "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner", "trip_v": 2,
         "dishes": {"breakfast": {"name": "Руськи"}, "lunch": {"name": "Боботи"}, "dinner": {"name": "Брай"}}}}

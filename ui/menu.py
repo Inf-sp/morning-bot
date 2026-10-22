@@ -308,6 +308,9 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact):
         note = _cooking_text(dish.get("note"))
         if note:
             b.line(_with_period(note[:1].upper() + note[1:]))
+    else:  # AI не дал блюда кухни страны — честно, без подмены домашней кухней
+        b.spacer()
+        b.line("Блюдо дня сейчас недоступно — загляни чуть позже.")
     if fact:
         b.spacer()
         b.italic(_with_period(fact))

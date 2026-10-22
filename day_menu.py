@@ -117,6 +117,11 @@ def get_cached_day_menu(cid, now=None) -> dict | None:
         return None
     if "top" in menu and menu.get("trip_v") != _TRIP_MENU_VERSION:  # набор отпуска старого вида — собрать заново
         return None
+    import vacation
+    trip_cuisine = vacation.cuisine(cid) if vacation.active(cid) else ""
+    # Меню другой кухни: домашнее, собранное до отпуска, или набор отпуска после возвращения — собрать заново.
+    if (trip_cuisine and menu.get("cuisine") != trip_cuisine) or (not trip_cuisine and "top" in menu):
+        return None
     dishes = menu.get("dishes") or {}
     if "top" in menu:  # набор отпуска: приём пищи без блюда пропускается, но хоть одно блюдо должно быть
         return menu if trip_dish(menu).get("name") else None
@@ -272,11 +277,14 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     label = vacation.local_cuisine_label(cid) if cuisine.startswith(LOCAL_PREFIX) else ""
     data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid), label,
                       trip)
-    if label and not any(isinstance(data.get(meal), dict) and _clean(data[meal].get("name"), _NAME_MAX)
-                         for meal in meals):
-        # Кухни страны отпуска нет во встроенном списке блюд: без ответа AI — обычная кухня дня.
-        cuisine, label = home_cuisine(cid, day), ""
-        data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid))
+    def has_dishes(value):
+        return any(isinstance(value.get(meal), dict) and _clean(value[meal].get("name"), _NAME_MAX) for meal in meals)
+
+    if label and not has_dishes(data):
+        # Кухни страны отпуска нет во встроенном списке блюд: ещё одна попытка AI; домашнюю кухню в отпуске
+        # не подставляем — не вышло, экран честно скажет «сейчас недоступно», а следующее открытие повторит.
+        data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid),
+                          label, trip)
     dishes, used = {}, set()
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
@@ -300,8 +308,6 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
             dish = {"name": name, "note": note}
         used.add(dish["name"].casefold())
         dishes[meal] = dish
-    if label and not dishes:  # ни одно блюдо кухни страны не прошло ограничения — обычная кухня дня
-        return build_day_menu(cid, now=now, cuisine=home_cuisine(cid, day), avoid=avoid)
     menu = {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
     if trip:  # блюдо «попробовать сегодня» для «Моего дня»: отметка AI, без неё — ужин или последнее
         top = str(data.get("top") or "").strip().casefold()
