@@ -188,6 +188,13 @@ def day_summary(
         b.newline()
         b.spacer()
 
+    # В отпуске — интересный факт о стране, свой на каждый день поездки.
+    country_fact = str(vacation.get("country_fact") or "").strip()
+    if country_fact:
+        b.text_line("💡 ")
+        b.labeled_line("Факт дня", finish_dot(country_fact), lowercase=False)
+        b.spacer()
+
     # Премьера дня из Досуга — только сегодняшняя, одна строка.
     if premiere:
         _premiere_line(b, premiere)

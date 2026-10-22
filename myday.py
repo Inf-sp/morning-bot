@@ -527,12 +527,15 @@ def _vacation_blocks(cid) -> dict:
     if not vacation.active(cid):
         return {}
     from ui import vacation as vacation_ui
+    import settings as user_settings
     guide = vacation.guide(cid)
     import day_menu
     return {
         "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
         "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
+        # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.
+        "country_fact": vacation.fact_of_day(cid, "country") if user_settings.myday_block_on(cid, "fact") else "",
     }
 
 

@@ -5,6 +5,8 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 import day_menu
 import vacation
 
+REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты дня; здесь нужен настоящий сбор
+
 
 def _setup(monkeypatch, ai_data, history=()):
     profile = {"cooking_day_menu_history": {"month": day_menu._today(None).strftime("%Y-%m"),
@@ -46,3 +48,27 @@ def test_cuisine_fact_about_another_country_is_dropped():
     assert not vacation._about_other_country("В ЮАР брай — почти национальный праздник.", "южноафриканская")
     assert not vacation._about_other_country("Корейцы едят кимчи почти каждый день.", "корейская")
     assert not vacation._about_other_country("Немцы любят колбаски.", "немецкая")
+
+
+def test_country_fact_of_day_in_my_day_summary():
+    from ui import myday as myday_ui
+
+    msg = myday_ui.day_summary("Ср, 22 окт", "Cape Town", vacation={
+        "country_fact": "В ЮАР 11 официальных языков"})
+
+    assert "💡 Факт дня: В ЮАР 11 официальных языков." in msg.text
+
+
+def test_country_facts_keep_mentions_of_other_countries(monkeypatch):
+    monkeypatch.setattr(vacation, "trip_facts", REAL_TRIP_FACTS)
+    saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-30", "guide": {"cuisine_ru": "Южноафриканская"}}
+    monkeypatch.setattr(vacation, "state", lambda _cid: saved)
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
+    prompts = []
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {
+        "facts": ["Кейптаун основали голландцы в 1652 году"]})
+
+    assert vacation.trip_facts("42", "country") == ["Кейптаун основали голландцы в 1652 году"]
+    assert "South Africa (ZA)" in prompts[0] and "о самой стране" in prompts[0]

@@ -1201,6 +1201,8 @@ _FACT_TOPICS = {
     "language": "о языке «{language}» этой страны: история, слова, перешедшие в другие языки, сколько людей на нём "
                 "говорит, необычное в произношении и грамматике",
     "culture": "о культуре и досуге этой страны: музыка, кино, фестивали, праздники, спорт, рекорды",
+    "country": "о самой стране: история, география, природа, города, изобретения, рекорды, необычные законы и "
+               "обычаи; не о кухне, языке и досуге (у них свои факты)",
 }
 _FACTS_VERSION = 3  # 3 — страна названа явно, факты о чужих народах отсеиваются; 2 — свой факт на каждый день
 _FACTS_MIN, _FACTS_MAX = 7, 20
@@ -1262,7 +1264,7 @@ def trip_facts(cid, topic) -> list:
     for fact in (data.get("facts") if isinstance(data, dict) else None) or []:
         text = _text(fact, 220)
         if (re.search(r"[а-яё]", text, re.I) and text.casefold() not in seen
-                and not (cuisine_ru and _about_other_country(text, cuisine_ru))):
+                and not (topic == "cuisine" and cuisine_ru and _about_other_country(text, cuisine_ru))):
             seen.add(text.casefold())
             items.append(text)
     items = items[:count]
