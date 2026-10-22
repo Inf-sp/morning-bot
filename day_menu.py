@@ -242,10 +242,26 @@ _TRIP_DISH_RULES = (
 )
 
 
+def _guide_dishes(cid, meals, avoided, restrictions) -> dict:
+    """Блюда из набора поездки (vacation.trip_dishes) по приёмам пищи: сначала не показанные, по кругу дней."""
+    import vacation
+    pool = [dish for dish in vacation.trip_dishes(cid)
+            if fits_restrictions({"name": dish["name"], "note": dish.get("note", "")}, restrictions)]
+    fresh = [dish for dish in pool if dish["name"].casefold() not in avoided] or pool
+    if not fresh:
+        return {}
+    start = _today().toordinal() % len(fresh)
+    ordered = fresh[start:] + fresh[:start]
+    data = {meal: dict(ordered[index % len(ordered)]) for index, meal in enumerate(meals) if index < len(ordered)}
+    return {**data, "top": meals[0]} if data else {}
+
+
 def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions_text="", label="", trip=False) -> dict:
     try:
         data = ai.llm_json(
-            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label, trip), 900 if trip else 500,
+            # В отпуске ответ длинный (местное название, эмодзи, описание до 200 символов): 900 токенов
+            # обрывали JSON у моделей с рассуждением — вся цепочка падала, блюда не было.
+            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label, trip), 2400 if trip else 500,
             tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             cache_context={
@@ -285,6 +301,8 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
         # не подставляем — не вышло, экран честно скажет «сейчас недоступно», а следующее открытие повторит.
         data = _ai_dishes(cid, cuisine, available, avoided_names, meals, _settings().food_restrictions_prompt(cid),
                           label, trip)
+    if label and not has_dishes(data):
+        data = _guide_dishes(cid, meals, avoided, restrictions)  # запас без AI: знаковые блюда страны на поездку
     dishes, used = {}, set()
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}

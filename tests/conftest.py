@@ -97,4 +97,5 @@ def _no_trip_facts_ai(monkeypatch):
     import vacation
 
     monkeypatch.setattr(vacation, "trip_facts", lambda _cid, _topic: [])
+    monkeypatch.setattr(vacation, "trip_dishes", lambda _cid: [])  # запас блюд поездки — тоже без AI
     yield

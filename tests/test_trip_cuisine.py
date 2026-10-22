@@ -6,6 +6,7 @@ import day_menu
 import vacation
 
 REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты дня; здесь нужен настоящий сбор
+REAL_TRIP_DISHES = vacation.trip_dishes
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -95,3 +96,36 @@ def test_trip_screen_without_dish_says_unavailable():
     msg = menu_ui.day_menu({"cuisine": "local_za", "dishes": {}}, cuisine_label="Южноафриканская",
                            flag="🇿🇦", trip=True, trip_dish={})
     assert "Блюдо дня сейчас недоступно" in msg.text and "Южноафриканская" in msg.text
+
+
+def test_trip_dish_from_trip_set_when_ai_fails(monkeypatch):
+    _setup(monkeypatch, {}, history=["Брай"])
+    monkeypatch.setattr(vacation, "trip_dishes", lambda _cid: [
+        {"name": "Брай", "original": "Braai", "emoji": "🔥", "note": "Мясо на углях."},
+        {"name": "Боботи", "original": "Bobotie", "emoji": "🥘", "note": "Запеканка с фаршем и карри."},
+    ])
+
+    menu = day_menu.build_day_menu("42", cuisine="local_za")
+
+    assert menu["cuisine"] == "local_za"
+    assert day_menu.trip_dish(menu)["name"] == "Боботи"  # сначала не показанное
+    assert day_menu.trip_dish(menu)["original"] == "Bobotie"
+
+
+def test_trip_dishes_are_built_once_per_trip(monkeypatch):
+    fresh = vacation
+    monkeypatch.setattr(vacation, "trip_dishes", REAL_TRIP_DISHES)
+    saved = {"cc": "ZA"}
+    monkeypatch.setattr(fresh, "state", lambda _cid: saved)
+    monkeypatch.setattr(fresh, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(fresh, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(fresh.util, "on_event_loop", lambda: False)
+    calls = []
+    monkeypatch.setattr(fresh.ai, "llm_json", lambda prompt, *_a, **_k: calls.append(prompt) or {"dishes": [
+        {"name": "Билтонг", "original": "Biltong", "emoji": "🥩", "note": "Вяленое мясо."},
+        {"name": "Biltong", "original": "", "emoji": "", "note": "латиница — не берём"},
+    ]})
+
+    assert [dish["name"] for dish in fresh.trip_dishes("42")] == ["Билтонг"]
+    assert fresh.trip_dishes("42")[0]["original"] == "Biltong" and len(calls) == 1
+    assert "South Africa (ZA)" in calls[0]
