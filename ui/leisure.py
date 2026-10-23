@@ -853,9 +853,7 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
-    if country:  # справка о стране — первой: столица, валюта, время, экстренный номер, розетки…
-        b.bold("Страна:")
-        b.newline()
+    if country:  # справка о стране — первой, без подписи «Страна:»: столица, валюта, время, экстренный номер…
         for label, value in country:
             b.labeled_line(label, value, lowercase=False)
         b.spacer()

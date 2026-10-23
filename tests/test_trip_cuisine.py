@@ -153,7 +153,7 @@ def test_trip_leisure_screen_starts_with_country():
 
     msg = leisure_ui.trip_leisure_screen("ЮАР", {"films": [{"title": "Tsotsi"}]}, flag="🇿🇦",
                                          country=[("Столица", "Pretoria"), ("Валюта", "ZAR (R)")])
-    assert msg.text.startswith("🇿🇦 Досуг в отпуске · ЮАР\n\nСтрана:\nСтолица: Pretoria\nВалюта: ZAR (R)\n\n")
+    assert msg.text.startswith("🇿🇦 Досуг в отпуске · ЮАР\n\nСтолица: Pretoria\nВалюта: ZAR (R)\n\n")
 
 
 def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):
