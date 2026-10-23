@@ -180,3 +180,14 @@ def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):
     asyncio.run(settings.handle_callback(None, "42", "set_mylib"))
     rows = sent[-1].reply_markup.inline_keyboard
     assert sent[-1].text.startswith("🎚️ Моя библиотека") and rows[-1][0].callback_data == "set_mydata"
+
+
+def test_trip_food_screen_footer_is_trip_stats():
+    from ui import menu as menu_ui
+
+    msg = menu_ui.day_menu({"cuisine": "local_za", "dishes": {}}, cuisine_label="Южноафриканская", flag="🇿🇦",
+                           trip=True, trip_dish={"name": "Банни чоу", "note": "хлеб с карри"},
+                           fact="Бильтонг — вяленое мясо", trip_stats={"day": 4, "days": 14, "dishes": 6})
+    assert msg.text.endswith("День 4 из 14 · подобрано 6 местных блюд")
+    assert "Бильтонг" not in msg.text
+    assert menu_ui.trip_food_stats({"day": 2, "dishes": 1}) == "День 2 · подобрано 1 местное блюдо"

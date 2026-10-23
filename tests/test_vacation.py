@@ -547,8 +547,7 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
         ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
     # Одно блюдо — то, что стоит попробовать сегодня (top), жирным, ниже описание; без «Завтрак / Обед / Ужин».
     assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне.\n\n🔥 Брай · Braai\n"
-                        "Мясо на открытом огне. Главная традиция выходных.\n\nБрай — национальная традиция: 24 сентября в ЮАР отмечают "
-                        "Национальный день брая.")
+                        "Мясо на открытом огне. Главная традиция выходных.")  # факта о кухне внизу нет — там статистика поездки
     utf16 = msg.text.encode("utf-16-le")  # смещения Telegram — в UTF-16: флаг 🇿🇦 занимает 4 единицы
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
     assert "🔥 Брай · Braai" in bold and "Завтрак" not in msg.text and "Обед" not in msg.text

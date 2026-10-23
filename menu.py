@@ -90,10 +90,32 @@ def _day_menu_message(menu, cid=None):
             and str(menu.get("cuisine") or "").startswith(day_menu.LOCAL_PREFIX) else ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),
         show_mine=cid is None or not vacation.active(cid), stats=stats, trip=trip,
-        # В отпуске — одно блюдо, которое стоит попробовать, и факт о кухне страны.
+        # В отпуске — одно блюдо, которое стоит попробовать, внизу курсивом — статистика поездки.
         trip_dish=day_menu.trip_dish(menu) if trip else None,
-        fact=vacation.fact_of_day(cid, "cuisine") if trip else "",  # факт дня о кухне — один на день
+        trip_stats=_trip_food_stats(cid, menu) if trip else None,
     )
+
+
+def _trip_food_stats(cid, menu) -> dict:
+    """День поездки и сколько разных блюд кухни страны уже подобрано: {day, days, dishes}."""
+    import datetime as _dt
+    import config
+    import vacation
+    current = vacation.state(cid) or {}
+    today = _dt.datetime.now(config.TZ).date()
+    try:
+        since = _dt.date.fromisoformat(current.get("since") or "")
+    except ValueError:
+        since = None
+    try:
+        until = _dt.date.fromisoformat(current.get("until") or "")
+    except ValueError:
+        until = None
+    history = ((store.get_profile(cid) or {}).get("cooking_day_menu_history") or {}).get("by_cuisine") or {}
+    shown = {str(name).casefold() for name in history.get(menu.get("cuisine"), []) if name}
+    return {"day": (today - since).days + 1 if since else 0,
+            "days": (until - since).days + 1 if since and until else 0,
+            "dishes": len(shown)}
 
 
 async def send_trip_dish(bot, cid, status=None, q=None):
