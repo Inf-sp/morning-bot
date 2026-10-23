@@ -98,5 +98,6 @@ def _no_trip_facts_ai(monkeypatch):
 
     monkeypatch.setattr(vacation, "trip_facts", lambda _cid, _topic: [])
     monkeypatch.setattr(vacation, "trip_dishes", lambda _cid: [])  # запас блюд поездки — тоже без AI
-    monkeypatch.setattr(vacation, "eating_out_line", lambda _cid: "")  # чаевые и курс — без сети
+    monkeypatch.setattr(vacation, "eating_out_line", lambda _cid, today=None: "")  # чаевые и курс — без сети
+    monkeypatch.setattr(vacation, "food_tips", lambda _cid: {})  # средний чек и часы еды — без AI
     yield

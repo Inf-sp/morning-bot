@@ -8,6 +8,7 @@ import vacation
 REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты дня; здесь нужен настоящий сбор
 REAL_TRIP_DISHES = vacation.trip_dishes
 REAL_EATING_OUT = vacation.eating_out_line
+REAL_FOOD_TIPS = vacation.food_tips
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -194,10 +195,33 @@ def test_trip_food_screen_footer_is_tipping_and_rate():
     assert menu_ui.trip_food_stats({"day": 2}) == "День 2"
 
 
-def test_eating_out_line_from_guide_tips_and_cached_rate(monkeypatch):
+def test_eating_out_line_rotates_tips_by_trip_day(monkeypatch):
+    from datetime import date
     monkeypatch.setattr(vacation, "eating_out_line", REAL_EATING_OUT)
-    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
-    monkeypatch.setattr(vacation, "guide", lambda _cid: {"tips": {"tipping": "10–15 % в кафе."}})
+    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA", "since": "2026-10-20"})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"tips": {"tipping": "10–15 % в кафе.",
+                                                                  "water": "Обычно можно пить."}})
     monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: {"currency": "ZAR", "symbol": "R"})
     monkeypatch.setattr(vacation, "_eur_rate", lambda _currency: 18.514)
-    assert vacation.eating_out_line("42") == "Чаевые: 10–15 % в кафе · 1 € = 18,51 R"
+    monkeypatch.setattr(vacation, "food_tips", lambda _cid: {"check": "150–250 R, около 8–14 €",
+                                                             "hours": "обед с 12 до 14, ужин после 19"})
+    days = [vacation.eating_out_line("42", date(2026, 10, 20 + index)) for index in range(5)]
+    assert days == [
+        "Чаевые: 10–15 % в кафе · 1 € = 18,51 R",
+        "Средний чек в кафе: 150–250 R, около 8–14 €",
+        "Вода из-под крана: обычно можно пить",
+        "Едят местные: обед с 12 до 14, ужин после 19",
+        "Чаевые: 10–15 % в кафе · 1 € = 18,51 R",
+    ]
+
+
+def test_food_tips_without_digits_are_dropped(monkeypatch):
+    real = REAL_FOOD_TIPS
+    monkeypatch.setattr(vacation, "food_tips", real)
+    saved = {"cc": "ZA"}
+    monkeypatch.setattr(vacation, "state", lambda _cid: saved)
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: {"check": "недорого", "hours": "ужин после 19"})
+    assert vacation.food_tips("42") == {"hours": "ужин после 19"}
