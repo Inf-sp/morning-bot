@@ -812,6 +812,21 @@ def _hours_from_amsterdam(lat, lon):
     return round((offset - home) / 3600, 1)
 
 
+def country_card_first_time(cid, today=None) -> bool:
+    """Блок «Страна» в «Моём дне» — только в день первого показа после включения отпуска (сводку того дня можно
+    открыть снова); дальше он живёт в Досуге. Первый показ запоминается в состоянии отпуска."""
+    current = state(cid)
+    if not current:
+        return False
+    today = (today or datetime.now(config.TZ).date()).isoformat()
+    shown = current.get("country_card_day")
+    if not shown:
+        # Поездка началась раньше — справку уже показали в её первый день (до появления этой отметки).
+        shown = current.get("since") or today
+        _save(cid, {**current, "country_card_day": shown})
+    return shown == today
+
+
 def country_facts(cid) -> dict:
     """Факты о стране отпуска; сбой источника убирает только свою строку."""
     place = store.get_settings(cid)

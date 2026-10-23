@@ -845,7 +845,7 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
             b.newline()
 
 
-def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="") -> MessageSpec:
+def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="", country=()) -> MessageSpec:
     """«🇿🇦 Досуг в отпуске · ЮАР»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
     во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
     без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом footer: твои артисты из этой
@@ -853,6 +853,12 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="")
     нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
+    if country:  # справка о стране — первой: столица, валюта, время, экстренный номер, розетки…
+        b.bold("Страна:")
+        b.newline()
+        for label, value in country:
+            b.labeled_line(label, value, lowercase=False)
+        b.spacer()
     data = data or {}
     if not any(data.get(key) for key in ("films", "series", "hits", "legends")):
         b.line("Собираю кино и музыку страны — загляни чуть позже.")

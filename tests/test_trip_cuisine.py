@@ -129,3 +129,26 @@ def test_trip_dishes_are_built_once_per_trip(monkeypatch):
     assert [dish["name"] for dish in fresh.trip_dishes("42")] == ["Билтонг"]
     assert fresh.trip_dishes("42")[0]["original"] == "Biltong" and len(calls) == 1
     assert "South Africa (ZA)" in calls[0]
+
+
+def test_country_card_in_my_day_only_on_first_day(monkeypatch):
+    from datetime import date
+    saved = {"cc": "ZA", "since": "2026-10-20"}
+    monkeypatch.setattr(vacation, "state", lambda _cid: dict(saved))
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: (saved.clear(), saved.update(value)))
+
+    assert vacation.country_card_first_time("42", date(2026, 10, 20))
+    assert vacation.country_card_first_time("42", date(2026, 10, 20))  # та же сводка, открыта снова
+    assert not vacation.country_card_first_time("42", date(2026, 10, 21))
+
+    saved.clear()
+    saved.update({"cc": "ZA", "since": "2026-10-18"})  # поездка до появления отметки — справку уже видели
+    assert not vacation.country_card_first_time("42", date(2026, 10, 23))
+
+
+def test_trip_leisure_screen_starts_with_country():
+    from ui import leisure as leisure_ui
+
+    msg = leisure_ui.trip_leisure_screen("ЮАР", {"films": [{"title": "Tsotsi"}]}, flag="🇿🇦",
+                                         country=[("Столица", "Pretoria"), ("Валюта", "ZAR (R)")])
+    assert msg.text.startswith("🇿🇦 Досуг в отпуске · ЮАР\n\nСтрана:\nСтолица: Pretoria\nВалюта: ZAR (R)\n\n")

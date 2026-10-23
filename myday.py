@@ -531,7 +531,9 @@ def _vacation_blocks(cid) -> dict:
     guide = vacation.guide(cid)
     import day_menu
     return {
-        "country_lines": vacation_ui.country_lines(vacation.country_facts(cid), guide),
+        # Справка о стране — только при первом показе после включения отпуска; дальше — в Досуге.
+        "country_lines": (vacation_ui.country_lines(vacation.country_facts(cid), guide)
+                          if vacation.country_card_first_time(cid) else []),
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
         "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
         # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.

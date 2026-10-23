@@ -649,8 +649,11 @@ def _trip_screen(cid, data):
     concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
     # Заголовок — страна (страны маршрута), а не город: «🇿🇦 Досуг в отпуске · ЮАР».
     where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or place.get("city") or cc
+    from ui import vacation as vacation_ui
+    country = vacation_ui.country_lines(vacation.country_facts(cid), vacation.guide(cid))  # справка о стране — первой
     return leisure_ui.trip_leisure_screen(where, data, sorted(events, key=lambda event: event.get("start", "")),
-                                          concerts, flag=util.flag_from_cc(cc), footer=_trip_footer(cid, cc))
+                                          concerts, flag=util.flag_from_cc(cc), footer=_trip_footer(cid, cc),
+                                          country=country)
 
 
 _TRIP_ARTISTS_SHOWN = 5
