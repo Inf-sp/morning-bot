@@ -812,6 +812,28 @@ def _hours_from_amsterdam(lat, lon):
     return round((offset - home) / 3600, 1)
 
 
+def eating_out_line(cid) -> str:
+    """«Чаевые: 10–15 % в кафе · 1 € = 18,51 R» — внизу Кухни в отпуске, что пригодится в кафе; без сети в
+    обработчике (справочник и курс — из кэша, обновляются фоном) и без AI; нет данных — ""."""
+    current = state(cid)
+    if not current:
+        return ""
+    parts = []
+    tipping = _text(((guide(cid).get("tips") or {}).get("tipping")), 120)
+    if tipping:
+        parts.append(f"Чаевые: {tipping[:1].lower()}{tipping[1:]}".rstrip("."))
+    cc = str(current.get("cc") or "").upper()
+    try:
+        record = _cached(config.COUNTRY_FACTS_KEY, cc, lambda: _country_record(cc)) or {}
+        rate = _eur_rate(record.get("currency"))
+    except Exception:
+        record, rate = {}, None
+    if rate:
+        symbol = record.get("symbol") or record.get("currency") or ""
+        parts.append(f"1 € = {rate:.2f}".replace(".", ",") + f" {symbol}".rstrip())
+    return " · ".join(parts)
+
+
 def country_card_first_time(cid, today=None) -> bool:
     """Блок «Страна» в «Моём дне» — только в день первого показа после включения отпуска (сводку того дня можно
     открыть снова); дальше он живёт в Досуге. Первый показ запоминается в состоянии отпуска."""

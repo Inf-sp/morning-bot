@@ -182,12 +182,20 @@ def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):
     assert sent[-1].text.startswith("🎚️ Моя библиотека") and rows[-1][0].callback_data == "set_mydata"
 
 
-def test_trip_food_screen_footer_is_trip_stats():
+def test_trip_food_screen_footer_is_tipping_and_rate():
     from ui import menu as menu_ui
 
     msg = menu_ui.day_menu({"cuisine": "local_za", "dishes": {}}, cuisine_label="Южноафриканская", flag="🇿🇦",
                            trip=True, trip_dish={"name": "Банни чоу", "note": "хлеб с карри"},
-                           fact="Бильтонг — вяленое мясо", trip_stats={"day": 4, "days": 14, "dishes": 6})
-    assert msg.text.endswith("День 4 из 14 · подобрано 6 местных блюд")
-    assert "Бильтонг" not in msg.text
-    assert menu_ui.trip_food_stats({"day": 2, "dishes": 1}) == "День 2 · подобрано 1 местное блюдо"
+                           fact="Бильтонг — вяленое мясо", trip_stats={"day": 4, "days": 14},
+                           eating_out="Чаевые: 10–15 % в кафе · 1 € = 18,51 R")
+    assert msg.text.endswith("Чаевые: 10–15 % в кафе · 1 € = 18,51 R") and "Бильтонг" not in msg.text
+    assert menu_ui.trip_food_stats({"day": 2}) == "День 2"
+
+
+def test_eating_out_line_from_guide_tips_and_cached_rate(monkeypatch):
+    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"tips": {"tipping": "10–15 % в кафе."}})
+    monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: {"currency": "ZAR", "symbol": "R"})
+    monkeypatch.setattr(vacation, "_eur_rate", lambda _currency: 18.514)
+    assert vacation.eating_out_line("42") == "Чаевые: 10–15 % в кафе · 1 € = 18,51 R"

@@ -291,22 +291,18 @@ def _short_intro(text) -> str:
 
 
 def trip_food_stats(stats) -> str:
-    """«День 4 из 14 · подобрано 6 местных блюд» — статистика поездки внизу Кухни в отпуске; нет данных — ""."""
+    """«День 4 из 14» — запасная строка внизу Кухни в отпуске, когда нет чаевых и курса; нет данных — ""."""
     stats = stats or {}
-    day, days, dishes = int(stats.get("day") or 0), int(stats.get("days") or 0), int(stats.get("dishes") or 0)
-    parts = []
-    if day > 0:
-        parts.append(f"День {day} из {days}" if days >= day else f"День {day}")
-    if dishes > 0:
-        parts.append(f"подобрано {dishes} {ru_plural(dishes, 'местное блюдо', 'местных блюда', 'местных блюд')}")
-    text = " · ".join(parts)
-    return text[:1].upper() + text[1:]
+    day, days = int(stats.get("day") or 0), int(stats.get("days") or 0)
+    if day <= 0:
+        return ""
+    return f"День {day} из {days}" if days >= day else f"День {day}"
 
 
-def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None):
+def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eating_out=""):
     """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни одним коротким предложением без повтора
     названия, одно блюдо жирным — «🥩 Билтонг · Biltong» (эмодзи и местное название, если есть) — с описанием, курсивом
-    статистика поездки (как в других разделах: «День 4 из 14 · подобрано 6 местных блюд»); нет её — факт дня о кухне;
+    что пригодится в кафе — «Чаевые: 10–15 % в кафе · 1 € = 18,51 R» (eating_out); нет — день поездки;
     кнопки «Другое блюдо» и «Главная» — в поездке не готовим, рецептов нет."""
     b = MessageBuilder()
     b.section(f"{flag} Пробуем в отпуске · {cuisine_label} кухня")
@@ -325,7 +321,7 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None):
     else:  # AI не дал блюда кухни страны — честно, без подмены домашней кухней
         b.spacer()
         b.line("Блюдо дня сейчас недоступно — загляни чуть позже.")
-    footer = trip_food_stats(trip_stats) or (_with_period(fact) if fact else "")
+    footer = str(eating_out or "").strip() or trip_food_stats(trip_stats)
     if footer:
         b.spacer()
         b.italic(footer)
@@ -337,7 +333,7 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None):
 
 
 def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None, trip=False, trip_dish=None,
-             fact="", trip_stats=None):
+             fact="", trip_stats=None, eating_out=""):
     """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (холодильник остался дома).
@@ -347,7 +343,7 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     if trip:
         return _trip_menu(trip_dish, cuisine_label=cuisine_label, intro=intro, flag=flag, fact=fact,
-                          trip_stats=trip_stats)
+                          trip_stats=trip_stats, eating_out=eating_out)
     b = MessageBuilder()
     b.section(f"{flag} Меню на сегодня · {cuisine_label} кухня")
     if intro:  # тон и настроение меню — сразу под заголовком, обычным текстом

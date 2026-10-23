@@ -93,11 +93,12 @@ def _day_menu_message(menu, cid=None):
         # В отпуске — одно блюдо, которое стоит попробовать, внизу курсивом — статистика поездки.
         trip_dish=day_menu.trip_dish(menu) if trip else None,
         trip_stats=_trip_food_stats(cid, menu) if trip else None,
+        eating_out=vacation.eating_out_line(cid) if trip else "",  # чаевые и курс — для кафе страны
     )
 
 
 def _trip_food_stats(cid, menu) -> dict:
-    """День поездки и сколько разных блюд кухни страны уже подобрано: {day, days, dishes}."""
+    """День поездки: {day, days}."""
     import datetime as _dt
     import config
     import vacation
@@ -111,11 +112,8 @@ def _trip_food_stats(cid, menu) -> dict:
         until = _dt.date.fromisoformat(current.get("until") or "")
     except ValueError:
         until = None
-    history = ((store.get_profile(cid) or {}).get("cooking_day_menu_history") or {}).get("by_cuisine") or {}
-    shown = {str(name).casefold() for name in history.get(menu.get("cuisine"), []) if name}
     return {"day": (today - since).days + 1 if since else 0,
-            "days": (until - since).days + 1 if since and until else 0,
-            "dishes": len(shown)}
+            "days": (until - since).days + 1 if since and until else 0}
 
 
 async def send_trip_dish(bot, cid, status=None, q=None):
