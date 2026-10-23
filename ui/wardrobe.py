@@ -525,3 +525,18 @@ def suitcase_city_not_found(city):
     b = MessageBuilder()
     b.line(f"Не нашёл город «{_clean_text(city)}». Напиши его ещё раз вместе с датами.")
     return b.build_stripped()
+
+
+def edit_item_prompt(item):
+    """«Изменить вещь»: что сейчас записано и как описать заново."""
+    item = item or {}
+    b = MessageBuilder()
+    b.section("✏️ Изменить вещь")
+    b.spacer()
+    b.labeled_line("Сейчас", _upper_first(_clean_text(item.get("name")) or "вещь"), lowercase=False)
+    if item.get("color"):
+        b.labeled_line("Цвет", item["color"], lowercase=False)
+    b.spacer()
+    b.line("Опиши вещь заново одним сообщением — она заменит прежнюю.")
+    b.italic("Например: голубая хлопковая футболка.")
+    return b.build_stripped()

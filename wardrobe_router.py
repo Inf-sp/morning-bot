@@ -4,6 +4,7 @@ import store
 import util
 import verify
 import wardrobe
+from ui import wardrobe as wardrobe_ui
 
 
 async def ingest(bot, cid, text):
@@ -95,8 +96,17 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data.startswith("w_item_"):
         await wardrobe.send_item_card(bot, cid, data[len("w_item_"):], q=q)
         return
-    if data.startswith("w_edit_"):
-        await wardrobe.send_item_card(bot, cid, data[len("w_edit_"):], q=q)
+    if data.startswith("w_edit_"):  # «Изменить»: вещь описывается заново одним сообщением и заменяет прежнюю
+        item_id = data[len("w_edit_"):]
+        _zone, _subcat, item = wardrobe._find_item(cid, item_id)
+        if not item:
+            await wardrobe.send_wardrobe_zones(bot, cid, q=q)
+            return
+        store.pending_input[str(cid)] = "wardrobe_edit"
+        store.wardrobe_edit_item[str(cid)] = item_id
+        msg = wardrobe_ui.edit_item_prompt(item)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                               reply_markup=wardrobe._kb([[("⬅️ Назад", f"w_item_{item_id}")]]))
         return
     # «Удалить» удаляет вещь сразу, без подтверждения; w_deleteok_ — старые кнопки.
     if data.startswith(("w_delete_", "w_deleteok_", "w_searchdel_")):

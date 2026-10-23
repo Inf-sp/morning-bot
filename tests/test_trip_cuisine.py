@@ -152,3 +152,31 @@ def test_trip_leisure_screen_starts_with_country():
     msg = leisure_ui.trip_leisure_screen("ЮАР", {"films": [{"title": "Tsotsi"}]}, flag="🇿🇦",
                                          country=[("Столица", "Pretoria"), ("Валюта", "ZAR (R)")])
     assert msg.text.startswith("🇿🇦 Досуг в отпуске · ЮАР\n\nСтрана:\nСтолица: Pretoria\nВалюта: ZAR (R)\n\n")
+
+
+def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):
+    import asyncio
+    import settings
+    shown = []
+
+    async def show(_bot, _cid, msg, reply_markup=None, query=None):
+        shown.append((msg, reply_markup))
+
+    monkeypatch.setattr(settings.rich_delivery, "show", show)
+    monkeypatch.setattr(settings.store, "get_learning_language", lambda _cid: "nl")
+    asyncio.run(settings.handle_callback(None, "42", "set_mydata"))
+    msg, markup = shown[-1]
+    assert msg.text.startswith("🗂 Мои данные")
+    assert [row[0].callback_data for row in markup.inline_keyboard] == [
+        "w_closet", "as_fridge_home", "a_dictlang_nl", "set_mylib", "set_home"]
+
+    import leisure_hub
+    sent = []
+
+    async def hub_show(_bot, _cid, msg, _q=None):
+        sent.append(msg)
+
+    monkeypatch.setattr(leisure_hub, "_show", hub_show)
+    asyncio.run(settings.handle_callback(None, "42", "set_mylib"))
+    rows = sent[-1].reply_markup.inline_keyboard
+    assert sent[-1].text.startswith("🎚️ Моя библиотека") and rows[-1][0].callback_data == "set_mydata"

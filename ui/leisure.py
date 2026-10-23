@@ -1007,7 +1007,7 @@ def premiere_card(feed, index=0) -> MessageSpec:
     return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 
-def leisure_library_menu() -> MessageSpec:
+def leisure_library_menu(back="m_leisure") -> MessageSpec:
     b = MessageBuilder()
     b.title("🎚️ Моя библиотека")
     b.line("Любимое кино и артисты — по ним подбираю рекомендации.")
@@ -1015,7 +1015,7 @@ def leisure_library_menu() -> MessageSpec:
         ("🎬 Фильмы и сериалы", "movie_favorites"),
         ("🎧 Музыка", "artist_favorites"),
         ("🎫 Концерты", "a_concerts_find"),
-    )).inline_keyboard, nav_row("m_leisure")]))
+    )).inline_keyboard, nav_row(back)]))
 
 
 # ---------- «Новинка» в меню «Выбрать жанр» ----------

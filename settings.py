@@ -329,7 +329,9 @@ async def send_home(bot, cid, q=None):
     import vacation
     trip = vacation.state(cid)
     if trip:  # в отпуске — только то, что нужно в поездке: вернуться из отпуска и уведомления
-        rows = [rows[3], [vacation_button(cid)], rows[-1]]  # «Вернуться из отпуска» — красная, над «Главной»
+        # «Мои данные» — шкаф, холодильник, словарь, библиотека: поправить, не выходя из отпуска.
+        rows = [[InlineKeyboardButton("🗂 Мои данные", callback_data="set_mydata")], rows[3],
+                [vacation_button(cid)], rows[-1]]  # «Вернуться из отпуска» — красная, над «Главной»
         msg = settings_ui.settings_trip(_trip_place_line(cid, data), (trip.get("home") or {}).get("city", ""),
                                         _trip_language_line(cid), settings_summary(cid))
     else:
@@ -389,6 +391,20 @@ def preferences_summary(cid) -> list:
         ("Музыка", ", ".join(music[key] for key in leisure_music._music_styles(cid)) or _NOT_SET),
         ("Кино", " · ".join(part for part in movie if part) or _NOT_SET),
     ]
+
+
+async def send_my_data(bot, cid, q=None):
+    """«🗂 Мои данные»: свои данные разделов в одном месте — в отпуске их можно поправить без выхода из него."""
+    import learning_dictionary
+    code = learning_dictionary._active_language_code(cid)
+    rows = [
+        [InlineKeyboardButton("👔 Мой шкаф", callback_data="w_closet")],
+        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="as_fridge_home")],
+        [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{code}")],
+        [InlineKeyboardButton("🎬 Моя библиотека", callback_data="set_mylib")],
+        nav_row("set_home"),
+    ]
+    await rich_delivery.show(bot, cid, settings_ui.my_data(), reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 
 def vacation_button(cid):
@@ -1145,6 +1161,12 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "set_fridge_g":
         import menu
         await menu.send_food_menu(bot, cid)
+    elif data == "set_mydata":
+        await send_my_data(bot, cid, q)
+    elif data == "set_mylib":  # библиотека из «Моих данных»: в отпуске lz_lib ведёт на Досуг поездки
+        import leisure_hub
+        from ui import leisure as leisure_ui
+        await leisure_hub._show(bot, cid, leisure_ui.leisure_library_menu(back="set_mydata"), q)
     elif data == "set_notif":
         await send_notif(bot, cid, q)
     elif data == "set_notif_new":

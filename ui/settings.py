@@ -129,3 +129,11 @@ def mydata_section(title, hint=""):
 
 def admin_only():
     return MessageSpec(text="❌ Только для администратора.")
+
+
+def my_data():
+    b = MessageBuilder()
+    b.section("🗂 Мои данные")
+    b.spacer()
+    b.italic("Шкаф, холодильник, словарь и библиотека — поправь, не выходя из отпуска.")
+    return b.build_stripped()
