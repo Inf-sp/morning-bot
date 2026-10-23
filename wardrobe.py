@@ -666,9 +666,9 @@ async def send_item_card(bot, cid, item_id, q=None):
         [("Собрать образ", f"w_with_{item_id}")],
         [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
     ])
-    # «Изменить» — описать заново (цвет, материал, название); зелёная явно, чтобы стоять под «Удалить», а не наверху.
-    edit = [InlineKeyboardButton("✏️ Изменить", callback_data=f"w_edit_{item_id}", api_kwargs={"style": "success"})]
-    kb = InlineKeyboardMarkup([kb.inline_keyboard[0], edit, *kb.inline_keyboard[1:]])
+    # «Изменить» — описать заново (цвет, материал, название); синяя, прямо над «Назад | Главная».
+    edit = [InlineKeyboardButton("✏️ Изменить", callback_data=f"w_edit_{item_id}", api_kwargs={"style": "primary"})]
+    kb = InlineKeyboardMarkup([*kb.inline_keyboard[:-1], edit, kb.inline_keyboard[-1]])
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
