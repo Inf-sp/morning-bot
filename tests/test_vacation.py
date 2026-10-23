@@ -365,7 +365,7 @@ def test_settings_on_vacation_keep_only_return_home_and_notifications(monkeypatc
     saved["vacation"] = {"home": HOME, "until": "", "cc": "ZA"}
     asyncio.run(settings.send_home(bot, "42"))
     trip = [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard]
-    assert trip == [["set_vachome"], ["set_notif"], ["m_menu"]]  # без предпочтений, города и экспорта
+    assert trip == [["set_notif"], ["set_vachome"], ["m_menu"]]  # без предпочтений, города и экспорта
 
 
 def test_trip_phrases_cover_every_day_of_the_trip_without_repeats(monkeypatch):

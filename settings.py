@@ -329,7 +329,7 @@ async def send_home(bot, cid, q=None):
     import vacation
     trip = vacation.state(cid)
     if trip:  # в отпуске — только то, что нужно в поездке: вернуться из отпуска и уведомления
-        rows = [[vacation_button(cid)], rows[3], rows[-1]]
+        rows = [rows[3], [vacation_button(cid)], rows[-1]]  # «Вернуться из отпуска» — красная, над «Главной»
         msg = settings_ui.settings_trip(_trip_place_line(cid, data), (trip.get("home") or {}).get("city", ""),
                                         _trip_language_line(cid), settings_summary(cid))
     else:
