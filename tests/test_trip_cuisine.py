@@ -7,6 +7,7 @@ import vacation
 
 REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты дня; здесь нужен настоящий сбор
 REAL_TRIP_DISHES = vacation.trip_dishes
+REAL_EATING_OUT = vacation.eating_out_line
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -194,6 +195,7 @@ def test_trip_food_screen_footer_is_tipping_and_rate():
 
 
 def test_eating_out_line_from_guide_tips_and_cached_rate(monkeypatch):
+    monkeypatch.setattr(vacation, "eating_out_line", REAL_EATING_OUT)
     monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
     monkeypatch.setattr(vacation, "guide", lambda _cid: {"tips": {"tipping": "10–15 % в кафе."}})
     monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: {"currency": "ZAR", "symbol": "R"})

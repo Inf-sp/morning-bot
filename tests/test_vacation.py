@@ -468,14 +468,16 @@ def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):
     assert bot_callbacks._legacy_alias("m_myday", "42") == "m_myday"
 
 
-def test_local_cuisine_menu_has_an_intro_like_home_cuisines(monkeypatch):
+def test_trip_cuisine_screen_has_no_repeating_intro(monkeypatch):
     import menu
     saved, _places = _env(monkeypatch, CAPE)
     saved["vacation"] = {"home": HOME, "cc": "ZA", "guide": {"v": 5, "cuisine_ru": "Южноафриканская",
                                                              "cuisine_intro": "Мясо на открытом огне и пряные карри."}}
     text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
                                         "dishes": {"lunch": {"name": "Брай", "note": "мясо на открытом огне"}}}, "42").text
-    assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне и пряные карри.")
+    # Описание кухни каждый день одинаковое — на экране отпуска его нет, сразу блюдо.
+    assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай\n")
+    assert "пряные карри" not in text
 
 
 def test_country_hits_are_tracks_of_local_artists_from_the_deezer_chart(monkeypatch):
@@ -546,11 +548,11 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
         ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
     # Одно блюдо — то, что стоит попробовать сегодня (top), жирным, ниже описание; без «Завтрак / Обед / Ужин».
-    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nМясо на открытом огне.\n\n🔥 Брай · Braai\n"
+    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай · Braai\n"
                         "Мясо на открытом огне. Главная традиция выходных.")  # факта о кухне внизу нет — там статистика поездки
     utf16 = msg.text.encode("utf-16-le")  # смещения Telegram — в UTF-16: флаг 🇿🇦 занимает 4 единицы
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
-    assert "🔥 Брай · Braai" in bold and "Завтрак" not in msg.text and "Обед" not in msg.text
+    assert "Брай · Braai" in bold and "🔥" not in msg.text and "Завтрак" not in msg.text and "Обед" not in msg.text
 
 
 def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(monkeypatch):

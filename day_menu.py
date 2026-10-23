@@ -237,8 +237,10 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
 _TRIP_DISH_RULES = (
     "name — название блюда по-русски, как его принято называть («Билтонг»); original — как его называют в стране, "
     "латиницей («Biltong»), пусто, если совпадает с name; emoji — один эмодзи еды, ближе всего к блюду (🥩); "
-    "note — одно-два коротких предложения по-русски, до 200 символов: что это за блюдо и чем оно интересно, "
-    "верно по сути (способ готовки, основа), не выдумывай (брай — мясо на открытом огне, а не тушёное).\n"
+    "note — одно-два коротких предложения по-русски, до 200 символов, живо и вкусно, как совет друга, который тут "
+    "жил: какой вкус и текстура, как и где его едят местные, чем удивит; без штампов («ароматный», «популярный», "
+    "«традиционное блюдо»); верно по сути (способ готовки, основа), не выдумывай (брай — мясо на открытом огне, "
+    "а не тушёное).\n"
 )
 
 
@@ -267,7 +269,7 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 3, "trip": trip,
+                "language": "ru", "schema_version": 4, "trip": trip,
             },
         )
     except Exception as error:

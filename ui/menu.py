@@ -306,14 +306,10 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
     кнопки «Другое блюдо» и «Главная» — в поездке не готовим, рецептов нет."""
     b = MessageBuilder()
     b.section(f"{flag} Пробуем в отпуске · {cuisine_label} кухня")
-    intro = _short_intro(intro)
-    if intro:
-        b.spacer()
-        b.line(intro)
+    # Описания кухни нет — каждый день одно и то же; главное — блюдо: название и местное название без эмодзи.
     if (dish or {}).get("name"):
         b.spacer()
-        b.bold(" ".join(part for part in (dish.get("emoji"), " · ".join(
-            part for part in (dish["name"], dish.get("original")) if part)) if part))
+        b.bold(" · ".join(part for part in (dish["name"], dish.get("original")) if part))
         b.newline()
         note = _cooking_text(dish.get("note"))
         if note:
