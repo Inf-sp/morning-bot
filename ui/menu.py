@@ -208,19 +208,16 @@ def learning_menu(home: dict):
 
 
 def _trip_learning(home: dict):
-    """«🇿🇦 Обучение в отпуске · Африкаанс»: «Ситуация: транспорт», ниже цитатой три фразы с переводом и
-    произношением через пустую строку; курсивом факт дня о языке. Грамматики и строки «Произношение» в поездке нет."""
+    """«🇿🇦 Обучение в отпуске · Африкаанс»: «Ситуация: транспорт», ниже три фразы обычным текстом строка к строке —
+    фраза жирным → перевод (произношение); курсивом факт дня о языке. Грамматики и строки «Произношение» нет."""
     b = MessageBuilder()
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
     situation = home.get("situation") or {}
     if situation.get("phrases"):
         b.labeled_line("Ситуация", str(situation.get("title") or "").strip())  # «Ситуация: транспорт»
-        lines = []
-        for phrase in situation["phrases"]:
-            say = f" ({phrase['say']})" if phrase.get("say") else ""
-            lines.append(f"{phrase['text']} → {phrase['ru']}{say}")
-        b.quote("\n\n".join(lines))  # фразы диалога — через пустую строку
-        b.newline()
+        for phrase in situation["phrases"]:  # обычным текстом, строка к строке: фраза жирным → перевод (произношение)
+            b.bold(str(phrase["text"]).strip())
+            b.line(f" → {phrase['ru']}" + (f" ({phrase['say']})" if phrase.get("say") else ""))
     else:
         b.line("Готовлю фразы для поездки — загляни чуть позже.")
     if str(home.get("language_fact") or "").strip():

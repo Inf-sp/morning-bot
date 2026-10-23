@@ -118,13 +118,13 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
 
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
-    # Не грамматика, а что пригодится в поездке: «Ситуация: …» одной строкой, ниже цитатой фразы через пустую строку.
+    # Не грамматика, а что пригодится в поездке: «Ситуация: …», ниже фразы обычным текстом строка к строке.
     assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nСитуация: ситуация ")
-    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\n\nDankie! → Спасибо! (данки)\n" in msg.text
+    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\nDankie! → Спасибо! (данки)\n" in msg.text
     utf16 = msg.text.encode("utf-16-le")
-    quote = next(utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")
-                 for e in msg.entities if e.type == "blockquote")
-    assert quote.startswith("Een koffie") and quote.endswith("Dankie! → Спасибо! (данки)")  # фразы — в цитате
+    bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
+    assert "Een koffie, asseblief" in bold and "Dankie!" in bold  # фраза жирным
+    assert not any(e.type == "blockquote" for e in msg.entities)  # без цитаты
     assert "Произношение" not in msg.text and "Грамматика" not in msg.text  # в поездке — только фразы и факт
     assert msg.text.endswith("Африкаанс вырос из нидерландского XVII века.")
     assert [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row][0] == "vac_train"
