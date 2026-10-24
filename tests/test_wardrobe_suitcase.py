@@ -534,3 +534,29 @@ def test_raincoat_is_swapped_for_a_windbreaker_when_rain_is_rare():
     # Слой на прохладные вечера чек-лист тоже берёт не дождевик.
     picked, _gaps = wardrobe_suitcase._cover_weather(clothes, [0, 1, 2], {**dry, "daily": [{"tmin": 10}]})
     assert clothes[picked[-1]][1]["name"] == "Чёрная ветровка"
+
+
+def test_another_look_picks_most_different_and_not_shown(monkeypatch):
+    import wardrobe_suitcase as ws
+
+    def outfit(*names):
+        return [{"name": name, "zone": "Верх"} for name in names]
+
+    options = [outfit("Футболка", "Джинсы", "Кеды"), outfit("Футболка", "Джинсы", "Сандалии"),
+               outfit("Рубашка", "Шорты", "Сандалии"), outfit("Футболка", "Шорты", "Кеды")]
+    state = {"looks": [{"date": "2026-10-24", "items": ["Футболка", "Джинсы", "Кеды"]}]}
+    monkeypatch.setattr(ws, "plan", lambda _cid: [dict(look) for look in state["looks"]])
+    monkeypatch.setattr(ws, "saved_suitcase", lambda _cid: {"result": {"Верх": ["x"]}})
+    monkeypatch.setattr(ws, "_flat", lambda _result: [("Верх", "x")])
+    monkeypatch.setattr(ws, "_suitcase_closet", lambda *_a: {})
+    monkeypatch.setattr(ws.store, "load_wardrobe", lambda _cid: {})
+    monkeypatch.setattr(ws, "_day_outfits", lambda _w, _day: options)
+    monkeypatch.setattr(ws, "_names_key", lambda _result: "k")
+    monkeypatch.setattr(ws, "_save_plan", lambda _cid, _key, plan: state.update(looks=plan["looks"]))
+    monkeypatch.setattr(ws, "outfit_display_order", lambda item: 0, raising=False)
+
+    shown = []
+    for _press in range(4):
+        shown.append(set(ws.another_look("42", 0)[0]["items"]))
+    assert shown[0] == {"Рубашка", "Шорты", "Сандалии"}  # самый непохожий, а не соседний «Сандалии вместо кед»
+    assert len({frozenset(look) for look in shown[:3]}) == 3  # пока есть непоказанные — без повторов

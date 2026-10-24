@@ -552,11 +552,20 @@ def another_look(cid, index) -> list:
                for outfit in _day_outfits(_suitcase_closet(store.load_wardrobe(cid), names), looks[index])]
     options = [[item.get("name") for item in outfit] for outfit in outfits]
     current = set(looks[index].get("items") or [])
-    position = next((number for number, option in enumerate(options) if set(option) == current), -1)
-    fresh = next((number for number in [*range(position + 1, len(options)), *range(position + 1)]
-                  if set(options[number]) != current), None)
+    # Соседние лучшие комплекты отличаются одной вещью — «Ещё вариант» по порядку выглядел однообразно. Берём самый
+    # непохожий на текущий; уже показанные в этот день — в конец; все показаны — круг заново.
+    seen = [set(names) for names in looks[index].get("seen") or []]
+    if all(any(set(option) == shown for shown in seen) for option in options if set(option) != current):
+        seen = []
+    candidates = [number for number, option in enumerate(options) if set(option) != current]
+    fresh = max(candidates, key=lambda number: (
+        not any(set(options[number]) == shown for shown in seen),
+        len(set(options[number]) - current),
+        -number,
+    ), default=None)
     if fresh is not None:
-        look = {**looks[index], "items": options[fresh]}
+        shown = [sorted(names) for names in [*seen, current]][-_LOOK_CHOICES:]
+        look = {**looks[index], "items": options[fresh], "seen": shown}
         looks = [*looks[:index], look, *looks[index + 1:]]
         key = _names_key(saved["result"])
         _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
