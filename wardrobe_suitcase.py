@@ -619,8 +619,8 @@ def _draft_kb(basic=False):
 def _saved_kb(basic=False):
     """Сохранённый чемодан: «Добавить ещё вещь» кладёт и убирает вещи сразу в нём (w_pack_add_s) — отдельного
     «Пересобрать» нет; у базового набора пустого шкафа добавлять нечего."""
-    rows = [] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add_s")],
-                             [InlineKeyboardButton("👕 Образы на каждый день", callback_data="w_pack_looks")]]
+    # «Образы на каждый день» убраны из «Мой чемодан»; старая кнопка w_pack_looks в истории чата работает.
+    rows = [] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add_s")]]
     return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("❌ Удалить подборку", callback_data="w_pack_del")],
                                  nav_row("m_wardrobe")])
 

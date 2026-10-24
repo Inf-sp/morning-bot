@@ -151,7 +151,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n"  # без «✅ Чемодан сохранён»
                                     "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
 
     # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
@@ -178,7 +178,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_looks"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
