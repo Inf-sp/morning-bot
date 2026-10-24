@@ -118,8 +118,9 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
 
     home = learning.build_learning_home("42")
     msg = menu_ui.learning_menu(home)
-    # Не грамматика, а что пригодится в поездке: «Ситуация: …», ниже фразы обычным текстом строка к строке.
-    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nСитуация: ситуация ")
+    # Не грамматика, а что пригодится в поездке: без строки «Ситуация» — сразу фразы строка к строке (запаса
+    # поездки нет — фразы ситуации дня и гида, до пяти).
+    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nEen koffie") and "Ситуация" not in msg.text
     assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\nDankie! → Спасибо! (данки)\n" in msg.text
     utf16 = msg.text.encode("utf-16-le")
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]

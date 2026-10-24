@@ -9,6 +9,7 @@ REAL_TRIP_FACTS = vacation.trip_facts  # conftest подменяет факты 
 REAL_TRIP_DISHES = vacation.trip_dishes
 REAL_EATING_OUT = vacation.eating_out_line
 REAL_FOOD_TIPS = vacation.food_tips
+REAL_TRAVEL_PHRASES = vacation.travel_phrases
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -225,3 +226,37 @@ def test_food_tips_without_digits_are_dropped(monkeypatch):
     monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
     monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: {"check": "недорого", "hours": "ужин после 19"})
     assert vacation.food_tips("42") == {"hours": "ужин после 19"}
+
+def test_travel_phrases_built_for_whole_trip_in_batches_and_five_per_day(monkeypatch):
+    from datetime import date
+    monkeypatch.setattr(vacation, "travel_phrases", REAL_TRAVEL_PHRASES)
+    saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-29"}  # 10 дней — 50 фраз, два запроса
+    monkeypatch.setattr(vacation, "state", lambda _cid: saved)
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"language_ru": "Африкаанс"})
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
+    prompts = []
+
+    def fake(prompt, *_a, **_k):
+        start = len(prompts) * 25
+        prompts.append(prompt)
+        return {"phrases": [{"text": f"Frase {start + i}", "ru": f"Фраза {start + i}", "say": "ф"} for i in range(25)]}
+
+    monkeypatch.setattr(vacation.ai, "llm_json", fake)
+    items = vacation.travel_phrases("42")
+    assert len(items) == 50 and len(prompts) == 2
+    assert "Не базовые приветствия" in prompts[0] and "Не повторяй" in prompts[1] and "Frase 0" in prompts[1]
+    assert vacation.travel_phrases("42") == items and len(prompts) == 2  # запас уже на весь отпуск — без запросов
+    day1 = vacation.phrases_today("42", date(2026, 10, 20))
+    day2 = vacation.phrases_today("42", date(2026, 10, 21))
+    assert [p["text"] for p in day1] == [f"Frase {i}" for i in range(5)]
+    assert [p["text"] for p in day2] == [f"Frase {i}" for i in range(5, 10)]
+
+
+def test_trip_learning_screen_has_no_situation_line():
+    from ui import menu as menu_ui
+
+    msg = menu_ui._trip_learning({"flag": "🇿🇦", "language": "Африкаанс", "phrases": [
+        {"text": "Hoeveel kos dit?", "ru": "Сколько это стоит?", "say": "хуфеел кос дит"}]})
+    assert msg.text == "🇿🇦 Обучение в отпуске · Африкаанс\n\nHoeveel kos dit? → Сколько это стоит? (хуфеел кос дит)"

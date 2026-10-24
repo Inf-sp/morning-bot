@@ -208,14 +208,13 @@ def learning_menu(home: dict):
 
 
 def _trip_learning(home: dict):
-    """«🇿🇦 Обучение в отпуске · Африкаанс»: «Ситуация: транспорт», ниже три фразы обычным текстом строка к строке —
-    фраза жирным → перевод (произношение); курсивом факт дня о языке. Грамматики и строки «Произношение» нет."""
+    """«🇿🇦 Обучение в отпуске · Африкаанс»: сразу 5 ходовых фраз дня обычным текстом строка к строке — фраза жирным
+    → перевод (произношение); курсивом факт дня о языке. Строки «Ситуация», грамматики и «Произношение» нет."""
     b = MessageBuilder()
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
-    situation = home.get("situation") or {}
-    if situation.get("phrases"):
-        b.labeled_line("Ситуация", str(situation.get("title") or "").strip())  # «Ситуация: транспорт»
-        for phrase in situation["phrases"]:  # обычным текстом, строка к строке: фраза жирным → перевод (произношение)
+    phrases = home.get("phrases") or (home.get("situation") or {}).get("phrases") or []
+    if phrases:
+        for phrase in phrases:
             b.bold(str(phrase["text"]).strip())
             b.line(f" → {phrase['ru']}" + (f" ({phrase['say']})" if phrase.get("say") else ""))
     else:
