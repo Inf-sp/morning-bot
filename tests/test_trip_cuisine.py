@@ -289,3 +289,14 @@ def test_trip_leisure_country_has_no_water_and_languages(monkeypatch):
     monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
     leisure_hub._trip_screen("42", {})
     assert captured["country"] == [("Столица", "Pretoria"), ("Розетки", "тип M")]
+
+
+def test_my_day_trip_lines_are_short():
+    from ui import myday as myday_ui
+
+    long_fact = ("Столовая гора в Кейптауне — одна из старейших гор мира, ей около 260 миллионов лет, "
+                 "и она входит в число новых семи чудес природы")
+    msg = myday_ui.day_summary("Сб, 24 окт", "Cape Town", vacation={
+        "try_dish": {"name": "Банни чоу", "note": "хлеб с карри"}, "country_fact": long_fact})
+    assert "🍽 Попробовать сегодня: Банни чоу\n" in msg.text and "хлеб с карри" not in msg.text
+    assert "💡 Факт дня: Столовая гора в Кейптауне — одна из старейших гор мира, ей около 260 миллионов лет." in msg.text

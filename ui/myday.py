@@ -87,6 +87,21 @@ def _premiere_line(b: MessageBuilder, item) -> None:
     b.spacer()
 
 
+_FACT_MAX = 110
+
+
+def _short_fact(text) -> str:
+    """Факт дня в сводке — коротко: длинный режется по «, » / « — » / «; » не дальше _FACT_MAX, иначе по слову."""
+    text = " ".join(str(text or "").split()).rstrip(".")
+    if len(text) <= _FACT_MAX:
+        return text
+    head = text[:_FACT_MAX]
+    cut = max(head.rfind(", "), head.rfind(" — "), head.rfind("; "))
+    if cut >= 40:
+        return head[:cut]
+    return head.rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
+
+
 def day_summary(
     header,
     city,
@@ -180,19 +195,16 @@ def day_summary(
 
     # В отпуске — блюдо, которое стоит попробовать сегодня (главное в меню Кухни).
     dish = vacation.get("try_dish") or {}
-    if str(dish.get("name") or "").strip():
-        note = str(dish.get("note") or "").strip()
+    if str(dish.get("name") or "").strip():  # только название — описание блюда есть в Кухне
         b.text_line("🍽 ")
-        b.label("Попробовать сегодня")
-        b.text_line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
-        b.newline()
+        b.labeled_line("Попробовать сегодня", str(dish["name"]).strip(), lowercase=False)
         b.spacer()
 
     # В отпуске — интересный факт о стране, свой на каждый день поездки.
     country_fact = str(vacation.get("country_fact") or "").strip()
     if country_fact:
         b.text_line("💡 ")
-        b.labeled_line("Факт дня", finish_dot(country_fact), lowercase=False)
+        b.labeled_line("Факт дня", finish_dot(_short_fact(country_fact)), lowercase=False)
         b.spacer()
 
     # Премьера дня из Досуга — только сегодняшняя, одна строка.
