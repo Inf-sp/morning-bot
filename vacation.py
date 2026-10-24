@@ -1289,6 +1289,41 @@ def phrases_today(cid, today=None) -> list:
     return out[:_PHRASES_PER_DAY]
 
 
+def languages_fact(cid) -> str:
+    """«ЮАР: 11 официальных языков — африкаанс, английский, …» — факт о языках страны для круга фактов Обучения;
+    справочник — из кэша (без сети в обработчике), названия по-русски из гида. Нет данных — ""."""
+    import countries
+    cc = str((state(cid) or {}).get("cc") or "").upper()
+    try:
+        record = _cached(config.COUNTRY_FACTS_KEY, cc, lambda: _country_record(cc)) or {}
+    except Exception:
+        record = {}
+    translated = guide(cid).get("languages_ru") or {}
+    names = [translated.get(name, "") for name in record.get("languages") or []]
+    if not names or not all(names):  # нет перевода хоть одного языка — без смеси «африкаанс, English»
+        return ""
+    where = countries.name_ru(cc) or "В стране"  # именительный падеж: «ЮАР: …», без «в Испания»
+    count = len(names)
+    if count == 1:
+        return f"{where}: один официальный язык — {names[0]}"
+    word = "официальных языка" if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14) else "официальных языков"
+    return f"{where}: {count} {word} — {', '.join(names)}"
+
+
+def language_fact_today(cid, today=None) -> str:
+    """Факт дня о языке для низа Обучения в отпуске: факты о языке и последним в круге — языки страны."""
+    base = trip_facts(cid, "language") or [fact for fact in [guide(cid).get("language_fact") or ""] if fact]
+    facts = [*base, *([line] if (line := languages_fact(cid)) else [])]
+    if not facts:
+        return ""
+    today = today or datetime.now(config.TZ).date()
+    try:
+        index = (today - date.fromisoformat((state(cid) or {}).get("since") or "")).days
+    except ValueError:
+        index = today.toordinal()
+    return facts[max(0, index) % len(facts)]
+
+
 def learning_home(cid) -> dict | None:
     """Данные экрана «Обучение» на время отпуска или None — обычное обучение."""
     if not replaces_learning(cid):
@@ -1298,7 +1333,7 @@ def learning_home(cid) -> dict | None:
     return {"vacation": True, "has_material": True, "language": found.get("language_ru") or "Местный язык",
             "flag": util.flag_from_cc((state(cid) or {}).get("cc", "")) or "🌍",
             "phrases": phrases_today(cid),  # 5 ходовых фраз дня — без строки «Ситуация»
-            "language_fact": fact_of_day(cid, "language") or found.get("language_fact") or ""}  # свой на каждый день
+            "language_fact": language_fact_today(cid)}  # свой на каждый день
 
 
 async def send_quiz(bot, cid):

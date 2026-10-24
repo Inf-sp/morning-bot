@@ -260,3 +260,32 @@ def test_trip_learning_screen_has_no_situation_line():
     msg = menu_ui._trip_learning({"flag": "🇿🇦", "language": "Африкаанс", "phrases": [
         {"text": "Hoeveel kos dit?", "ru": "Сколько это стоит?", "say": "хуфеел кос дит"}]})
     assert msg.text == "🇿🇦 Обучение в отпуске · Африкаанс\n\nHoeveel kos dit? → Сколько это стоит? (хуфеел кос дит)"
+
+
+def test_languages_fact_is_last_in_language_facts_rotation(monkeypatch):
+    from datetime import date
+    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA", "since": "2026-10-20"})
+    monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: {"languages": ["Afrikaans", "English", "Zulu"]})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {"languages_ru": {"Afrikaans": "африкаанс",
+                                                                          "English": "английский", "Zulu": "зулу"}})
+    monkeypatch.setattr(vacation, "trip_facts", lambda _cid, _topic: ["Факт 1", "Факт 2"])
+    days = [vacation.language_fact_today("42", date(2026, 10, 20 + index)) for index in range(4)]
+    assert days == ["Факт 1", "Факт 2", "ЮАР: 3 официальных языка — африкаанс, английский, зулу", "Факт 1"]
+
+
+def test_trip_leisure_country_has_no_water_and_languages(monkeypatch):
+    import leisure_hub
+    from ui import vacation as vacation_ui
+    monkeypatch.setattr(vacation_ui, "country_lines", lambda *_a: [
+        ("Столица", "Pretoria"), ("Языки", "африкаанс"), ("Вода из-под крана", "можно"), ("Розетки", "тип M")])
+    monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
+    captured = {}
+    monkeypatch.setattr(leisure_hub.leisure_ui, "trip_leisure_screen",
+                        lambda *a, **k: captured.update(k) or None)
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(leisure_hub, "_trip_footer", lambda *_a: "")
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
+    leisure_hub._trip_screen("42", {})
+    assert captured["country"] == [("Столица", "Pretoria"), ("Розетки", "тип M")]
