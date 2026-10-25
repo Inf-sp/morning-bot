@@ -361,13 +361,15 @@ def _speed_range(values):
     return str(high) if low == high else f"{low}–{high}"
 
 
-def _clock(value):
+def _clock(value, tz=None):
+    """«07:12» в часовом поясе tz (в отпуске — места поездки); без tz — TZ."""
     try:
         parsed = datetime.fromisoformat(str(value))
     except (TypeError, ValueError):
         return ""
     # Провайдер отдаёт наивное время уже в TZ; astimezone() считал бы его временем сервера (UTC на VM).
-    return (parsed.astimezone(TZ) if parsed.tzinfo else parsed).strftime("%H:%M")
+    parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=TZ)
+    return parsed.astimezone(tz or TZ).strftime("%H:%M")
 
 
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
@@ -494,8 +496,10 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             }
             for p in forecast_periods(data, dt)
         ]
-        sunrise = _clock((d.get("sunrise") or [""])[0])
-        sunset = _clock((d.get("sunset") or [""])[0])
+        import vacation
+        local = await asyncio.to_thread(vacation.local_tz, cid)  # в отпуске — время места, не Амстердама
+        sunrise = _clock((d.get("sunrise") or [""])[0], local)
+        sunset = _clock((d.get("sunset") or [""])[0], local)
         sunrise_line = (
             f"Восход {sunrise} → Закат {sunset}" if sunrise and sunset
             else f"Восход {sunrise}" if sunrise
@@ -503,7 +507,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             else ""
         )
         # Вечерний золотой час — по координатам города, без внешних API; идёт в «Полезно».
-        golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(TZ).date(), TZ)
+        golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(local).date(), local)
         sunset_line = ""
         advice = _qualitative_outlook([day_conditions(data, 1)], "Завтра")
         if golden:

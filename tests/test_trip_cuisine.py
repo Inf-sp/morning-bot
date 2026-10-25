@@ -10,6 +10,7 @@ REAL_TRIP_DISHES = vacation.trip_dishes
 REAL_EATING_OUT = vacation.eating_out_line
 REAL_FOOD_TIPS = vacation.food_tips
 REAL_TRAVEL_PHRASES = vacation.travel_phrases
+REAL_LOCAL_TZ = vacation.local_tz
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -300,3 +301,28 @@ def test_my_day_trip_lines_are_short():
         "try_dish": {"name": "Банни чоу", "note": "хлеб с карри"}, "country_fact": long_fact})
     assert "🍽 Попробовать сегодня: Банни чоу\n" in msg.text and "хлеб с карри" not in msg.text
     assert "💡 Факт дня: Столовая гора в Кейптауне — одна из старейших гор мира, ей около 260 миллионов лет." in msg.text
+
+
+def test_sunset_and_golden_hour_use_trip_timezone(monkeypatch):
+    from datetime import date
+    from zoneinfo import ZoneInfo
+    import sun
+    import weather
+
+    cape = ZoneInfo("Africa/Johannesburg")
+    # Прогноз — во времени Амстердама (после перевода часов UTC+1); в Кейптауне UTC+2 — на час больше.
+    assert weather._clock("2026-10-25T18:12", cape) == "19:12"
+    assert weather._clock("2026-10-25T18:12") == "18:12"
+    golden_cape = sun.evening_golden_range(-33.92, 18.42, date(2026, 10, 25), cape)
+    golden_ams = sun.evening_golden_range(-33.92, 18.42, date(2026, 10, 25), weather.TZ)
+    assert golden_cape and golden_ams and golden_cape != golden_ams
+
+
+def test_local_tz_is_home_timezone_when_not_on_trip(monkeypatch):
+    monkeypatch.setattr(vacation, "local_tz", REAL_LOCAL_TZ)
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+    assert vacation.local_tz("42") is vacation.config.TZ
+    monkeypatch.setattr(vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(vacation.store, "get_settings", lambda _cid: {"lat": -33.92, "lon": 18.42})
+    monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: "Africa/Johannesburg")
+    assert str(vacation.local_tz("42")) == "Africa/Johannesburg"

@@ -610,7 +610,9 @@ def _build_day_text(cid, *, refresh_current=False):
         sky_part = "" if rain_part else f" и {weather.sky_word(clouds, code)}"
         weather_line = (f"до {tmax:+.0f}°C{sky_part}" + (f" · {rain_part}" if rain_part else "")
                         + f" · {wind_part}")
-        golden = (sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(config.TZ).date(), config.TZ)
+        import vacation
+        local = vacation.local_tz(cid)  # в отпуске — часовой пояс места поездки, не Амстердама
+        golden = (sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(local).date(), local)
                   if on("golden") else "")
         if golden:
             weather_line += f" · Золотой час {golden}"

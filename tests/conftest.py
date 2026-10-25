@@ -101,4 +101,5 @@ def _no_trip_facts_ai(monkeypatch):
     monkeypatch.setattr(vacation, "eating_out_line", lambda _cid, today=None: "")  # чаевые и курс — без сети
     monkeypatch.setattr(vacation, "food_tips", lambda _cid: {})  # средний чек и часы еды — без AI
     monkeypatch.setattr(vacation, "travel_phrases", lambda _cid: [])  # ходовые фразы поездки — без AI
+    monkeypatch.setattr(vacation, "local_tz", lambda _cid: vacation.config.TZ)  # часовой пояс места — без сети
     yield

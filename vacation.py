@@ -569,6 +569,7 @@ async def _warm_trip_leisure(cid):
         await asyncio.to_thread(trip_dishes, cid)  # запас блюд страны для Кухни на случай сбоя AI
         await asyncio.to_thread(food_tips, cid)  # средний чек и часы еды — для низа Кухни
         await asyncio.to_thread(travel_phrases, cid)  # ходовые фразы Обучения — сразу на весь отпуск
+        await asyncio.to_thread(local_tz, cid)  # часовой пояс места — для золотого часа и заката
         await leisure_hub.warm_hub_cache(cid)
     except Exception:
         _log.warning("vacation: leisure warm failed cid=%s", cid, exc_info=True)
@@ -896,6 +897,32 @@ def food_tips(cid) -> dict:
         _save(cid, {**(state(cid) or current), "food_tips": {"cc": current.get("cc"), "v": _FOOD_TIPS_VERSION,
                                                               "value": value}})
     return value
+
+
+def local_tz(cid):
+    """Часовой пояс места: в отпуске — города поездки (Open-Meteo timezone=auto, кэш 30 дней по координатам; в
+    обработчике без сети — пока нет кэша, время Амстердама), дома — config.TZ. Для золотого часа, восхода и заката."""
+    from zoneinfo import ZoneInfo
+    if not active(cid):
+        return config.TZ
+    place = store.get_settings(cid) or {}
+    try:
+        lat, lon = round(float(place.get("lat")), 2), round(float(place.get("lon")), 2)
+    except (TypeError, ValueError):
+        return config.TZ
+
+    def load():
+        data = requests.get("https://api.open-meteo.com/v1/forecast", params={
+            "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 1,
+        }, timeout=_TIMEOUT).json()
+        return str(data.get("timezone") or "")
+
+    try:
+        name = _cached(config.COUNTRY_FACTS_KEY, f"tz:{lat},{lon}", load) or ""
+        return ZoneInfo(name) if name else config.TZ
+    except Exception:
+        _log.warning("vacation: local timezone unavailable", exc_info=True)
+        return config.TZ
 
 
 def country_card_first_time(cid, today=None) -> bool:
