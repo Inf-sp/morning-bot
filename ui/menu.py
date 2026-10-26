@@ -208,20 +208,29 @@ def learning_menu(home: dict):
 
 
 def _trip_learning(home: dict):
-    """«🇿🇦 Обучение в отпуске · Африкаанс»: сразу 5 ходовых фраз дня обычным текстом строка к строке — фраза жирным
-    → перевод (произношение); курсивом факт дня о языке. Строки «Ситуация», грамматики и «Произношение» нет."""
+    """«🇿🇦 Обучение в отпуске · Африкаанс»: сразу 5 ходовых фраз дня через пустую строку — фраза жирным → перевод,
+    произношение курсивом в скобках; курсивом факт дня о языке. Строк «Ситуация», грамматики и «Произношение» нет."""
     b = MessageBuilder()
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
     phrases = home.get("phrases") or (home.get("situation") or {}).get("phrases") or []
     if phrases:
-        for phrase in phrases:
+        for number, phrase in enumerate(phrases):  # длинные фразы переносятся — между фразами пустая строка
+            if number:
+                b.spacer()
             b.bold(str(phrase["text"]).strip())
-            b.line(f" → {phrase['ru']}" + (f" ({phrase['say']})" if phrase.get("say") else ""))
+            b.text_line(f" → {phrase['ru']}")
+            if phrase.get("say"):
+                b.text_line(" ")
+                b.italic(f"({str(phrase['say']).strip().strip('()')})")
+            b.newline()
     else:
         b.line("Готовлю фразы для поездки — загляни чуть позже.")
-    if str(home.get("language_fact") or "").strip():
+    fact = str(home.get("language_fact") or "").strip()
+    if fact.startswith("«") and fact.rstrip(".").endswith("»"):  # AI обернул весь факт в кавычки — снимаем внешние
+        fact = fact.rstrip(".")[1:-1].strip()
+    if fact:
         b.spacer()
-        b.italic(_with_period(home["language_fact"]))
+        b.italic(_with_period(fact))
         b.newline()
     # В отпуске: тренировка по фразам страны, свой словарь — после возвращения.
     return b.build_stripped(reply_markup=ikb([

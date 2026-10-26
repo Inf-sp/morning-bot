@@ -278,6 +278,12 @@ def test_trip_learning_screen_has_no_situation_line():
     msg = menu_ui._trip_learning({"flag": "🇿🇦", "language": "Африкаанс", "phrases": [
         {"text": "Hoeveel kos dit?", "ru": "Сколько это стоит?", "say": "хуфеел кос дит"}]})
     assert msg.text == "🇿🇦 Обучение в отпуске · Африкаанс\n\nHoeveel kos dit? → Сколько это стоит? (хуфеел кос дит)"
+    utf16 = msg.text.encode("utf-16-le")
+    italic = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "italic"]
+    assert italic == ["(хуфеел кос дит)"]
+    quoted = menu_ui._trip_learning({"language": "Африкаанс", "phrases": [{"text": "Ja", "ru": "Да"}],
+                                     "language_fact": "«Слово «апартеид» — из африкаанс»."})
+    assert quoted.text.endswith("\n\nСлово «апартеид» — из африкаанс.")  # внешние кавычки сняты
 
 
 def test_languages_fact_is_last_in_language_facts_rotation(monkeypatch):
