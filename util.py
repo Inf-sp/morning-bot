@@ -3,6 +3,7 @@ import contextlib
 import logging
 import random
 import re
+import threading
 import time
 from html import escape as _html_escape
 
@@ -63,7 +64,8 @@ def on_event_loop() -> bool:
 
 
 def build_off_loop(key, func, *args) -> None:
-    """Из потока событий: запускает func(*args) в отдельном потоке, не дожидаясь результата.
+    """Запускает func(*args) в отдельном потоке, не дожидаясь результата: из потока событий — в его executor, из
+    рабочего потока — фоновым потоком.
 
     Один запуск на key; после неудачи следующий — не раньше OFF_LOOP_RETRY_SECONDS.
     """
@@ -77,7 +79,20 @@ def build_off_loop(key, func, *args) -> None:
         if not future.cancelled() and future.exception() is not None:
             _log.warning("off-loop build %s failed", key, exc_info=future.exception())
 
-    asyncio.get_running_loop().run_in_executor(None, func, *args).add_done_callback(done)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # Вызов из рабочего потока (экран собирается в asyncio.to_thread): цикла событий тут нет —
+        # раньше это падало RuntimeError, и экран открывался только со второго раза. Запускаем фоновым потоком.
+        def run():
+            try:
+                func(*args)
+            except Exception:
+                _log.warning("off-loop build %s failed", key, exc_info=True)
+
+        threading.Thread(target=run, name=f"off-loop-{key}", daemon=True).start()
+        return
+    loop.run_in_executor(None, func, *args).add_done_callback(done)
 
 
 class StatusManager:
