@@ -11,6 +11,7 @@ REAL_EATING_OUT = vacation.eating_out_line
 REAL_FOOD_TIPS = vacation.food_tips
 REAL_TRAVEL_PHRASES = vacation.travel_phrases
 REAL_LOCAL_TZ = vacation.local_tz
+REAL_COUNTRY_BRIEF = vacation.country_brief
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -150,12 +151,28 @@ def test_country_card_in_my_day_only_on_first_day(monkeypatch):
     assert not vacation.country_card_first_time("42", date(2026, 10, 23))
 
 
-def test_trip_leisure_screen_starts_with_country():
+def test_trip_leisure_screen_starts_with_country_brief_and_useful():
     from ui import leisure as leisure_ui
+    from ui import vacation as vacation_ui
 
-    msg = leisure_ui.trip_leisure_screen("ЮАР", {"films": [{"title": "Tsotsi"}]}, flag="🇿🇦",
-                                         country=[("Столица", "Pretoria"), ("Валюта", "ZAR (R)")])
-    assert msg.text.startswith("🇿🇦 Досуг в отпуске · ЮАР\n\nСтолица: Pretoria\nВалюта: ZAR (R)\n\n")
+    facts = {"country": {"capital": "Pretoria", "area": 1221037, "currency": "ZAR", "symbol": "R",
+                         "calling": "+27"},
+             "population": {"value": 64_700_000, "year": 2025}, "rate": 18.58, "hours": 1}
+    guide = {"tips": {"plugs": "тип M, 230 В", "emergency": "112"}}
+    brief = {"capital_ru": "Претория", "currency_ru": "ранд", "emergency": "112", "police": "10111",
+             "ambulance": "10177"}
+    about, useful = vacation_ui.trip_brief(facts, guide, brief)
+    footer = vacation_ui.holiday_line({"name": "День свободы", "date": "27 апреля",
+                                       "about": "В этот день в 1994 году прошли первые всеобщие выборы."})
+    msg = leisure_ui.trip_leisure_screen("ЮАР", {}, flag="🇿🇦", about=about, useful=useful, footer=footer)
+    assert msg.text == (
+        "🇿🇦 Досуг в отпуске · ЮАР\n\n"
+        "Коротко о стране:\n• Столица - Претория\n• Население 64,7 млн (2025)\n• Площадь 1 221 037 км²\n"
+        "• Валюта - ранд (ZAR) · 1 € ≈ 18,58 R\n• Время на 1 час больше, чем в Амстердаме\n• Телефонный код +27\n\n"
+        "Полезно знать:\n• Экстренный номер: 112\n• Полиция: 10111\n• Скорая помощь: 10177\n"
+        "• Розетки: тип M · 230 В\n\n"
+        "День свободы · 27 апреля · В этот день в 1994 году прошли первые всеобщие выборы."
+    )
 
 
 def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):
@@ -274,22 +291,22 @@ def test_languages_fact_is_last_in_language_facts_rotation(monkeypatch):
     assert days == ["Факт 1", "Факт 2", "ЮАР: 3 официальных языка — африкаанс, английский, зулу", "Факт 1"]
 
 
-def test_trip_leisure_country_has_no_water_and_languages(monkeypatch):
-    import leisure_hub
-    from ui import vacation as vacation_ui
-    monkeypatch.setattr(vacation_ui, "country_lines", lambda *_a: [
-        ("Столица", "Pretoria"), ("Языки", "африкаанс"), ("Вода из-под крана", "можно"), ("Розетки", "тип M")])
-    monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})
-    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
-    captured = {}
-    monkeypatch.setattr(leisure_hub.leisure_ui, "trip_leisure_screen",
-                        lambda *a, **k: captured.update(k) or None)
-    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"cc": "ZA"})
-    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
-    monkeypatch.setattr(leisure_hub, "_trip_footer", lambda *_a: "")
-    monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
-    leisure_hub._trip_screen("42", {})
-    assert captured["country"] == [("Столица", "Pretoria"), ("Розетки", "тип M")]
+def test_country_brief_keeps_only_digit_numbers_and_holidays(monkeypatch):
+    monkeypatch.setattr(vacation, "country_brief", REAL_COUNTRY_BRIEF)
+    saved = {"cc": "ZA", "since": "2026-10-20"}
+    monkeypatch.setattr(vacation, "state", lambda _cid: saved)
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
+    monkeypatch.setattr(vacation.util, "build_off_loop", lambda *_a: None)
+    monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: {
+        "capital_ru": "Претория", "currency_ru": "ранд", "emergency": "112", "police": "10111",
+        "ambulance": "скорая", "holidays": [{"name": "День свободы", "date": "27 апреля", "about": "Выборы 1994."},
+                                            {"name": "День наследия", "date": "24 сентября", "about": ""}]})
+    brief = vacation.country_brief("42")
+    assert brief["police"] == "10111" and brief["ambulance"] == ""  # не цифры — пусто
+    from datetime import date
+    assert vacation.holiday_of_day("42", date(2026, 10, 21))["name"] == "День наследия"  # по кругу дней
 
 
 def test_my_day_trip_lines_are_short():

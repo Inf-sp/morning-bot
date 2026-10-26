@@ -434,9 +434,10 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
         concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
 
     text = msg.text
-    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nКино страны:\n- Район №9 · 2009 · фантастика\n\n"
-                           "Сериалы страны:\n- Кровь и вода · 2020\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n\n"
-                           "Легенды:\n- Miriam Makeba — Pata Pata\n- Black Coffee\n")  # списком, как сериалы
+    # Кино и сериалов страны на экране нет — сразу музыка.
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n\n"
+                           "Легенды:\n- Miriam Makeba — Pata Pata\n- Black Coffee\n")
+    assert "Кино страны" not in text and "Сериалы страны" not in text
     assert ("Во время отпуска:\n24 сентября — Heritage Day — День наследия\n"
             "Cape Town Jazz Festival — 26 сентября – 27 сентября\nTyla Live — 28 сентября, Grand Arena\n"
             "Muse — 30 сентября, Cape Town Stadium") in text  # без эмодзи
@@ -454,9 +455,8 @@ def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip(
     during = text.split("Во время отпуска:\n", 1)[1].split("\n")
     assert during == ["1 октября — Праздник 1", "2 октября — Праздник 2", "Show 0 — 1 октября", "Show 1 — 1 октября",
                       "Band 0 — 2 октября", "Band 1 — 2 октября"]
-    # Кино и музыка страны ещё собираются — подсказка сразу под заголовком, праздники уже видны.
-    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nСобираю кино и музыку страны — загляни чуть позже.\n\n"
-                           "Во время отпуска:\n")
+    # Музыки ещё нет — сразу «Во время отпуска».
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nВо время отпуска:\n")
 
 
 def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):

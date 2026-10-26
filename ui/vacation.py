@@ -171,3 +171,67 @@ def country_lines(facts, guide=None) -> list:
         if str(tips.get(key) or "").strip():
             lines.append((label, tips[key]))
     return lines
+
+
+def _hours_phrase(diff) -> str:
+    """«на 1 час больше, чем в Амстердаме» / «как в Амстердаме»; нет данных — ""."""
+    if diff is None:
+        return ""
+    if not diff:
+        return "как в Амстердаме"
+    value = abs(diff)
+    number = f"{value:g}".replace(".", ",")
+    if value != int(value):
+        word = "часа"
+    else:
+        n = int(value)
+        word = "час" if n % 10 == 1 and n % 100 != 11 else "часа" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) \
+            else "часов"
+    return f"на {number} {word} {'больше' if diff > 0 else 'меньше'}, чем в Амстердаме"
+
+
+def trip_brief(facts, guide=None, brief=None):
+    """Досуг в отпуске: («Коротко о стране» [строки], «Полезно знать» [строки]) — «Столица - Претория»,
+    «Валюта - ранд (ZAR) · 1 € ≈ 18,58 R», «Полиция: 10111»…; пустые факты пропускаются."""
+    country = facts.get("country") or {}
+    guide, brief = guide or {}, brief or {}
+    about = []
+    capital = brief.get("capital_ru") or country.get("capital")
+    if capital:
+        about.append(f"Столица - {capital}")
+    population = facts.get("population") or {}
+    if population.get("value"):
+        year = f" ({population['year']})" if population.get("year") else ""
+        about.append(f"Население {_population(population['value'])}{year}")
+    if country.get("area"):
+        about.append(f"Площадь {_number(country['area'])} км²")
+    if country.get("currency"):
+        code = country["currency"]
+        currency = f"{brief['currency_ru']} ({code})" if brief.get("currency_ru") else code
+        rate = facts.get("rate")
+        if rate:
+            symbol = country.get("symbol") or code
+            currency += f" · 1 € ≈ {rate:.2f}".replace(".", ",") + f" {symbol}"
+        about.append(f"Валюта - {currency}")
+    hours = _hours_phrase(facts.get("hours"))
+    if hours:
+        about.append(f"Время {hours}")
+    if country.get("calling"):
+        about.append(f"Телефонный код {country['calling']}")
+    useful = []
+    numbers = [(label, brief.get(key)) for label, key in (("Экстренный номер", "emergency"), ("Полиция", "police"),
+                                                          ("Скорая помощь", "ambulance")) if brief.get(key)]
+    if numbers:
+        useful.extend(f"{label}: {value}" for label, value in numbers)
+    elif str((guide.get("tips") or {}).get("emergency") or "").strip():  # без разбора по службам — строкой гида
+        useful.append(f"Экстренный номер: {guide['tips']['emergency']}")
+    plugs = str((guide.get("tips") or {}).get("plugs") or "").strip()
+    if plugs:
+        useful.append(f"Розетки: {plugs.replace(', ', ' · ')}")
+    return about, useful
+
+
+def holiday_line(holiday) -> str:
+    """«День свободы · 27 апреля · В этот день в 1994 году…» — праздник дня внизу Досуга в отпуске; нет — ""."""
+    holiday = holiday or {}
+    return " · ".join(part for part in (holiday.get("name"), holiday.get("date"), holiday.get("about")) if part)

@@ -845,23 +845,32 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
             b.newline()
 
 
-def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="", country=()) -> MessageSpec:
-    """«🇿🇦 Досуг в отпуске · ЮАР»: кино и сериалы страны (TMDb), хиты местных артистов и легенды, и что идёт
+def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="", country=(),
+                        about=(), useful=()) -> MessageSpec:
+    """«🇿🇦 Досуг в отпуске · ЮАР»: «Коротко о стране» и «Полезно знать» списком, хиты местных артистов и легенды, и что идёт
     во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
     без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом footer: твои артисты из этой
     страны или факт дня о её культуре (библиотека целиком здесь не пишется). Премьер, рекомендаций и кнопок разделов
     нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
-    if country:  # справка о стране — первой, без подписи «Страна:»: столица, валюта, время, экстренный номер…
+    if about:  # «Коротко о стране» и «Полезно знать» — списком; кино и сериалов страны на экране нет
+        b.bold("Коротко о стране:")
+        b.newline()
+        for line in about:
+            b.line(f"• {line}")
+        b.spacer()
+    if useful:
+        b.bold("Полезно знать:")
+        b.newline()
+        for line in useful:
+            b.line(f"• {line}")
+        b.spacer()
+    if country and not about:  # прежний вид справки — пока нет нового
         for label, value in country:
             b.labeled_line(label, value, lowercase=False)
         b.spacer()
     data = data or {}
-    if not any(data.get(key) for key in ("films", "series", "hits", "legends")):
-        b.line("Собираю кино и музыку страны — загляни чуть позже.")
-    _trip_titles(b, "Кино страны", data.get("films") or [])
-    _trip_titles(b, "Сериалы страны", data.get("series") or [])
     _trip_music(b, data.get("hits") or [], data.get("legends") or [])
     holidays = [f"{day} — {name}" for day, name in (data.get("holidays") or [])[:_TRIP_HOLIDAYS_MAX]]
     shows = [" — ".join(part for part in (concert.get("artist") or "", ", ".join(part for part in (
