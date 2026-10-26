@@ -457,15 +457,16 @@ _HOT_LOOK, _COOL_LOOK, _WINDY_LOOK = 24, 17, 8  # как у подбора об�
 
 
 def _day_condition(look) -> str:
-    """Пометка об условиях, когда они влияют на выбор вещей: «Жарко», «Прохладно, ветрено», «Дождь»; только по
-    прогнозу на неделю, в обычный день — ""."""
+    """Погода дня со значком: «🌧️ Дождь», «☀️ Жарко», «⛅ Тепло и сухо»; только по прогнозу на неделю (дальше —
+    "", дождя и ветра там ещё не знаем)."""
     tmax, wind = look.get("tmax"), look.get("wind") or 0
     if tmax is None or look.get("kind") not in (None, "", "forecast"):
         return ""
     parts = ["жарко" if tmax >= _HOT_LOOK else "прохладно" if tmax < _COOL_LOOK else "",
              "дождь" if look.get("rain") else "", "ветрено" if wind >= _WINDY_LOOK else ""]
-    text = ", ".join(part for part in parts if part)
-    return _upper_first(text)
+    text = ", ".join(part for part in parts if part) or ("тепло и сухо" if tmax >= _COOL_LOOK else "сухо")
+    icon = str(look.get("icon") or "").strip()
+    return f"{icon} {_upper_first(text)}".strip()
 
 
 def suitcase_day_card(data, look, index, total, today=""):

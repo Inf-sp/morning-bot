@@ -514,13 +514,53 @@ def plan(cid, *, fetch=True) -> list:
     key, current = _names_key(saved["result"]), saved.get("plan") or {}
     if current.get("key") == key and (not fetch or (current.get("v") == _PLAN_VERSION
                                                     and current.get("date") == _today().isoformat())):
-        return list(current.get("looks") or [])
+        looks = list(current.get("looks") or [])
+        return _sync_today(cid, looks, saved) if fetch else looks
     if not fetch:
         return []
     trip = saved["trip"]
     daily = _weather(trip).get("daily") or saved["result"].get("daily") or []
     looks = daily_looks(store.load_wardrobe(cid), {name for _zone, name in _flat(saved["result"])}, trip, daily)
     _save_plan(cid, key, {"key": key, "v": _PLAN_VERSION, "date": _today().isoformat(), "looks": looks})
+    return _sync_today(cid, looks, saved_suitcase(cid))
+
+
+def _sync_today(cid, looks, saved) -> list:
+    """Образ на сегодня — по той же погоде, что «Мой день» (weather.today_conditions: дневное окно, оставшаяся часть
+    дня, реальный дождь), а не по прогнозу поездки, посчитанному утром на весь период. Погода разошлась (дождь /
+    температура на 3° и больше) — комплект дня пересобирается; значок и строка условий — по ней. Только в отпуске."""
+    import weather
+    today = _today().isoformat()
+    index = next((number for number, look in enumerate(looks) if look.get("date") == today), None)
+    if index is None or not vacation.active(cid):
+        return looks
+    place = store.get_settings(cid) or {}
+    try:
+        data = weather.fetch_weather(place["lat"], place["lon"], 2)
+        found = weather.today_conditions(data, datetime.now(config.TZ))
+    except Exception:
+        _log.warning("suitcase: today weather unavailable", exc_info=True)
+        return looks
+    if not found:
+        return looks
+    day = {"date": today, "tmax": found["tmax"], "tmin": found["tmin"], "rain": found["rain"],
+           "wind": found["wind"], "code": found["code"], "kind": "forecast"}
+    look = looks[index]
+    changed = bool(look.get("rain")) != bool(day["rain"]) or (
+        look.get("tmax") is None or abs(float(look["tmax"]) - float(day["tmax"])) >= 3)
+    items = look.get("items") or []
+    if changed:
+        from wardrobe_outfit import outfit_display_order
+        names = {name for _zone, name in _flat(saved["result"])}
+        outfits = _day_outfits(_suitcase_closet(store.load_wardrobe(cid), names), day)
+        if outfits:
+            items = [item.get("name") for item in sorted(outfits[0], key=outfit_display_order)]
+    fresh = {**look, **_day_weather(day), "icon": found["icon"], "items": items}
+    if fresh == look:
+        return looks
+    looks = [*looks[:index], fresh, *looks[index + 1:]]
+    key = _names_key(saved["result"])
+    _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
     return looks
 
 

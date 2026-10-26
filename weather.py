@@ -435,6 +435,33 @@ def _period_lines(period) -> list[str]:
             f"· {wind} {_speed_range(period['winds'])} м/с"]
 
 
+def today_conditions(data, now):
+    """Погода сегодняшнего дня ровно как в «Моём дне»: дневное окно, оставшаяся часть дня, осадки сейчас —
+    {tmax, tmin, rain (реальный дождь), wind, code, clouds, icon}; нет данных — None."""
+    d = (data or {}).get("daily") or {}
+    if not d.get("time"):
+        return None
+    day_str, code = d["time"][0], d["weathercode"][0]
+    tmin, tmax = _daytime_temperature_range(data, day_str, d["temperature_2m_min"][0], d["temperature_2m_max"][0])
+    rain_mm_day = (d.get("precipitation_sum") or [None])[0] if d.get("precipitation_sum") else None
+    wind_ms = d["windspeed_10m_max"][0] or 0
+    daytime = daytime_outfit_weather(data, day_str, tmax, wind_ms, d["precipitation_probability_max"][0] or 0,
+                                     rain_mm_day, code)
+    rain, rain_mm = daytime["rain_prob"], daytime["rain_mm"]
+    wind = daytime.get("wind_ms") or wind_ms
+    clouds = _mean(_daytime_values(data, day_str, "cloudcover"))
+    outlook = today_outlook(data, now)
+    if outlook:
+        tmax, rain, rain_mm = outlook["tmax"], outlook["rain"], outlook["rain_mm"]
+        wind, clouds = outlook["wind_ms"], outlook["clouds"]
+    current_code = (data.get("current") or {}).get("weathercode")
+    raining_now = bool(current_precipitation_text(current_code))
+    icon = (weather_icon(current_code, tmax, 100, wind) if raining_now
+            else weather_icon(code, tmax, rain, wind, rain_mm, clouds))
+    return {"tmax": tmax, "tmin": tmin, "rain": raining_now or _rain_real(rain, rain_mm), "wind": wind,
+            "code": code, "clouds": clouds, "icon": icon}
+
+
 def today_outlook(data, now):
     """Оставшаяся часть сегодняшнего дня из тех же периодов, что и «Полный прогноз»; None — нет часов."""
     periods = [p for p in forecast_periods(data, now) if p["label"] != "Ночью"]

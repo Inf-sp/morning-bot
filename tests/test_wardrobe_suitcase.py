@@ -355,13 +355,14 @@ def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
     # Без дат и температуры: день недели (поездка дольше недели — «день N»), пометка, только когда влияет на выбор,
     # вещи списком, как в «Надень сегодня»; носков нет, даже в старом плане — их выбирает пользователь.
     # В заголовке — страна и дни, в строке дня — город этого дня; внизу курсивом — чемодан.
-    assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\nПонедельник · день 1 · сегодня · Кейптаун\nДождь\n\n"
+    assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\nПонедельник · день 1 · сегодня · Кейптаун\n🌧️ Дождь\n\n"
                     "- Бежевая футболка с оранжевым принтом\n- Бежевые строгие брюки\n- Белые кеды"
                     "\n\nТвой чемодан · 12 вещей · 17 образов")
     conditions = {kind: wardrobe_ui._day_condition({"tmax": 15, "wind": 9, "kind": kind})
                   for kind in ("forecast", "early", "typical")}
     assert conditions == {"forecast": "Прохладно, ветрено", "early": "", "typical": ""}  # дальше прогноза — без пометки
-    assert wardrobe_ui._day_condition({"tmax": 21, "wind": 3, "kind": "forecast"}) == ""  # обычный день — без пометки
+    # Обычный день — тоже строка со значком погоды, чтобы было видно: дождя нет.
+    assert wardrobe_ui._day_condition({"tmax": 21, "wind": 3, "kind": "forecast", "icon": "⛅"}) == "⛅ Тепло и сухо"
     assert wardrobe_ui._day_condition({"tmax": 30, "kind": "forecast"}) == "Жарко"
 
 
@@ -560,3 +561,26 @@ def test_another_look_picks_most_different_and_not_shown(monkeypatch):
         shown.append(set(ws.another_look("42", 0)[0]["items"]))
     assert shown[0] == {"Рубашка", "Шорты", "Сандалии"}  # самый непохожий, а не соседний «Сандалии вместо кед»
     assert len({frozenset(look) for look in shown[:3]}) == 3  # пока есть непоказанные — без повторов
+
+
+def test_today_look_follows_my_day_weather(monkeypatch):
+    import weather
+    today = wardrobe_suitcase._today().isoformat()
+    looks = [{"date": today, "tmax": 18, "rain": True, "kind": "forecast", "icon": "🌧️", "items": ["Ветровка"]}]
+    saved = {"result": {"groups": [("Верх", ["Футболка"])]}, "plan": {}}
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(wardrobe_suitcase.store, "get_settings", lambda _cid: {"lat": -33.9, "lon": 18.4})
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_a: {})
+    monkeypatch.setattr(weather, "today_conditions", lambda *_a: {
+        "tmax": 19, "tmin": 13, "rain": False, "wind": 4, "code": 1, "clouds": 20, "icon": "🌤️"})
+    monkeypatch.setattr(wardrobe_suitcase, "_flat", lambda _result: [("Верх", "Футболка")])
+    monkeypatch.setattr(wardrobe_suitcase, "_suitcase_closet", lambda *_a: {})
+    monkeypatch.setattr(wardrobe_suitcase.store, "load_wardrobe", lambda _cid: {})
+    monkeypatch.setattr(wardrobe_suitcase, "_day_outfits", lambda _w, day: [[{"name": "Футболка", "zone": "Верх"}]]
+                        if not day["rain"] else [])
+    monkeypatch.setattr(wardrobe_suitcase, "_names_key", lambda _result: "k")
+    monkeypatch.setattr(wardrobe_suitcase, "_save_plan", lambda *_a: None)
+
+    look = wardrobe_suitcase._sync_today("42", looks, saved)[0]
+    assert (look["rain"], look["icon"], look["items"]) == (False, "🌤️", ["Футболка"])  # без дождя — без ветровки
+    assert wardrobe_ui._day_condition(look) == "🌤️ Тепло и сухо"
