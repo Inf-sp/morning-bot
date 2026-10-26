@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
@@ -521,6 +521,15 @@ class _BlockOff(Exception):
     """Блок выключен пользователем — не ошибка, просто не показываем."""
 
 
+def _trip_day(trip, today=None) -> int:
+    """Номер дня поездки (первый день — 1) по дате начала отпуска; нет даты — 0."""
+    try:
+        since = date.fromisoformat(str(trip.get("since") or ""))
+    except ValueError:
+        return 0
+    return max(1, ((today or datetime.now(TZ).date()) - since).days + 1)
+
+
 def _vacation_blocks(cid) -> dict:
     """В отпуске: факты о стране с памяткой и фраза дня на языке страны; дома — {}."""
     import vacation
@@ -536,6 +545,7 @@ def _vacation_blocks(cid) -> dict:
                           if vacation.country_card_first_time(cid) else []),
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
         "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
+        "day": _trip_day(vacation.state(cid) or {}),  # «Мой 8 день в отпуске»
         # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.
         "country_fact": vacation.fact_of_day(cid, "country") if user_settings.myday_block_on(cid, "fact") else "",
     }

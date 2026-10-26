@@ -481,19 +481,7 @@ def suitcase_day_card(data, look, index, total, today=""):
     b = MessageBuilder()
     b.title(" · ".join(part for part in (f"{data.get('flag') or '👕'} Образы в отпуске", data.get("place"),
                                          f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part))
-    try:
-        title = _WEEKDAYS[date.fromisoformat(str(look.get("date"))).weekday()]
-    except ValueError:
-        title = ""
-    title = " · ".join(part for part in (title, f"день {index + 1}" if total > 7 or not title else "",
-                                        "сегодня" if look.get("date") == today else "",
-                                        _clean_text(look.get("city") or data.get("city"))) if part)
-    b.bold(_upper_first(title))
-    b.newline()
-    condition = _day_condition(look)
-    if condition:
-        b.line(condition)
-    b.spacer()
+    # Строк дня («Понедельник · день 8 · сегодня · Кейптаун») и погоды нет — сразу вещи; день — в «Моём дне».
     items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
     for item in items:
         b.line(f"- {item}")

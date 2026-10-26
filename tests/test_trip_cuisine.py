@@ -343,3 +343,14 @@ def test_local_tz_is_home_timezone_when_not_on_trip(monkeypatch):
     monkeypatch.setattr(vacation.store, "get_settings", lambda _cid: {"lat": -33.92, "lon": 18.42})
     monkeypatch.setattr(vacation, "_cached", lambda *_a, **_k: "Africa/Johannesburg")
     assert str(vacation.local_tz("42")) == "Africa/Johannesburg"
+
+
+def test_my_day_title_says_which_trip_day():
+    from datetime import date
+    import myday
+    from ui import myday as myday_ui
+
+    assert myday._trip_day({"since": "2026-10-19"}, date(2026, 10, 26)) == 8
+    assert myday._trip_day({}, date(2026, 10, 26)) == 0
+    msg = myday_ui.day_summary("Пн, 26 октября", "Кейптаун", country="ZA", flag="🇿🇦", vacation={"day": 8})
+    assert msg.text.startswith("Мой 8 день в отпуске · Пн, 26 октября · Кейптаун")

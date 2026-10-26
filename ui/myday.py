@@ -132,7 +132,10 @@ def day_summary(
     if flag:
         place += f" {flag}"
     vacation = vacation or {}
-    b.bold(f"Мой день{' в отпуске' if vacation else ''} · {header} · {place}".rstrip(" ·"))
+    # В отпуске — какой это день поездки: «Мой 8 день в отпуске · Пн, 26 октября · Кейптаун, ZA 🇿🇦».
+    trip_day = int(vacation.get("day") or 0)
+    title = (f"Мой {trip_day} день в отпуске" if trip_day > 0 else "Мой день в отпуске") if vacation else "Мой день"
+    b.bold(f"{title} · {header} · {place}".rstrip(" ·"))
     b.newline()
     b.spacer()
 

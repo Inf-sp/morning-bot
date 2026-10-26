@@ -9,6 +9,8 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import wardrobe
 import wardrobe_suitcase
+
+REAL_SYNC_TODAY = wardrobe_suitcase._sync_today  # conftest подменяет сверку с погодой дня
 from ui import wardrobe as wardrobe_ui
 
 
@@ -355,7 +357,7 @@ def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
     # Без дат и температуры: день недели (поездка дольше недели — «день N»), пометка, только когда влияет на выбор,
     # вещи списком, как в «Надень сегодня»; носков нет, даже в старом плане — их выбирает пользователь.
     # В заголовке — страна и дни, в строке дня — город этого дня; внизу курсивом — чемодан.
-    assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\nПонедельник · день 1 · сегодня · Кейптаун\n🌧️ Дождь\n\n"
+    assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\n"
                     "- Бежевая футболка с оранжевым принтом\n- Бежевые строгие брюки\n- Белые кеды"
                     "\n\nТвой чемодан · 12 вещей · 17 образов")
     conditions = {kind: wardrobe_ui._day_condition({"tmax": 15, "wind": 9, "kind": kind})
@@ -422,12 +424,12 @@ def test_day_card_pages_in_a_circle_from_the_suitcase_and_from_the_trip_wardrobe
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_looks"))  # открывается на сегодняшнем дне
     rows = bot.sent[-1]["reply_markup"].inline_keyboard
-    assert "Вторник · сегодня · Кейптаун" in bot.sent[-1]["text"]  # 3 дня — без «день N»
+    assert "сегодня" not in bot.sent[-1]["text"]  # строки дня в карточке нет — день пишет «Мой день»
     assert [b.callback_data for b in rows[0]] == ["w_pack_day_0", "noop", "w_pack_day_2"] and rows[0][1].text == "2 из 3"
     assert [b.callback_data for b in rows[1]] == ["w_pack_saved", "m_menu"]
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_day_2"))
-    assert "Среда · Кейптаун\n" in bot.sent[-1]["text"]
+    assert bot.sent[-1]["reply_markup"].inline_keyboard[0][1].text == "3 из 3"  # день — на счётчике кнопок
     assert [b.callback_data for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == [
         "w_pack_day_1", "noop", "w_pack_day_0"]  # по кругу
 
@@ -444,7 +446,7 @@ def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it
 
     asyncio.run(wardrobe.send_home(bot, "42"))
 
-    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун · 3 дня\n\nВторник · сегодня · Кейптаун")
+    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун · 3 дня\n\n- ")
     today = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
     summary = wardrobe.get_cached_outfit_summary("42")["items"]
     assert summary == [name[:1].lower() + name[1:] for name in today]  # «Мой день» — тот же образ
@@ -452,7 +454,7 @@ def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_alt_today"))
     changed = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
     assert changed != today and len(changed) == 3  # другой комплект из вещей чемодана, сохранён в плане
-    assert bot.sent[-1]["text"].count("сегодня") == 1
+    assert "сегодня" not in bot.sent[-1]["text"]
 
 
 def test_trip_wardrobe_without_suitcase_keeps_the_daily_look(monkeypatch):
@@ -581,6 +583,6 @@ def test_today_look_follows_my_day_weather(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase, "_names_key", lambda _result: "k")
     monkeypatch.setattr(wardrobe_suitcase, "_save_plan", lambda *_a: None)
 
-    look = wardrobe_suitcase._sync_today("42", looks, saved)[0]
+    look = REAL_SYNC_TODAY("42", looks, saved)[0]
     assert (look["rain"], look["icon"], look["items"]) == (False, "🌤️", ["Футболка"])  # без дождя — без ветровки
     assert wardrobe_ui._day_condition(look) == "🌤️ Тепло и сухо"
