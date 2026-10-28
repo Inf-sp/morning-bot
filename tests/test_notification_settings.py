@@ -39,6 +39,9 @@ def test_every_time_option_has_a_scheduled_job(monkeypatch):
     names = {job.name for job in bot._build_application().job_queue.jobs()}
 
     for kind, (_default, options) in settings.NOTIF_TIMES.items():
+        if kind == "trip_day":  # по местному времени поездки — одна задача каждые 15 минут
+            assert "trip_day_repeating" in names
+            continue
         for slot in options:
             assert f"{kind}_{slot.replace(':', '')}" in names
 
@@ -147,3 +150,37 @@ def test_holidays_eve_sends_tomorrow_holiday_and_local_events_only_when_any(monk
     monkeypatch.setattr(local_events, "starting_on", lambda *_a, **_k: [])
     asyncio.run(settings._send_holidays_eve(Bot(), "42"))
     assert sent == []  # нечего сказать — без сообщения
+
+
+def test_trip_day_comes_at_8_local_time_once_a_day(monkeypatch):
+    import asyncio
+    from datetime import datetime as real_datetime
+    from zoneinfo import ZoneInfo
+    import vacation
+
+    saved = {}
+    _settings(monkeypatch, saved)
+    monkeypatch.setattr(bot.access, "get_allowed_cids", lambda: ["42"])
+    monkeypatch.setattr(settings, "notification_available", lambda _cid, _kind: True)
+    monkeypatch.setattr(vacation, "local_tz", lambda _cid: ZoneInfo("Africa/Johannesburg"))
+    sent = []
+
+    async def send(_bot, cid, kind):
+        sent.append((cid, kind))
+
+    monkeypatch.setattr(settings, "send_scheduled_notification", send)
+    clock = {"now": real_datetime(2026, 10, 28, 6, 0, tzinfo=ZoneInfo("UTC"))}  # 08:00 в Кейптауне, 07:00 в Амстердаме
+
+    class FakeDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock["now"].astimezone(tz) if tz else clock["now"]
+
+    monkeypatch.setattr(bot, "datetime", FakeDatetime)
+    context = type("C", (), {"bot": object()})()
+    asyncio.run(bot.job_trip_day(context))
+    asyncio.run(bot.job_trip_day(context))  # следующая проверка через 15 минут — без повтора
+    assert sent == [("42", "trip_day")]
+    clock["now"] = real_datetime(2026, 10, 29, 5, 0, tzinfo=ZoneInfo("UTC"))  # 07:00 в Кейптауне — рано
+    asyncio.run(bot.job_trip_day(context))
+    assert len(sent) == 1

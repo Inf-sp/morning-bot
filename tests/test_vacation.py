@@ -802,7 +802,7 @@ def test_trip_day_plan_comes_in_the_morning_only_on_vacation(monkeypatch):
     asyncio.run(settings._send_scheduled_notification(object(), "42", "trip_day"))
     assert sent == []
     active[0] = True
-    assert settings.notification_available("42", "trip_day") and settings.notif_time("42", "trip_day") == "09:00"
+    assert settings.notification_available("42", "trip_day") and settings.notif_time("42", "trip_day") == "08:00"
     asyncio.run(settings._send_scheduled_notification(object(), "42", "trip_day"))
     # Сводка «Мой день в отпуске» с кнопками рассылки: «Настроить уведомления | Главная».
     assert [b.callback_data for row in sent[0].inline_keyboard for b in row][-1] == "m_menu"

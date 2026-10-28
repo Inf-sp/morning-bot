@@ -453,11 +453,19 @@ async def job_holidays(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_trip_day(context: ContextTypes.DEFAULT_TYPE):
-    """Утром в отпуске — план дня: сводка «Мой день в отпуске» (дома не приходит)."""
+    """Утром в отпуске — план дня: сводка «Мой день в отпуске» в выбранный час (по умолчанию 08:00) по местному
+    времени поездки, а не Амстердама; раз в день (отметка — по местной дате). Дома не приходит."""
+    import vacation
+
     for cid in access.get_allowed_cids():
-        if (not settings.notif_on(cid, "trip_day") or not _slot_due(context, cid, "trip_day")
-                or not settings.notification_available(cid, "trip_day")):
+        if not settings.notif_on(cid, "trip_day") or not settings.notification_available(cid, "trip_day"):
             continue
+        local = datetime.now(vacation.local_tz(cid))
+        hour = int(settings.notif_time(cid, "trip_day").split(":")[0])
+        today = local.date().isoformat()
+        if local.hour != hour or settings.get(cid, "trip_day_sent") == today:
+            continue
+        settings.set_(cid, "trip_day_sent", today)  # раньше отправки: сбой не даст повторов каждые 15 минут
         try:
             await settings.send_scheduled_notification(context.bot, cid, "trip_day")
         except Exception:
@@ -674,12 +682,13 @@ def _build_application():
         ("daily_words", job_daily_words, tuple(range(7))),
         ("evening_weather", job_evening_weather, tuple(range(7))),
         ("holidays", job_holidays, tuple(range(7))),
-        ("trip_day", job_trip_day, tuple(range(7))),
     )
     for kind, job, days in notification_jobs:
         for slot in settings.NOTIF_TIMES[kind][1]:
             jq.run_daily(job, time=_t(slot), days=days, data=slot,
                          **_job_options(f"{kind}_{slot.replace(':', '')}"))
+    # «План дня в отпуске» — по местному времени поездки: проверка каждые 15 минут, отправка в выбранный час.
+    jq.run_repeating(job_trip_day, interval=900, first=60, **_job_options("trip_day_repeating"))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
     return app
