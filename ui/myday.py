@@ -88,6 +88,21 @@ def _premiere_line(b: MessageBuilder, item) -> None:
 
 
 _FACT_MAX = 110
+_NOTE_MAX = 60
+
+
+def _short_note(text) -> str:
+    """Что это за блюдо — очень коротко, одной частью: первое предложение до «, » / « — » / «; » (до _NOTE_MAX);
+    со строчной буквы, без точки; не вышло коротко — ""."""
+    text = " ".join(str(text or "").split())
+    text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0].rstrip(".!?")
+    for separator in (" — ", "; ", ", ", ": "):
+        if len(text) <= _NOTE_MAX:
+            break
+        text = text.split(separator, 1)[0]
+    if not text or len(text) > _NOTE_MAX:
+        return ""
+    return text[:1].lower() + text[1:]
 
 
 def _short_fact(text) -> str:
@@ -198,9 +213,11 @@ def day_summary(
 
     # В отпуске — блюдо, которое стоит попробовать сегодня (главное в меню Кухни).
     dish = vacation.get("try_dish") or {}
-    if str(dish.get("name") or "").strip():  # только название — описание блюда есть в Кухне
+    if str(dish.get("name") or "").strip():  # «🍽 Попробовать: Банни чоу — хлеб с карри.»: название и очень коротко
+        note = _short_note(dish.get("note"))
         b.text_line("🍽 ")
-        b.labeled_line("Попробовать сегодня", str(dish["name"]).strip(), lowercase=False)
+        b.labeled_line("Попробовать", finish_dot(str(dish["name"]).strip() + (f" — {note}" if note else "")),
+                       lowercase=False)
         b.spacer()
 
     # В отпуске — интересный факт о стране, свой на каждый день поездки.

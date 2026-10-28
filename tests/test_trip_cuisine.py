@@ -322,7 +322,9 @@ def test_my_day_trip_lines_are_short():
                  "и она входит в число новых семи чудес природы")
     msg = myday_ui.day_summary("Сб, 24 окт", "Cape Town", vacation={
         "try_dish": {"name": "Банни чоу", "note": "хлеб с карри"}, "country_fact": long_fact})
-    assert "🍽 Попробовать сегодня: Банни чоу\n" in msg.text and "хлеб с карри" not in msg.text
+    assert "🍽 Попробовать: Банни чоу — хлеб с карри.\n" in msg.text
+    assert myday_ui._short_note("Хлеб в виде лодочки, наполненный ароматным карри (обычно говядина или курица), "
+                                "популярно в Дурбане.") == "хлеб в виде лодочки"
     assert "💡 Факт дня: Столовая гора в Кейптауне — одна из старейших гор мира, ей около 260 миллионов лет." in msg.text
 
 

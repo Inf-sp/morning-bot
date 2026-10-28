@@ -603,7 +603,7 @@ def test_trip_facts_are_one_per_day_and_built_once_per_topic_and_country(monkeyp
 def test_my_day_on_trip_shows_the_dish_to_try_today():
     text = myday_ui.day_summary("Пт, 16 окт", "Кейптаун", vacation={
         "try_dish": {"name": "Брай", "note": "Мясо на открытом огне"}}).text
-    assert "🍽 Попробовать сегодня: Брай" in text
+    assert "🍽 Попробовать: Брай — мясо на открытом огне." in text  # название и очень коротко, что это
     assert "Попробовать" not in myday_ui.day_summary("Пт", "Алкмар").text  # дома строки нет
 
 
