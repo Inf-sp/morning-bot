@@ -195,14 +195,32 @@ def _label(event):
     return f"{event['name']} — {event['about']}" if event.get("about") else event["name"]
 
 
+# Из афиши поездки в «Мой день» и рассылку накануне — только праздники и фестивали (Johannesburg Pride, карнавал,
+# ярмарка), не концерты и шоу: их много, и они — в Досуге.
+_FESTIVE_RE = re.compile(r"\b(?:pride|festival|fest|carnival|parade|fair|feast|day|holiday|week|celebration|"
+                         r"фестивал\w*|праздник\w*|карнавал\w*|ярмарк\w*|парад\w*|день)\b", re.IGNORECASE)
+
+
+def _occasions(cid, fetch) -> list:
+    """События города (Pride, фестивали, праздники) и праздничные события афиши поездки, без повторов."""
+    found, seen = [], set()
+    afisha = [event for event in trip_afisha(cid, fetch) if _FESTIVE_RE.search(str(event.get("name") or ""))]
+    for event in [*events(cid, fetch), *afisha]:
+        name = str(event.get("name") or "").casefold()
+        if name and name not in seen:
+            seen.add(name)
+            found.append(event)
+    return found
+
+
 def today_lines(cid, day) -> list:
     """«Сегодня: Amsterdam Pride — прайд-фестиваль на каналах» — события, идущие в этот день; без сети."""
     iso = day.isoformat()
-    return [f"Сегодня: {_label(event)}" for event in events(cid, fetch=False)
+    return [f"Сегодня: {_label(event)}" for event in _occasions(cid, False)
             if event["start"] <= iso <= event["end"]]
 
 
 def starting_on(cid, day, fetch=True) -> list:
     """Подписи событий, которые начинаются в этот день (для рассылки накануне)."""
     iso = day.isoformat()
-    return [_label(event) for event in events(cid, fetch) if event["start"] == iso]
+    return [_label(event) for event in _occasions(cid, fetch) if event["start"] == iso]

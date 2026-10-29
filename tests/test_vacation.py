@@ -422,42 +422,26 @@ def test_country_films_and_series_come_from_tmdb_by_origin_country_and_artists_a
     assert vacation._verified_artists(["Miriam Makeba", "Taylor Swift"], "ZA") == ["Miriam Makeba"]
 
 
-def test_trip_leisure_screen_has_country_culture_and_what_is_on_during_the_trip():
+def test_trip_leisure_screen_has_country_culture_and_no_during_block():
     from ui import leisure as leisure_ui
     msg = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {
-        "films": [{"id": 1, "title": "Район №9", "name_en": "District 9", "year": "2009", "genres": "фантастика"}],
-        "series": [{"id": 2, "title": "Кровь и вода", "name_en": "Blood & Water", "year": "2020", "kind": "tv"}],
         "hits": [{"track": "Nayvee's Prayer", "artist": "DJ Zinhle"}],
         "legends": [{"artist": "Miriam Makeba", "track": "Pata Pata"}, {"artist": "Black Coffee", "track": ""}],
         "holidays": [("24 сентября", "Heritage Day — День наследия")],
-    }, events=[{"name": "Cape Town Jazz Festival", "start": "2026-09-26", "end": "2026-09-27"},
-               {"name": "Tyla Live", "start": "2026-09-28", "end": "2026-09-28", "place": "Grand Arena"}],
-        concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}])
+    }, events=[{"name": "Johannesburg Pride 2026", "start": "2026-10-31", "end": "2026-10-31"}],
+        concerts=[{"artist": "Muse", "date": "2026-09-30", "venue": "Cape Town Stadium"}],
+        footer="День наследия · 24 сентября · Праздник культурного многообразия")
 
     text = msg.text
-    # Кино и сериалов страны на экране нет — сразу музыка.
     assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n\n"
                            "Легенды:\n- Miriam Makeba — Pata Pata\n- Black Coffee\n")
-    assert "Кино страны" not in text and "Сериалы страны" not in text
-    assert ("Во время отпуска:\n24 сентября — Heritage Day — День наследия\n"
-            "Cape Town Jazz Festival — 26 сентября – 27 сентября\nTyla Live — 28 сентября, Grand Arena\n"
-            "Muse — 30 сентября, Cape Town Stadium") in text  # без эмодзи
-    assert "Собираю" not in text
+    # «Во время отпуска» нет: праздник — курсивом внизу, события — рассылкой накануне и в «Моём дне».
+    assert "Во время отпуска" not in text and "Johannesburg Pride" not in text and "Muse" not in text
+    assert text.endswith("День наследия · 24 сентября · Праздник культурного многообразия.")
     links = {msg.text.encode("utf-16-le")[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le"): e.url
              for e in msg.entities if e.type == "text_link"}
     assert links["Nayvee's Prayer — DJ Zinhle"].startswith("https://music.youtube.com/search?q=Nayvee")
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["m_menu"]]
-
-    # «Во время отпуска» — не длиннее 6 строк: праздники (до 2) и концерты любимых (до 2) не теряются в афише.
-    many = [{"name": f"Show {i}", "start": "2026-10-01", "end": "2026-10-01"} for i in range(10)]
-    holidays = [(f"{i} октября", f"Праздник {i}") for i in range(1, 5)]
-    concerts = [{"artist": f"Band {i}", "date": "2026-10-02"} for i in range(4)]
-    text = leisure_ui.trip_leisure_screen("ЮАР 🇿🇦", {"holidays": holidays}, many, concerts).text
-    during = text.split("Во время отпуска:\n", 1)[1].split("\n")
-    assert during == ["1 октября — Праздник 1", "2 октября — Праздник 2", "Show 0 — 1 октября", "Show 1 — 1 октября",
-                      "Band 0 — 2 октября", "Band 1 — 2 октября"]
-    # Музыки ещё нет — сразу «Во время отпуска».
-    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nВо время отпуска:\n")
 
 
 def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):

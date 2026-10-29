@@ -403,3 +403,14 @@ def test_my_day_on_trip_has_no_premiere(monkeypatch):
     monkeypatch.setattr(wardrobe, "get_cached_outfit_summary", lambda _cid: {"items": [], "emoji": ""})
     text, _entities = myday._build_day_text("42")
     assert calls == [] and "Новый альбом" not in text
+
+
+def test_trip_festivals_reach_my_day_and_eve_but_not_concerts(monkeypatch):
+    from datetime import date
+    import local_events
+    monkeypatch.setattr(local_events, "events", lambda _cid, fetch=True: [])
+    monkeypatch.setattr(local_events, "trip_afisha", lambda _cid, fetch=True: [
+        {"name": "Johannesburg Pride 2026", "about": "прайд-парад", "start": "2026-10-31", "end": "2026-10-31"},
+        {"name": "Tyla Live", "about": "концерт", "start": "2026-10-31", "end": "2026-10-31"}])
+    assert local_events.starting_on("42", date(2026, 10, 31)) == ["Johannesburg Pride 2026 — прайд-парад"]
+    assert local_events.today_lines("42", date(2026, 10, 31)) == ["Сегодня: Johannesburg Pride 2026 — прайд-парад"]

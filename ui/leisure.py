@@ -883,12 +883,8 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
         tail = ", ".join(part for part in (when, event.get("place") or "") if part)
         afisha.append(" — ".join(part for part in (event.get("name") or "", tail) if part))
     during = [*holidays, *afisha[:max(0, _TRIP_DURING_MAX - len(holidays) - len(shows))], *shows]
-    if during:
-        b.spacer()
-        b.bold("Во время отпуска:")
-        b.newline()
-        for line in during:
-            b.line(line)
+    # Блока «Во время отпуска» нет: праздник — в подписи внизу, ближайшие события и праздники — рассылкой
+    # накануне и в «Моём дне» в их день.
     if str(footer or "").strip():  # «Твои артисты отсюда: …» или факт дня о культуре страны — курсивом
         b.spacer()
         b.italic(_finish_sentence(str(footer).strip()))
