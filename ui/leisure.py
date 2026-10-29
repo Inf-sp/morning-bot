@@ -846,7 +846,7 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
 
 
 def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="", country=(),
-                        about=(), useful=()) -> MessageSpec:
+                        about=(), useful=(), activity=None) -> MessageSpec:
     """«🇿🇦 Досуг в отпуске · ЮАР»: «Коротко о стране» и «Полезно знать» списком, хиты местных артистов и легенды, и что идёт
     во время отпуска — праздники, афиша города (концерты, фестивали, выставки), концерты твоих артистов; до 6 строк,
     без эмодзи. Пока кино и музыка страны собираются — строка-подсказка; внизу курсивом footer: твои артисты из этой
@@ -854,21 +854,14 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     нет."""
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
-    if about:  # «Коротко о стране» и «Полезно знать» — списком; кино и сериалов страны на экране нет
-        b.bold("Коротко о стране:")
-        b.newline()
-        for line in about:
-            b.line(f"• {line}")
-        b.spacer()
-    if useful:
-        b.bold("Полезно знать:")
-        b.newline()
-        for line in useful:
-            b.line(f"• {line}")
-        b.spacer()
-    if country and not about:  # прежний вид справки — пока нет нового
-        for label, value in country:
-            b.labeled_line(label, value, lowercase=False)
+    activity = activity or {}
+    if activity.get("name"):  # одно развлечение на день из заранее готового списка поездки
+        if activity.get("category"):
+            b.bold(activity["category"])
+            b.newline()
+        b.text_line("• ")
+        b.bold(f"{activity['name']}:")
+        b.line(f" {activity.get('about') or ''}".rstrip())
         b.spacer()
     data = data or {}
     _trip_music(b, data.get("hits") or [], data.get("legends") or [])

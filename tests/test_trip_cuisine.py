@@ -12,6 +12,8 @@ REAL_FOOD_TIPS = vacation.food_tips
 REAL_TRAVEL_PHRASES = vacation.travel_phrases
 REAL_LOCAL_TZ = vacation.local_tz
 REAL_COUNTRY_BRIEF = vacation.country_brief
+REAL_ACTIVITY_OF_DAY = vacation.activity_of_day
+REAL_USEFUL_OF_DAY = vacation.useful_of_day
 
 
 def _setup(monkeypatch, ai_data, history=()):
@@ -151,7 +153,7 @@ def test_country_card_in_my_day_only_on_first_day(monkeypatch):
     assert not vacation.country_card_first_time("42", date(2026, 10, 23))
 
 
-def test_trip_leisure_screen_starts_with_country_brief_and_useful():
+def test_trip_brief_lines_for_my_day_useful():
     from ui import leisure as leisure_ui
     from ui import vacation as vacation_ui
 
@@ -164,15 +166,43 @@ def test_trip_leisure_screen_starts_with_country_brief_and_useful():
     about, useful = vacation_ui.trip_brief(facts, guide, brief)
     footer = vacation_ui.holiday_line({"name": "День свободы", "date": "27 апреля",
                                        "about": "В этот день в 1994 году прошли первые всеобщие выборы."})
-    msg = leisure_ui.trip_leisure_screen("ЮАР", {}, flag="🇿🇦", about=about, useful=useful, footer=footer)
+    assert about == ["Столица - Претория", "Население 64,7 млн (2025)", "Площадь 1 221 037 км²",
+                     "Валюта - ранд (ZAR) · 1 € ≈ 18,58 R", "Время на 1 час больше, чем в Амстердаме",
+                     "Телефонный код +27"]
+    assert useful == ["Экстренный номер: 112", "Полиция: 10111", "Скорая помощь: 10177", "Розетки: тип M · 230 В"]
+    assert footer.startswith("День свободы · 27 апреля")
+
+
+def test_trip_leisure_screen_is_one_activity_and_tip():
+    from ui import leisure as leisure_ui
+
+    msg = leisure_ui.trip_leisure_screen("ЮАР", {}, flag="🇿🇦", activity={
+        "category": "Сафари и животные", "name": "Парк Пиланесберг",
+        "about": "Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии."},
+        footer="Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано")
     assert msg.text == (
-        "🇿🇦 Досуг в отпуске · ЮАР\n\n"
-        "Коротко о стране:\n• Столица - Претория\n• Население 64,7 млн (2025)\n• Площадь 1 221 037 км²\n"
-        "• Валюта - ранд (ZAR) · 1 € ≈ 18,58 R\n• Время на 1 час больше, чем в Амстердаме\n• Телефонный код +27\n\n"
-        "Полезно знать:\n• Экстренный номер: 112\n• Полиция: 10111\n• Скорая помощь: 10177\n"
-        "• Розетки: тип M · 230 В\n\n"
-        "День свободы · 27 апреля · В этот день в 1994 году прошли первые всеобщие выборы."
-    )
+        "🇿🇦 Досуг в отпуске · ЮАР\n\nСафари и животные\n"
+        "• Парк Пиланесберг: Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии.\n\n"
+        "Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано.")
+    assert "Коротко о стране" not in msg.text
+
+
+def test_activity_and_useful_rotate_by_trip_day(monkeypatch):
+    from datetime import date
+    monkeypatch.setattr(vacation, "activity_of_day", REAL_ACTIVITY_OF_DAY)
+    monkeypatch.setattr(vacation, "useful_of_day", REAL_USEFUL_OF_DAY)
+    monkeypatch.setattr(vacation, "trip_start", lambda _cid: date(2026, 10, 19))
+    monkeypatch.setattr(vacation, "current_leg", lambda _cid, _today=None: {"city": "Кейптаун"})
+    monkeypatch.setattr(vacation, "trip_activities", lambda _cid, fetch=True: {"items": [
+        {"name": f"Место {i}", "about": "…", "city": "Кейптаун"} for i in range(4)]})
+    assert vacation.activity_of_day("42", date(2026, 10, 19))["name"] == "Место 0"
+    assert vacation.activity_of_day("42", date(2026, 10, 20))["name"] == "Место 1"
+    from ui import vacation as vacation_ui
+    monkeypatch.setattr(vacation_ui, "trip_brief", lambda *_a: (["Столица - Претория"], ["Полиция: 10111"]))
+    monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
+    assert [vacation.useful_of_day("42", date(2026, 10, 19 + i)) for i in range(3)] == [
+        "Полиция: 10111", "Столица - Претория", "Полиция: 10111"]
 
 
 def test_my_data_screen_opens_own_data_and_library_on_trip(monkeypatch):

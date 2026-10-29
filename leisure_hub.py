@@ -650,14 +650,13 @@ def _trip_screen(cid, data):
     # Заголовок — страна (страны маршрута), а не город: «🇿🇦 Досуг в отпуске · ЮАР».
     where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or place.get("city") or cc
     from ui import vacation as vacation_ui
-    # «Коротко о стране» и «Полезно знать» — первыми; вода — в Кухне, языки — в Обучении, здесь их нет.
-    about, useful = vacation_ui.trip_brief(vacation.country_facts(cid), vacation.guide(cid),
-                                           vacation.country_brief(cid, fetch=False))
-    # Внизу — крупный праздник страны, свой на каждый день; пока праздников нет — прежняя строка.
-    footer = vacation_ui.holiday_line(vacation.holiday_of_day(cid)) or _trip_footer(cid, cc)
+    # Одно развлечение на день из заранее готового списка поездки; справка о стране — в «Полезно» «Моего дня».
+    # Внизу курсивом — главный совет к активностям; пока списка нет — прежняя строка.
+    activities = vacation.trip_activities(cid, fetch=False)
+    footer = activities.get("tip") or _trip_footer(cid, cc)
     return leisure_ui.trip_leisure_screen(where, data, sorted(events, key=lambda event: event.get("start", "")),
                                           concerts, flag=util.flag_from_cc(cc), footer=footer,
-                                          about=about, useful=useful)
+                                          activity=vacation.activity_of_day(cid))
 
 
 _TRIP_ARTISTS_SHOWN = 5

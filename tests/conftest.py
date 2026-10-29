@@ -103,6 +103,8 @@ def _no_trip_facts_ai(monkeypatch):
     monkeypatch.setattr(vacation, "travel_phrases", lambda _cid: [])  # ходовые фразы поездки — без AI
     monkeypatch.setattr(vacation, "local_tz", lambda _cid: vacation.config.TZ)  # часовой пояс места — без сети
     monkeypatch.setattr(vacation, "country_brief", lambda _cid, fetch=True: {})  # справка Досуга — без AI
+    monkeypatch.setattr(vacation, "trip_activities", lambda _cid, fetch=True: {})  # развлечения поездки — без AI
+    monkeypatch.setattr(vacation, "useful_of_day", lambda _cid, today=None: "")  # «Полезно» — без сети
     import wardrobe_suitcase
     monkeypatch.setattr(wardrobe_suitcase, "_sync_today", lambda _cid, looks, _saved: looks)  # погода сегодня — без сети
     yield

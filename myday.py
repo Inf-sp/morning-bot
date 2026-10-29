@@ -548,6 +548,7 @@ def _vacation_blocks(cid) -> dict:
         "day": _trip_day({"since": start.isoformat()} if (start := vacation.trip_start(cid)) else {}),  # «Мой N день»
         # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.
         "country_fact": vacation.fact_of_day(cid, "country") if user_settings.myday_block_on(cid, "fact") else "",
+        "useful": vacation.useful_of_day(cid),  # «Полезно:» — один пункт справки о стране на день
     }
 
 

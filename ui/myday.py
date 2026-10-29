@@ -227,6 +227,12 @@ def day_summary(
         b.labeled_line("Факт дня", finish_dot(_short_fact(country_fact)), lowercase=False)
         b.spacer()
 
+    useful = str(vacation.get("useful") or "").strip()
+    if useful:  # «📌 Полезно: Скорая помощь: 10177» — один пункт справки о стране на день
+        b.text_line("📌 ")
+        b.labeled_line("Полезно", finish_dot(useful), lowercase=False)
+        b.spacer()
+
     # Премьера дня из Досуга — только сегодняшняя, одна строка.
     if premiere:
         _premiere_line(b, premiere)
