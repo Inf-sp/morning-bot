@@ -508,6 +508,7 @@ ROUTES = (
     # «Новых премьер» и «Другого варианта» больше нет: старые кнопки из истории чата открывают хаб.
     R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
+    R("lz_country", lambda c: leisure_hub.send_trip_country(c.bot, c.cid, q=c.q)),  # «О стране» в Досуге отпуска
     R("lz_read_next", lambda c: leisure_hub.next_read(c.bot, c.cid, q=c.q)),  # «Другая статья» в хабе
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),

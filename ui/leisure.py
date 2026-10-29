@@ -855,10 +855,7 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     activity = activity or {}
-    if activity.get("name"):  # одно развлечение на день из заранее готового списка поездки
-        if activity.get("category"):
-            b.bold(activity["category"])
-            b.newline()
+    if activity.get("name"):  # одно развлечение на день: место и описание, без категории
         b.text_line("• ")
         b.bold(f"{activity['name']}:")
         b.line(f" {activity.get('about') or ''}".rstrip())
@@ -882,8 +879,26 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
         b.spacer()
         b.italic(_finish_sentence(str(footer).strip()))
         b.newline()
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("#️⃣ Главная",
-                                                                                     callback_data="m_menu")]]))
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌍 О стране", callback_data="lz_country")],  # справка о стране — отдельным экраном
+        [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
+    ]))
+
+
+def trip_country_screen(place, about=(), useful=(), flag="") -> MessageSpec:
+    """«🇿🇦 О стране · ЮАР»: «Коротко о стране» и «Полезно знать» списком; ниже «Назад» (к Досугу) | «Главная»."""
+    b = MessageBuilder()
+    b.title(f"{flag or '🌍'} О стране" + (f" · {place}" if place else ""))
+    for title, lines in (("Коротко о стране:", about), ("Полезно знать:", useful)):
+        if lines:
+            b.bold(title)
+            b.newline()
+            for line in lines:
+                b.line(f"• {line}")
+            b.spacer()
+    if not about and not useful:
+        b.line("Собираю сведения о стране — загляни чуть позже.")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
 
 
 def leisure_hub_kb(read=False):

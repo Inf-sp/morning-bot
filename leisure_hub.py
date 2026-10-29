@@ -868,3 +868,24 @@ def is_ready(cid) -> bool:
         leisure_movies._movie_premieres_cache_get(cc, today) is not None
         and leisure_movies._cached_movie(cid) is not None
     )
+
+
+async def send_trip_country(bot, cid, q=None):
+    """«🌍 О стране» в Досуге отпуска: столица, население, площадь, валюта и курс, время, код; экстренные номера и
+    розетки. Справочник и курс — из кэша, обновляются фоном; русские названия и номера служб — vacation.country_brief."""
+    import vacation
+    from ui import vacation as vacation_ui
+    if not vacation.active(cid):
+        await send_hub(bot, cid, q=q)
+        return
+
+    def build():
+        place = store.get_settings(cid) or {}
+        cc = str(place.get("cc") or "").upper()
+        about, useful = vacation_ui.trip_brief(vacation.country_facts(cid), vacation.guide(cid),
+                                               vacation.country_brief(cid, fetch=False))
+        import countries
+        where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or cc
+        return leisure_ui.trip_country_screen(where, about, useful, flag=util.flag_from_cc(cc))
+
+    await _show(bot, cid, await asyncio.to_thread(build), q)

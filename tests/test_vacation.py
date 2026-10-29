@@ -441,7 +441,7 @@ def test_trip_leisure_screen_has_country_culture_and_no_during_block():
     links = {msg.text.encode("utf-16-le")[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le"): e.url
              for e in msg.entities if e.type == "text_link"}
     assert links["Nayvee's Prayer — DJ Zinhle"].startswith("https://music.youtube.com/search?q=Nayvee")
-    assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["m_menu"]]
+    assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["lz_country"], ["m_menu"]]
 
 
 def test_leisure_buttons_open_the_trip_screen_on_vacation(monkeypatch):

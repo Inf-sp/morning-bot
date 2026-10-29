@@ -181,7 +181,7 @@ def test_trip_leisure_screen_is_one_activity_and_tip():
         "about": "Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии."},
         footer="Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано")
     assert msg.text == (
-        "🇿🇦 Досуг в отпуске · ЮАР\n\nСафари и животные\n"
+        "🇿🇦 Досуг в отпуске · ЮАР\n\n"
         "• Парк Пиланесберг: Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии.\n\n"
         "Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано.")
     assert "Коротко о стране" not in msg.text
@@ -444,3 +444,29 @@ def test_trip_festivals_reach_my_day_and_eve_but_not_concerts(monkeypatch):
         {"name": "Tyla Live", "about": "концерт", "start": "2026-10-31", "end": "2026-10-31"}])
     assert local_events.starting_on("42", date(2026, 10, 31)) == ["Johannesburg Pride 2026 — прайд-парад"]
     assert local_events.today_lines("42", date(2026, 10, 31)) == ["Сегодня: Johannesburg Pride 2026 — прайд-парад"]
+
+
+def test_trip_leisure_has_about_country_button_and_screen(monkeypatch):
+    import asyncio
+    import leisure_hub
+    from ui import leisure as leisure_ui
+    from ui import vacation as vacation_ui
+
+    msg = leisure_ui.trip_leisure_screen("ЮАР", {}, flag="🇿🇦")
+    assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [["lz_country"], ["m_menu"]]
+    monkeypatch.setattr(vacation, "active", lambda _cid: True)
+    monkeypatch.setattr(vacation, "country_facts", lambda _cid: {})
+    monkeypatch.setattr(vacation, "guide", lambda _cid: {})
+    monkeypatch.setattr(vacation, "trip_countries", lambda _cid: ["ZA"])
+    monkeypatch.setattr(vacation_ui, "trip_brief", lambda *_a: (["Столица - Претория"], ["Полиция: 10111"]))
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"cc": "ZA"})
+    shown = []
+
+    async def show(_bot, _cid, screen, _q=None):
+        shown.append(screen)
+
+    monkeypatch.setattr(leisure_hub, "_show", show)
+    asyncio.run(leisure_hub.send_trip_country(None, "42"))
+    assert shown[0].text == ("🇿🇦 О стране · ЮАР\n\nКоротко о стране:\n• Столица - Претория\n\n"
+                             "Полезно знать:\n• Полиция: 10111")
+    assert [b.callback_data for b in shown[0].reply_markup.inline_keyboard[-1]] == ["m_leisure", "m_menu"]
