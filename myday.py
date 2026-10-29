@@ -655,7 +655,8 @@ def _build_day_text(cid, *, refresh_current=False):
     outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     quote = _daily_literary_quote(cid) if on("quote") else {}
-    premiere = _premiere_of_day(cid) if on("premiere") else None
+    # В отпуске премьеры дня (новый альбом, кино) нет — сводка о поездке.
+    premiere = _premiere_of_day(cid) if on("premiere") and not trip else None
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),

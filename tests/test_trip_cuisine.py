@@ -388,3 +388,18 @@ def test_restarting_trip_keeps_its_start(monkeypatch):
     monkeypatch.setattr(vacation, "_finish", finish)
     asyncio.run(vacation._start(None, "42", {"city": "Alkmaar"}, "2026-11-03", legs=[{"city": "Йоханнесбург"}]))
     assert saved["since"] == "2026-10-19"
+
+
+def test_my_day_on_trip_has_no_premiere(monkeypatch):
+    import myday
+    calls = []
+    monkeypatch.setattr(myday, "_premiere_of_day", lambda _cid: calls.append(1) or {"kind": "music", "title": "X"})
+    monkeypatch.setattr(myday, "_vacation_blocks", lambda _cid: {"day": 8})
+    monkeypatch.setattr(myday.store, "get_settings", lambda _cid: {"city": "Йоханнесбург", "lat": 1, "lon": 1})
+    monkeypatch.setattr(myday.weather, "fetch_weather", lambda *_a, **_k: None)
+    monkeypatch.setattr(myday.store, "learning_is_enabled", lambda _cid: False)
+    monkeypatch.setattr(myday, "_daily_literary_quote", lambda _cid: {})
+    import wardrobe
+    monkeypatch.setattr(wardrobe, "get_cached_outfit_summary", lambda _cid: {"items": [], "emoji": ""})
+    text, _entities = myday._build_day_text("42")
+    assert calls == [] and "Новый альбом" not in text
