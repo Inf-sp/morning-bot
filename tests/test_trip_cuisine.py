@@ -460,6 +460,7 @@ def test_trip_leisure_has_about_country_button_and_screen(monkeypatch):
     monkeypatch.setattr(vacation, "trip_countries", lambda _cid: ["ZA"])
     monkeypatch.setattr(vacation_ui, "trip_brief", lambda *_a: (["Столица - Претория"], ["Полиция: 10111"]))
     monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(vacation, "_trip_day_index", lambda _cid, today=None: 0)
     shown = []
 
     async def show(_bot, _cid, screen, _q=None):
@@ -467,6 +468,8 @@ def test_trip_leisure_has_about_country_button_and_screen(monkeypatch):
 
     monkeypatch.setattr(leisure_hub, "_show", show)
     asyncio.run(leisure_hub.send_trip_country(None, "42"))
-    assert shown[0].text == ("🇿🇦 О стране · ЮАР\n\nКоротко о стране:\n• Столица - Претория\n\n"
-                             "Полезно знать:\n• Полиция: 10111")
+    assert shown[0].text == "🇿🇦 О стране · ЮАР\n\n• Столица - Претория\n\nПолиция: 10111"
+    utf16 = shown[0].text.encode("utf-16-le")
+    assert [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")
+            for e in shown[0].entities if e.type == "italic"] == ["Полиция: 10111"]
     assert [b.callback_data for b in shown[0].reply_markup.inline_keyboard[-1]] == ["m_leisure", "m_menu"]

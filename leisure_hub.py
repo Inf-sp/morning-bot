@@ -886,6 +886,8 @@ async def send_trip_country(bot, cid, q=None):
                                                vacation.country_brief(cid, fetch=False))
         import countries
         where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or cc
-        return leisure_ui.trip_country_screen(where, about, useful, flag=util.flag_from_cc(cc))
+        # «Полезно знать» — по одному пункту на день поездки, по кругу.
+        tip = useful[vacation._trip_day_index(cid) % len(useful)] if useful else ""
+        return leisure_ui.trip_country_screen(where, about, tip, flag=util.flag_from_cc(cc))
 
     await _show(bot, cid, await asyncio.to_thread(build), q)

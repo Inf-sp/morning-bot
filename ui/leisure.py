@@ -885,17 +885,19 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     ]))
 
 
-def trip_country_screen(place, about=(), useful=(), flag="") -> MessageSpec:
-    """«🇿🇦 О стране · ЮАР»: «Коротко о стране» и «Полезно знать» списком; ниже «Назад» (к Досугу) | «Главная»."""
+def trip_country_screen(place, about=(), useful="", flag="") -> MessageSpec:
+    """«🇿🇦 О стране · ЮАР»: сведения о стране списком, без заголовка; внизу курсивом — один пункт «полезно знать»
+    на день (экстренный номер, полиция, скорая, розетки — по кругу); ниже «Назад» (к Досугу) | «Главная»."""
     b = MessageBuilder()
     b.title(f"{flag or '🌍'} О стране" + (f" · {place}" if place else ""))
-    for title, lines in (("Коротко о стране:", about), ("Полезно знать:", useful)):
-        if lines:
-            b.bold(title)
-            b.newline()
-            for line in lines:
-                b.line(f"• {line}")
+    for line in about or ():
+        b.line(f"• {line}")
+    useful = str(useful or "").strip()
+    if useful:
+        if about:
             b.spacer()
+        b.italic(useful)
+        b.newline()
     if not about and not useful:
         b.line("Собираю сведения о стране — загляни чуть позже.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
