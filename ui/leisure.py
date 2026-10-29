@@ -855,8 +855,7 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     activity = activity or {}
-    if activity.get("name"):  # одно развлечение на день: место и описание, без категории
-        b.text_line("• ")
+    if activity.get("name"):  # одно развлечение на день: место и описание, без категории и маркера
         b.bold(f"{activity['name']}:")
         b.line(f" {activity.get('about') or ''}".rstrip())
         b.spacer()
