@@ -85,7 +85,7 @@ def test_admin_card_refresh_menu_has_all_cards():
 def test_admin_refresh_card_reports_success(monkeypatch):
     calls = []
 
-    async def refresh(cid, key):
+    async def refresh(cid, key, bot=None):
         calls.append((cid, key))
         return True
 
@@ -444,7 +444,7 @@ def test_admin_refresh_leisure_resets_cards_of_the_day(monkeypatch):
 def test_admin_refresh_card_names_failed_leisure_steps(monkeypatch):
     import leisure_hub
 
-    async def refresh(cid, key):
+    async def refresh(cid, key, bot=None):
         leisure_hub.failed_steps[cid] = ["концерты", "артист дня"]
         return False
 
@@ -557,3 +557,26 @@ def test_restart_ignores_press_repeated_from_previous_run(monkeypatch):
     asyncio.run(admin.restart(bot, "42", 0))
 
     assert bot.sent[0]["text"] == "home"
+
+
+def test_refresh_my_day_sends_fresh_card(monkeypatch):
+    import asyncio
+    import admin
+    import myday
+    calls = []
+
+    async def refresh(cid, key, bot=None):
+        calls.append(("refresh", key, bot is not None))
+        return True
+
+    async def menu(_bot, _cid, _q=None, status=""):
+        calls.append(("menu", status))
+
+    async def plany(_bot, cid, **_kwargs):
+        calls.append(("plany", cid))
+
+    monkeypatch.setattr(admin, "_refresh_card_cache", refresh)
+    monkeypatch.setattr(admin, "send_card_refresh_menu", menu)
+    monkeypatch.setattr(myday, "send_plany", plany)
+    asyncio.run(admin.refresh_card(object(), "42", "myday"))
+    assert calls == [("refresh", "myday", True), ("menu", "✅ ☀️ Мой день обновлена."), ("plany", "42")]

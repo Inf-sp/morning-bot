@@ -316,7 +316,7 @@ async def send_card_refresh_menu(bot, cid, q=None, *, status=""):
     )
 
 
-async def _refresh_card_cache(cid, key):
+async def _refresh_card_cache(cid, key, bot=None):
     if key == "wardrobe":
         import wardrobe
         store.clear_wardrobe_daylook(cid)
@@ -342,7 +342,7 @@ async def _refresh_card_cache(cid, key):
             await _refresh_card_cache(cid, dependency)
         import myday
         myday.reset_day_cache(cid)
-        return await myday.warm_day_cache(cid)
+        return await myday.warm_day_cache(cid, bot)  # с bot — и образ дня готовится заново
     raise ValueError("unknown admin card")
 
 
@@ -360,11 +360,13 @@ async def refresh_card(bot, cid, key, q=None):
             q, bot=bot, cid=cid, stages=((0, f"Обновляю «{label.split(' ', 1)[-1]}»..."),),
             preserve_message=True,
         )
+    refreshed = False
     try:
-        result = await _refresh_card_cache(cid, key)
+        result = await _refresh_card_cache(cid, key, bot)
         if result is False:
             raise RuntimeError("card cache is incomplete")
         outcome = f"✅ {label} обновлена."
+        refreshed = True
     except Exception:
         _log.exception("admin card refresh failed cid=%s card=%s", cid, key)
         import leisure_hub
@@ -373,6 +375,10 @@ async def refresh_card(bot, cid, key, q=None):
     if status is not None:
         await status.stop(delete=True)
     await send_card_refresh_menu(bot, cid, q, status=outcome)
+    if key == "myday" and refreshed:
+        # Кэш пересобран, но прежнее сообщение «Мой день» в чате не меняется — присылаем свежую карточку.
+        import myday
+        await myday.send_plany(bot, cid)
 
 
 # ================= ПОЛЬЗОВАТЕЛИ =================
