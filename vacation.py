@@ -288,6 +288,30 @@ def _iso_legs(legs) -> list:
                        for key in ("start", "end")}} for leg in legs]
 
 
+def trip_start(cid):
+    """Первый день поездки — самая ранняя дата из начала маршрута, чемодана этой поездки и включения отпуска
+    (режим часто включают уже в дороге); нет данных — None."""
+    current = state(cid) or {}
+    dates = [current.get("since"), *(leg.get("start") for leg in current.get("legs") or [])]
+    try:
+        import wardrobe_suitcase
+        saved = wardrobe_suitcase.saved_suitcase(cid)
+        trip = saved.get("trip") or {}
+        if trip.get("start") and str(trip.get("cc") or "").upper() in {"", str(current.get("cc") or "").upper()}:
+            dates.append(trip["start"])
+    except Exception:
+        _log.debug("vacation: suitcase start unavailable", exc_info=True)
+    found = []
+    for value in dates:
+        try:
+            found.append(date.fromisoformat(str(value or "")[:10]))
+        except ValueError:
+            continue
+    today = datetime.now(config.TZ).date()
+    found = [day for day in found if day <= today]
+    return min(found) if found else None
+
+
 def current_leg(cid, today=None) -> dict:
     """Город отпуска на сегодня по маршруту (день переезда — уже следующий); без маршрута — {}."""
     today = (today or datetime.now(config.TZ).date()).isoformat()
@@ -485,8 +509,11 @@ async def _start(bot, cid, home, until, legs=None):
     legs — маршрут из нескольких городов."""
     import asyncio
     place = store.get_settings(cid)
+    previous = state(cid) or {}
+    # Отпуск уже идёт (поменял маршрут, добавил город) — начало поездки не сбрасываем: «Мой N день» считается дальше.
+    since = previous.get("since") or datetime.now(config.TZ).date().isoformat()
     _save(cid, {"home": home, "until": "", "cc": str(place.get("cc") or "").upper(),
-                "since": datetime.now(config.TZ).date().isoformat(), **({"legs": legs} if legs else {})})
+                "since": since, **({"legs": legs} if legs else {})})
     _reset_day_caches(cid)
     if until:
         await _finish(bot, cid, until)

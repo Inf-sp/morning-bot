@@ -545,7 +545,7 @@ def _vacation_blocks(cid) -> dict:
                           if vacation.country_card_first_time(cid) else []),
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
         "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
-        "day": _trip_day(vacation.state(cid) or {}),  # «Мой 8 день в отпуске»
+        "day": _trip_day({"since": start.isoformat()} if (start := vacation.trip_start(cid)) else {}),  # «Мой N день»
         # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.
         "country_fact": vacation.fact_of_day(cid, "country") if user_settings.myday_block_on(cid, "fact") else "",
     }

@@ -362,3 +362,29 @@ def test_my_day_title_says_which_trip_day():
     assert myday._trip_day({}, date(2026, 10, 26)) == 0
     msg = myday_ui.day_summary("Пн, 26 октября", "Кейптаун", country="ZA", flag="🇿🇦", vacation={"day": 8})
     assert msg.text.startswith("Мой 8 день в отпуске · Пн, 26 октября · Кейптаун")
+
+
+def test_trip_start_is_earliest_of_route_suitcase_and_mode(monkeypatch):
+    import wardrobe_suitcase
+    from datetime import date
+    monkeypatch.setattr(vacation, "state", lambda _cid: {
+        "cc": "ZA", "since": "2026-10-22",  # режим включили заново после смены маршрута
+        "legs": [{"city": "Кейптаун", "start": "2026-10-19"}, {"city": "Йоханнесбург", "start": "2026-10-27"}]})
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": {"start": "2026-10-20", "cc": "ZA"}})
+    assert vacation.trip_start("42") == date(2026, 10, 19)
+
+
+def test_restarting_trip_keeps_its_start(monkeypatch):
+    import asyncio
+    saved = {"home": {"city": "Alkmaar"}, "cc": "ZA", "since": "2026-10-19"}
+    monkeypatch.setattr(vacation, "state", lambda _cid: dict(saved))
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: (saved.clear(), saved.update(value)))
+    monkeypatch.setattr(vacation.store, "get_settings", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(vacation, "_reset_day_caches", lambda _cid: None)
+
+    async def finish(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(vacation, "_finish", finish)
+    asyncio.run(vacation._start(None, "42", {"city": "Alkmaar"}, "2026-11-03", legs=[{"city": "Йоханнесбург"}]))
+    assert saved["since"] == "2026-10-19"
