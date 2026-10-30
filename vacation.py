@@ -1552,9 +1552,8 @@ async def send_quiz(bot, cid):
     word = random.choice(words)
     options = random.sample([item["ru"] for item in words if item["ru"] != word["ru"]], 3) + [word["ru"]]
     random.shuffle(options)
-    say = f" [{word['say']}]" if word.get("say") else ""
-    await bot.send_poll(
-        chat_id=cid, question=f"🎯 Выбери перевод\n\nЧто значит {word['text']}{say}?"[:300],
+    await bot.send_poll(  # только фраза: без «Что значит» и транскрипции
+        chat_id=cid, question=f"🎯 Выбери перевод\n\n{word['text']}"[:300],
         options=[option[:100] for option in options], type="quiz",
         correct_option_id=options.index(word["ru"]), is_anonymous=False,
         reply_markup=InlineKeyboardMarkup([
