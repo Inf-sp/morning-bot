@@ -855,9 +855,20 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     activity = activity or {}
-    if activity.get("name"):  # одно развлечение на день: место и описание, без категории и маркера
-        b.bold(f"{activity['name']}:")
-        b.line(f" {activity.get('about') or ''}".rstrip())
+    if activity.get("name"):  # одно развлечение на день: место — ссылка на Google Maps · город, ниже описание
+        name, city = str(activity["name"]).strip(), str(activity.get("city") or "").strip()
+        # Поиск на карте — по оригинальному названию латиницей, если есть: так Google Maps точнее находит место.
+        query = ", ".join(part for part in (str(activity.get("name_en") or "").strip() or name, city, place) if part)
+        b.bold_link(name, "https://www.google.com/maps/search/?api=1&query=" + quote_plus(query))
+        if city and city.casefold() not in name.casefold():
+            b.text_line(f" · {city}")
+        b.newline()
+        about = str(activity.get("about") or "").strip()
+        if about.casefold().startswith(name.casefold()):  # «Сад Уолтера Сисулу известен…» — без повтора названия
+            about = about[len(name):].lstrip(" :—-,")
+            about = about[:1].upper() + about[1:]
+        if about:
+            b.line(about)
         b.spacer()
     data = data or {}
     _trip_music(b, data.get("hits") or [], data.get("legends") or [])

@@ -177,13 +177,18 @@ def test_trip_leisure_screen_is_one_activity_and_tip():
     from ui import leisure as leisure_ui
 
     msg = leisure_ui.trip_leisure_screen("ЮАР", {}, flag="🇿🇦", activity={
-        "category": "Сафари и животные", "name": "Парк Пиланесберг",
-        "about": "Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии."},
-        footer="Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано")
+        "category": "Природа", "name": "Сад Уолтера Сисулу", "name_en": "Walter Sisulu National Botanical Garden",
+        "city": "Йоханнесбург",
+        "about": "Сад Уолтера Сисулу известен своим водопадом и тропами."},
+        footer="Планируй всё до 17:00 — в ЮАР темнеет рано")
     assert msg.text == (
-        "🇿🇦 Досуг в отпуске · ЮАР\n\n"
-        "Парк Пиланесберг: Поездки на джипах за «Большой пятёркой». Огромный плюс — нет малярии.\n\n"
-        "Главное правило: все активности планируй до 17:00 — в ЮАР темнеет рано.")
+        "🇿🇦 Досуг в отпуске · ЮАР\n\nСад Уолтера Сисулу · Йоханнесбург\n"
+        "Известен своим водопадом и тропами.\n\n"  # без повтора названия и без категории
+        "Планируй всё до 17:00 — в ЮАР темнеет рано.")
+    link = next(e for e in msg.entities if e.type == "text_link")
+    assert link.url == ("https://www.google.com/maps/search/?api=1&query="
+                        "Walter+Sisulu+National+Botanical+Garden%2C+%D0%99%D0%BE%D1%85%D0%B0%D0%BD%D0%BD%D0%B5%D1%81"
+                        "%D0%B1%D1%83%D1%80%D0%B3%2C+%D0%AE%D0%90%D0%A0")
     assert "Коротко о стране" not in msg.text
 
 
