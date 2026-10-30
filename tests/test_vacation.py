@@ -149,7 +149,7 @@ def test_vacation_quiz_is_a_translation_poll(monkeypatch):
     asyncio.run(vacation.send_quiz(PollBot(), "42"))
 
     poll = polls[0]
-    assert poll["type"] == "quiz" and len(poll["options"]) == 4 and poll["question"].startswith("🎯 Выбери перевод")
+    assert poll["type"] == "quiz" and len(poll["options"]) == 3 and poll["question"].startswith("🎯 Выбери перевод")
     term = poll["question"].split("\n\n", 1)[1]  # только фраза: без «Что значит» и транскрипции
     assert "Что значит" not in poll["question"] and "[" not in poll["question"]
     assert poll["options"][poll["correct_option_id"]] == "Фраза " + term.split()[-1]

@@ -478,3 +478,22 @@ def test_trip_leisure_has_about_country_button_and_screen(monkeypatch):
     assert [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")
             for e in shown[0].entities if e.type == "italic"] == ["Полиция: 10111"]
     assert [b.callback_data for b in shown[0].reply_markup.inline_keyboard[-1]] == ["m_leisure", "m_menu"]
+
+
+def test_trip_quiz_asks_a_word_with_three_options(monkeypatch):
+    import asyncio
+    monkeypatch.setattr(vacation, "replaces_learning", lambda _cid: True)
+    monkeypatch.setattr(vacation, "travel_words", lambda _cid: [
+        {"text": "die rekening", "ru": "счёт"}, {"text": "die apteek", "ru": "аптека"},
+        {"text": "die stasie", "ru": "вокзал"}, {"text": "kleingeld", "ru": "сдача"}])
+    polls = []
+
+    class Bot:
+        async def send_poll(self, **kwargs):
+            polls.append(kwargs)
+
+    asyncio.run(vacation.send_quiz(Bot(), "42"))
+    poll = polls[0]
+    word = poll["question"].split("\n\n", 1)[1]
+    assert word in {"die rekening", "die apteek", "die stasie", "kleingeld"}  # слово, а не фраза
+    assert len(poll["options"]) == 3 and len(set(poll["options"])) == 3
