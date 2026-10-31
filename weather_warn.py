@@ -10,6 +10,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
+import store
 import weather
 
 # Максимумы по ТЗ: не перегружать уведомление.
@@ -266,6 +267,27 @@ def _safe_trigger(hazard, ctx) -> bool:
         return False
 
 
+def _local_when(when, cid):
+    """«11:00–18:00» из прогноза (время Амстердама) — во время места: в отпуске сдвигаем на разницу поясов."""
+    import re
+    from datetime import datetime, timedelta
+    import vacation
+    try:
+        local = vacation.local_tz(cid)
+        now = datetime.now(weather.TZ)
+        shift = now.astimezone(local).utcoffset() - now.utcoffset()
+    except Exception:
+        return when
+    if not shift:
+        return when
+
+    def move(match):
+        moment = datetime(2000, 1, 1, int(match.group(1)), int(match.group(2))) + shift
+        return moment.strftime("%H:%M")
+
+    return re.sub(r"\b(\d{1,2}):(\d{2})\b", move, str(when or ""))
+
+
 def build_warning(data, cid):
     """Собирает MessageSpec погодного предупреждения или None (тихий день)."""
     from ui import weather as weather_ui
@@ -280,5 +302,8 @@ def build_warning(data, cid):
         mark, _sep, text = h.event(ctx).partition(" ")
         icon = icon or mark
         events.append(text)
-    when = _when_for(ctx, [h.key for h in top])
-    return weather_ui.weather_warning(events, when, icon)
+    when = _local_when(_when_for(ctx, [h.key for h in top]), cid)
+    import countries
+    place = store.get_settings(cid) or {}
+    country = countries.name_ru(place.get("cc")) or str(place.get("country") or "")
+    return weather_ui.weather_warning(events, when, icon, country=country, city=str(place.get("city") or ""))

@@ -39,20 +39,24 @@ def forecast_unavailable():
     return b.build_stripped()
 
 
-def weather_warning(events, when="", icon="⚠️"):
-    """Погодное предупреждение: значок главного события в заголовке → события → когда.
+def weather_warning(events, when="", icon="⚠️", country="", city=""):
+    """Погодное предупреждение: «🌡️ Погодное предупреждение · ЮАР» → город жирным → события → курсивом «Когда: …».
 
     Эмодзи только в заголовке (🌧️ дождь, 💨 ветер, ⛈️ гроза…); события и «Когда:» —
     без значков, рекомендаций «Что сделать» нет.
     """
     b = MessageBuilder()
-    b.section(f"{icon or '⚠️'} Погодное предупреждение")
+    b.section(" · ".join(part for part in (f"{icon or '⚠️'} Погодное предупреждение", country) if part))
     b.newline()
+    if city:
+        b.bold(city)
+        b.newline()
     for ev in events:
         b.line(ev)
     if when:
-        b.section("Когда:")
-        b.line(when)
+        b.spacer()
+        b.italic(f"Когда: {when}")
+        b.newline()
     return b.build_stripped()
 
 

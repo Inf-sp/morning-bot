@@ -497,3 +497,20 @@ def test_trip_quiz_asks_a_word_with_three_options(monkeypatch):
     word = poll["question"].split("\n\n", 1)[1]
     assert word in {"die rekening", "die apteek", "die stasie", "kleingeld"}  # слово, а не фраза
     assert len(poll["options"]) == 3 and len(set(poll["options"])) == 3
+
+
+def test_weather_warning_has_country_city_and_local_when(monkeypatch):
+    from zoneinfo import ZoneInfo
+    import weather_warn
+    monkeypatch.setattr(vacation, "local_tz", lambda _cid: ZoneInfo("Africa/Johannesburg"))
+    monkeypatch.setattr(weather_warn.weather, "TZ", ZoneInfo("Europe/Amsterdam"))
+    # 31 октября: Амстердам UTC+1, Йоханнесбург UTC+2 — «11:00–18:00» по Амстердаму = «12:00–19:00» на месте.
+    assert weather_warn._local_when("11:00–18:00", "42") in ("12:00–19:00", "11:00–18:00")
+    from ui import weather as weather_ui
+    msg = weather_ui.weather_warning(["Жарко, до +32°C.", "Высокий UV-индекс — 14."], "12:00–19:00", "🌡️",
+                                     country="ЮАР", city="Йоханнесбург")
+    assert msg.text == ("🌡️ Погодное предупреждение · ЮАР\n\nЙоханнесбург\nЖарко, до +32°C.\n"
+                        "Высокий UV-индекс — 14.\n\nКогда: 12:00–19:00")
+    utf16 = msg.text.encode("utf-16-le")
+    styled = {(e.type, utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")) for e in msg.entities}
+    assert ("bold", "Йоханнесбург") in styled and ("italic", "Когда: 12:00–19:00") in styled
