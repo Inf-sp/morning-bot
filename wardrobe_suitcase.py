@@ -525,6 +525,16 @@ def plan(cid, *, fetch=True) -> list:
     return _sync_today(cid, looks, saved_suitcase(cid))
 
 
+def _reset_my_day(cid):
+    """Образ на сегодня поменялся (погода дня, «Ещё вариант») — «Мой день» пересоберётся с ним же, а не покажет
+    утренний кэш с прежними вещами."""
+    try:
+        import myday
+        myday.reset_day_cache(cid)
+    except Exception:
+        _log.warning("suitcase: my day cache reset failed", exc_info=True)
+
+
 _RAIN_FROM = {"утром": 8, "днём": 12, "вечером": 18, "ночью": 22}
 
 
@@ -586,6 +596,8 @@ def _sync_today(cid, looks, saved) -> list:
     looks = [*looks[:index], fresh, *looks[index + 1:]]
     key = _names_key(saved["result"])
     _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
+    if fresh.get("items") != look.get("items"):
+        _reset_my_day(cid)
     return looks
 
 
@@ -634,6 +646,8 @@ def another_look(cid, index) -> list:
         looks = [*looks[:index], look, *looks[index + 1:]]
         key = _names_key(saved["result"])
         _save_plan(cid, key, {**(saved.get("plan") or {}), "key": key, "looks": looks})
+        if look.get("date") == _today().isoformat():
+            _reset_my_day(cid)
     return looks
 
 

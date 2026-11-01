@@ -113,10 +113,9 @@ def render_wardrobe_message(look_data):
     # Старые сохранённые образы хранят строку со значком погоды.
     for icon in ("☂️", "💨", "🌡️", "☀️"):
         weather_reason = weather_reason.removeprefix(icon).strip()
-    if weather_reason:  # почему такие вещи — курсивом, чтобы не сливалось со списком
+    if weather_reason:  # почему такие вещи — обычным текстом, над списком
         b.spacer()
-        b.italic(weather_reason)
-        b.newline()
+        b.line(weather_reason)
 
     if items:
         b.spacer()
@@ -483,16 +482,16 @@ def suitcase_day_card(data, look, index, total, today=""):
     b.title(" · ".join(part for part in (f"{data.get('flag') or '👕'} Образы в отпуске", data.get("place"),
                                          f"{days} {ru_plural(days, 'день', 'дня', 'дней')}" if days else "") if part))
     # Строк дня («Понедельник · день 8 · сегодня · Кейптаун») и погоды нет — сразу вещи; день — в «Моём дне».
+    reason = _clean_text(look.get("reason")) if look.get("date") == today else ""
+    if reason:  # почему такие вещи — обычным текстом, над списком (как у образа дня дома)
+        b.line(reason)
+        b.spacer()
     items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
     for item in items:
         b.line(f"- {item}")
     if not items:
         b.line("В шкафу нет вещей для образа.")
-    reason = _clean_text(look.get("reason")) if look.get("date") == today else ""
-    if reason:  # «Чёрная ветровка — на вечер: дождь и ветер до 10 м/с» — почему в жару верхняя одежда
-        b.spacer()
-        b.italic(reason)
-        b.newline()
+
     packed = int(data.get("items") or 0)
     if packed:
         b.spacer()

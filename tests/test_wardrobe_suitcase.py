@@ -605,4 +605,26 @@ def test_trip_reason_explains_outfit_like_home(monkeypatch):
     head = {"place": "ЮАР", "days": 16, "flag": "🇿🇦", "items": 18}
     look = {"date": today, "items": items, "reason": rainy}
     text = wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).text
-    assert f"- Чёрная Uniqlo ветровка\n\n{rainy}\n\n" in text
+    assert text.startswith(f"🇿🇦 Образы в отпуске · ЮАР · 16 дней\n\n{rainy}\n\n- Оливковая футболка")
+    assert not any(e.type == "italic" and e.offset < 40 for e in
+                   wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).entities)  # не курсив
+
+
+def test_changed_today_look_resets_my_day_cache(monkeypatch):
+    import myday
+    resets = []
+    monkeypatch.setattr(myday, "reset_day_cache", lambda cid: resets.append(cid))
+    today = wardrobe_suitcase._today().isoformat()
+    looks = [{"date": today, "items": ["Ветровка"], "rain": True, "tmax": 20}]
+    saved = {"result": {"groups": []}, "plan": {}}
+    monkeypatch.setattr(wardrobe_suitcase, "plan", lambda _cid: [dict(look) for look in looks])
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: saved)
+    monkeypatch.setattr(wardrobe_suitcase, "_flat", lambda _result: [("Верх", "x")])
+    monkeypatch.setattr(wardrobe_suitcase, "_suitcase_closet", lambda *_a: {})
+    monkeypatch.setattr(wardrobe_suitcase.store, "load_wardrobe", lambda _cid: {})
+    monkeypatch.setattr(wardrobe_suitcase, "_day_outfits", lambda _w, _day: [
+        [{"name": "Ветровка"}], [{"name": "Футболка"}]])
+    monkeypatch.setattr(wardrobe_suitcase, "_names_key", lambda _result: "k")
+    monkeypatch.setattr(wardrobe_suitcase, "_save_plan", lambda *_a: None)
+    wardrobe_suitcase.another_look("42", 0)  # «Ещё вариант» на сегодня — «Мой день» пересоберётся
+    assert resets == ["42"]
