@@ -120,9 +120,9 @@ def test_learning_switches_to_country_language_only_for_other_language(monkeypat
     msg = menu_ui.learning_menu(home)
     # Не грамматика, а что пригодится в поездке: без строки «Ситуация» — сразу фразы строка к строке (запаса
     # поездки нет — фразы ситуации дня и гида, до пяти).
-    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nEen koffie") and "Ситуация" not in msg.text
-    # Длинные фразы переносятся — между фразами пустая строка; произношение курсивом.
-    assert "\nEen koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\n\nDankie! → Спасибо! (данки)\n" in msg.text
+    assert msg.text.startswith("🇿🇦 Обучение в отпуске · Африкаанс\n\nФразы дня:\n• Een koffie") and "Ситуация" not in msg.text
+    # Фразы — пунктами «•» под «Фразы дня:»; произношение курсивом.
+    assert "\n• Een koffie, asseblief → Кофе, пожалуйста (ин кофи, асэблиф)\n• Dankie! → Спасибо! (данки)\n" in msg.text
     utf16 = msg.text.encode("utf-16-le")
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
     assert "Een koffie, asseblief" in bold and "Dankie!" in bold  # фраза жирным
@@ -434,8 +434,8 @@ def test_trip_leisure_screen_has_country_culture_and_no_during_block():
         footer="День наследия · 24 сентября · Праздник культурного многообразия")
 
     text = msg.text
-    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nХиты страны:\n- Nayvee's Prayer — DJ Zinhle\n\n"
-                           "Легенды:\n- Miriam Makeba — Pata Pata\n- Black Coffee\n")
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nХиты страны:\n• Nayvee's Prayer — DJ Zinhle\n\n"
+                           "Легенды:\n• Miriam Makeba — Pata Pata\n• Black Coffee\n")
     # «Во время отпуска» нет: праздник — курсивом внизу, события — рассылкой накануне и в «Моём дне».
     assert "Во время отпуска" not in text and "Johannesburg Pride" not in text and "Muse" not in text
     assert text.endswith("День наследия · 24 сентября · Праздник культурного многообразия.")
@@ -463,7 +463,7 @@ def test_trip_cuisine_screen_has_no_repeating_intro(monkeypatch):
     text = menu._day_menu_message({"cuisine": "local_za", "cuisine_label": "Южноафриканская",
                                         "dishes": {"lunch": {"name": "Брай", "note": "мясо на открытом огне"}}}, "42").text
     # Описание кухни каждый день одинаковое — на экране отпуска его нет, сразу блюдо.
-    assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай\n")
+    assert text.startswith("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай:\n• ")
     assert "пряные карри" not in text
 
 
@@ -535,11 +535,11 @@ def test_trip_menu_is_what_to_try_with_top_dish_and_no_recipe_buttons(monkeypatc
     assert [[b.callback_data for b in row] for row in msg.reply_markup.inline_keyboard] == [
         ["food_trip_next"], ["m_menu"]]  # «Другое блюдо» и «Главная», без рецептов «Завтрак / Обед / Ужин»
     # Одно блюдо — то, что стоит попробовать сегодня (top), жирным, ниже описание; без «Завтрак / Обед / Ужин».
-    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай · Braai\n"
-                        "Мясо на открытом огне. Главная традиция выходных.")  # факта о кухне внизу нет — там статистика поездки
+    assert msg.text == ("🇿🇦 Пробуем в отпуске · Южноафриканская кухня\n\nБрай · Braai:\n"
+                        "• Мясо на открытом огне.\n• Главная традиция выходных.")  # факта о кухне внизу нет — там статистика поездки
     utf16 = msg.text.encode("utf-16-le")  # смещения Telegram — в UTF-16: флаг 🇿🇦 занимает 4 единицы
     bold = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "bold"]
-    assert "Брай · Braai" in bold and "🔥" not in msg.text and "Завтрак" not in msg.text and "Обед" not in msg.text
+    assert "Брай · Braai:" in bold and "🔥" not in msg.text and "Завтрак" not in msg.text and "Обед" not in msg.text
 
 
 def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(monkeypatch):

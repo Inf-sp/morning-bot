@@ -487,8 +487,12 @@ def suitcase_day_card(data, look, index, total, today=""):
         b.line(reason)
         b.spacer()
     items = [_upper_first(_clean_text(name)) for name in look.get("items") or [] if _clean_text(name)]
+    city = _clean_text(look.get("city") or data.get("city"))
+    if items and city:  # как в погодном предупреждении: «Йоханнесбург:», ниже вещи с «•»
+        b.bold(f"{city}:")
+        b.newline()
     for item in items:
-        b.line(f"- {item}")
+        b.line(f"• {item}")
     if not items:
         b.line("В шкафу нет вещей для образа.")
 

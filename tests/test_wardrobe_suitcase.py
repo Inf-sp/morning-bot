@@ -358,7 +358,7 @@ def test_day_card_has_trip_head_day_weather_tiers_and_one_item_per_line():
     # вещи списком, как в «Надень сегодня»; носков нет, даже в старом плане — их выбирает пользователь.
     # В заголовке — страна и дни, в строке дня — город этого дня; внизу курсивом — чемодан.
     assert text == ("🇿🇦 Образы в отпуске · ЮАР · 17 дней\n\n"
-                    "- Бежевая футболка с оранжевым принтом\n- Бежевые строгие брюки\n- Белые кеды"
+                    "Кейптаун:\n• Бежевая футболка с оранжевым принтом\n• Бежевые строгие брюки\n• Белые кеды"
                     "\n\nТвой чемодан · 12 вещей · 17 образов")
     conditions = {kind: wardrobe_ui._day_condition({"tmax": 15, "wind": 9, "kind": kind})
                   for kind in ("forecast", "early", "typical")}
@@ -446,7 +446,7 @@ def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it
 
     asyncio.run(wardrobe.send_home(bot, "42"))
 
-    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун · 3 дня\n\n- ")
+    assert bot.sent[-1]["text"].startswith("🇿🇦 Образы в отпуске · Кейптаун · 3 дня\n\nКейптаун:\n• ")
     today = profile["suitcase_saved"]["plan"]["looks"][1]["items"]
     summary = wardrobe.get_cached_outfit_summary("42")["items"]
     assert summary == [name[:1].lower() + name[1:] for name in today]  # «Мой день» — тот же образ
@@ -605,7 +605,7 @@ def test_trip_reason_explains_outfit_like_home(monkeypatch):
     head = {"place": "ЮАР", "days": 16, "flag": "🇿🇦", "items": 18}
     look = {"date": today, "items": items, "reason": rainy}
     text = wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).text
-    assert text.startswith(f"🇿🇦 Образы в отпуске · ЮАР · 16 дней\n\n{rainy}\n\n- Оливковая футболка")
+    assert text.startswith(f"🇿🇦 Образы в отпуске · ЮАР · 16 дней\n\n{rainy}\n\n• Оливковая футболка")
     assert not any(e.type == "italic" and e.offset < 40 for e in
                    wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).entities)  # не курсив
 

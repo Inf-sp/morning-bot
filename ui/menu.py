@@ -214,9 +214,10 @@ def _trip_learning(home: dict):
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
     phrases = home.get("phrases") or (home.get("situation") or {}).get("phrases") or []
     if phrases:
-        for number, phrase in enumerate(phrases):  # длинные фразы переносятся — между фразами пустая строка
-            if number:
-                b.spacer()
+        b.bold("Фразы дня:")  # как в погодном предупреждении: подпись с двоеточием, пункты с «•»
+        b.newline()
+        for phrase in phrases:
+            b.text_line("• ")
             b.bold(str(phrase["text"]).strip())
             b.text_line(f" → {phrase['ru']}")
             if phrase.get("say"):
@@ -312,13 +313,15 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
     b = MessageBuilder()
     b.section(f"{flag} Пробуем в отпуске · {cuisine_label} кухня")
     # Описания кухни нет — каждый день одно и то же; главное — блюдо: название и местное название без эмодзи.
-    if (dish or {}).get("name"):
+    if (dish or {}).get("name"):  # как в погодном предупреждении: «Банни чоу · Bunny Chow:», описание пунктами «•»
         b.spacer()
-        b.bold(" · ".join(part for part in (dish["name"], dish.get("original")) if part))
+        b.bold(" · ".join(part for part in (dish["name"], dish.get("original")) if part) + ":")
         b.newline()
         note = _cooking_text(dish.get("note"))
-        if note:
-            b.line(_with_period(note[:1].upper() + note[1:]))
+        for sentence in re.split(r"(?<=[.!?])\s+", note) if note else []:
+            sentence = sentence.strip()
+            if sentence:
+                b.line(f"• {_with_period(sentence[:1].upper() + sentence[1:])}")
     else:  # AI не дал блюда кухни страны — честно, без подмены домашней кухней
         b.spacer()
         b.line("Блюдо дня сейчас недоступно — загляни чуть позже.")

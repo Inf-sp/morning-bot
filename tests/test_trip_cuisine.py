@@ -182,8 +182,8 @@ def test_trip_leisure_screen_is_one_activity_and_tip():
         "about": "Сад Уолтера Сисулу известен своим водопадом и тропами."},
         footer="Планируй всё до 17:00 — в ЮАР темнеет рано")
     assert msg.text == (
-        "🇿🇦 Досуг в отпуске · ЮАР\n\nСад Уолтера Сисулу · Йоханнесбург\n"
-        "Известен своим водопадом и тропами.\n\n"  # без повтора названия и без категории
+        "🇿🇦 Досуг в отпуске · ЮАР\n\nЙоханнесбург:\n"  # как в погодном предупреждении: город, ниже пункт «•»
+        "• Сад Уолтера Сисулу — известен своим водопадом и тропами.\n\n"  # без повтора названия и категории
         "Планируй всё до 17:00 — в ЮАР темнеет рано.")
     link = next(e for e in msg.entities if e.type == "text_link")
     assert link.url == ("https://www.google.com/maps/search/?api=1&query="
@@ -312,7 +312,8 @@ def test_trip_learning_screen_has_no_situation_line():
 
     msg = menu_ui._trip_learning({"flag": "🇿🇦", "language": "Африкаанс", "phrases": [
         {"text": "Hoeveel kos dit?", "ru": "Сколько это стоит?", "say": "хуфеел кос дит"}]})
-    assert msg.text == "🇿🇦 Обучение в отпуске · Африкаанс\n\nHoeveel kos dit? → Сколько это стоит? (хуфеел кос дит)"
+    assert msg.text == ("🇿🇦 Обучение в отпуске · Африкаанс\n\nФразы дня:\n"
+                        "• Hoeveel kos dit? → Сколько это стоит? (хуфеел кос дит)")
     utf16 = msg.text.encode("utf-16-le")
     italic = [utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le") for e in msg.entities if e.type == "italic"]
     assert italic == ["(хуфеел кос дит)"]

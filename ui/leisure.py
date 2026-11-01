@@ -831,7 +831,7 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
         b.bold("Хиты страны:")
         b.newline()
         for hit in hits:
-            b.text_line("- ")
+            b.text_line("• ")
             b.link(f"{hit['track']} — {hit['artist']}", youtube_music_link(hit["track"], hit["artist"]))
             b.newline()
     if legends:
@@ -839,7 +839,7 @@ def _trip_music(b: MessageBuilder, hits, legends) -> None:
         b.bold("Легенды:")
         b.newline()
         for legend in legends:
-            b.text_line("- ")
+            b.text_line("• ")
             name = f"{legend['artist']} — {legend['track']}" if legend.get("track") else legend["artist"]
             b.link(name, youtube_music_link(legend.get("track") or "", legend["artist"]))
             b.newline()
@@ -859,16 +859,16 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
         name, city = str(activity["name"]).strip(), str(activity.get("city") or "").strip()
         # Поиск на карте — по оригинальному названию латиницей, если есть: так Google Maps точнее находит место.
         query = ", ".join(part for part in (str(activity.get("name_en") or "").strip() or name, city, place) if part)
-        b.bold_link(name, "https://www.google.com/maps/search/?api=1&query=" + quote_plus(query))
-        if city and city.casefold() not in name.casefold():
-            b.text_line(f" · {city}")
-        b.newline()
+        if city:  # как в погодном предупреждении: «Йоханнесбург:», ниже «• Место — описание»
+            b.bold(f"{city}:")
+            b.newline()
         about = str(activity.get("about") or "").strip()
         if about.casefold().startswith(name.casefold()):  # «Сад Уолтера Сисулу известен…» — без повтора названия
             about = about[len(name):].lstrip(" :—-,")
-            about = about[:1].upper() + about[1:]
-        if about:
-            b.line(about)
+        about = about[:1].lower() + about[1:] if about else ""
+        b.text_line("• ")
+        b.bold_link(name, "https://www.google.com/maps/search/?api=1&query=" + quote_plus(query))
+        b.line(f" — {about}" if about else "")
         b.spacer()
     data = data or {}
     _trip_music(b, data.get("hits") or [], data.get("legends") or [])
