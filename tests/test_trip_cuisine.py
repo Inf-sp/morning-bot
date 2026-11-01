@@ -536,3 +536,21 @@ def test_trip_menu_has_second_dessert_drink_or_snack(monkeypatch):
                             trip=True, trip_dish={"name": "Банни чоу", "note": "Хлеб с карри."},
                             trip_extra={"kind": "десерт", "name": "Мальва-пудинг", "note": "Тёплый пудинг."}).text
     assert "Банни чоу:\n• Хлеб с карри.\n\nДесерт · Мальва-пудинг:\n• Тёплый пудинг." in text
+
+
+def test_trip_leisure_footer_is_the_tip_of_todays_place(monkeypatch):
+    import leisure_hub
+    captured = {}
+    monkeypatch.setattr(leisure_hub.leisure_ui, "trip_leisure_screen", lambda *a, **k: captured.update(k))
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(vacation, "state", lambda _cid: {"cc": "ZA"})
+    monkeypatch.setattr(leisure_hub, "_trip_footer", lambda *_a: "старая строка")
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "cached_favorite_concerts", lambda *_a: [])
+    monkeypatch.setattr(vacation, "trip_activities", lambda _cid, fetch=True: {"tip": "Общий совет"})
+    monkeypatch.setattr(vacation, "activity_of_day", lambda _cid, today=None: {
+        "name": "Соуэто", "tip": "Бери тур с местным гидом — так безопаснее и интереснее"})
+    leisure_hub._trip_screen("42", {})
+    assert captured["footer"] == "Бери тур с местным гидом — так безопаснее и интереснее"
+    monkeypatch.setattr(vacation, "activity_of_day", lambda _cid, today=None: {"name": "Соуэто"})
+    leisure_hub._trip_screen("42", {})
+    assert captured["footer"] == "Общий совет"

@@ -653,10 +653,11 @@ def _trip_screen(cid, data):
     # Одно развлечение на день из заранее готового списка поездки; справка о стране — в «Полезно» «Моего дня».
     # Внизу курсивом — главный совет к активностям; пока списка нет — прежняя строка.
     activities = vacation.trip_activities(cid, fetch=False)
-    footer = activities.get("tip") or _trip_footer(cid, cc)
+    activity = vacation.activity_of_day(cid)
+    # Внизу — совет к сегодняшнему месту (у каждого свой — без повторов); нет — общий совет поездки.
+    footer = activity.get("tip") or activities.get("tip") or _trip_footer(cid, cc)
     return leisure_ui.trip_leisure_screen(where, data, sorted(events, key=lambda event: event.get("start", "")),
-                                          concerts, flag=util.flag_from_cc(cc), footer=footer,
-                                          activity=vacation.activity_of_day(cid))
+                                          concerts, flag=util.flag_from_cc(cc), footer=footer, activity=activity)
 
 
 _TRIP_ARTISTS_SHOWN = 5

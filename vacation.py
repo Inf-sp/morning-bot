@@ -1020,7 +1020,7 @@ def holiday_of_day(cid, today=None) -> dict:
     return holidays[max(0, index) % len(holidays)]
 
 
-_ACTIVITIES_VERSION = 2  # 2 — name_en для ссылки на карту, описание без повтора названия
+_ACTIVITIES_VERSION = 3  # 3 — свой совет у каждого места (tip); 2 — name_en для карты, описание без повтора названия
 _ACTIVITIES_MAX = 30  # поездка длиннее — по кругу
 
 
@@ -1049,9 +1049,12 @@ def trip_activities(cid, fetch=True) -> dict:
         "животные»), name — название места или занятия (как принято, «Столовая гора», «Музей Zeitz MOCAA»), name_en — "
         "оригинальное название латиницей для поиска на карте («Table Mountain»), about — одно-два живых предложения до "
         "180 символов: что делать и чем удивит, не начинай с названия места; city — город из списка, рядом с которым "
-        "это. tip — одно главное практическое правило для активностей в этой стране до 160 символов («Планируй всё "
+        "это; tip — один практичный совет именно к этому месту до 140 символов, у каждого места свой и без повторов: "
+        "когда лучше приехать, как добраться, что взять, на что не попасть, как сэкономить («Бери тур с местным "
+        "гидом — так безопаснее и интереснее»). Только проверяемое: не уверен в цене или часах — не пиши их. tip — одно главное практическое правило для активностей в этой стране до 160 символов («Планируй всё "
         "до 17:00 — в ЮАР темнеет рано, на сафари и в горы лучше выходить на рассвете»).\n"
-        'JSON: {"items": [{"category": "", "name": "", "name_en": "", "about": "", "city": ""}], "tip": ""}'
+        'JSON: {"items": [{"category": "", "name": "", "name_en": "", "about": "", "city": "", "tip": ""}], '
+        '"tip": ""}'
     )
     try:
         data = ai.llm_json(prompt, 4000, tier="cheap", module="vacation", fallback_allowed=True,
@@ -1065,7 +1068,7 @@ def trip_activities(cid, fetch=True) -> dict:
         if not isinstance(raw, dict):
             continue
         item = {key: _text(raw.get(key), limit) for key, limit in
-                (("category", 40), ("name", 60), ("name_en", 80), ("about", 220), ("city", 40))}
+                (("category", 40), ("name", 60), ("name_en", 80), ("about", 220), ("city", 40), ("tip", 180))}
         if item["name"] and item["about"] and item["name"].casefold() not in seen:
             seen.add(item["name"].casefold())
             items.append(item)
