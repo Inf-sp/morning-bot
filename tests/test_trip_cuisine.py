@@ -509,8 +509,8 @@ def test_weather_warning_has_country_city_and_local_when(monkeypatch):
     from ui import weather as weather_ui
     msg = weather_ui.weather_warning(["Жарко, до +32°C.", "Высокий UV-индекс — 14."], "12:00–19:00", "🌡️",
                                      country="ЮАР", city="Йоханнесбург")
-    assert msg.text == ("🌡️ Погодное предупреждение · ЮАР\n\nЙоханнесбург\nЖарко, до +32°C.\n"
-                        "Высокий UV-индекс — 14.\n\nКогда: 12:00–19:00")
+    assert msg.text == ("🌡️ Погодное предупреждение · ЮАР\n\nЙоханнесбург:\n• Жарко, до +32°C.\n"
+                        "• Высокий UV-индекс — 14.\n\nКогда: 12:00–19:00")
     utf16 = msg.text.encode("utf-16-le")
     styled = {(e.type, utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")) for e in msg.entities}
-    assert ("bold", "Йоханнесбург") in styled and ("italic", "Когда: 12:00–19:00") in styled
+    assert ("bold", "Йоханнесбург:") in styled and ("italic", "Когда: 12:00–19:00") in styled

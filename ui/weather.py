@@ -40,7 +40,8 @@ def forecast_unavailable():
 
 
 def weather_warning(events, when="", icon="⚠️", country="", city=""):
-    """Погодное предупреждение: «🌡️ Погодное предупреждение · ЮАР» → город жирным → события → курсивом «Когда: …».
+    """Погодное предупреждение: «🌡️ Погодное предупреждение · ЮАР» → «Йоханнесбург:» жирным → события списком «•» →
+    курсивом «Когда: …».
 
     Эмодзи только в заголовке (🌧️ дождь, 💨 ветер, ⛈️ гроза…); события и «Когда:» —
     без значков, рекомендаций «Что сделать» нет.
@@ -49,10 +50,10 @@ def weather_warning(events, when="", icon="⚠️", country="", city=""):
     b.section(" · ".join(part for part in (f"{icon or '⚠️'} Погодное предупреждение", country) if part))
     b.newline()
     if city:
-        b.bold(city)
+        b.bold(f"{city}:")
         b.newline()
-    for ev in events:
-        b.line(ev)
+    for ev in events:  # события списком: «• Жарко, до +32°C.»
+        b.line(f"• {ev}")
     if when:
         b.spacer()
         b.italic(f"Когда: {when}")
