@@ -588,19 +588,21 @@ def test_today_look_follows_my_day_weather(monkeypatch):
     assert wardrobe_ui._day_condition(look) == "🌤️ Тепло и сухо"
 
 
-def test_outer_reason_explains_windbreaker_on_hot_day(monkeypatch):
+def test_trip_reason_explains_outfit_like_home(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase.store, "load_wardrobe", lambda _cid: {"zones": {
-        "Верхняя одежда": {"Куртки": [{"name": "Чёрная Uniqlo ветровка"}]},
-        "Верх": {"Футболки": [{"name": "Оливковая футболка"}]}}})
-    items = ["Оливковая футболка", "Чёрная Uniqlo ветровка"]
-    found = {"rain": True, "wind": 10, "rain_periods": ["вечером", "ночью"]}
-    assert wardrobe_suitcase._outer_reason("42", items, found) == \
-        "Чёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с"
-    assert wardrobe_suitcase._outer_reason("42", items, {"rain": False, "wind": 3}) == ""
-    assert wardrobe_suitcase._outer_reason("42", ["Оливковая футболка"], found) == ""  # без верхней одежды
+        "Верхняя одежда": {"Куртки": [{"name": "Чёрная Uniqlo ветровка", "rain_ok": True}]},
+        "Верх": {"Футболки": [{"name": "Оливковая футболка"}]},
+        "Обувь": {"Кеды": [{"name": "Бежевые кеды"}]}}})
+    items = ["Оливковая футболка", "Бежевые кеды", "Чёрная Uniqlo ветровка"]
+    rainy = wardrobe_suitcase._trip_reason("42", items, {"rain": True, "wind": 10, "tmax": 32, "tmin": 21,
+                                                         "rain_periods": ["вечером", "ночью"]})
+    assert rainy.startswith("Дождь с 18:00 и порывы ветра до 10 м/с")
+    assert "непромокаемую верхнюю одежду" in rainy and "закрытую обувь" in rainy
+    calm = wardrobe_suitcase._trip_reason("42", items[:2], {"rain": False, "wind": 3, "tmax": 22, "tmin": 15})
+    assert calm.startswith("Сухо, до +22°")
 
     today = wardrobe_suitcase._today().isoformat()
     head = {"place": "ЮАР", "days": 16, "flag": "🇿🇦", "items": 18}
-    look = {"date": today, "items": items, "reason": "Чёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с"}
+    look = {"date": today, "items": items, "reason": rainy}
     text = wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).text
-    assert "- Чёрная Uniqlo ветровка\n\nЧёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с\n\n" in text
+    assert f"- Чёрная Uniqlo ветровка\n\n{rainy}\n\n" in text

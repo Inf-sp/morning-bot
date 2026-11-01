@@ -525,25 +525,28 @@ def plan(cid, *, fetch=True) -> list:
     return _sync_today(cid, looks, saved_suitcase(cid))
 
 
-_PERIOD_FOR = {"утром": "на утро", "днём": "на день", "вечером": "на вечер", "ночью": "на ночь"}
+_RAIN_FROM = {"утром": 8, "днём": 12, "вечером": 18, "ночью": 22}
 
 
-def _outer_reason(cid, items, found) -> str:
-    """Почему в образе верхняя одежда: «Ветровка — на вечер: дождь и ветер до 10 м/с»; иначе ""."""
-    zones = {str(item.get("name") or "").casefold(): zone
-             for zone, subs in (store.load_wardrobe(cid).get("zones") or {}).items()
-             for items_ in subs.values() for item in items_}
-    outer = next((name for name in items if zones.get(str(name).casefold()) == "Верхняя одежда"), "")
+def _trip_reason(cid, items, found) -> str:
+    """Почему такие вещи — та же строка, что у образа дня дома (wardrobe_rules.weather_reason): «Дождь с 18:00 и
+    порывы ветра до 10 м/с, лучше выбрать непромокаемую верхнюю одежду и закрытую обувь.», «Тепло до +32° и сухо,
+    лучше выбрать лёгкие вещи…»; погода — как в «Моём дне»."""
+    import wardrobe_rules
+    by_name = {str(item.get("name") or "").casefold(): {**item, "zone": zone}
+               for zone, subs in (store.load_wardrobe(cid).get("zones") or {}).items()
+               for items_ in subs.values() for item in items_}
+    objects = [by_name.get(str(name).casefold(), {"name": name}) for name in items]
     wind = round(float(found.get("wind") or 0))
-    windy = wind >= _STRONG_WIND_MS
-    if not outer or not (found.get("rain") or windy):
+    first = next((str(period).casefold() for period in found.get("rain_periods") or []), "")
+    ctx = {"has_rain": bool(found.get("rain")), "rain_from": _RAIN_FROM.get(first), "window": (8, 20),
+           "strong_wind": wind >= _STRONG_WIND_MS, "gust_max": wind, "wind_ms": wind,
+           "tmax": found.get("tmax"), "tmin": found.get("tmin")}
+    try:
+        return wardrobe_rules.weather_reason(ctx, objects)
+    except Exception:
+        _log.warning("suitcase: weather reason failed", exc_info=True)
         return ""
-    periods = [_PERIOD_FOR.get(str(period).casefold(), "") for period in found.get("rain_periods") or []]
-    when = next((period for period in periods if period), "") if found.get("rain") else ""
-    what = " и ".join(part for part in ("дождь" if found.get("rain") else "",
-                                        f"ветер до {wind} м/с" if windy else "") if part)
-    name = str(outer).strip()
-    return f"{name[:1].upper()}{name[1:]} — {when + ': ' if when else ''}{what}"
 
 
 def _sync_today(cid, looks, saved) -> list:
@@ -577,7 +580,7 @@ def _sync_today(cid, looks, saved) -> list:
         if outfits:
             items = [item.get("name") for item in sorted(outfits[0], key=outfit_display_order)]
     fresh = {**look, **_day_weather(day), "icon": found["icon"], "items": items,
-             "reason": _outer_reason(cid, items, found)}
+             "reason": _trip_reason(cid, items, found)}
     if fresh == look:
         return looks
     looks = [*looks[:index], fresh, *looks[index + 1:]]
