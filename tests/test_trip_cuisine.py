@@ -280,7 +280,7 @@ def test_food_tips_without_digits_are_dropped(monkeypatch):
     monkeypatch.setattr(vacation.ai, "llm_json", lambda *_a, **_k: {"check": "недорого", "hours": "ужин после 19"})
     assert vacation.food_tips("42") == {"hours": "ужин после 19"}
 
-def test_travel_phrases_built_for_whole_trip_in_batches_and_five_per_day(monkeypatch):
+def test_travel_phrases_built_for_whole_trip_in_batches_and_three_per_day(monkeypatch):
     from datetime import date
     monkeypatch.setattr(vacation, "travel_phrases", REAL_TRAVEL_PHRASES)
     saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-29"}  # 10 дней — 50 фраз, два запроса
@@ -303,8 +303,8 @@ def test_travel_phrases_built_for_whole_trip_in_batches_and_five_per_day(monkeyp
     assert vacation.travel_phrases("42") == items and len(prompts) == 2  # запас уже на весь отпуск — без запросов
     day1 = vacation.phrases_today("42", date(2026, 10, 20))
     day2 = vacation.phrases_today("42", date(2026, 10, 21))
-    assert [p["text"] for p in day1] == [f"Frase {i}" for i in range(5)]
-    assert [p["text"] for p in day2] == [f"Frase {i}" for i in range(5, 10)]
+    assert [p["text"] for p in day1] == [f"Frase {i}" for i in range(3)]  # на экране — три фразы дня
+    assert [p["text"] for p in day2] == [f"Frase {i}" for i in range(3, 6)]
 
 
 def test_trip_learning_screen_has_no_situation_line():

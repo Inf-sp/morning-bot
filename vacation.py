@@ -1412,7 +1412,8 @@ def replaces_learning(cid) -> bool:
     return bool(found.get("situations")) and bool(code) and code not in ("ru", store.get_learning_language(cid) or "")
 
 
-_PHRASES_PER_DAY = 5
+_PHRASES_PER_DAY = 3  # на экране — 3 фразы дня
+_PHRASES_STOCK_PER_DAY = 5  # запас — по 5 на день: при 3 в день его хватает дольше
 _TRAVEL_PHRASES_VERSION = 1
 _TRAVEL_PHRASES_BATCH = 25  # фраз за один AI-запрос (5 дней); запас на всю поездку — несколькими запросами
 _TRAVEL_PHRASES_MAX = 150  # до 30 дней; поездка длиннее — фразы идут по кругу
@@ -1428,7 +1429,7 @@ def travel_phrases(cid) -> list:
     saved = current.get("travel_phrases")
     fresh = isinstance(saved, dict) and saved.get("cc") == current.get("cc") and saved.get("v") == _TRAVEL_PHRASES_VERSION
     items = list(saved.get("items") or []) if fresh else []
-    total = min(_TRAVEL_PHRASES_MAX, max(_FACTS_MIN, trip_days(cid)) * _PHRASES_PER_DAY)
+    total = min(_TRAVEL_PHRASES_MAX, max(_FACTS_MIN, trip_days(cid)) * _PHRASES_STOCK_PER_DAY)
     if len(items) >= total or (fresh and saved.get("done")):
         return items
     if util.on_event_loop():

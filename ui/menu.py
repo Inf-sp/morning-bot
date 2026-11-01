@@ -184,8 +184,9 @@ def learning_menu(home: dict):
         topic, explanation = _grammar_parts(phrase.get("rule"))
     # Как в погодном предупреждении: тема жирной подписью с двоеточием, объяснение и пример — пунктами «•».
     points = [point for point in str(explanation or "").split("\n\n") if point.strip()]
-    if phrase.get("more") and phrase.get("more_translation"):
-        points.append(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+    example = (f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}"
+               if phrase.get("more") and phrase.get("more_translation") else "")
+    points = [*points[:2 if example else 3], *([example] if example else [])]  # не больше трёх пунктов
     if topic:
         b.spacer()
         b.bold(f"Грамматика: {topic}:")
@@ -212,7 +213,7 @@ def _trip_learning(home: dict):
     произношение курсивом в скобках; курсивом факт дня о языке. Строк «Ситуация», грамматики и «Произношение» нет."""
     b = MessageBuilder()
     b.title(f"{home.get('flag') or '🌍'} Обучение в отпуске · {home.get('language') or 'Местный язык'}")
-    phrases = home.get("phrases") or (home.get("situation") or {}).get("phrases") or []
+    phrases = (home.get("phrases") or (home.get("situation") or {}).get("phrases") or [])[:3]  # три фразы дня
     if phrases:
         b.bold("Фразы дня:")  # как в погодном предупреждении: подпись с двоеточием, пункты с «•»
         b.newline()
