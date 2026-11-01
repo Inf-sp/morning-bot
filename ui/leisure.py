@@ -860,6 +860,9 @@ def trip_leisure_screen(place, data, events=(), concerts=(), flag="", footer="",
     b = MessageBuilder()
     b.title(f"{flag or '🍿'} Досуг в отпуске" + (f" · {place}" if place else ""))  # «🇿🇦 Досуг в отпуске · ЮАР»
     activity = activity or {}
+    if not activity.get("name"):  # список мест ещё собирается — честно, а не пустой экран с одной подписью
+        b.line("Подбираю развлечения на поездку — загляни чуть позже.")
+        b.spacer()
     if activity.get("name"):  # одно развлечение на день: место — ссылка на Google Maps · город, ниже описание
         name, city = str(activity["name"]).strip(), str(activity.get("city") or "").strip()
         # Поиск на карте — по оригинальному названию латиницей, если есть: так Google Maps точнее находит место.

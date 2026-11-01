@@ -12,6 +12,7 @@ REAL_FOOD_TIPS = vacation.food_tips
 REAL_TRAVEL_PHRASES = vacation.travel_phrases
 REAL_LOCAL_TZ = vacation.local_tz
 REAL_COUNTRY_BRIEF = vacation.country_brief
+REAL_TRIP_ACTIVITIES = vacation.trip_activities
 REAL_ACTIVITY_OF_DAY = vacation.activity_of_day
 REAL_USEFUL_OF_DAY = vacation.useful_of_day
 
@@ -554,3 +555,25 @@ def test_trip_leisure_footer_is_the_tip_of_todays_place(monkeypatch):
     monkeypatch.setattr(vacation, "activity_of_day", lambda _cid, today=None: {"name": "Соуэто"})
     leisure_hub._trip_screen("42", {})
     assert captured["footer"] == "Общий совет"
+
+
+def test_trip_activities_are_built_in_batches_without_repeats(monkeypatch):
+    monkeypatch.setattr(vacation, "trip_activities", REAL_TRIP_ACTIVITIES)
+    saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-29"}  # 10 дней — две части по 8 и 2
+    monkeypatch.setattr(vacation, "state", lambda _cid: saved)
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
+    monkeypatch.setattr(vacation, "country_name_en", lambda _cid: "South Africa")
+    monkeypatch.setattr(vacation.util, "on_event_loop", lambda: False)
+    prompts = []
+
+    def fake(prompt, *_a, **_k):
+        start = len(prompts) * 8
+        prompts.append(prompt)
+        return {"items": [{"name": f"Место {start + i}", "about": "что делать", "city": "Кейптаун", "tip": f"совет {i}"}
+                          for i in range(8)], "rule": "Планируй всё до 17:00"}
+
+    monkeypatch.setattr(vacation.ai, "llm_json", fake)
+    value = vacation.trip_activities("42")
+    assert len(value["items"]) == 10 and len(prompts) == 2 and value["tip"] == "Планируй всё до 17:00"
+    assert "Не повторяй" in prompts[1] and "Место 0" in prompts[1]
+    assert vacation.trip_activities("42") == value and len(prompts) == 2  # собрано — без запросов

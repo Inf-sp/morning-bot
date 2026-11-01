@@ -434,7 +434,9 @@ def test_trip_leisure_screen_has_country_culture_and_no_during_block():
         footer="День наследия · 24 сентября · Праздник культурного многообразия")
 
     text = msg.text
-    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nХиты страны:\n• Nayvee's Prayer — DJ Zinhle\n\n"
+    # Места дня ещё нет — подсказка вместо пустоты, музыка ниже.
+    assert text.startswith("🍿 Досуг в отпуске · ЮАР 🇿🇦\n\nПодбираю развлечения на поездку — загляни чуть позже.\n\n"
+                           "Хиты страны:\n• Nayvee's Prayer — DJ Zinhle\n\n"
                            "Легенды:\n• Miriam Makeba — Pata Pata\n• Black Coffee\n")
     # «Во время отпуска» нет: праздник — курсивом внизу, события — рассылкой накануне и в «Моём дне».
     assert "Во время отпуска" not in text and "Johannesburg Pride" not in text and "Muse" not in text
