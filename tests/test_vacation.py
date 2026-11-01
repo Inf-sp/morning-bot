@@ -547,7 +547,8 @@ def test_another_dish_on_trip_goes_through_todays_set_then_asks_for_a_new_one(mo
     monkeypatch.setattr(vacation, "active", lambda _cid: True)
     monkeypatch.setattr(vacation, "cuisine", lambda _cid: "local_za")
     profile = {"cooking_day_menu": {
-        "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner", "trip_v": 2,
+        "date": day_menu._today(None).isoformat(), "cuisine": "local_za", "top": "dinner",
+        "trip_v": day_menu._TRIP_MENU_VERSION,
         "dishes": {"breakfast": {"name": "Руськи"}, "lunch": {"name": "Боботи"}, "dinner": {"name": "Брай"}}}}
     monkeypatch.setattr(store, "get_profile", lambda _cid: profile)
     monkeypatch.setattr(store, "mutate_profile", lambda _cid, change: profile.update(change(dict(profile))[0]))

@@ -92,6 +92,7 @@ def _day_menu_message(menu, cid=None):
         show_mine=cid is None or not vacation.active(cid), stats=stats, trip=trip,
         # В отпуске — одно блюдо, которое стоит попробовать, внизу курсивом — статистика поездки.
         trip_dish=day_menu.trip_dish(menu) if trip else None,
+        trip_extra=(menu.get("extra") or {}) if trip else None,  # второе: десерт, напиток или закуска
         trip_stats=_trip_food_stats(cid, menu) if trip else None,
         eating_out=vacation.eating_out_line(cid) if trip else "",  # чаевые и курс — для кафе страны
     )

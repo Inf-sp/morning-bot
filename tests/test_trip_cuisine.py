@@ -515,3 +515,24 @@ def test_weather_warning_has_country_city_and_local_when(monkeypatch):
     utf16 = msg.text.encode("utf-16-le")
     styled = {(e.type, utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")) for e in msg.entities}
     assert ("bold", "Йоханнесбург:") in styled and ("italic", "Когда: 12:00–19:00") in styled
+
+
+def test_trip_menu_has_second_dessert_drink_or_snack(monkeypatch):
+    _setup(monkeypatch, {"dinner": {"name": "Банни чоу", "note": "хлеб с карри"}, "top": "dinner",
+                         "extra": {"kind": "Десерт", "name": "Мальва-пудинг", "original": "Malva Pudding",
+                                   "note": "тёплый пудинг с джемом"}})
+    menu = day_menu.build_day_menu("42", cuisine="local_za")
+    assert menu["extra"] == {"kind": "десерт", "name": "Мальва-пудинг", "original": "Malva Pudding",
+                             "note": "тёплый пудинг с джемом"}
+
+    _setup(monkeypatch, {"dinner": {"name": "Банни чоу", "note": "хлеб с карри"}, "top": "dinner"})
+    monkeypatch.setattr(vacation, "trip_dishes", lambda _cid: [{"name": "Банни чоу"}, {"name": "Билтонг",
+                                                                                        "note": "вяленое мясо"}])
+    menu = day_menu.build_day_menu("42", cuisine="local_za")
+    assert menu["extra"]["name"] == "Билтонг"  # AI не дал — из запаса поездки, не то же блюдо
+
+    from ui import menu as menu_ui
+    text = menu_ui.day_menu({"cuisine": "local_za", "dishes": {}}, cuisine_label="Южноафриканская", flag="🇿🇦",
+                            trip=True, trip_dish={"name": "Банни чоу", "note": "Хлеб с карри."},
+                            trip_extra={"kind": "десерт", "name": "Мальва-пудинг", "note": "Тёплый пудинг."}).text
+    assert "Банни чоу:\n• Хлеб с карри.\n\nДесерт · Мальва-пудинг:\n• Тёплый пудинг." in text

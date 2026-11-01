@@ -305,7 +305,20 @@ def trip_food_stats(stats) -> str:
     return f"День {day} из {days}" if days >= day else f"День {day}"
 
 
-def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eating_out=""):
+def _trip_dish_block(b, dish, kind=""):
+    """«Банни чоу · Bunny Chow:» жирным (у второго — «Десерт · Мальва-пудинг · Malva Pudding:»), описание пунктами «•»."""
+    title = " · ".join(part for part in (kind[:1].upper() + kind[1:] if kind else "", dish["name"],
+                                          dish.get("original")) if part)
+    b.bold(title + ":")
+    b.newline()
+    note = _cooking_text(dish.get("note"))
+    for sentence in re.split(r"(?<=[.!?])\s+", note) if note else []:
+        sentence = sentence.strip()
+        if sentence:
+            b.line(f"• {_with_period(sentence[:1].upper() + sentence[1:])}")
+
+
+def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eating_out="", extra=None):
     """«🇿🇦 Пробуем в отпуске · Южноафриканская кухня»: описание кухни одним коротким предложением без повтора
     названия, одно блюдо жирным — «🥩 Билтонг · Biltong» (эмодзи и местное название, если есть) — с описанием, курсивом
     что пригодится в кафе — «Чаевые: 10–15 % в кафе · 1 € = 18,51 R» (eating_out); нет — день поездки;
@@ -315,13 +328,10 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
     # Описания кухни нет — каждый день одно и то же; главное — блюдо: название и местное название без эмодзи.
     if (dish or {}).get("name"):  # как в погодном предупреждении: «Банни чоу · Bunny Chow:», описание пунктами «•»
         b.spacer()
-        b.bold(" · ".join(part for part in (dish["name"], dish.get("original")) if part) + ":")
-        b.newline()
-        note = _cooking_text(dish.get("note"))
-        for sentence in re.split(r"(?<=[.!?])\s+", note) if note else []:
-            sentence = sentence.strip()
-            if sentence:
-                b.line(f"• {_with_period(sentence[:1].upper() + sentence[1:])}")
+        _trip_dish_block(b, dish)
+        if (extra or {}).get("name") and extra["name"].casefold() != dish["name"].casefold():
+            b.spacer()  # второе — десерт, напиток или закуска
+            _trip_dish_block(b, extra, extra.get("kind") or "")
     else:  # AI не дал блюда кухни страны — честно, без подмены домашней кухней
         b.spacer()
         b.line("Блюдо дня сейчас недоступно — загляни чуть позже.")
@@ -337,7 +347,7 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
 
 
 def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None, trip=False, trip_dish=None,
-             fact="", trip_stats=None, eating_out=""):
+             fact="", trip_stats=None, eating_out="", trip_extra=None):
     """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (холодильник остался дома).
@@ -347,7 +357,7 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     if trip:
         return _trip_menu(trip_dish, cuisine_label=cuisine_label, intro=intro, flag=flag, fact=fact,
-                          trip_stats=trip_stats, eating_out=eating_out)
+                          trip_stats=trip_stats, eating_out=eating_out, extra=trip_extra)
     b = MessageBuilder()
     b.section(f"{flag} Меню на сегодня · {cuisine_label} кухня")
     if intro:  # тон и настроение меню — сразу под заголовком, обычным текстом

@@ -23,7 +23,7 @@ MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
 _NAME_MAX = 60
 _NOTE_MAX = 100
 _TRIP_NOTE_MAX = 240  # в отпуске описание блюда — одно-два предложения
-_TRIP_MENU_VERSION = 2  # 2 — у блюда отпуска местное название и эмодзи
+_TRIP_MENU_VERSION = 3  # 3 — ещё второе: десерт, напиток или закуска (extra); 2 — местное название и эмодзи
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
 _CUISINE_HISTORY_MAX = 60  # блюда одной кухни: давно показанное возвращается первым
 
@@ -201,7 +201,8 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
               if restrictions_text else "")
     dish_shape = '{"name":"","original":"","emoji":"","note":""}' if trip else '{"name":"","note":""}'
     json_shape = ",".join(f'"{meal}":{dish_shape}' for meal in meals) \
-        + (f',"top":"один из: {", ".join(meals)}"' if trip else "")
+        + (f',"top":"один из: {", ".join(meals)}","extra":{{"kind":"десерт / напиток / закуска","name":"",'
+           f'"original":"","note":""}}' if trip else "")
     names = {"breakfast": "завтрак", "lunch": "обед", "dinner": "ужин"}
     fridge = (f"По возможности опирайся на продукты из холодильника: "
               f"{secure.wrap_untrusted(', '.join(available), 'продукты в наличии')}.\n" if available else "")
@@ -225,7 +226,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
         + ("Это новое меню взамен показанного: предложи блюда, которых ещё не было, смелее бери "
            "традиционные блюда не из примеров.\n" if avoided_names else "") +
         f"{limits}{fridge}{avoid}"
-        + (_TRIP_DISH_RULES if trip else
+        + (_TRIP_DISH_RULES + _TRIP_EXTRA_RULE if trip else
            "name — общепринятое название блюда (для итальянской, французской и мексиканской кухни — "
            "оригинальное латиницей, для остальных — по-русски); note — что это за блюдо на самом деле, по-русски, "
            "до 10 слов, без точки: верно по сути (способ готовки, основа), не выдумывай (брай — мясо на открытом "
@@ -234,6 +235,11 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     )
 
 
+_TRIP_EXTRA_RULE = (
+    "extra — ещё одно, что обязательно стоит попробовать в этой стране, но не основное блюдо: местный десерт, напиток "
+    "(без алкоголя или с ним — как принято) или уличная закуска; kind — что это по-русски строчными («десерт», "
+    "«напиток», «закуска»), name, original и note — как у блюд, не повторяй блюда выше.\n"
+)
 _TRIP_DISH_RULES = (
     "name — название блюда по-русски, как его принято называть («Билтонг»); original — как его называют в стране, "
     "латиницей («Biltong»), пусто, если совпадает с name; emoji — один эмодзи еды, ближе всего к блюду (🥩); "
@@ -333,7 +339,28 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
         top = str(data.get("top") or "").strip().casefold()
         menu["top"] = top if top in dishes else ("dinner" if "dinner" in dishes else next(reversed(dishes), ""))
         menu["trip_v"] = _TRIP_MENU_VERSION
+        extra = _trip_extra(cid, data.get("extra"), used)
+        if extra:
+            menu["extra"] = extra
     return {**menu, "cuisine_label": label} if label else menu
+
+
+def _trip_extra(cid, raw, used) -> dict:
+    """Второе на экране отпуска — десерт, напиток или закуска: {kind, name, original, note}; AI не дал — другое блюдо
+    из запаса блюд поездки (vacation.trip_dishes), не из набора дня; нет — {}."""
+    raw = raw if isinstance(raw, dict) else {}
+    name = _clean(raw.get("name"), _NAME_MAX)
+    if name and name.casefold() not in used:
+        original = _clean(raw.get("original"), _NAME_MAX)
+        return {"kind": _clean(raw.get("kind"), 20).casefold(), "name": name,
+                "original": original if original.casefold() != name.casefold() else "",
+                "note": _clean(raw.get("note"), _TRIP_NOTE_MAX)}
+    import vacation
+    spare = [dish for dish in vacation.trip_dishes(cid) if dish.get("name", "").casefold() not in used]
+    if not spare:
+        return {}
+    dish = spare[_today().toordinal() % len(spare)]
+    return {"kind": "", "name": dish["name"], "original": dish.get("original", ""), "note": dish.get("note", "")}
 
 
 def _trip_order(menu) -> list:
