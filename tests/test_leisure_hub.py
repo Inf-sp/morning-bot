@@ -536,12 +536,13 @@ def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(mon
 
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
-        "Восставший · 2026 · история · драма · DE · 1 ч 52 мин • Историческая драма о восстании. Второе.\n\n"
+        "Фильм дня:\n"  # как в погодном предупреждении: подпись, ниже пункты «•»
+        "• Восставший · 2026 · история · драма · DE · 1 ч 52 мин — Историческая драма о восстании. Второе.\n\n"
         "Если не хочется кино:\n"
-        "- Нили · сериал · 2025 · Prime Video · драма · USA\n"  # страна кратко, без флага
-        "- Focus Group · музыкальный альбом · UK\n\n"
+        "• Нили · сериал · 2025 · Prime Video · драма · USA\n"  # страна кратко, без флага
+        "• Focus Group · музыкальный альбом · UK\n\n"
         "Если захочется выйти:\n"
-        "Muse — сегодня, Ziggo Dome\n\n"
+        "• Muse — сегодня, Ziggo Dome\n\n"
         "Твоя библиотека · 55 фильмов · 42 артиста"
     )
     raw = msg.text.encode("utf-16-le")
@@ -556,8 +557,8 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
 
     # Без фильма главной становится первая карточка — без описания строка не ломается.
     msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
-    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nНили · 2025 · Prime Video")
-    assert "Другие варианты:\n- Focus Group · музыкальный альбом · UK" in msg.text
+    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video")
+    assert "Другие варианты:\n• Focus Group · музыкальный альбом · UK" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты"]] and _callbacks(kb)[0] == "lz_prem"
@@ -575,7 +576,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
 
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 
-    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nВосставший · 2026")
+    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nФильм дня:\n• Восставший · 2026")
     assert "Если захочется выйти" not in bot.sent[0]["text"]
     assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_prem"
 
@@ -611,7 +612,7 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
     data = _today_picks(monkeypatch)
 
-    assert "- Focus Group · музыкальный альбом · UK · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
+    assert "• Focus Group · музыкальный альбом · UK · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
     this_year = date.today().replace(month=1, day=9).isoformat()
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)

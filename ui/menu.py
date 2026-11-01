@@ -182,18 +182,18 @@ def learning_menu(home: dict):
             topic += f" → {phrase['meaning']}"
     else:  # прежний краткий формат правила (уроки страны отпуска)
         topic, explanation = _grammar_parts(phrase.get("rule"))
+    # Как в погодном предупреждении: тема жирной подписью с двоеточием, объяснение и пример — пунктами «•».
+    points = [point for point in str(explanation or "").split("\n\n") if point.strip()]
+    if phrase.get("more") and phrase.get("more_translation"):
+        points.append(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
     if topic:
         b.spacer()
-        b.bold("Грамматика:")
-        b.text_line(f" {topic}")
+        b.bold(f"Грамматика: {topic}:")
         b.newline()
-    if explanation:
+    elif points:
         b.spacer()
-        b.quote(explanation)
-        b.newline()
-    if phrase.get("more") and phrase.get("more_translation"):
-        b.spacer()
-        b.line(f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}")
+    for point in points:
+        b.line(f"• {point.strip()}")
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
         b.spacer()
@@ -356,11 +356,13 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
+    if rows:  # как в погодном предупреждении: «Меню на день:», ниже «• Завтрак — Crostata, песочный пирог с джемом»
+        b.spacer()
+        b.bold("Меню на день:")
+        b.newline()
     for label, dish in rows:
-        b.spacer()  # пустая строка перед каждым блюдом
-        b.bold(f"{label}:")
         note = _cooking_text(dish.get("note"))
-        b.line(f" {dish['name']}" + (f" — {note[:1].lower()}{note[1:]}" if note else ""))
+        b.line(f"• {label} — {dish['name']}" + (f", {note[:1].lower()}{note[1:]}" if note else ""))
     if stats:
         b.spacer()
         b.italic(fridge_stats_line(stats.get("products"), stats.get("meals")))

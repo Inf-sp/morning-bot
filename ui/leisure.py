@@ -757,24 +757,29 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, read=None
         b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Сериалы» ниже.")
     else:
         first = picks[0]
+        # Как в погодном предупреждении: «Фильм дня:» жирным, ниже «• имя · метаданные — описание».
+        b.bold({"movie": "Фильм дня:", "tv": "Сериал дня:", "music": "Альбом дня:"}.get(first.get("kind"), "На сегодня:"))
+        b.newline()
+        b.text_line("• ")
         _today_name(b, {**first, "meta": [*first.get("meta", ()), first.get("runtime")]})
         about = _hub_about(first.get("about"))
         if about:
-            b.text_line(f" • {about}")
+            b.text_line(f" — {about}")  # регистр не трогаем: описание часто начинается с имени («Пол Атрейдес…»)
         b.newline()
         rest = [pick for pick in picks if pick is not first]
         if rest:
             b.spacer()
             b.bold("Если не хочется кино:" if first["kind"] == "movie" else "Другие варианты:")
             b.newline()
-            for pick in rest:  # «- Колесо Времени · сериал · 2021 · Prime Video · фантастика · USA»
-                b.text_line("- ")
+            for pick in rest:  # «• Колесо Времени · сериал · 2021 · Prime Video · фантастика · USA»
+                b.text_line("• ")
                 _today_name(b, {**pick, "meta": [_TODAY_KIND.get(pick["kind"], ""), *pick.get("meta", ())]})
                 b.newline()
     if outing:
         b.spacer()
         b.bold("Если захочется выйти:")
         b.newline()
+        b.text_line("• ")
         _today_name(b, {"name": outing.get("name"), "url": outing.get("url")}, meta=False)
         tail = ", ".join(part for part in (outing.get("when"), outing.get("place")) if str(part or "").strip())
         if tail:

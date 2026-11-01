@@ -105,19 +105,19 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Грамматика: Zodra",
-        "Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-        "Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
+        "Грамматика: Zodra:\n"
+        "• Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben.\n"
+        "• Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
         "Твой нидерландский · 120 слов · 14 изученных тем",
-    ]  # фраза дня — в «Моём дне», здесь: тема → объяснение цитатой → пример → статистика курсивом
+    ]  # как в погодном предупреждении: тема подписью, объяснение и пример пунктами «•», статистика курсивом
 
     def marked(kind):
         raw = message.text.encode("utf-16-le")
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("bold")[1:] == ["Грамматика:"]  # «Пример:» больше нет
-    assert marked("blockquote") == ["Как только. В придаточном предложении глагол стоит в конце: zodra ik thuis ben."]
+    assert marked("bold")[1:] == ["Грамматика: Zodra:"]  # «Пример:» больше нет
+    assert marked("blockquote") == []  # без цитаты — пунктами
     assert marked("italic") == ["Твой нидерландский · 120 слов · 14 изученных тем"]  # пример — обычным текстом
     assert marked("spoiler") == []
 
@@ -637,10 +637,10 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
 
     assert text.split("\n\n")[1:] == [
-        "Грамматика: Hoeven … te → не нужно что-то делать",
-        "Обычно используется с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце: "
-        "We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
-        "Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
+        "Грамматика: Hoeven … te → не нужно что-то делать:\n"
+        "• Обычно используется с niet (не нужно) или pas (только, не раньше чем). Глагол с te стоит в конце: "
+        "We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.\n"
+        "• Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
     ]
     assert "Пример:" not in text
     assert all(item.get("topic") and item.get("meaning") and item.get("explain")

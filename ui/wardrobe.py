@@ -117,10 +117,14 @@ def render_wardrobe_message(look_data):
         b.spacer()
         b.line(weather_reason)
 
-    if items:
+    if items:  # как в погодном предупреждении: «Alkmaar:» жирным, ниже вещи с «•»
         b.spacer()
+        city = _clean_text(look_data.get("city"))
+        if city:
+            b.bold(f"{city}:")
+            b.newline()
         for item in items:
-            b.line(f"- {item}")
+            b.line(f"• {item}")
 
     # Нижняя строка курсивом — статистика шкафа: «Твой шкаф · 37 вещей · 528 образов».
     # Без статистики (старые данные) — прежняя финальная фраза о стиле.

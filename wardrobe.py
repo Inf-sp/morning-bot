@@ -197,6 +197,8 @@ def _with_trip_flag(cid, look_data):
     import vacation
     flag = (util.flag_from_cc(vacation.trip_cc(cid)) or "✈️") if vacation.active(cid) else ""
     look_data = {key: value for key, value in look_data.items() if key != "trip_flag"}  # вернулся домой — без флага
+    city = str((store.get_settings(cid) or {}).get("city") or "").strip()  # «Alkmaar:» над вещами
+    look_data = {**look_data, "city": city} if city else look_data
     return {**look_data, "trip_flag": flag} if flag else look_data
 
 
