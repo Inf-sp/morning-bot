@@ -586,3 +586,21 @@ def test_today_look_follows_my_day_weather(monkeypatch):
     look = REAL_SYNC_TODAY("42", looks, saved)[0]
     assert (look["rain"], look["icon"], look["items"]) == (False, "🌤️", ["Футболка"])  # без дождя — без ветровки
     assert wardrobe_ui._day_condition(look) == "🌤️ Тепло и сухо"
+
+
+def test_outer_reason_explains_windbreaker_on_hot_day(monkeypatch):
+    monkeypatch.setattr(wardrobe_suitcase.store, "load_wardrobe", lambda _cid: {"zones": {
+        "Верхняя одежда": {"Куртки": [{"name": "Чёрная Uniqlo ветровка"}]},
+        "Верх": {"Футболки": [{"name": "Оливковая футболка"}]}}})
+    items = ["Оливковая футболка", "Чёрная Uniqlo ветровка"]
+    found = {"rain": True, "wind": 10, "rain_periods": ["вечером", "ночью"]}
+    assert wardrobe_suitcase._outer_reason("42", items, found) == \
+        "Чёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с"
+    assert wardrobe_suitcase._outer_reason("42", items, {"rain": False, "wind": 3}) == ""
+    assert wardrobe_suitcase._outer_reason("42", ["Оливковая футболка"], found) == ""  # без верхней одежды
+
+    today = wardrobe_suitcase._today().isoformat()
+    head = {"place": "ЮАР", "days": 16, "flag": "🇿🇦", "items": 18}
+    look = {"date": today, "items": items, "reason": "Чёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с"}
+    text = wardrobe_ui.suitcase_day_card(head, look, 0, 16, today).text
+    assert "- Чёрная Uniqlo ветровка\n\nЧёрная Uniqlo ветровка — на вечер: дождь и ветер до 10 м/с\n\n" in text

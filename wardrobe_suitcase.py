@@ -525,6 +525,27 @@ def plan(cid, *, fetch=True) -> list:
     return _sync_today(cid, looks, saved_suitcase(cid))
 
 
+_PERIOD_FOR = {"утром": "на утро", "днём": "на день", "вечером": "на вечер", "ночью": "на ночь"}
+
+
+def _outer_reason(cid, items, found) -> str:
+    """Почему в образе верхняя одежда: «Ветровка — на вечер: дождь и ветер до 10 м/с»; иначе ""."""
+    zones = {str(item.get("name") or "").casefold(): zone
+             for zone, subs in (store.load_wardrobe(cid).get("zones") or {}).items()
+             for items_ in subs.values() for item in items_}
+    outer = next((name for name in items if zones.get(str(name).casefold()) == "Верхняя одежда"), "")
+    wind = round(float(found.get("wind") or 0))
+    windy = wind >= _STRONG_WIND_MS
+    if not outer or not (found.get("rain") or windy):
+        return ""
+    periods = [_PERIOD_FOR.get(str(period).casefold(), "") for period in found.get("rain_periods") or []]
+    when = next((period for period in periods if period), "") if found.get("rain") else ""
+    what = " и ".join(part for part in ("дождь" if found.get("rain") else "",
+                                        f"ветер до {wind} м/с" if windy else "") if part)
+    name = str(outer).strip()
+    return f"{name[:1].upper()}{name[1:]} — {when + ': ' if when else ''}{what}"
+
+
 def _sync_today(cid, looks, saved) -> list:
     """Образ на сегодня — по той же погоде, что «Мой день» (weather.today_conditions: дневное окно, оставшаяся часть
     дня, реальный дождь), а не по прогнозу поездки, посчитанному утром на весь период. Погода разошлась (дождь /
@@ -555,7 +576,8 @@ def _sync_today(cid, looks, saved) -> list:
         outfits = _day_outfits(_suitcase_closet(store.load_wardrobe(cid), names), day)
         if outfits:
             items = [item.get("name") for item in sorted(outfits[0], key=outfit_display_order)]
-    fresh = {**look, **_day_weather(day), "icon": found["icon"], "items": items}
+    fresh = {**look, **_day_weather(day), "icon": found["icon"], "items": items,
+             "reason": _outer_reason(cid, items, found)}
     if fresh == look:
         return looks
     looks = [*looks[:index], fresh, *looks[index + 1:]]

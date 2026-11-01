@@ -487,6 +487,11 @@ def suitcase_day_card(data, look, index, total, today=""):
         b.line(f"- {item}")
     if not items:
         b.line("В шкафу нет вещей для образа.")
+    reason = _clean_text(look.get("reason")) if look.get("date") == today else ""
+    if reason:  # «Чёрная ветровка — на вечер: дождь и ветер до 10 м/с» — почему в жару верхняя одежда
+        b.spacer()
+        b.italic(reason)
+        b.newline()
     packed = int(data.get("items") or 0)
     if packed:
         b.spacer()

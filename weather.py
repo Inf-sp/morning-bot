@@ -450,16 +450,17 @@ def today_conditions(data, now):
     rain, rain_mm = daytime["rain_prob"], daytime["rain_mm"]
     wind = daytime.get("wind_ms") or wind_ms
     clouds = _mean(_daytime_values(data, day_str, "cloudcover"))
+    rain_periods = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
     outlook = today_outlook(data, now)
     if outlook:
         tmax, rain, rain_mm = outlook["tmax"], outlook["rain"], outlook["rain_mm"]
-        wind, clouds = outlook["wind_ms"], outlook["clouds"]
+        wind, clouds, rain_periods = outlook["wind_ms"], outlook["clouds"], outlook["rain_periods"]
     current_code = (data.get("current") or {}).get("weathercode")
     raining_now = bool(current_precipitation_text(current_code))
     icon = (weather_icon(current_code, tmax, 100, wind) if raining_now
             else weather_icon(code, tmax, rain, wind, rain_mm, clouds))
     return {"tmax": tmax, "tmin": tmin, "rain": raining_now or _rain_real(rain, rain_mm), "wind": wind,
-            "code": code, "clouds": clouds, "icon": icon}
+            "code": code, "clouds": clouds, "icon": icon, "rain_periods": list(rain_periods or [])}
 
 
 def today_outlook(data, now):
