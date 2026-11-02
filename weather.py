@@ -604,6 +604,14 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     if mode == "tomorrow_plain":
         day = 1
         dt = now + timedelta(days=1)
+        # Утро, день и вечер завтра — по часам Open-Meteo во времени места: у основного провайдера часы только на
+        # ~48 ч от запроса, и вечер завтра в них мог не попасть — блока «Вечером» не было.
+        import vacation
+        import weather_provider
+        tomorrow_tz = await asyncio.to_thread(vacation.local_tz, cid)
+        local_hours = await asyncio.to_thread(weather_provider.week_hourly, s["lat"], s["lon"], str(tomorrow_tz))
+        if local_hours:
+            data = {**data, "hourly": local_hours}
         cc = str(s.get("cc") or "").upper()
         flag = flag_from_cc(cc) or ""
         place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"  # «Alkmaar, NL 🇳🇱»
