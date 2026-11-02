@@ -435,7 +435,7 @@ def test_day_card_pages_in_a_circle_from_the_suitcase_and_from_the_trip_wardrobe
 
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_trip_0"))
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_trip_2", "noop", "w_pack_trip_1"], ["w_pack_alt_0"], ["w_pack"], ["w_closet", "m_menu"]]
+        ["w_pack"], ["w_closet", "m_menu"]]  # в Гардеробе отпуска — без листания и «Ещё вариант»
 
 
 def test_trip_wardrobe_opens_todays_planned_look_and_another_variant_replaces_it(monkeypatch):

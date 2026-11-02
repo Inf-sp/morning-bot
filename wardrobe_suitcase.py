@@ -878,13 +878,13 @@ def _pager(prefix, index, total) -> list:
 
 
 def _day_kb(index, total, trip=False):
-    """Листание дней по кругу. Из чемодана — «Назад» к нему; в Гардеробе отпуска — «Ещё вариант» для этого дня,
-    «Мой чемодан», «Настроить шкаф | Главная»."""
+    """Из чемодана — листание дней по кругу и «Назад» к нему; в Гардеробе отпуска — только «Мой чемодан»,
+    «Настроить шкаф | Главная»."""
     if not trip:
         return InlineKeyboardMarkup([_pager("w_pack_day_", index, total), nav_row("w_pack_saved")])
+    # В Гардеробе отпуска — только образ на сегодня: без листания дней и «Ещё вариант» (старые кнопки
+    # w_pack_trip_ / w_pack_alt_ в истории чата работают).
     return InlineKeyboardMarkup([
-        _pager("w_pack_trip_", index, total),
-        [InlineKeyboardButton("Ещё вариант", callback_data=f"w_pack_alt_{index}")],
         [InlineKeyboardButton("🧳 Мой чемодан", callback_data="w_pack")],
         [InlineKeyboardButton("🎚️ Настроить шкаф", callback_data="w_closet"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
