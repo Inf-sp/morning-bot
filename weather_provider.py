@@ -490,6 +490,36 @@ def _fetch_open_meteo(lat, lon):
     }
 
 
+_WEEK_HOURLY = ("temperature_2m", "precipitation_probability", "precipitation", "windspeed_10m", "cloudcover")
+_WEEK_HOURLY_CACHE = {}  # (lat2, lon2, tz) -> (ts, hourly)
+_WEEK_HOURLY_TTL = 3600
+
+
+def week_hourly(lat, lon, tz_name) -> dict:
+    """Почасовые показатели на 9 дней (Open-Meteo) во времени места tz_name — для недельного прогноза: у основного
+    провайдера часы есть только на ~48 ч, дальше — суточный агрегат с ночью, и ночная гроза рисовала дождь на весь
+    день. Кэш час в памяти; сбой — {} (неделя — по прежней логике)."""
+    key = (round(float(lat), 2), round(float(lon), 2), str(tz_name))
+    hit = _WEEK_HOURLY_CACHE.get(key)
+    if hit and time.time() - hit[0] < _WEEK_HOURLY_TTL:
+        return hit[1]
+    try:
+        response = requests.get(_OPEN_METEO_URL, timeout=max(_OPEN_METEO_MIN_TIMEOUT, tracking.bounded_timeout(8)),
+                                params={"latitude": lat, "longitude": lon, "timezone": str(tz_name),
+                                        "forecast_days": 9, "wind_speed_unit": "ms",
+                                        "hourly": ",".join(_WEEK_HOURLY)})
+        response.raise_for_status()
+        hourly = response.json().get("hourly") or {}
+    except Exception:
+        _log.warning("weather: week hourly unavailable", exc_info=True)
+        return {}
+    if not hourly.get("time"):
+        return {}
+    value = {name: list(hourly.get(name) or []) for name in ("time", *_WEEK_HOURLY)}
+    _WEEK_HOURLY_CACHE[key] = (time.time(), value)
+    return value
+
+
 _OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 _FORECAST_HORIZON_DAYS = 15  # Open-Meteo даёт прогноз на 16 дней вперёд, включая сегодня
 

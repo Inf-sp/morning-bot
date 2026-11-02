@@ -642,6 +642,13 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
     # week/week_plain: семь фактических дневных строк без группировки и повторов
     week_plain = mode == "week_plain"
     _SKIP = 1
+    # Дневное окно 08–20 — по местному времени и на все 7 дней: часы Open-Meteo в поясе места (в отпуске — поездки).
+    # У основного провайдера часы только на ~48 ч, дальше суточный итог с ночью — ночной дождь давал 🌧️ на весь день.
+    import vacation
+    import weather_provider
+    week_tz = await asyncio.to_thread(vacation.local_tz, cid)
+    hourly = await asyncio.to_thread(weather_provider.week_hourly, s["lat"], s["lon"], str(week_tz))
+    week_data = {**data, "hourly": hourly} if hourly else data
 
     # Сбор данных для 7 дней
     day_data = []
@@ -649,7 +656,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         idx = _SKIP + i
         if idx >= len(d["weathercode"]):
             break
-        day = day_conditions(data, idx)
+        day = day_conditions(week_data, idx)
         if day["tmax"] is None or day["tmin"] is None:
             continue
         dt_i = datetime.fromisoformat(day["day_str"])

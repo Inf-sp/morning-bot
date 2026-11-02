@@ -598,3 +598,20 @@ def test_parallel_trip_builds_do_not_erase_each_other(monkeypatch):
     for thread in threads:
         thread.join()
     assert {"activities", "leisure", "brief"} <= set(stored["value"])  # ни одна сборка не затёрла другую
+
+
+def test_week_icon_ignores_night_rain_with_local_hourly():
+    import weather
+    day = "2026-11-03"
+    hours = [f"{day}T{h:02d}:00" for h in range(24)]
+    hourly = {"time": hours, "temperature_2m": [24 if 8 <= h < 20 else 18 for h in range(24)],
+              "precipitation_probability": [80 if h >= 21 or h < 5 else 5 for h in range(24)],
+              "precipitation": [3.0 if h >= 21 or h < 5 else 0.0 for h in range(24)],
+              "windspeed_10m": [4] * 24, "cloudcover": [30] * 24}
+    data = {"daily": {"time": [day], "weathercode": [95], "temperature_2m_min": [16], "temperature_2m_max": [29],
+                      "precipitation_probability_max": [80], "precipitation_sum": [12], "windspeed_10m_max": [6]},
+            "hourly": hourly}
+    found = weather.day_conditions(data, 0)
+    assert not found["rain_real"]  # ночная гроза — не дождь дня
+    assert weather._week_icon(found["code"], found["tmax"], found["rain"], found["wind"], found["rain_mm"],
+                              found["clouds"]) not in ("🌧️", "🌩️")
