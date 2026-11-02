@@ -577,3 +577,24 @@ def test_trip_activities_are_built_in_batches_without_repeats(monkeypatch):
     assert len(value["items"]) == 10 and len(prompts) == 2 and value["tip"] == "Планируй всё до 17:00"
     assert "Не повторяй" in prompts[1] and "Место 0" in prompts[1]
     assert vacation.trip_activities("42") == value and len(prompts) == 2  # собрано — без запросов
+
+
+def test_parallel_trip_builds_do_not_erase_each_other(monkeypatch):
+    import threading
+    import time
+    stored = {"value": {"cc": "ZA", "since": "2026-10-20"}}
+
+    def slow_state(_cid):
+        snapshot = dict(stored["value"])
+        time.sleep(0.01)  # чтение и запись разнесены — как при записи в базу
+        return snapshot
+
+    monkeypatch.setattr(vacation, "state", slow_state)
+    monkeypatch.setattr(vacation, "_save", lambda _cid, value: stored.update(value=value))
+    threads = [threading.Thread(target=vacation._save_merge, args=("42", {}, {key: [key]}))
+               for key in ("activities", "leisure", "brief")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert {"activities", "leisure", "brief"} <= set(stored["value"])  # ни одна сборка не затёрла другую

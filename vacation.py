@@ -13,6 +13,7 @@ Open-Meteo (часовой пояс города). Уроки языка стр�
 import json
 import logging
 import re
+import threading
 import time
 from datetime import date, datetime, timedelta
 
@@ -385,6 +386,20 @@ def _save(cid, value):
     _settings().set_(cid, _KEY, value)
 
 
+_SAVE_LOCK = threading.Lock()
+
+
+def _save_merge(cid, fallback, patch):
+    """Дописать в состояние отпуска свои ключи, не затирая чужие: фоновые сборки (развлечения, музыка и кино страны,
+    справка, фразы…) идут параллельно, и запись «прочитал раньше — сохранил целиком» стирала то, что успела
+    сохранить соседняя сборка. Под замком — свежее состояние и только свои ключи."""
+    with _SAVE_LOCK:
+        current = state(cid) or fallback
+        if not current:
+            return
+        _save(cid, {**current, **patch})
+
+
 def forget(cid):
     """Обычная смена города: отпуск закончен, новый город — дом (домашний не возвращаем)."""
     _pending_home.pop(str(cid), None)
@@ -565,7 +580,7 @@ async def _finish(bot, cid, until):
     if not current:
         return
     store.pending_input.pop(str(cid), None)
-    _save(cid, {**current, "until": until.isoformat() if until else ""})
+    _save_merge(cid, current, {"until": until.isoformat() if until else ""})
     import asyncio
     await asyncio.to_thread(guide, cid)  # уроки языка и кухня страны — один AI-запрос заранее
     place = store.get_settings(cid)
@@ -696,7 +711,7 @@ def switch_leg(cid, today=None) -> bool:
     if not leg or str(leg.get("city") or "") == str(place.get("city") or ""):
         return False
     _set_place(cid, leg)
-    _save(cid, {**(state(cid) or {}), "cc": str(leg.get("cc") or "").upper()})
+    _save_merge(cid, {}, {"cc": str(leg.get("cc") or "").upper()})
     _reset_day_caches(cid)
     util.background(_warm_trip_leisure(cid), "vacation next city warm")
     return True
@@ -924,7 +939,7 @@ def food_tips(cid) -> dict:
     value = {key: _text(data.get(key), 120) for key in ("check", "hours")
              if re.search(r"\d", _text(data.get(key), 120))}  # без цифр — не совет, а вода
     if value:
-        _save(cid, {**(state(cid) or current), "food_tips": {"cc": current.get("cc"), "v": _FOOD_TIPS_VERSION,
+        _save_merge(cid, current, {"food_tips": {"cc": current.get("cc"), "v": _FOOD_TIPS_VERSION,
                                                               "value": value}})
     return value
 
@@ -1002,7 +1017,7 @@ def country_brief(cid, fetch=True) -> dict:
                              "about": _text(item.get("about"), 240)})
     value["holidays"] = holidays[:8]
     if any(value.values()):
-        _save(cid, {**(state(cid) or current), "brief": {"cc": current.get("cc"), "v": _BRIEF_VERSION,
+        _save_merge(cid, current, {"brief": {"cc": current.get("cc"), "v": _BRIEF_VERSION,
                                                           "value": value}})
     return value
 
@@ -1089,7 +1104,7 @@ def trip_activities(cid, fetch=True) -> dict:
         items = [*items, *batch[:need]]  # модель могла вернуть больше, чем просили
         rule = rule or _text(data.get("rule") or data.get("tip"), 200)
         value = {"items": items, "tip": rule}
-        _save(cid, {**(state(cid) or current), "activities": {"cc": current.get("cc"), "v": _ACTIVITIES_VERSION,
+        _save_merge(cid, current, {"activities": {"cc": current.get("cc"), "v": _ACTIVITIES_VERSION,
                                                                "value": value}})
     return value
 
@@ -1131,7 +1146,7 @@ def country_card_first_time(cid, today=None) -> bool:
     if not shown:
         # Поездка началась раньше — справку уже показали в её первый день (до появления этой отметки).
         shown = current.get("since") or today
-        _save(cid, {**current, "country_card_day": shown})
+        _save_merge(cid, current, {"country_card_day": shown})
     return shown == today
 
 
@@ -1225,7 +1240,7 @@ JSON: {{"language_ru":"","language_code":"","cuisine_ru":"","cuisine_intro":"","
     result = _clean_guide(data, days)
     if result:
         result = {**result, "cc": current.get("cc")}
-        _save(cid, {**(state(cid) or current), "guide": result})
+        _save_merge(cid, current, {"guide": result})
     return result
 
 
@@ -1341,7 +1356,7 @@ def trip_leisure(cid) -> dict:
         "legends": _legends(_country_legends(country), cc, {hit["artist"].casefold() for hit in hits}),
         "holidays": trip_holidays(cid, until) or [],
     }
-    _save(cid, {**(state(cid) or current), "leisure": result})
+    _save_merge(cid, current, {"leisure": result})
     return result
 
 
@@ -1485,7 +1500,7 @@ def travel_phrases(cid) -> list:
             break
         seen.update(item["text"].casefold() for item in batch)
         items = [*items, *batch]
-        _save(cid, {**(state(cid) or current), "travel_phrases": {"cc": current.get("cc"),
+        _save_merge(cid, current, {"travel_phrases": {"cc": current.get("cc"),
                                                                   "v": _TRAVEL_PHRASES_VERSION, "items": items}})
     return items
 
@@ -1534,7 +1549,7 @@ def travel_words(cid) -> list:
             seen.update({text.casefold(), ru.casefold()})
             items.append({"text": text, "ru": ru})
     if items:
-        _save(cid, {**(state(cid) or current), "travel_words": {"cc": current.get("cc"), "v": _TRAVEL_WORDS_VERSION,
+        _save_merge(cid, current, {"travel_words": {"cc": current.get("cc"), "v": _TRAVEL_WORDS_VERSION,
                                                                 "items": items}})
     return items
 
@@ -1766,7 +1781,7 @@ def trip_facts(cid, topic) -> list:
             items.append(text)
     items = items[:count]
     if items:
-        _save(cid, {**(state(cid) or current), key: {"cc": current.get("cc"), "v": version, "items": items}})
+        _save_merge(cid, current, {key: {"cc": current.get("cc"), "v": version, "items": items}})
     return items
 
 
@@ -1816,7 +1831,7 @@ def trip_dishes(cid) -> list:
                           "original": original if original.casefold() != dish_name.casefold() else "",
                           "emoji": emoji if not re.search(r"\w", emoji) else ""})
     if items:
-        _save(cid, {**(state(cid) or current), "dishes": {"cc": current.get("cc"), "v": _DISHES_VERSION,
+        _save_merge(cid, current, {"dishes": {"cc": current.get("cc"), "v": _DISHES_VERSION,
                                                            "items": items}})
     return items
 
