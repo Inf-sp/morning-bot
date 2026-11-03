@@ -465,9 +465,11 @@ def test_style_screen_shows_two_groups_with_descriptions():
     message = wardrobe_style([(label, about) for _key, label, about, _members in settings.STYLE_GROUPS])
 
     assert message.text == (
-        "Стиль\n\nВыбери стили, которые тебе близки. Изменения сохраняются сразу.\n\n"
+        "Стиль\n\n"
         "Повседневный\nНа каждый день, комфорт и простые сочетания.\n\n"
-        "Классический\nСтруктурированные силуэты и более элегантные сочетания."
+        "Классический\nСтруктурированные силуэты и более элегантные сочетания.\n\n"
+        "По температуре\nМёрзну — одеваю как на 3° холоднее, жарко — как на 3° теплее.\n\n"
+        "Нажатие сразу меняет подбор образа."
     )
     assert "Не предлагать" not in message.text
 
@@ -517,10 +519,12 @@ def test_wardrobe_preferences_show_two_style_groups_as_toggles():
     markup = settings._wardrobe_style_kb("prefs-test", raw={"style_groups": ["classic"]})
     labels = [button.text for row in markup.inline_keyboard for button in row]
 
-    assert labels[:-2] == ["□ Повседневный", "✅ Классический", "□ Рубашка поверх футболки"]
-    assert [row[0].callback_data for row in markup.inline_keyboard[:-1]] == [
+    assert labels[:-2] == ["□ Повседневный", "✅ Классический", "□ Рубашка поверх футболки",
+                           "□ Мёрзну", "✅ Обычно", "□ Жарко"]
+    assert [row[0].callback_data for row in markup.inline_keyboard[:-2]] == [
         "set_stgroup_0", "set_stgroup_1", "set_shirtlayer"]
-    assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
+    assert all(len(row) == 1 for row in markup.inline_keyboard[:-2])
+    assert [b.callback_data for b in markup.inline_keyboard[-2]] == ["set_wtemp_cold", "set_wtemp_normal", "set_wtemp_warm"]
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 
 
@@ -614,3 +618,16 @@ def test_accessories_are_in_the_list_and_old_accent_is_hidden():
         "• Белая футболка\n• Синие джинсы\n• Белые кеды\n• Серые часы\n• Чёрная кепка"
     )
     assert "Главный акцент" not in text and "Спокойная палитра" not in text
+
+
+def test_temperature_feel_shifts_picking_but_not_the_weather_line():
+    import wardrobe
+    ctx = {"tmin": 12, "tmax": 17, "feels_min": 11, "feels_max": 16, "hot": False, "warm": True,
+           "tags": ["warm", "sunny"]}
+    cold = wardrobe.personal_weather(ctx, -3)
+    assert (cold["tmax"], cold["feels_min"], cold["warm"], cold["tags"]) == (14, 8, False, ["sunny", "cool"])
+    assert cold["real"] is ctx  # строка о погоде — по реальным градусам
+    warm = wardrobe.personal_weather(ctx, 3)
+    assert warm["tmax"] == 20 and warm["warm"] and warm["real"] is ctx
+    assert wardrobe.personal_weather(ctx, 0) is ctx
+    assert wardrobe.personal_weather({"tmax": None}, 3) == {"tmax": None}

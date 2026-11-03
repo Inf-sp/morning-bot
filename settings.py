@@ -963,6 +963,27 @@ def wardrobe_constraints_list(cid):
     return _multi_selected(cid, "wardrobe_constraints", CONSTRAINT_OPTIONS)
 
 
+# «Как тебе по температуре»: (ключ, подпись, сдвиг погоды для подбора образа, °C)
+TEMP_FEEL = (("cold", "Мёрзну", -3), ("normal", "Обычно", 0), ("warm", "Жарко", 3))
+
+
+def temp_feel(cid) -> str:
+    value = get(cid, "wardrobe_temp", "normal")
+    return value if value in {key for key, *_rest in TEMP_FEEL} else "normal"
+
+
+def temp_offset(cid) -> int:
+    """Сдвиг погоды для подбора образа: «Мёрзну» −3°, «Жарко» +3°, иначе 0."""
+    return next(offset for key, _label, offset in TEMP_FEEL if key == temp_feel(cid))
+
+
+async def set_temp_feel(bot, cid, key, q=None):
+    if key in {k for k, *_rest in TEMP_FEEL}:
+        set_(cid, "wardrobe_temp", key)
+        _invalidate_wardrobe_recommendations(cid)
+    await send_wardrobe_style(bot, cid, q=q)
+
+
 SHIRT_LAYER_NOTE = "Любит рубашку расстёгнутой поверх футболки"  # маркер в prefs_text для подбора образа
 
 
@@ -1121,6 +1142,10 @@ def _wardrobe_style_kb(cid, raw=None):
     layered = bool((raw or {}).get("wardrobe_shirt_layer")) if raw is not None else wardrobe_shirt_layer(cid)
     rows.append([InlineKeyboardButton(("✅ " if layered else "□ ") + "Рубашка поверх футболки",
                                       callback_data="set_shirtlayer")])
+    feel = (raw or {}).get("wardrobe_temp") if raw is not None else temp_feel(cid)
+    feel = feel if feel in {key for key, *_rest in TEMP_FEEL} else "normal"
+    rows.append([InlineKeyboardButton(("✅ " if key == feel else "□ ") + label, callback_data=f"set_wtemp_{key}")
+                 for key, label, _offset in TEMP_FEEL])
     rows.append(nav_row("w_closet"))
     return InlineKeyboardMarkup(rows)
 
@@ -1215,6 +1240,8 @@ async def handle_callback(bot, cid, data, q=None):
         await set_style_group(bot, cid, int(data[len("set_stgroup_"):]), q)
     elif data.startswith("set_style_"):  # кнопки прежних шести стилей из истории чата
         await send_wardrobe_style(bot, cid, q)
+    elif data.startswith("set_wtemp_"):
+        await set_temp_feel(bot, cid, data[len("set_wtemp_"):], q)
     elif data == "set_shirtlayer":
         await toggle_shirt_layer(bot, cid, q)
     elif data.startswith("set_fit_"):

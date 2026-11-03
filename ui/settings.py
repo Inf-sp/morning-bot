@@ -61,13 +61,18 @@ def wardrobe_style(groups):
     """
     b = MessageBuilder()
     b.section("Стиль")
-    b.spacer()
-    b.line("Выбери стили, которые тебе близки. Изменения сохраняются сразу.")
     for label, about in groups:
         b.spacer()
         b.bold(label)
         b.newline()
         b.line(about)
+    b.spacer()
+    b.bold("По температуре")
+    b.newline()
+    b.line("Мёрзну — одеваю как на 3° холоднее, жарко — как на 3° теплее.")
+    b.spacer()
+    b.italic("Нажатие сразу меняет подбор образа.")
+    b.newline()
     return b.build_stripped()
 
 

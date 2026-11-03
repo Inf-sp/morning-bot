@@ -87,8 +87,28 @@ _NO_WEATHER = {"tmin": None, "tmax": None, "has_rain": False, "wind_ms": None,
                "strong_wind": False, "sunny": False, "hot": False, "warm": False, "tags": []}
 
 
-def _wear_weather(settings_data):
-    """(weather_ctx, flags) на часы, когда образ носят; без погоды — (_NO_WEATHER, None)."""
+def personal_weather(ctx, offset) -> dict:
+    """Погода «как ощущает пользователь» для подбора: «Мёрзну» — на 3° холоднее, «Жарко» — на 3° теплее; реальная —
+    в `real` (по ней пишется строка о погоде). Без сдвига или без погоды — как есть."""
+    if not offset or ctx.get("tmax") is None:
+        return ctx
+    shifted = {key: (ctx[key] + offset if isinstance(ctx.get(key), (int, float)) else ctx.get(key))
+               for key in ("tmin", "tmax", "feels_min", "feels_max") if key in ctx}
+    tmax = shifted["tmax"]
+    hot, warm = tmax >= 24, 17 <= tmax < 24
+    tags = [tag for tag in ctx.get("tags") or [] if tag not in ("hot", "warm", "cool")]
+    tags.append("hot" if hot else "warm" if warm else "cool")
+    return {**ctx, **shifted, "hot": hot, "warm": warm, "tags": tags, "real": ctx.get("real") or ctx}
+
+
+def _wear_weather(settings_data, cid=None):
+    """(weather_ctx, flags) на часы, когда образ носят; без погоды — (_NO_WEATHER, None). cid — с поправкой
+    «Мёрзну / Жарко» из предпочтений стиля."""
+    ctx, flags = _real_wear_weather(settings_data)
+    return (personal_weather(ctx, _settings.temp_offset(cid)) if cid is not None else ctx), flags
+
+
+def _real_wear_weather(settings_data):
     try:
         wdata = weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2)
         wd = wdata["daily"]
@@ -431,7 +451,7 @@ def _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previou
         ],
         "style_tip": fallback_tip,
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
+        "weather_reason": wardrobe_rules.weather_reason(weather_ctx.get("real") or weather_ctx, best_sorted),
         "weather": weather_signature(weather_ctx, flags),
     }
     # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
@@ -468,7 +488,7 @@ async def swap_item(bot, cid, index, q=None):
     if not cached or not 0 <= index < len(current):
         await send_looks(bot, cid, q=q)
         return
-    weather_ctx, flags = await asyncio.to_thread(_wear_weather, store.get_settings(cid))
+    weather_ctx, flags = await asyncio.to_thread(_wear_weather, store.get_settings(cid), cid)
     styles = _settings.wardrobe_styles(cid)
     tried = (cached.get("swapped") or {}).get(str(current[index].get("zone")), [])
     new = swap_choice(w, current, index, weather_ctx, store.get_wardrobe_history(cid),
@@ -511,7 +531,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     weather_now = (None, None)
     if cached:
         # Погода поменялась (дождь, ветер, холод) или образ собран без неё — пересобираем.
-        weather_now = await asyncio.to_thread(_wear_weather, store.get_settings(cid))
+        weather_now = await asyncio.to_thread(_wear_weather, store.get_settings(cid), cid)
         current = weather_signature(*weather_now)
         saved = (cached.get("look_data") or {}).get("weather")
         if current is not None and current != saved:
@@ -529,7 +549,8 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
             look_data = {**look_data, "stats": wardrobe_counts(store.load_wardrobe(cid))}
         if not look_data.get("weather_reason") and weather_now[1] is not None:
             # Образ собран раньше, чем строка о погоде стала обязательной: дописываем её сверху.
-            reason = wardrobe_rules.weather_reason(weather_now[0], look_data.get("items") or [])
+            reason = wardrobe_rules.weather_reason(weather_now[0].get("real") or weather_now[0],
+                                                   look_data.get("items") or [])
             look_data = {**look_data, "weather_reason": reason} if reason else look_data
         look_data = _with_trip_flag(cid, look_data)
         text, entities = _build_look_message(look_data)
@@ -590,7 +611,7 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
         else:
             status = await util.StatusManager.start(
                 bot, cid, message=None, stages=util.StatusManager.TOPIC_STAGES["wardrobe"])
-    weather_ctx, flags = await asyncio.to_thread(_wear_weather, s)
+    weather_ctx, flags = await asyncio.to_thread(_wear_weather, s, cid)
     _rules, gap_note = _build_weather_rules(cid, w, flags)
 
     w = await migrate_item_attrs(cid, w)
