@@ -478,6 +478,10 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
     assert ["Футболки и рубашки · 1"] in labels and ["Обувь · 0"] in labels
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
+    assert labels[1] == ["📝 Выбрать предпочтения"]  # зелёная, сразу под «Добавить вещь»
+    assert bot.message["reply_markup"].inline_keyboard[1][0].callback_data == "set_pref_style"
+    import telegram_runtime
+    assert telegram_runtime._enhance_markup(bot.message["reply_markup"])["inline_keyboard"][1][0].get("style") == "success"
     assert ["💳 Что докупить"] not in labels
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
     assert all(len(row) == 1 for row in labels[:-1])

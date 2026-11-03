@@ -673,7 +673,9 @@ async def send_wardrobe_zones(bot, cid, q=None):
     _cancel_wardrobe_input(cid)
     w = store.load_wardrobe(cid)
     total, counts = wardrobe_stats(w)
-    rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")]]
+    rows = [[InlineKeyboardButton("✅ Добавить вещь", callback_data="w_add")],
+            # Зелёная, сразу под «Добавить вещь» (telegram_runtime._PREFS_RE): стиль и «Рубашка поверх футболки».
+            [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="set_pref_style")]]
     for zone in CLOSET_ZONE_ORDER:
         count = counts.get(zone, 0)
         rows.append([InlineKeyboardButton(
