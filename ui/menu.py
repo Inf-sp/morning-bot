@@ -177,7 +177,23 @@ def learning_menu(home: dict):
     if phrase.get("topic") and phrase.get("explain"):
         # Подробное объяснение — пунктами через пустую строку в одной цитате; без пунктов — краткое.
         details = [_with_period(point) for point in phrase.get("details") or [] if str(point).strip()]
-        topic, explanation = phrase["topic"], "\n\n".join(details) or _with_period(phrase["explain"])
+        # Не больше двух пунктов объяснения: сводка темы (explain) и пункт с живым примером «→» — как это звучит.
+        # Первые пункты details часто абстрактные («то же, что er + предлог») и без примера непонятны.
+        summary = _with_period(phrase["explain"]) if str(phrase.get("explain") or "").strip() else ""
+        shown = [summary] if summary else details[:1]
+        def has_example(point):  # «… → перевод» или «…: Het regent, daarom blijf ik thuis»
+            return "→" in point or bool(re.search(r":\s+[A-Z][a-z]", point))
+
+        def repeats(point):  # тот же смысл, что у сводки: больше половины слов общие
+            words = set(re.findall(r"\w{4,}", point.casefold()))
+            known = set(re.findall(r"\w{4,}", summary.casefold()))
+            return bool(words) and len(words & known) / len(words) > 0.5
+
+        fresh = [point for point in details if point not in shown and not repeats(point)]
+        practical = next((point for point in fresh if "→" in point), "") \
+            or next((point for point in fresh if has_example(point)), "")
+        shown += [practical] if practical else fresh[:1]
+        topic, explanation = phrase["topic"], "\n\n".join(shown)
         if phrase.get("meaning"):
             topic += f" → {phrase['meaning']}"
     else:  # прежний краткий формат правила (уроки страны отпуска)

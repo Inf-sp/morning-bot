@@ -658,3 +658,22 @@ def test_choose_language_button_is_green_right_under_add():
     ])
     rows = telegram_runtime._enhance_markup(markup)["inline_keyboard"]
     assert rows[1][0]["text"] == "Выбрать язык" and rows[1][0].get("style") == "success"
+
+
+def test_grammar_points_are_summary_practical_example_and_no_repeats():
+    from ui import menu as menu_ui
+    lesson = {
+        "topic": "Daarom", "meaning": "поэтому",
+        "explain": "Daarom в начале второго предложения вызывает инверсию: глагол сразу после daarom.",
+        "details": ["Daarom — «поэтому»: вводит следствие.",
+                    "В начале второго предложения вызывает инверсию — глагол сразу после daarom.",
+                    "Daar ben ik het mee eens → С этим я согласен."],
+        "more": "Ik was moe, daarom ben ik vroeg gaan slapen.", "more_translation": "Я устал, поэтому рано лёг спать.",
+    }
+    text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
+    points = [line for line in text.split("\n") if line.startswith("• ")]
+    assert points == [
+        "• Daarom в начале второго предложения вызывает инверсию: глагол сразу после daarom.",  # сводка темы
+        "• Daar ben ik het mee eens → С этим я согласен.",  # пункт с живым примером, а не повтор сводки
+        "• Ik was moe, daarom ben ik vroeg gaan slapen → Я устал, поэтому рано лёг спать.",
+    ]
