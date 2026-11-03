@@ -257,14 +257,24 @@ def _is_light_base_top(item):
     return outfit_role(item) == "base_top" and any(marker in facts for marker in _LIGHT_BASE_MARKERS)
 
 
-def _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles=None):
-    """Добавляет варианты «футболка + расстёгнутая рубашка» для мягкой погоды."""
+_SHIRT_LAYER_RANGE = (14, 22)  # tmax, когда связка «футболка + рубашка» вообще предлагается
+_SHIRT_LAYER_LOVED = (10, 25)  # то же, если пользователь её любит (настройка «Рубашка поверх футболки»)
+
+
+def likes_shirt_layer(prefs_text) -> bool:
+    import settings
+    return settings.SHIRT_LAYER_NOTE in str(prefs_text or "")
+
+
+def _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles=None, loved=False):
+    """Добавляет варианты «футболка + расстёгнутая рубашка» для мягкой погоды; loved — шире по погоде и больше рубашек."""
     tmax = weather_ctx.get("tmax")
-    if tmax is None or not 14 <= tmax <= 22 or weather_ctx.get("hot"):
+    low, high = _SHIRT_LAYER_LOVED if loved else _SHIRT_LAYER_RANGE
+    if tmax is None or not low <= tmax <= high or weather_ctx.get("hot"):
         return combos
     shirts = _top_candidates([
         item for item in candidates.get("Верх", []) if _is_layerable_shirt(item)
-    ], limit=2, selected_styles=selected_styles)
+    ], limit=3 if loved else 2, selected_styles=selected_styles)
     if not shirts:
         return combos
     layered = []
@@ -471,6 +481,10 @@ def score_outfit(items, weather_ctx, wardrobe_history, prefs_text, selected_styl
     # но при +20…+22 однослойный комплект снова остаётся конкурентным.
     if tmax is not None and 14 <= tmax < 20 and _has_light_shirt_layer(items):
         score += 2
+    # Любит рубашку поверх футболки — связка выигрывает у однослойного верха, пока её допускает погода.
+    if (tmax is not None and _SHIRT_LAYER_LOVED[0] <= tmax <= _SHIRT_LAYER_LOVED[1] and not weather_ctx.get("hot")
+            and _has_light_shirt_layer(items) and likes_shirt_layer(prefs_text)):
+        score += 6
     # Прохладно: кофта поверх футболки получает приоритет.
     low = rules.feels_low(weather_ctx)
     if low is not None and low < rules.SWEATER_FEELS_MAX and any(it.get("zone") == "Кофты" for it in items):
@@ -648,7 +662,8 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
             for combo in _combos(width)
             for complete in _completed_layered_combos(combo, candidates, selected_styles)
         ]
-        built = _with_light_shirt_layers(built, candidates, weather_ctx, selected_styles)
+        built = _with_light_shirt_layers(built, candidates, weather_ctx, selected_styles,
+                                         loved=likes_shirt_layer(prefs_text))
         if anchor:
             built = [combo for combo in built if any(it.get("id") == anchor_id for it in combo)]
         return _least_conflicts(built)

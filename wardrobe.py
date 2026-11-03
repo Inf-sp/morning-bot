@@ -251,15 +251,9 @@ def build_wardrobe_keyboard(cid=None):
             [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
         ])
     # Чемодан дома — в «Настройки → ✈️ Отпуск»; в Гардеробе он только в отпуске («Мой чемодан»).
-    # Под образом — его вещи по два в строке: нажал «Футболка» — меняется только она, в том же сообщении;
-    # ниже «Новый образ» — весь образ заново. Стандартного цвета.
-    items = [] if cid is None else ((_get_cached_look(cid) or {}).get("look_data") or {}).get("items") or []
-    buttons = [(wardrobe_ui.item_button_label(_item_name(item), (item or {}).get("zone") if isinstance(item, dict)
-                                              else ""), f"w_sw_{index}")
-               for index, item in enumerate(items)
-               if not (isinstance(item, dict) and item.get("zone") == "Аксессуары")]
+    # «Новый образ» — весь образ заново (стандартного цвета). Кнопок отдельных вещей нет; старые w_sw_<n> из
+    # истории чата по-прежнему меняют одну вещь.
     rows = [
-        *[buttons[start:start + 2] for start in range(0, len(buttons), 2)],
         [("Новый образ", "w_look")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]

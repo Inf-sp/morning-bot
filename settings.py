@@ -963,6 +963,19 @@ def wardrobe_constraints_list(cid):
     return _multi_selected(cid, "wardrobe_constraints", CONSTRAINT_OPTIONS)
 
 
+SHIRT_LAYER_NOTE = "Любит рубашку расстёгнутой поверх футболки"  # маркер в prefs_text для подбора образа
+
+
+def wardrobe_shirt_layer(cid) -> bool:
+    return bool(get(cid, "wardrobe_shirt_layer", False))
+
+
+async def toggle_shirt_layer(bot, cid, q=None):
+    set_(cid, "wardrobe_shirt_layer", not wardrobe_shirt_layer(cid))
+    _invalidate_wardrobe_recommendations(cid)
+    await send_wardrobe_style(bot, cid, q=q)
+
+
 def wardrobe_palette(cid):
     return _normalize_palette(get(cid, "wardrobe_palette", []))
 
@@ -1074,6 +1087,8 @@ def wardrobe_prefs_context(cid):
     style_custom = get(cid, "wardrobe_style_custom", "")
     if style_custom:
         parts.append(f"Стиль своими словами: {style_custom}.")
+    if wardrobe_shirt_layer(cid):
+        parts.append(f"{SHIRT_LAYER_NOTE} — предлагай эту связку, когда погода позволяет.")
     fit = get(cid, "wardrobe_fit", "")
     if fit:
         parts.append(f"Предпочитаемая посадка одежды: {fit}.")
@@ -1103,6 +1118,9 @@ def _wardrobe_style_kb(cid, raw=None):
     selected = set(style_groups(cid, raw))
     rows = [[InlineKeyboardButton(("✅ " if key in selected else "□ ") + label, callback_data=f"set_stgroup_{i}")]
             for i, (key, label, _about, _members) in enumerate(STYLE_GROUPS)]
+    layered = bool((raw or {}).get("wardrobe_shirt_layer")) if raw is not None else wardrobe_shirt_layer(cid)
+    rows.append([InlineKeyboardButton(("✅ " if layered else "□ ") + "Рубашка поверх футболки",
+                                      callback_data="set_shirtlayer")])
     rows.append(nav_row("w_closet"))
     return InlineKeyboardMarkup(rows)
 
@@ -1197,6 +1215,8 @@ async def handle_callback(bot, cid, data, q=None):
         await set_style_group(bot, cid, int(data[len("set_stgroup_"):]), q)
     elif data.startswith("set_style_"):  # кнопки прежних шести стилей из истории чата
         await send_wardrobe_style(bot, cid, q)
+    elif data == "set_shirtlayer":
+        await toggle_shirt_layer(bot, cid, q)
     elif data.startswith("set_fit_"):
         await set_fit(bot, cid, int(data[len("set_fit_"):]), q)
     elif data.startswith("set_palette_"):

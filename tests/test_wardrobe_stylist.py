@@ -517,8 +517,9 @@ def test_wardrobe_preferences_show_two_style_groups_as_toggles():
     markup = settings._wardrobe_style_kb("prefs-test", raw={"style_groups": ["classic"]})
     labels = [button.text for row in markup.inline_keyboard for button in row]
 
-    assert labels[:-2] == ["□ Повседневный", "✅ Классический"]
-    assert [row[0].callback_data for row in markup.inline_keyboard[:-1]] == ["set_stgroup_0", "set_stgroup_1"]
+    assert labels[:-2] == ["□ Повседневный", "✅ Классический", "□ Рубашка поверх футболки"]
+    assert [row[0].callback_data for row in markup.inline_keyboard[:-1]] == [
+        "set_stgroup_0", "set_stgroup_1", "set_shirtlayer"]
     assert all(len(row) == 1 for row in markup.inline_keyboard[:-1])
     assert markup.inline_keyboard[-1][0].callback_data == "w_closet"
 

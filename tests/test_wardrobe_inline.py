@@ -615,7 +615,7 @@ def test_old_purchase_buttons_open_wardrobe_home(monkeypatch):
     assert opened == ["42"] * 6
 
 
-def test_look_buttons_swap_one_item_in_place(monkeypatch):
+def test_old_item_buttons_still_swap_one_item(monkeypatch):
     import wardrobe_outfit
     from ui import wardrobe as wardrobe_ui
     look = {"items": [{"name": "Чёрная футболка", "zone": "Верх"}, {"name": "Черные строгие брюки", "zone": "Низ"},
@@ -625,8 +625,7 @@ def test_look_buttons_swap_one_item_in_place(monkeypatch):
     import vacation
     monkeypatch.setattr(vacation, "active", lambda _cid: False)
     kb = wardrobe.build_wardrobe_keyboard("42")
-    assert _labels(kb)[:3] == [["Футболка", "Брюки"], ["Кроссовки", "Ветровка"], ["Новый образ"]]
-    assert [b.callback_data for b in kb.inline_keyboard[0]] == ["w_sw_0", "w_sw_1"]
+    assert _labels(kb)[0] == ["Новый образ"]  # кнопок вещей под образом нет; старые w_sw_<n> работают
     assert wardrobe_ui.item_button_label("Nike Air Max", "Обувь") == "Обувь"
 
     tee, shirt, polo = ({"id": n, "zone": "Верх", "name": n} for n in ("tee", "shirt", "polo"))
@@ -639,3 +638,22 @@ def test_look_buttons_swap_one_item_in_place(monkeypatch):
     assert wardrobe.swap_choice({}, [shirt, pants], 0, {}, [], "", [], tried=["tee"]) is tee
     monkeypatch.setattr(wardrobe_outfit, "select_outfit_candidates", lambda _w, _ctx: {"Верх": [tee]})
     assert wardrobe.swap_choice({}, [tee, pants], 0, {}, [], "", []) is None
+
+
+def test_loved_shirt_over_tee_wins_in_wider_weather():
+    import settings
+    import wardrobe_outfit
+    tee = {"id": "tee", "zone": "Верх", "name": "Белая футболка", "subcategory": "Футболки"}
+    shirt = {"id": "shirt", "zone": "Верх", "name": "Голубая льняная рубашка", "subcategory": "Рубашки"}
+    pants = {"id": "pants", "zone": "Низ", "name": "Джинсы"}
+    shoes = {"id": "shoes", "zone": "Обувь", "name": "Кеды"}
+    assert wardrobe_outfit._has_light_shirt_layer([tee, shirt])
+    loved = f"{settings.SHIRT_LAYER_NOTE} — предлагай эту связку."
+    weather = {"tmax": 23}  # раньше связка предлагалась только до +22
+    single, layered = [tee, pants, shoes], [tee, shirt, pants, shoes]
+    assert wardrobe_outfit._with_light_shirt_layers([single], {"Верх": [tee, shirt]}, weather) == [single]
+    built = wardrobe_outfit._with_light_shirt_layers([single], {"Верх": [tee, shirt]}, weather, loved=True)
+    assert any({item["id"] for item in combo} == {"tee", "shirt", "pants", "shoes"} for combo in built)
+    gain = (wardrobe_outfit.score_outfit(layered, weather, [], loved)
+            - wardrobe_outfit.score_outfit(layered, weather, [], ""))
+    assert gain == 6
