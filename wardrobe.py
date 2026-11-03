@@ -251,9 +251,16 @@ def build_wardrobe_keyboard(cid=None):
             [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
         ])
     # Чемодан дома — в «Настройки → ✈️ Отпуск»; в Гардеробе он только в отпуске («Мой чемодан»).
+    # Под образом — его вещи по два в строке: нажал «Футболка» — меняется только она, в том же сообщении;
+    # ниже «Новый образ» — весь образ заново. Стандартного цвета.
+    items = [] if cid is None else ((_get_cached_look(cid) or {}).get("look_data") or {}).get("items") or []
+    buttons = [(wardrobe_ui.item_button_label(_item_name(item), (item or {}).get("zone") if isinstance(item, dict)
+                                              else ""), f"w_sw_{index}")
+               for index, item in enumerate(items)
+               if not (isinstance(item, dict) and item.get("zone") == "Аксессуары")]
     rows = [
-        # Новый образ сразу в выбранной группе стиля; предпочтения не меняются. Стандартного цвета.
-        [("Повседневный", "w_lookst_casual"), ("Классический", "w_lookst_classic")],
+        *[buttons[start:start + 2] for start in range(0, len(buttons), 2)],
+        [("Новый образ", "w_look")],
         [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
     ]
     return _kb(rows)
@@ -415,6 +422,92 @@ def _no_outfit_screen(result_kb, alternative=False, anchored=False):
     return text, result_kb
 
 
+def _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previous_style_tip=None) -> dict:
+    """Данные карточки образа: вещи, совет, строка о погоде, заголовок стиля, статистика шкафа."""
+    fallback_tip = build_style_tip(
+        best_sorted,
+        weather_ctx,
+        avoid_tips={previous_style_tip} if previous_style_tip else None,
+    )
+    look_data = {
+        "primary_style": choose_outfit_style(best_sorted, selected_styles),
+        "items": [
+            {"name": public_item_name(it), "zone": it.get("zone")}
+            for it in best_sorted
+        ],
+        "style_tip": fallback_tip,
+        "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
+        "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
+        "weather": weather_signature(weather_ctx, flags),
+    }
+    # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
+    groups = _settings.style_groups_of(selected_styles)
+    look_data["style_group"] = (_settings.style_group_labels(groups)[0] if len(groups) == 1
+                                else wardrobe_ui.outfit_group(look_data))
+    look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
+    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
+    return _with_trip_flag(cid, look_data)
+
+
+def swap_choice(w, current, index, weather_ctx, history, prefs, styles, tried=()):
+    """Замена одной вещи образа: та же зона, проходит погоду, без конфликтов с остальными вещами; из подходящих —
+    лучший по оценке всего образа; уже показанные сегодня на этом месте (tried) — после остальных. Нет — None."""
+    from wardrobe_outfit import outfit_conflicts, score_outfit, select_outfit_candidates
+    old = current[index]
+    rest = [item for number, item in enumerate(current) if number != index]
+    pool = [item for item in (select_outfit_candidates(w, weather_ctx).get(old.get("zone")) or [])
+            if item.get("id") != old.get("id") and not outfit_conflicts([*rest, item])]
+    if not pool:
+        return None
+    tried = set(tried)
+    return max(pool, key=lambda item: (item.get("id") not in tried,
+                                       score_outfit([*rest, item], weather_ctx, history, prefs, styles)))
+
+
+async def swap_item(bot, cid, index, q=None):
+    """Кнопка вещи под образом («Футболка»): эта вещь меняется на другую, остальной образ — тот же; в том же
+    сообщении. Другой подходящей нет — короткий ответ на кнопке, образ не меняется."""
+    cached = _get_cached_look(cid)
+    w = store.load_wardrobe(cid)
+    by_id = {item.get("id"): {**item, "zone": zone} for zone, _sub, item in _flat_wardrobe_items(w)}
+    current = [by_id[item_id] for item_id in (cached or {}).get("item_ids") or [] if item_id in by_id]
+    if not cached or not 0 <= index < len(current):
+        await send_looks(bot, cid, q=q)
+        return
+    weather_ctx, flags = await asyncio.to_thread(_wear_weather, store.get_settings(cid))
+    styles = _settings.wardrobe_styles(cid)
+    tried = (cached.get("swapped") or {}).get(str(current[index].get("zone")), [])
+    new = swap_choice(w, current, index, weather_ctx, store.get_wardrobe_history(cid),
+                      _settings.wardrobe_prefs_context(cid), styles, tried)
+    if new is None:
+        if q is not None:
+            try:
+                await q.answer("Другой подходящей вещи под эту погоду нет", show_alert=False)
+            except Exception:
+                pass
+        return
+    best_sorted = sorted([*current[:index], new, *current[index + 1:]], key=outfit_display_order)
+    look_data = _look_data(cid, w, best_sorted, weather_ctx, flags, styles)
+    item_ids = [item.get("id") for item in best_sorted]
+    zone = str(current[index].get("zone"))
+    swapped = {**(cached.get("swapped") or {})}
+    swapped[zone] = [*swapped.get(zone, []), current[index].get("id")]
+    _save_cached_look(cid, item_ids, look_data=look_data)
+    saved = store.get_wardrobe_daylook(cid)
+    if isinstance(saved, dict):
+        store.set_wardrobe_daylook(cid, {**saved, "swapped": swapped})
+    text, entities = _build_look_message(look_data)
+    store.last_answer[str(cid)] = text
+    kb = build_wardrobe_keyboard(cid)
+    if q is not None:
+        try:
+            await q.message.edit_text(text, entities=entities, reply_markup=kb, disable_web_page_preview=True)
+            return
+        except Exception:
+            _log.debug("wardrobe: swap edit failed", exc_info=True)
+    await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb, disable_web_page_preview=True)
+
+
 async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
                      previous_style_tip=None, previous_weather_intro=None,
                      previous_style=None, q=None, silent=False,
@@ -543,37 +636,15 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     best = outfits[pick["index"]] if pick else outfits[0]
     best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
-    fallback_tip = build_style_tip(
-        best_sorted,
-        weather_ctx,
-        avoid_tips={previous_style_tip} if previous_style_tip else None,
-    )
-    look_data = {
-        "primary_style": choose_outfit_style(best_sorted, selected_styles),
-        "items": [
-            {"name": public_item_name(it), "zone": it.get("zone")}
-            for it in best_sorted
-        ],
-        "style_tip": fallback_tip,
-        "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "weather_reason": wardrobe_rules.weather_reason(weather_ctx, best_sorted),
-        "weather": weather_signature(weather_ctx, flags),
-    }
-    # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
-    groups = _settings.style_groups_of(selected_styles)
-    look_data["style_group"] = (_settings.style_group_labels(groups)[0] if len(groups) == 1
-                                else wardrobe_ui.outfit_group(look_data))
-    look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
-    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
-    look_data = _with_trip_flag(cid, look_data)
-    if kb is None:
-        result_kb = build_wardrobe_keyboard(cid)
+    look_data = _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previous_style_tip)
     text, entities = _build_look_message(look_data)
     # Порядок важен: save_outfit_feedback мутирует гардероб (use_count/last_used) и
     # бампает версию через mutate_wardrobe — кэш дня должен сохраняться ПОСЛЕ, иначе
     # он окажется привязан к устаревшей версии и станет невалидным сразу же.
     save_outfit_feedback(cid, item_ids, weather_ctx.get("tags", []))
     _save_cached_look(cid, item_ids, look_data=look_data)
+    if kb is None:  # кнопки вещей — по только что сохранённому образу
+        result_kb = build_wardrobe_keyboard(cid)
     store.recent_looks[str(cid)] = (store.recent_looks.get(str(cid), []) + [", ".join(it.get("name", "") for it in best_sorted)[:80]])[-3:]
     store.last_look[str(cid)] = ", ".join(it.get("name", "") for it in best_sorted)[:120]
     store.last_source[str(cid)] = "Гардероб · Образ"

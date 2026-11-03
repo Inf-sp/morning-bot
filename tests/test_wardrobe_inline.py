@@ -268,11 +268,9 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
-        ["Повседневный", "Классический"],  # вместо «Новый образ» — две группы стиля
+        ["Новый образ"],  # без образа — только он
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
-    assert [b.callback_data for b in wardrobe.build_wardrobe_keyboard().inline_keyboard[0]] == [
-        "w_lookst_casual", "w_lookst_classic"]
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 
@@ -615,3 +613,29 @@ def test_old_purchase_buttons_open_wardrobe_home(monkeypatch):
         asyncio.run(wardrobe.handle_callback(object(), "42", None, data))
 
     assert opened == ["42"] * 6
+
+
+def test_look_buttons_swap_one_item_in_place(monkeypatch):
+    import wardrobe_outfit
+    from ui import wardrobe as wardrobe_ui
+    look = {"items": [{"name": "Чёрная футболка", "zone": "Верх"}, {"name": "Черные строгие брюки", "zone": "Низ"},
+                      {"name": "Чёрные Timberland кроссовки", "zone": "Обувь"},
+                      {"name": "Бежевая ветровка", "zone": "Верхняя одежда"}, {"name": "Носки", "zone": "Аксессуары"}]}
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: {"look_data": look})
+    import vacation
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+    kb = wardrobe.build_wardrobe_keyboard("42")
+    assert _labels(kb)[:3] == [["Футболка", "Брюки"], ["Кроссовки", "Ветровка"], ["Новый образ"]]
+    assert [b.callback_data for b in kb.inline_keyboard[0]] == ["w_sw_0", "w_sw_1"]
+    assert wardrobe_ui.item_button_label("Nike Air Max", "Обувь") == "Обувь"
+
+    tee, shirt, polo = ({"id": n, "zone": "Верх", "name": n} for n in ("tee", "shirt", "polo"))
+    pants = {"id": "pants", "zone": "Низ", "name": "pants"}
+    monkeypatch.setattr(wardrobe_outfit, "select_outfit_candidates", lambda _w, _ctx: {"Верх": [tee, shirt, polo]})
+    monkeypatch.setattr(wardrobe_outfit, "outfit_conflicts", lambda items: ["x"] if polo in items else [])
+    monkeypatch.setattr(wardrobe_outfit, "score_outfit", lambda items, *_a: 1 if shirt in items else 0)
+    # Та же зона, не текущая, без конфликта с остальными; уже показанные — после остальных.
+    assert wardrobe.swap_choice({}, [tee, pants], 0, {}, [], "", []) is shirt
+    assert wardrobe.swap_choice({}, [shirt, pants], 0, {}, [], "", [], tried=["tee"]) is tee
+    monkeypatch.setattr(wardrobe_outfit, "select_outfit_candidates", lambda _w, _ctx: {"Верх": [tee]})
+    assert wardrobe.swap_choice({}, [tee, pants], 0, {}, [], "", []) is None

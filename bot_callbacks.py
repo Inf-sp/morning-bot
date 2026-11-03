@@ -444,6 +444,8 @@ ROUTES = (
     R("w_pack_*", lambda c: wardrobe_suitcase.handle(c.bot, c.cid, c.data, c.q)),  # подтвердить / пересобрать
     R("w_lookst_*", _picked(lambda c: c.status(
         lambda status: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data, status=status)))),
+    # Кнопка вещи под образом: меняется только она, в том же сообщении.
+    R("w_sw_*", lambda c: wardrobe.swap_item(c.bot, c.cid, int(c.data[5:]) if c.data[5:].isdigit() else -1, q=c.q)),
     R("w_*", lambda c: wardrobe.handle_callback(c.bot, c.cid, c.q, c.data), sub="wardrobe"),
     R("colr:*", _open_collection_route),
     # Настройки обучения и общие настройки.

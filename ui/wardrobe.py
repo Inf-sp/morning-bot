@@ -161,6 +161,17 @@ def _outfit_slots(items):
     return grouped
 
 
+_ZONE_BUTTON = {"Верх": "Верх", "Кофты": "Кофта", "Низ": "Низ", "Обувь": "Обувь", "Верхняя одежда": "Куртка"}
+
+
+def item_button_label(name, zone="") -> str:
+    """Кнопка замены вещи под образом — что это за вещь одним словом: «Чёрные Timberland кроссовки» → «Кроссовки»
+    (в русском названии вещь — последнее слово по-русски); не нашлось — по зоне («Обувь»)."""
+    words = re.findall(r"[А-Яа-яЁё-]{3,}", str(name or ""))
+    word = words[-1] if words else _ZONE_BUTTON.get(str(zone or ""), "Вещь")
+    return word[:1].upper() + word[1:].lower()
+
+
 def outfit_item_names(look_data):
     """Все показанные в образе вещи в том же порядке, но одним списком."""
     look_data = look_data or {}
