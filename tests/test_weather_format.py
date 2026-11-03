@@ -110,7 +110,7 @@ def test_daily_rain_code_without_real_rain_gives_no_rain_icon():
 
 def test_period_icon_follows_period_rain_and_clouds():
     assert weather._period_weather_icon("Днём", 61, 20, 0, 6, 0) == "☁️"
-    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌙"
+    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌑"
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
 
 

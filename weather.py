@@ -374,7 +374,7 @@ def _clock(value, tz=None):
 
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
     icon = weather_icon(code, temp, rain, wind_ms, rain_mm, clouds)
-    return "🌙" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
+    return "🌑" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
 
 
 def _full_forecast_parts(now):
