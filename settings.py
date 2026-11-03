@@ -21,7 +21,7 @@ NOTIF_TYPES = [
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
     ("flight_deals",    "Дешёвые билеты"),
-    ("holidays",        "Праздники и события"),
+    ("holidays",        "Праздники и концерты"),  # накануне: праздник, событие города, концерт твоего артиста
     ("trip_day",        "План дня в отпуске"),  # только в отпуске (notification_available)
 ]
 
@@ -120,7 +120,7 @@ _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
-    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и события", "trip_day": "План дня в отпуске",
+    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и концерты", "trip_day": "План дня в отпуске",
 }
 
 
@@ -559,11 +559,25 @@ async def _send_holidays_eve(bot, cid):
         public_holidays.holiday_lines, place.get("cc"), today) if line.startswith("Завтра: ")]
     tomorrow = today + timedelta(days=1)
     lines += await asyncio.to_thread(local_events.starting_on, cid, tomorrow)
-    if not lines:
+    if lines:
+        msg = myday_ui.holidays_eve(place.get("city", ""), lines)
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
+                               reply_markup=InlineKeyboardMarkup([notif_row()]))
+    await _send_concerts_eve(bot, cid, tomorrow)
+
+
+async def _send_concerts_eve(bot, cid, tomorrow):
+    """Накануне концерта артиста из твоего списка — отдельное «🎫 Завтра концерт»; из кэша концертов, без сети.
+    Концертов завтра нет — ничего не отправляем."""
+    import asyncio
+    import leisure_concerts
+    from ui import leisure as leisure_ui
+    concerts = await asyncio.to_thread(leisure_concerts.favorite_concerts_on, cid, tomorrow)
+    if not concerts:
         return
-    msg = myday_ui.holidays_eve(place.get("city", ""), lines)
+    msg = leisure_ui.concerts_eve(concerts)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=InlineKeyboardMarkup([notif_row()]))
+                           reply_markup=InlineKeyboardMarkup([notif_row()]), disable_web_page_preview=True)
 
 
 async def send_scheduled_notification(bot, cid, kind):
@@ -605,7 +619,7 @@ _ADMIN_NOTIFICATION_META = {
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
-    "holidays":        ("накануне 18:00, если есть праздник", "Праздники и события"),
+    "holidays":        ("накануне 18:00, если есть праздник или концерт", "Праздники и концерты"),
     "trip_day":        ("08:00, в отпуске", "План дня в отпуске"),
 }
 

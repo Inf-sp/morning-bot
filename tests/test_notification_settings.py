@@ -140,6 +140,8 @@ def test_holidays_eve_sends_tomorrow_holiday_and_local_events_only_when_any(monk
             sent.append(kwargs)
 
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Амстердам", "cc": "NL"})
+    import leisure_concerts
+    monkeypatch.setattr(leisure_concerts, "favorite_concerts_on", lambda _cid, _day: [])
     monkeypatch.setattr(public_holidays, "holiday_lines", lambda _cc, _day: ["Сегодня: A", "Завтра: Koningsdag — День короля"])
     monkeypatch.setattr(local_events, "starting_on", lambda _cid, _day, fetch=True: ["Amsterdam Pride — прайд-фестиваль"])
     asyncio.run(settings._send_holidays_eve(Bot(), "42"))
@@ -150,6 +152,38 @@ def test_holidays_eve_sends_tomorrow_holiday_and_local_events_only_when_any(monk
     monkeypatch.setattr(local_events, "starting_on", lambda *_a, **_k: [])
     asyncio.run(settings._send_holidays_eve(Bot(), "42"))
     assert sent == []  # нечего сказать — без сообщения
+
+
+def test_concert_eve_comes_for_favorite_artist_tomorrow_even_without_holidays(monkeypatch):
+    import asyncio
+    from datetime import date
+    import leisure_concerts
+    import local_events
+    import public_holidays
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    tomorrow = date(2026, 11, 4)
+    event = {"name": "Muse", "url": "https://tickets.example/muse",
+             "dates": {"start": {"localDate": tomorrow.isoformat()}},
+             "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}
+    later = {**event, "name": "Placebo", "dates": {"start": {"localDate": "2026-11-09"}}}
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: [event, later])
+    assert [c["artist"] for c in leisure_concerts.favorite_concerts_on("42", tomorrow)] == ["Muse"]
+
+    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(public_holidays, "holiday_lines", lambda *_a: [])
+    monkeypatch.setattr(local_events, "starting_on", lambda *_a, **_k: [])
+    asyncio.run(settings._send_concerts_eve(Bot(), "42", tomorrow))
+    assert sent[0]["text"] == "🎫 Завтра концерт\n\n• Muse — Ziggo Dome, Amsterdam"
+    assert [e.url for e in sent[0]["entities"] if e.type == "text_link"] == ["https://tickets.example/muse"]
+    sent.clear()
+    asyncio.run(settings._send_concerts_eve(Bot(), "42", date(2026, 11, 5)))
+    assert sent == []
 
 
 def test_trip_day_comes_at_8_local_time_once_a_day(monkeypatch):

@@ -1152,6 +1152,12 @@ def concert_items_between(events, start, end, limit):
     return items[:limit]
 
 
+def favorite_concerts_on(cid, day) -> list:
+    """Концерты артистов из твоего списка в этот день (страна из Настроек — дома или в отпуске); только кэш."""
+    cc = (store.get_settings(cid).get("cc") or "NL").upper()
+    return concert_items_between(_concerts_cache_get(cid, cc) or [], day, day, 5)
+
+
 def cached_favorite_concerts(cid, limit):
     """Ближайшие концерты любимых артистов из персонального кэша; без сети."""
     from datetime import datetime, timedelta

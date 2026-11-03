@@ -961,6 +961,21 @@ def leisure_hub_kb(read=False):
     ])
 
 
+def concerts_eve(concerts) -> MessageSpec:
+    """Рассылка накануне: «🎫 Завтра концерт» и «• Артист (ссылка на билеты) — площадка, город»."""
+    b = MessageBuilder()
+    b.title("🎫 Завтра концерт" if len(concerts) == 1 else "🎫 Завтра концерты")
+    for concert in concerts:
+        b.text_line("• ")
+        name, url = str(concert.get("artist") or concert.get("title") or "").strip(), str(concert.get("url") or "")
+        b.bold_link(name, url) if url.startswith("http") else b.bold(name)
+        place = ", ".join(part for part in (concert.get("venue"), concert.get("city")) if str(part or "").strip())
+        if place:
+            b.text_line(f" — {place}")
+        b.newline()
+    return b.build_stripped()
+
+
 def no_month_concerts(title="🎫 Ближайшие концерты") -> MessageSpec:
     b = MessageBuilder()
     b.title(title)
