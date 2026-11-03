@@ -961,18 +961,37 @@ def leisure_hub_kb(read=False):
     ])
 
 
-def concerts_eve(concerts) -> MessageSpec:
-    """Рассылка накануне: «🎫 Завтра концерт» и «• Артист (ссылка на билеты) — площадка, город»."""
+def concerts_eve(concerts, day=None) -> MessageSpec:
+    """Рассылка накануне: «🎫 Завтра концерт · среда, 4 ноября», на концерт — имя жирной ссылкой на билеты, фраза об
+    артисте и пункты «Начало / Где / Жанр / Билеты / Тур» (только то, что известно)."""
     b = MessageBuilder()
-    b.title("🎫 Завтра концерт" if len(concerts) == 1 else "🎫 Завтра концерты")
-    for concert in concerts:
-        b.text_line("• ")
+    when = ""
+    if day is not None:
+        weekday = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")[day.weekday()]
+        when = f"{weekday}, {_format_date_label(day, include_year=False)}"
+    b.title(" · ".join(part for part in ("🎫 Завтра концерт" if len(concerts) == 1 else "🎫 Завтра концерты", when)
+                       if part))
+    for number, concert in enumerate(concerts):
+        if number:
+            b.spacer()
         name, url = str(concert.get("artist") or concert.get("title") or "").strip(), str(concert.get("url") or "")
         b.bold_link(name, url) if url.startswith("http") else b.bold(name)
-        place = ", ".join(part for part in (concert.get("venue"), concert.get("city")) if str(part or "").strip())
-        if place:
-            b.text_line(f" — {place}")
+        about = str(concert.get("about") or "").strip()
+        b.text_line(f" — {about}" if about else "")
         b.newline()
+        place = ", ".join(part for part in (concert.get("venue"), concert.get("address"), concert.get("city"))
+                          if str(part or "").strip())
+        title = str(concert.get("title") or "").strip()
+        rows = [
+            ("Начало", concert.get("time")),
+            ("Где", place),
+            ("Жанр", str(concert.get("genre") or "").lower()),
+            ("Билеты", concert.get("price")),
+            ("Тур", title if title and title.casefold() != name.casefold() else ""),
+        ]
+        for label, value in rows:
+            if str(value or "").strip():
+                b.line(f"• {label}: {value}")
     return b.build_stripped()
 
 

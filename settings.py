@@ -626,7 +626,13 @@ async def _send_concerts_eve(bot, cid, tomorrow):
     concerts = await asyncio.to_thread(leisure_concerts.favorite_concerts_on, cid, tomorrow)
     if not concerts:
         return
-    msg = leisure_ui.concerts_eve(concerts)
+    try:  # фраза об артисте — из кэша заметок «Концертов недели» (90 дней), иначе один дешёвый запрос
+        notes = await leisure_concerts.artist_notes([item["artist"] for item in concerts])
+    except Exception:
+        notes = {}
+    concerts = [{**item, "about": (notes.get(leisure_concerts._concert_identity_text(item["artist"])) or {})
+                 .get("about", "")} for item in concerts]
+    msg = leisure_ui.concerts_eve(concerts, tomorrow)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
                            reply_markup=InlineKeyboardMarkup([notif_row()]), disable_web_page_preview=True)
 

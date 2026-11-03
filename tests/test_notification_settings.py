@@ -168,9 +168,12 @@ def test_concert_eve_comes_for_favorite_artist_tomorrow_even_without_holidays(mo
             sent.append(kwargs)
 
     tomorrow = date(2026, 11, 4)
-    event = {"name": "Muse", "url": "https://tickets.example/muse",
-             "dates": {"start": {"localDate": tomorrow.isoformat()}},
-             "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}
+    event = {"name": "Muse: Will of the People Tour", "url": "https://tickets.example/muse",
+             "dates": {"start": {"localDate": tomorrow.isoformat(), "localTime": "20:00:00"}},
+             "classifications": [{"genre": {"name": "Rock"}}],
+             "priceRanges": [{"min": 65, "currency": "EUR"}],
+             "_embedded": {"venues": [{"name": "Ziggo Dome", "address": {"line1": "De Passage 100"},
+                                       "city": {"name": "Amsterdam"}}]}}
     later = {**event, "name": "Placebo", "dates": {"start": {"localDate": "2026-11-09"}}}
     monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
     monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda _cid, _cc: [event, later])
@@ -179,8 +182,14 @@ def test_concert_eve_comes_for_favorite_artist_tomorrow_even_without_holidays(mo
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
     monkeypatch.setattr(public_holidays, "holiday_lines", lambda *_a: [])
     monkeypatch.setattr(local_events, "starting_on", lambda *_a, **_k: [])
+    async def notes(names):
+        return {leisure_concerts._concert_identity_text("Muse"): {"about": "Стадионный рок с оркестром.", "fame": 9}}
+    monkeypatch.setattr(leisure_concerts, "artist_notes", notes)
     asyncio.run(settings._send_concerts_eve(Bot(), "42", tomorrow))
-    assert sent[0]["text"] == "🎫 Завтра концерт\n\n• Muse — Ziggo Dome, Amsterdam"
+    text = sent[0]["text"]
+    assert text.startswith("🎫 Завтра концерт · среда, 4 ноября\n\nMuse — Стадионный рок с оркестром.\n"
+                           "• Начало: 20:00\n• Где: Ziggo Dome, De Passage 100, Amsterdam\n")
+    assert "• Билеты: от 65 EUR" in text and "• Тур: Muse: Will of the People Tour" in text
     assert [e.url for e in sent[0]["entities"] if e.type == "text_link"] == ["https://tickets.example/muse"]
     sent.clear()
     asyncio.run(settings._send_concerts_eve(Bot(), "42", date(2026, 11, 5)))

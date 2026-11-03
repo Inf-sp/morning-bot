@@ -1147,6 +1147,9 @@ def concert_items_between(events, start, end, limit):
             "url": str(event.get("url") or "").strip(),
             "venue": " ".join(str(venue.get("name") or "").split()),
             "city": city,
+            "time": str(event.get("dates", {}).get("start", {}).get("localTime") or "")[:5],
+            "price": _concert_min_price(event),
+            "address": " ".join(str((venue.get("address") or {}).get("line1") or "").split()),
         })
     items.sort(key=lambda item: item.get("date") or "9999-99-99")
     return items[:limit]
