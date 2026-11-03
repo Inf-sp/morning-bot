@@ -212,6 +212,9 @@ def day_summary(
         if text:
             b.text_line("🚧 ")
             b.labeled_line("Работы на ЖД", text, lowercase=False)
+            from .transport import practical_lines
+            for line in practical_lines({**works, "sections": []})[:3]:  # участок уже в строке
+                b.line(f"• {line}")
             b.spacer()
 
     if vacation.get("country_lines"):

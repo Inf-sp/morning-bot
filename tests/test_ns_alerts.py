@@ -29,6 +29,7 @@ def test_parse_keeps_disruptions_and_calamities_but_not_maintenance():
         "id": "7001", "type": "DISRUPTION", "title": "Alkmaar – Amsterdam Centraal",
         "cause": "defecte trein", "situation": "minder treinen",
         "start": "", "until": "2026-10-08T18:30:00+0200", "extra": "tot 30 minuten extra reistijd",
+        "sections": [], "level": "", "extra_min": "", "alternative": "", "advice": "",
     }
     calamity = ns_api.parse_disruption({"id": "c1", "type": "CALAMITY", "title": "Brand", "description": "Geen treinen"})
     assert calamity["situation"] == "Geen treinen"
@@ -246,3 +247,39 @@ def test_restored_card_has_blocks_with_bold_route_and_cause():
     assert message.text == ("✅ Движение восстановлено\n\nAlkmaar - Den Helder\n\nПоезда снова ходят.\n\n"
                             "Причина: Неисправный железнодорожный мост.\n\nСбой длился с 08:29 до 11:47")
     assert bold == ["✅ Движение восстановлено", "Alkmaar - Den Helder", "Причина:"]
+
+
+PRACTICAL = {
+    "id": "w1", "type": "MAINTENANCE", "title": "Alkmaar - Hoorn",
+    "timespans": [{"start": "2026-10-10T00:00:00+0200", "end": "2026-10-12T23:59:00+0200",
+                   "alternativeTransport": {"label": "Bussen tussen Alkmaar en Hoorn"},
+                   "advices": ["Reis via Zaandam"],
+                   "additionalTravelTime": {"minimumDurationInMinutes": 15, "maximumDurationInMinutes": 30}}],
+    "publicationSections": [
+        {"section": {"stations": [{"name": "Alkmaar"}, {"name": "Heerhugowaard"}, {"name": "Hoorn"}]},
+         "consequence": {"level": "LESS_TRAINS"}},
+        {"section": {"stations": [{"name": "Alkmaar"}, {"name": "Hoorn"}]},
+         "consequence": {"level": "NO_OR_MUCH_LESS_TRAINS"}},
+    ],
+}
+
+
+def test_practical_info_sections_level_alternative_extra_and_advice():
+    info = ns_api.practical(PRACTICAL)
+    assert info == {"sections": ["Alkmaar – Hoorn"], "level": "поездов нет или почти нет", "extra_min": "+15–30 мин",
+                    "alternative": "Bussen tussen Alkmaar en Hoorn", "advice": "Reis via Zaandam"}
+    works = {**ns_api.parse_works(PRACTICAL, _date(2026, 10, 11)),
+             "alternative": "автобусы между Alkmaar и Hoorn", "advice": "езжай через Zaandam"}
+    text = myday_ui.day_summary("Вс", "Alkmaar", rail_works=[works]).text
+    assert ("🚧 Работы на ЖД: от Alkmaar до Hoorn · с 10 по 12 октября\n• Поездов нет или почти нет.\n"
+            "• Вместо поездов: автобусы между Alkmaar и Hoorn.\n• Заложи: +15–30 мин к дороге.") in text
+    alert = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption({**RAW, **{
+        k: PRACTICAL[k] for k in ("publicationSections",)}}), "situation": "меньше поездов",
+        "cause": "неисправный поезд", "alternative": "автобусы", "advice": "езжай через Zaandam"}).text
+    assert "• Затронуты: Alkmaar – Hoorn.\n• Вместо поездов: автобусы.\n• Совет: езжай через Zaandam." in alert
+
+
+def test_works_alternative_without_translation_is_dropped(monkeypatch):
+    monkeypatch.setattr(ns_alerts, "_translate", lambda fields: fields)  # AI недоступен — оригинал NS
+    item = ns_alerts._translate_or_drop({"title": "Alkmaar - Hoorn", "alternative": "Bussen", "advice": "Reis via X"})
+    assert item["alternative"] == "" and item["advice"] == ""

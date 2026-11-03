@@ -80,6 +80,59 @@ def _label(value):
     return str((value or {}).get("label") or "").strip() if isinstance(value, dict) else ""
 
 
+# Что значит сбой для пассажира (publicationSections[].consequence.level), от худшего к лучшему.
+_LEVELS = (("NO_OR_MUCH_LESS_TRAINS", "поездов нет или почти нет"), ("LESS_TRAINS", "меньше поездов"),
+           ("DIFFERENT_TRAINS", "поезда идут иначе"))
+
+
+def _travel_minutes(value) -> str:
+    """«+30 мин» / «+15–30 мин» из minimumDurationInMinutes / maximumDurationInMinutes; нет чисел — ""."""
+    if not isinstance(value, dict):
+        return ""
+    low, high = value.get("minimumDurationInMinutes"), value.get("maximumDurationInMinutes")
+    low, high = (int(v) if isinstance(v, (int, float)) and v > 0 else None for v in (low, high))
+    if low and high and low != high:
+        return f"+{low}–{high} мин"
+    return f"+{high or low} мин" if (high or low) else ""
+
+
+def _station_name(station) -> str:
+    if not isinstance(station, dict):
+        return ""
+    names = station.get("names") if isinstance(station.get("names"), dict) else {}
+    return str(station.get("name") or names.get("long") or names.get("medium") or station.get("stationCode")
+               or "").strip()
+
+
+def practical(raw) -> dict:
+    """Практическое для пассажира: участки (sections), что с поездами (level), дополнительное время (extra_min),
+    чем заменили поезда (alternative) и совет NS (advice). Чего нет в ответе NS — пусто."""
+    span = next((span for span in raw.get("timespans") or [] if isinstance(span, dict)), {})
+    sections, levels = [], set()
+    for publication in raw.get("publicationSections") or []:
+        if not isinstance(publication, dict):
+            continue
+        stations = [_station_name(station) for station in ((publication.get("section") or {}).get("stations") or [])]
+        stations = [name for name in stations if name]
+        if len(stations) >= 2:
+            label = f"{stations[0]} – {stations[-1]}"
+            if label not in sections:
+                sections.append(label)
+        levels.add(str((publication.get("consequence") or {}).get("level") or ""))
+    alternative = span.get("alternativeTransport") or next(
+        (item.get("alternativeTransport") for item in raw.get("alternativeTransportTimespans") or []
+         if isinstance(item, dict) and item.get("alternativeTransport")), None)
+    advices = [str(advice).strip() for advice in span.get("advices") or [] if str(advice or "").strip()]
+    return {
+        "sections": sections[:3],
+        "level": next((text for key, text in _LEVELS if key in levels), ""),
+        "extra_min": _travel_minutes(raw.get("summaryAdditionalTravelTime"))
+        or _travel_minutes(span.get("additionalTravelTime")),
+        "alternative": _label(alternative) if isinstance(alternative, dict) else "",
+        "advice": advices[0] if advices else "",
+    }
+
+
 def parse_disruption(raw):
     """Нормализованный сбой: {id, type, title, cause, situation, start, until, extra} или None."""
     if not isinstance(raw, dict) or raw.get("type") not in ALERT_TYPES or raw.get("isActive") is False:
@@ -95,6 +148,7 @@ def parse_disruption(raw):
         "start": str(timespan.get("start") or raw.get("start") or ""),
         "until": str(expected.get("endTime") or timespan.get("end") or ""),
         "extra": _label(raw.get("summaryAdditionalTravelTime")),
+        **practical(raw),
     }
 
 
@@ -132,7 +186,7 @@ def parse_works(raw, today):
     if not start <= today <= end:
         return None
     return {"id": str(raw.get("id") or ""), "title": _title(raw),
-            "start": start, "end": end}
+            "start": start, "end": end, **practical(raw)}
 
 
 def planned_works(code, today):

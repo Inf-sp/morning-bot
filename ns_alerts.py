@@ -39,7 +39,8 @@ def _keyboard():
 
 def _translate(disruption):
     """Причина, ситуация и время в пути по-русски; без AI — оригинал NS."""
-    fields = {key: disruption[key] for key in ("cause", "situation", "extra") if disruption.get(key)}
+    fields = {key: disruption[key] for key in ("cause", "situation", "extra", "alternative", "advice")
+              if disruption.get(key)}
     if not fields:
         return disruption
     try:
@@ -48,7 +49,7 @@ def _translate(disruption):
             f"Данные: {secure.wrap_untrusted(str(fields), 'сообщение NS')}. "
             "Верни JSON без markdown с теми же ключами и переводом значений.",
             300, tier="cheap", module="ns",
-            cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 2},
+            cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 3},
             # Ответ без кириллицы (модель вернула нидерландский) — брак: пробуем следующий
             # провайдер и не кэшируем.
             result_validator=lambda value: isinstance(value, dict) and all(
@@ -59,6 +60,15 @@ def _translate(disruption):
         return disruption
     translated = {key: str(data.get(key) or value) for key, value in fields.items()} if isinstance(data, dict) else {}
     return {**disruption, **translated}
+
+
+def _translate_or_drop(item):
+    """Работы для «Моего дня»: замена поездов и совет — по-русски; без перевода эти поля убираются (не по-нидерландски)."""
+    if not (item.get("alternative") or item.get("advice")):
+        return item
+    translated = _translate({key: item.get(key) for key in ("alternative", "advice")})
+    return {**item, **{key: value if _CYRILLIC.search(str(value or "")) else ""
+                       for key, value in translated.items() if key in ("alternative", "advice")}}
 
 
 def incident_signature(item):
@@ -137,4 +147,5 @@ def todays_works(cid, today=None):
     for code in ns_api.station_codes(city):
         for item in ns_api.planned_works(code, today):
             works.setdefault(item["id"], item)
-    return sorted(works.values(), key=lambda item: (item["end"], item["title"]))[:MAX_WORKS_LINES]
+    return [_translate_or_drop(item)
+            for item in sorted(works.values(), key=lambda item: (item["end"], item["title"]))[:MAX_WORKS_LINES]]

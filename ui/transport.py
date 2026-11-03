@@ -36,6 +36,32 @@ def _cause_line(b, cause):
     b.labeled_line("Причина:", f"{cause[:1].upper()}{cause[1:]}.", lowercase=False)
 
 
+def practical_lines(item, *, with_level=True) -> list:
+    """Пункты для пассажира: «Поезда: Alkmaar – Hoorn — поездов нет или почти нет», «Вместо поездов: автобусы»,
+    «Заложи: +30 мин», «Совет: …». Только то, что есть в данных NS."""
+    lines = []
+    sections = ", ".join(item.get("sections") or [])
+    level = str(item.get("level") or "") if with_level else ""
+    if sections and level:
+        lines.append(f"Поезда: {sections} — {level}")
+    elif sections:
+        lines.append(f"Затронуты: {sections}")
+    elif level:
+        lines.append(level[:1].upper() + level[1:])
+    if item.get("alternative"):
+        lines.append(f"Вместо поездов: {_lower(item['alternative'])}")
+    if item.get("extra_min"):
+        lines.append(f"Заложи: {item['extra_min']} к дороге")
+    if item.get("advice"):
+        lines.append(f"Совет: {_lower(item['advice'])}")
+    return [line.rstrip(".") + "." for line in lines]
+
+
+def _lower(text) -> str:
+    text = str(text or "").strip()
+    return text[:1].lower() + text[1:] if text[:2] != text[:2].upper() else text
+
+
 def ns_alert(city, disruption) -> MessageSpec:
     """Предупреждение о сбое NS: что случилось, причина, «Ожидается до …» — блоками через пустую строку.
 
@@ -54,9 +80,18 @@ def ns_alert(city, disruption) -> MessageSpec:
     cause = disruption.get("cause") or ""
     if cause and not _mentions(situation, cause, min_len=5):
         _cause_line(b, cause)
+    # Практическое: другие участки, чем заменили поезда, сколько закладывать, совет NS. «Что с поездами» уже
+    # сказано ситуацией; участок из заголовка не повторяется.
+    other = [section for section in disruption.get("sections") or []
+             if section.replace("–", "-").casefold() != title_line.replace("–", "-").casefold()]
+    lines = practical_lines({**disruption, "sections": other}, with_level=False)
+    if lines:
+        b.spacer()
+        for line in lines:
+            b.line(f"• {line}")
     tail = [part for part in (
         f"ожидается до {_time_label(disruption.get('until'))}" if _time_label(disruption.get("until")) else "",
-        disruption.get("extra") or "",
+        "" if disruption.get("extra_min") else disruption.get("extra") or "",
     ) if part]
     if tail:
         b.spacer()
