@@ -661,3 +661,33 @@ def test_loved_shirt_over_tee_wins_in_wider_weather():
     gain = (wardrobe_outfit.score_outfit(layered, weather, [], loved)
             - wardrobe_outfit.score_outfit(layered, weather, [], ""))
     assert gain == 6
+
+
+def test_oversized_tee_is_worn_alone_and_toggles_in_item_card(monkeypatch):
+    import wardrobe_outfit
+    tee = {"id": "tee", "zone": "Верх", "name": "Бежевая футболка с оранжевым принтом", "subcategory": "Футболки"}
+    big = {**tee, "fit": "оверсайз"}
+    shirt = {"id": "shirt", "zone": "Верх", "name": "Голубая льняная рубашка", "subcategory": "Рубашки"}
+    shorts = {"id": "shorts", "zone": "Низ", "name": "Шорты"}
+    shoes = {"id": "shoes", "zone": "Обувь", "name": "Кеды"}
+    assert wardrobe_outfit._has_light_shirt_layer([tee, shirt])
+    assert not wardrobe_outfit._has_light_shirt_layer([big, shirt])
+    assert "рубашка с оверсайз-футболкой" in wardrobe_outfit.outfit_conflicts([big, shirt, shorts, shoes])
+    assert wardrobe_outfit.outfit_conflicts([big, shorts, shoes]) == []
+    built = wardrobe_outfit._with_light_shirt_layers([[big, shorts, shoes]], {"Верх": [big, shirt]}, {"tmax": 18})
+    assert built == [[big, shorts, shoes]]  # рубашку поверх не добавляет
+
+    saved = {"zones": {"Верх": {"Футболки": [dict(tee)], "Рубашки": [dict(shirt)]}}}
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: saved)
+    monkeypatch.setattr(wardrobe.store, "mutate_wardrobe", lambda _cid, fn: fn(saved))
+    monkeypatch.setattr(wardrobe.store, "clear_wardrobe_daylook", lambda _cid: None)
+    bot = RecordingBot()
+    asyncio.run(wardrobe_router.handle_callback(bot, "42", None, "w_ovs_tee"))
+    assert saved["zones"]["Верх"]["Футболки"][0]["fit"] == "оверсайз"
+    labels = _labels(bot.message["reply_markup"])
+    assert ["✅ Оверсайз"] in labels and "Посадка: оверсайз" in bot.message["text"]
+    asyncio.run(wardrobe_router.handle_callback(bot, "42", None, "w_ovs_tee"))
+    assert saved["zones"]["Верх"]["Футболки"][0]["fit"] == ""
+    assert ["□ Оверсайз"] in _labels(bot.message["reply_markup"])
+    asyncio.run(wardrobe.send_item_card(bot, "42", "shirt"))
+    assert not any("Оверсайз" in label for row in _labels(bot.message["reply_markup"]) for label in row)

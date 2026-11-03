@@ -719,6 +719,33 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
     await rich_delivery.show(bot, cid, msg, reply_markup=kb, query=q)
 
 
+def _oversize_toggle_fits(zone, item) -> bool:
+    """Переключатель «Оверсайз» — у верха, кроме рубашек (их посадка на правило не влияет)."""
+    import wardrobe_outfit
+    item = {**(item or {}), "zone": zone}
+    return zone == "Верх" and wardrobe_outfit.outfit_role(item) == "base_top" and "рубаш" not in (
+        f"{item.get('name') or ''} {item.get('subcategory') or ''}".casefold())
+
+
+def toggle_oversize(cid, item_id) -> bool:
+    """«Оверсайз» в карточке: посадка «оверсайз» ставится или снимается; образ дня пересобирается."""
+    import wardrobe_outfit
+    zone, subcat, item = _find_item(cid, item_id)
+    if not item:
+        return False
+    if wardrobe_outfit.is_oversized({"fit": item.get("fit")}):
+        fit = ""
+    elif wardrobe_outfit.is_oversized({"name": item.get("name")}):
+        return False  # «оверсайз» в названии — снимается через «Изменить»
+    else:
+        fit = "оверсайз"
+    ok = _replace_item(cid, item_id, {**item, "zone": item.get("zone") or zone,
+                                      "subcategory": item.get("subcategory") or subcat, "fit": fit})
+    if ok:
+        store.clear_wardrobe_daylook(cid)
+    return ok
+
+
 async def send_item_card(bot, cid, item_id, q=None):
     _cancel_wardrobe_input(cid)
     zone, _subcat, item = _find_item(cid, item_id)
@@ -727,11 +754,14 @@ async def send_item_card(bot, cid, item_id, q=None):
         return
     msg = wardrobe_ui.item_card(item)
     zone_slug = ZONE_SLUG.get(zone, "oth")
-    kb = _kb([
+    rows = [
         [(delete_label("Удалить"), f"w_delete_{item_id}")],
         [("Собрать образ", f"w_with_{item_id}")],
-        [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")],
-    ])
+    ]
+    if _oversize_toggle_fits(zone, item):  # футболка, лонгслив, поло: «Оверсайз» — носить отдельно, без рубашки
+        import wardrobe_outfit
+        rows.append([(("✅ " if wardrobe_outfit.is_oversized(item) else "□ ") + "Оверсайз", f"w_ovs_{item_id}")])
+    kb = _kb([*rows, [("⬅️ Назад", f"w_cat_{zone_slug}"), ("#️⃣ Главная", "m_menu")]])
     # «Изменить» — описать заново (цвет, материал, название); синяя, прямо над «Назад | Главная».
     edit = [InlineKeyboardButton("✏️ Изменить", callback_data=f"w_edit_{item_id}", api_kwargs={"style": "primary"})]
     kb = InlineKeyboardMarkup([*kb.inline_keyboard[:-1], edit, kb.inline_keyboard[-1]])

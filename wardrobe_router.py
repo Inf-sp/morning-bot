@@ -96,6 +96,11 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data.startswith("w_item_"):
         await wardrobe.send_item_card(bot, cid, data[len("w_item_"):], q=q)
         return
+    if data.startswith("w_ovs_"):  # «Оверсайз» в карточке вещи — переключатель на месте
+        item_id = data[len("w_ovs_"):]
+        wardrobe.toggle_oversize(cid, item_id)
+        await wardrobe.send_item_card(bot, cid, item_id, q=q)
+        return
     if data.startswith("w_edit_"):  # «Изменить»: вещь описывается заново одним сообщением и заменяет прежнюю
         item_id = data[len("w_edit_"):]
         _zone, _subcat, item = wardrobe._find_item(cid, item_id)

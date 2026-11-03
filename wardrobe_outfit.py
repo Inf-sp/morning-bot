@@ -41,6 +41,18 @@ _CITY_2026_STRICT_MARKERS = (
     "офисн", "делов", "строг", "костюмн", "formal", "business",
 )
 _LIGHT_BASE_MARKERS = ("футболк", "майк", "лонгслив", "топ")
+_OVERSIZE_MARKERS = ("оверсайз", "oversize", "over size", "оверсайзн")
+
+
+def is_oversized(item) -> bool:
+    """Оверсайз-вещь: посадка (переключатель в карточке вещи) или название."""
+    facts = " ".join(str(item.get(key) or "") for key in ("fit", "name")).casefold()
+    return any(marker in facts for marker in _OVERSIZE_MARKERS)
+
+
+def _is_oversized_base_top(item) -> bool:
+    """Оверсайз-футболка носится сама по себе: без рубашки поверх и не под рубашкой."""
+    return outfit_role(item) == "base_top" and "рубаш" not in _item_facts(item) and is_oversized(item)
 
 # Зона вещи недостаточна для построения комплекта: старые вещи и ответ AI при
 # добавлении могли сохранить жилет или overshirt в «Верхе». Роль определяем по
@@ -188,6 +200,8 @@ def outfit_conflicts(items) -> list:
         found.append("два толстых слоя")
     if has(_KNIT_OVER_SHIRT) and has(("рубаш",)):
         found.append("худи или флис поверх рубашки")
+    if any(_is_oversized_base_top(item) for item in clothes) and has(("рубаш",)):
+        found.append("рубашка с оверсайз-футболкой")
     if has(_SPORTY_MARKERS) and has(_FORMAL_MARKERS):
         found.append("спортивное со строгим")
     if rules.statement_count(clothes) > 1:
@@ -254,7 +268,8 @@ def _is_layerable_shirt(item):
 
 def _is_light_base_top(item):
     facts = _item_facts(item)
-    return outfit_role(item) == "base_top" and any(marker in facts for marker in _LIGHT_BASE_MARKERS)
+    return (outfit_role(item) == "base_top" and any(marker in facts for marker in _LIGHT_BASE_MARKERS)
+            and not _is_oversized_base_top(item))
 
 
 _SHIRT_LAYER_RANGE = (14, 22)  # tmax, когда связка «футболка + рубашка» вообще предлагается
