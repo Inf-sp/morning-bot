@@ -271,15 +271,8 @@ def test_practical_info_sections_level_alternative_extra_and_advice():
     works = {**ns_api.parse_works(PRACTICAL, _date(2026, 10, 11)),
              "alternative": "автобусы между Alkmaar и Hoorn", "advice": "езжай через Zaandam"}
     text = myday_ui.day_summary("Вс", "Alkmaar", rail_works=[works]).text
-    assert ("🚧 Работы на ЖД: от Alkmaar до Hoorn · с 10 по 12 октября\n• Поездов нет или почти нет.\n"
-            "• Вместо поездов: автобусы между Alkmaar и Hoorn.\n• Заложи: +15–30 мин к дороге.") in text
+    assert "🚧 Работы на ЖД: от Alkmaar до Hoorn · с 10 по 12 октября · Поездов нет или почти нет." in text
     alert = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption({**RAW, **{
         k: PRACTICAL[k] for k in ("publicationSections",)}}), "situation": "меньше поездов",
         "cause": "неисправный поезд", "alternative": "автобусы", "advice": "езжай через Zaandam"}).text
     assert "• Затронуты: Alkmaar – Hoorn.\n• Вместо поездов: автобусы.\n• Совет: езжай через Zaandam." in alert
-
-
-def test_works_alternative_without_translation_is_dropped(monkeypatch):
-    monkeypatch.setattr(ns_alerts, "_translate", lambda fields: fields)  # AI недоступен — оригинал NS
-    item = ns_alerts._translate_or_drop({"title": "Alkmaar - Hoorn", "alternative": "Bussen", "advice": "Reis via X"})
-    assert item["alternative"] == "" and item["advice"] == ""

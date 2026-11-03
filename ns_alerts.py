@@ -62,15 +62,6 @@ def _translate(disruption):
     return {**disruption, **translated}
 
 
-def _translate_or_drop(item):
-    """Работы для «Моего дня»: замена поездов и совет — по-русски; без перевода эти поля убираются (не по-нидерландски)."""
-    if not (item.get("alternative") or item.get("advice")):
-        return item
-    translated = _translate({key: item.get(key) for key in ("alternative", "advice")})
-    return {**item, **{key: value if _CYRILLIC.search(str(value or "")) else ""
-                       for key, value in translated.items() if key in ("alternative", "advice")}}
-
-
 def incident_signature(item):
     """Один инцидент: та же причина и то же ожидаемое окончание; без них — сама запись."""
     cause = " ".join(str(item.get("cause") or "").casefold().split())
@@ -147,5 +138,4 @@ def todays_works(cid, today=None):
     for code in ns_api.station_codes(city):
         for item in ns_api.planned_works(code, today):
             works.setdefault(item["id"], item)
-    return [_translate_or_drop(item)
-            for item in sorted(works.values(), key=lambda item: (item["end"], item["title"]))[:MAX_WORKS_LINES]]
+    return sorted(works.values(), key=lambda item: (item["end"], item["title"]))[:MAX_WORKS_LINES]

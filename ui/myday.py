@@ -208,13 +208,12 @@ def day_summary(
     for works in rail_works or []:
         title = _works_section(works.get("title"))
         period = _works_period(works.get("start"), works.get("end"))
-        text = " · ".join(part for part in (title, period) if part)
+        # Одной строкой: участок · даты · что с поездами («Меньше поездов.»).
+        level = str(works.get("level") or "")
+        text = " · ".join(part for part in (title, period, f"{level[:1].upper()}{level[1:]}." if level else "") if part)
         if text:
             b.text_line("🚧 ")
             b.labeled_line("Работы на ЖД", text, lowercase=False)
-            from .transport import practical_lines
-            for line in practical_lines({**works, "sections": []})[:3]:  # участок уже в строке
-                b.line(f"• {line}")
             b.spacer()
 
     if vacation.get("country_lines"):
