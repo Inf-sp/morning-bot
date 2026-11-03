@@ -660,20 +660,18 @@ def test_choose_language_button_is_green_right_under_add():
     assert rows[1][0]["text"] == "Выбрать язык" and rows[1][0].get("style") == "success"
 
 
-def test_grammar_points_are_summary_practical_example_and_no_repeats():
+def test_grammar_is_topic_then_explanation_then_example_without_repeats():
     from ui import menu as menu_ui
     lesson = {
-        "topic": "Daarom", "meaning": "поэтому",
-        "explain": "Daarom в начале второго предложения вызывает инверсию: глагол сразу после daarom.",
-        "details": ["Daarom — «поэтому»: вводит следствие.",
-                    "В начале второго предложения вызывает инверсию — глагол сразу после daarom.",
-                    "Daar ben ik het mee eens → С этим я согласен."],
-        "more": "Ik was moe, daarom ben ik vroeg gaan slapen.", "more_translation": "Я устал, поэтому рано лёг спать.",
+        "topic": "Daarom, daarvoor", "meaning": "daar + предлог",
+        "explain": "Daar + предлог подчёркивает «именно это»: daarom — поэтому, daarvoor — для этого.",
+        "details": ["Daar + предлог — то же, что er + предлог, но с ударением."],
+        "more": "Daar heb ik geen tijd voor.", "more_translation": "На это у меня нет времени.",
     }
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
+    assert "Грамматика: Daar + предлог:" in text  # формула вместо «Daarom, daarvoor → daar + предлог»
     points = [line for line in text.split("\n") if line.startswith("• ")]
     assert points == [
-        "• Daarom в начале второго предложения вызывает инверсию: глагол сразу после daarom.",  # сводка темы
-        "• Daar ben ik het mee eens → С этим я согласен.",  # пункт с живым примером, а не повтор сводки
-        "• Ik was moe, daarom ben ik vroeg gaan slapen → Я устал, поэтому рано лёг спать.",
+        "• Подчёркивает «именно это»: daarom — поэтому, daarvoor — для этого.",  # без повтора заголовка
+        "• Daar heb ik geen tijd voor → На это у меня нет времени.",
     ]

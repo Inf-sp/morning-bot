@@ -134,6 +134,29 @@ def _grammar_parts(rule) -> tuple:
     return topic.strip(), _with_period(explanation[:1].upper() + explanation[1:])
 
 
+def _grammar_title(phrase) -> str:
+    """Заголовок — что изучаем: «Zijn → быть»; если «значение» — формула, а не перевод («daar + предлог»), то она
+    сама («Daar + предлог»), без «Daarom, daarvoor → daar + предлог»."""
+    topic, meaning = str(phrase.get("topic") or "").strip(), str(phrase.get("meaning") or "").strip()
+    if "+" in meaning and re.search(r"[a-z]", meaning.split("+")[0], re.I):
+        return meaning[:1].upper() + meaning[1:]
+    return f"{topic} → {meaning}" if meaning else topic
+
+
+def _grammar_explanation(phrase) -> str:
+    """Одно объяснение темы (сводка explain) — без повтора заголовка в начале: «Daar + предлог подчёркивает…» →
+    «Подчёркивает…», «Daarom — «поэтому»: вводит…» → «Вводит…»."""
+    text = _with_period(phrase.get("explain") or (phrase.get("details") or [""])[0])
+    for head in (phrase.get("meaning"), phrase.get("topic")):
+        head = str(head or "").strip()
+        if head and text.casefold().startswith(head.casefold()):
+            rest = text[len(head):].lstrip(" —–-:,")
+            if rest:
+                text = rest[:1].upper() + rest[1:]
+            break
+    return text
+
+
 def learning_menu(home: dict):
     """Главный экран обучения: материал дня, прогресс и следующий шаг."""
     if home.get("disabled"):
@@ -175,34 +198,13 @@ def learning_menu(home: dict):
     # (фраза дня — в «Моём дне», строка «Фраза дня»).
     phrase = home.get("live_language") or {}
     if phrase.get("topic") and phrase.get("explain"):
-        # Подробное объяснение — пунктами через пустую строку в одной цитате; без пунктов — краткое.
-        details = [_with_period(point) for point in phrase.get("details") or [] if str(point).strip()]
-        # Не больше двух пунктов объяснения: сводка темы (explain) и пункт с живым примером «→» — как это звучит.
-        # Первые пункты details часто абстрактные («то же, что er + предлог») и без примера непонятны.
-        summary = _with_period(phrase["explain"]) if str(phrase.get("explain") or "").strip() else ""
-        shown = [summary] if summary else details[:1]
-        def has_example(point):  # «… → перевод» или «…: Het regent, daarom blijf ik thuis»
-            return "→" in point or bool(re.search(r":\s+[A-Z][a-z]", point))
-
-        def repeats(point):  # тот же смысл, что у сводки: больше половины слов общие
-            words = set(re.findall(r"\w{4,}", point.casefold()))
-            known = set(re.findall(r"\w{4,}", summary.casefold()))
-            return bool(words) and len(words & known) / len(words) > 0.5
-
-        fresh = [point for point in details if point not in shown and not repeats(point)]
-        practical = next((point for point in fresh if "→" in point), "") \
-            or next((point for point in fresh if has_example(point)), "")
-        shown += [practical] if practical else fresh[:1]
-        topic, explanation = phrase["topic"], "\n\n".join(shown)
-        if phrase.get("meaning"):
-            topic += f" → {phrase['meaning']}"
+        topic, explanation = _grammar_title(phrase), _grammar_explanation(phrase)
     else:  # прежний краткий формат правила (уроки страны отпуска)
         topic, explanation = _grammar_parts(phrase.get("rule"))
-    # Как в погодном предупреждении: тема жирной подписью с двоеточием, объяснение и пример — пунктами «•».
-    points = [point for point in str(explanation or "").split("\n\n") if point.strip()]
+    # Грамматика — заголовком, ниже её объяснение одним пунктом и пример — вторым; без повтора слов заголовка.
     example = (f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}"
                if phrase.get("more") and phrase.get("more_translation") else "")
-    points = [*points[:2 if example else 3], *([example] if example else [])]  # не больше трёх пунктов
+    points = [point for point in (str(explanation or "").split("\n\n")[0].strip(), example) if point]
     if topic:
         b.spacer()
         b.bold(f"Грамматика: {topic}:")
@@ -210,7 +212,7 @@ def learning_menu(home: dict):
     elif points:
         b.spacer()
     for point in points:
-        b.line(f"• {point.strip()}")
+        b.line(f"• {point}")
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
         b.spacer()
