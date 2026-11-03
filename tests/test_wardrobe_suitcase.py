@@ -109,7 +109,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
 
     assert profile["suitcase_draft"]["trip"]["cc"] == "ZA" and "42" not in wardrobe_suitcase.store.pending_input
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_ok"], ["w_pack_add"], ["m_wardrobe", "m_menu"]]  # «Пересобрать» нет — его закрывает «Добавить»
+        ["w_pack_ok"], ["w_pack_add"], ["w_pack_back", "m_menu"]]  # «Пересобрать» нет — его закрывает «Добавить»
     monkeypatch.setattr(wardrobe_suitcase, "_clothes", lambda _cid: CLOTHES)
     monkeypatch.setattr(wardrobe_suitcase, "_weather", lambda _trip: {"tmin": 18, "tmax": 24, "rainy": 0})
 
@@ -153,7 +153,7 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n"  # без «✅ Чемодан сохранён»
                                     "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_del"], ["w_pack_back", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
 
     # «Собрать чемодан» дома теперь сразу открывает сохранённый чемодан, а не спрашивает о поездке.
@@ -180,7 +180,7 @@ def test_on_vacation_the_confirmed_suitcase_of_this_country_is_shown(monkeypatch
 
     assert "белая футболка" in bot.sent[-1]["text"] and "сохранён" not in bot.sent[-1]["text"]  # без новой сборки
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
-        ["w_pack_add_s"], ["w_pack_del"], ["m_wardrobe", "m_menu"]]
+        ["w_pack_add_s"], ["w_pack_del"], ["w_pack_back", "m_menu"]]
 
 
 def test_pack_button_at_home_and_on_vacation(monkeypatch):
@@ -189,12 +189,9 @@ def test_pack_button_at_home_and_on_vacation(monkeypatch):
 
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
     monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {})
-    assert callbacks(wardrobe.build_wardrobe_keyboard("42"))[2] == "w_pack"  # дома — под стилями
-    labels = [[b.text for b in row] for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard]
-    assert labels[1] == ["🧳 Собрать чемодан"]
+    assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard("42"))  # дома чемодан — в Настройках
     monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": TRIP, "result": {"groups": []}})
-    labels = [[b.text for b in row] for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard]
-    assert labels[1] == ["🧳 Чемодан в отпуск"]  # чемодан уже собран
+    assert "w_pack" not in callbacks(wardrobe.build_wardrobe_keyboard("42"))
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: True)
     # В отпуске нет стилей: «Ещё вариант» — новый образ дня, ниже «Мой чемодан».
     assert callbacks(wardrobe.build_wardrobe_keyboard("42")) == ["w_look", "w_pack", "w_closet", "m_menu"]

@@ -700,7 +700,7 @@ def _draft_kb(basic=False):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Подтвердить", callback_data="w_pack_ok")],
         *([] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add")]]),
-        nav_row("m_wardrobe"),
+        nav_row("w_pack_back"),
     ])
 
 
@@ -710,7 +710,7 @@ def _saved_kb(basic=False):
     # «Образы на каждый день» убраны из «Мой чемодан»; старая кнопка w_pack_looks в истории чата работает.
     rows = [] if basic else [[InlineKeyboardButton(_ADD_LABEL, callback_data="w_pack_add_s")]]
     return InlineKeyboardMarkup([*rows, [InlineKeyboardButton("❌ Удалить подборку", callback_data="w_pack_del")],
-                                 nav_row("m_wardrobe")])
+                                 nav_row("w_pack_back")])
 
 
 def _edit_kb(draft):
@@ -810,7 +810,7 @@ async def send(bot, cid, q=None):
             await _show_saved(bot, cid, saved, q)
             return
         store.pending_input[str(cid)] = _PENDING
-        await _show(bot, cid, {}, InlineKeyboardMarkup([nav_row("m_wardrobe")]), q, msg=wardrobe_ui.suitcase_ask())
+        await _show(bot, cid, {}, InlineKeyboardMarkup([nav_row("w_pack_back")]), q, msg=wardrobe_ui.suitcase_ask())
         return
     trip = vacation_trip(cid)
     saved = saved_suitcase(cid)
@@ -929,6 +929,13 @@ async def handle(bot, cid, data, q=None):
     сохранённый; w_pack_looks — образы на каждый день; w_pack_del — удалить подборку."""
     profile = _profile(cid)
     draft = profile.get("suitcase_draft") or {}
+    if data == "w_pack_back":  # «Назад» из чемодана: в отпуске — в Гардероб, дома — на экран «✈️ Отпуск»
+        if vacation.active(cid):
+            import wardrobe
+            await wardrobe.send_home(bot, cid, q)
+        else:
+            await vacation.send_screen(bot, cid, q)
+        return
     if data == "w_pack_saved":  # «Назад» из образов и старая кнопка «Мой шкаф»
         saved = saved_suitcase(cid)
         if saved:

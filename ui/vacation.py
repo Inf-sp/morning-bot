@@ -1,5 +1,5 @@
 """Тексты режима «✈️ В отпуске»: вход, возвращение и блок «Страна»."""
-from .builder import MessageBuilder
+from .builder import MessageBuilder, MessageSpec
 from .text import ru_plural
 
 ROUTE_EXAMPLE = "«Кейптаун до 27 октября, далее Йоханнесбург до 3 ноября»"
@@ -35,6 +35,50 @@ def suitcase_trip_label(trip, route=""):
     from util import _MONTHS
     end = date.fromisoformat(trip["end"])
     return f"🧳 {route or trip['city']} · до {end.day} {_MONTHS[end.month - 1]}"
+
+
+def trip_period(trip, route="") -> str:
+    """«Кейптаун · 20–27 октября», «Кейптаун → Йоханнесбург · 19 октября – 3 ноября»."""
+    from datetime import date
+    from util import _MONTHS
+    start, end = date.fromisoformat(trip["start"]), date.fromisoformat(trip["end"])
+    days = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if (start.year, start.month) == (end.year, end.month)
+            else f"{start.day} {_MONTHS[start.month - 1]} – {end.day} {_MONTHS[end.month - 1]}")
+    return f"{route or trip['city']} · {days}"
+
+
+def vacation_screen(trip_line="", packed=False) -> MessageSpec:
+    """«✈️ Отпуск» в Настройках: что такое чемодан и режим отпуска и чем они отличаются; trip_line — поездка
+    сохранённого чемодана («Кейптаун · 20–27 октября»)."""
+    b = MessageBuilder()
+    b.title("✈️ Отпуск")
+    b.bold("Чемодан:")
+    b.newline()
+    if trip_line:
+        b.line(f"• Собран: {trip_line}.")
+    b.line("• Вещи из твоего шкафа под погоду и даты поездки — удобно собрать заранее, дома."
+           if not packed else "• Можно добавить или убрать вещи до поездки.")
+    b.spacer()
+    b.bold("Режим отпуска:")
+    b.newline()
+    b.line("• Погода, Мой день, Кухня, Обучение и Досуг переключаются на страну поездки.")
+    b.line("• Гардероб подбирает образ дня из вещей чемодана.")
+    b.line("• В день возвращения я сам верну домашний город.")
+    b.spacer()
+    b.italic("Собран чемодан с датами — утром в день поездки спрошу, включить ли режим отпуска.")
+    b.newline()
+    return b.build_stripped()
+
+
+def trip_offer(trip_line) -> MessageSpec:
+    """Утро дня поездки из чемодана: включить режим отпуска?"""
+    b = MessageBuilder()
+    b.title("✈️ Сегодня поездка")
+    b.bold(f"{trip_line}:")
+    b.newline()
+    b.line("• Включить режим отпуска? Погода, Мой день, Кухня, Обучение и Досуг переключатся на страну поездки.")
+    b.line("• Вернуть домашний город можно в любой момент в Настройках.")
+    return b.build_stripped()
 
 
 def ask_city_in_country(country, flag=""):

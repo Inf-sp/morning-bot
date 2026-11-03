@@ -269,12 +269,10 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
         ["Повседневный", "Классический"],  # вместо «Новый образ» — две группы стиля
-        ["🧳 Собрать чемодан"],  # дома — спросит город и даты поездки
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
     assert [b.callback_data for b in wardrobe.build_wardrobe_keyboard().inline_keyboard[0]] == [
         "w_lookst_casual", "w_lookst_classic"]
-    assert wardrobe.build_wardrobe_keyboard().inline_keyboard[1][0].callback_data == "w_pack"
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
 
 

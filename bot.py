@@ -472,6 +472,17 @@ async def job_trip_day(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_trip_day failed for cid=%s", cid)
 
 
+async def job_vacation_offer(context: ContextTypes.DEFAULT_TYPE):
+    """В день поездки из чемодана (с 08:00) — один раз спросить, включить ли режим отпуска."""
+    import vacation
+
+    for cid in access.get_allowed_cids():
+        try:
+            await vacation.send_offer(context.bot, cid)
+        except Exception:
+            logging.exception("job_vacation_offer failed for cid=%s", cid)
+
+
 async def job_inactivity_reminders(context: ContextTypes.DEFAULT_TYPE):
     """Одно напоминание после 72 часов; новый цикл начинается с новой активности."""
     for cid, since_ts in tracking.due_inactivity_reminders(access.get_allowed_cids()):
@@ -689,6 +700,7 @@ def _build_application():
                          **_job_options(f"{kind}_{slot.replace(':', '')}"))
     # «План дня в отпуске» — по местному времени поездки: проверка каждые 15 минут, отправка в выбранный час.
     jq.run_repeating(job_trip_day, interval=900, first=60, **_job_options("trip_day_repeating"))
+    jq.run_repeating(job_vacation_offer, interval=900, first=90, **_job_options("vacation_offer_repeating"))
     jq.run_daily(job_inactivity_reminders, time=_t("09:00"), days=tuple(range(7)), **_job_options("inactivity_reminders_daily"))
     _log.info("Scheduler configured jobs=%s", len(jq.jobs()))
     return app

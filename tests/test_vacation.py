@@ -834,3 +834,36 @@ def test_learning_notification_pauses_on_vacation_unless_it_is_the_country_langu
     saved["vacation"]["guide"] = {"v": vacation._GUIDE_VERSION, "language_code": "en"}
     assert not settings.notification_paused("42", "daily_words")  # язык страны — тот, что учишь
     assert not settings.notification_paused("42", "evening_weather")
+
+
+def test_vacation_screen_has_suitcase_and_trip_start_and_morning_offer_once(monkeypatch):
+    import asyncio
+    from datetime import datetime as dt
+    import vacation as vac
+    profile = {}
+    monkeypatch.setattr(vac.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(vac.store, "mutate_profile", lambda _cid, fn: profile.update(fn(dict(profile))[0]))
+    trip = {"city": "Кейптаун", "lat": -33.9, "lon": 18.4, "start": "2026-10-20", "end": "2026-10-27"}
+    monkeypatch.setattr(vac, "suitcase_trip", lambda _cid: trip)
+    monkeypatch.setattr(vac, "active", lambda _cid: False)
+    import wardrobe_suitcase
+    monkeypatch.setattr(wardrobe_suitcase, "saved_suitcase", lambda _cid: {"trip": trip})
+    shown = []
+
+    async def show(_bot, _cid, msg, reply_markup=None, query=None):
+        shown.append((msg, reply_markup))
+    import rich_delivery
+    monkeypatch.setattr(rich_delivery, "show", show)
+    asyncio.run(vac.send_screen(None, "42"))
+    msg, kb = shown[-1]
+    assert msg.text.startswith("✈️ Отпуск\n\nЧемодан:\n• Собран: Кейптаун · 20–27 октября.")
+    assert "Режим отпуска:" in msg.text
+    assert [[b.callback_data for b in row] for row in kb.inline_keyboard] == [
+        ["w_pack"], ["set_vac_trip"], ["set_vac_city"], ["set_home", "m_menu"]]
+    assert kb.inline_keyboard[1][0].text == "✈️ Начать отпуск · Кейптаун · 20–27 октября"
+    tz = vac.config.TZ
+    assert vac.offer_due("42", dt(2026, 10, 20, 7, 50, tzinfo=tz)) == {}  # до 08:00
+    assert vac.offer_due("42", dt(2026, 10, 19, 9, tzinfo=tz)) == {}  # не день поездки
+    assert vac.offer_due("42", dt(2026, 10, 20, 8, 5, tzinfo=tz))["city"] == "Кейптаун"
+    profile["vacation_offer"] = "Кейптаун|2026-10-20|2026-10-27"
+    assert vac.offer_due("42", dt(2026, 10, 21, 9, tzinfo=tz)) == {}  # спросили один раз за поездку

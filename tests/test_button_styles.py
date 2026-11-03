@@ -294,4 +294,4 @@ def test_trip_suitcase_is_blue_and_return_is_red_above_home(monkeypatch):
     assert [row[0]["text"] for row in rows[-2:]] == ["Вернуться из отпуска", "Главная"]
     monkeypatch.setattr(vacation, "active", lambda _cid: False)
     labels = [button.text for row in wardrobe.build_wardrobe_keyboard("42").inline_keyboard for button in row]
-    assert "🧳 Собрать чемодан" in labels and "🧳 Мой чемодан" not in labels  # дома — прежняя кнопка
+    assert not any("чемодан" in label for label in labels)  # дома чемодан — в «Настройки → ✈️ Отпуск»

@@ -412,7 +412,7 @@ def vacation_button(cid):
     import vacation
     if vacation.active(cid):
         return InlineKeyboardButton("🏠 Вернуться из отпуска", callback_data="set_vachome")
-    return InlineKeyboardButton("✈️ В отпуске", callback_data="set_vac")
+    return InlineKeyboardButton("✈️ Отпуск", callback_data="set_vac")
 
 
 async def send_preferences(bot, cid, q=None):
@@ -1256,9 +1256,20 @@ async def handle_callback(bot, cid, data, q=None):
     elif (data == "set_learning" or data == "toggle_learning_language"
           or data.startswith("set_learning_language_") or data.startswith("set_learning_level_")):
         await learning_preferences.handle_learning_settings_callback(bot, cid, q, data)
-    elif data == "set_vac":
+    elif data == "set_vac":  # экран «✈️ Отпуск»: чемодан и режим отпуска; в отпуске — Настройки
+        import vacation
+        if vacation.active(cid):
+            await send_home(bot, cid, q)
+        else:
+            await vacation.send_screen(bot, cid, q)
+    elif data == "set_vac_city":
         import vacation
         await vacation.ask_city(bot, cid)
+    elif data == "set_vac_no":  # «Не сейчас» под утренним вопросом — вопрос убирается
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
     elif data == "set_vac_trip":
         import vacation
         await vacation.start_suitcase_trip(bot, cid, q)

@@ -447,6 +447,59 @@ async def ask_city(bot, cid):
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=markup)
 
 
+def _trip_line(trip) -> str:
+    return vacation_ui.trip_period(trip, route_label(trip.get("legs") or [])) if trip else ""
+
+
+async def send_screen(bot, cid, q=None):
+    """«✈️ Отпуск» в Настройках: чемодан (собрать / мой) и режим отпуска — с поездкой чемодана или другим городом."""
+    import rich_delivery
+    import wardrobe_suitcase
+    from ui.navigation import nav_row
+    trip = suitcase_trip(cid)
+    packed = bool(wardrobe_suitcase.saved_suitcase(cid))
+    rows = [[InlineKeyboardButton("🧳 Мой чемодан" if packed else "🧳 Собрать чемодан", callback_data="w_pack")]]
+    if trip:
+        rows += [[InlineKeyboardButton(f"✈️ Начать отпуск · {_trip_line(trip)}", callback_data="set_vac_trip")],
+                 [InlineKeyboardButton("✈️ Отпуск в другом городе", callback_data="set_vac_city")]]
+    else:
+        rows.append([InlineKeyboardButton("✈️ Начать отпуск", callback_data="set_vac_city")])
+    rows.append(nav_row("set_home"))
+    await rich_delivery.show(bot, cid, vacation_ui.vacation_screen(_trip_line(trip), packed),
+                             reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
+def offer_due(cid, now=None) -> dict:
+    """Поездка чемодана, о которой пора спросить «включить режим отпуска?»: сегодня в её датах, с 08:00, отпуск не
+    включён и об этой поездке ещё не спрашивали; иначе {}."""
+    now = now or datetime.now(config.TZ)
+    trip = suitcase_trip(cid)
+    if not trip or active(cid) or now.hour < OFFER_HOUR:
+        return {}
+    today = now.date().isoformat()
+    if not str(trip.get("start") or "") <= today <= str(trip.get("end") or ""):
+        return {}
+    key = f"{trip.get('city')}|{trip.get('start')}|{trip.get('end')}"
+    return {} if (store.get_profile(cid) or {}).get(_OFFER_KEY) == key else {**trip, "key": key}
+
+
+OFFER_HOUR = 8
+_OFFER_KEY = "vacation_offer"  # поездка чемодана, о которой уже спросили (один раз на поездку)
+
+
+async def send_offer(bot, cid):
+    """Утро дня поездки: «Начать отпуск» (как кнопка поездки чемодана) | «Не сейчас»."""
+    trip = offer_due(cid)
+    if not trip:
+        return
+    store.mutate_profile(cid, lambda profile: ({**profile, _OFFER_KEY: trip["key"]}, None))  # до отправки: без повторов
+    msg = vacation_ui.trip_offer(_trip_line(trip))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("✈️ Начать отпуск", callback_data="set_vac_trip")],
+        [InlineKeyboardButton("Не сейчас", callback_data="set_vac_no")],
+    ]))
+
+
 async def start_suitcase_trip(bot, cid, q=None):
     """Кнопка поездки из чемодана: отпуск с её городом (координаты уже известны) и датой возвращения."""
     trip = suitcase_trip(cid)
