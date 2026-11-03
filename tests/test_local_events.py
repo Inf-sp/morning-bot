@@ -41,3 +41,19 @@ def test_my_day_and_eve_lines_from_cache(monkeypatch):
     assert local_events.today_lines("42", date(2026, 8, 3)) == []
     assert local_events.starting_on("42", date(2026, 7, 25)) == ["Pride Amsterdam — прайд-фестиваль"]
     assert local_events.starting_on("42", date(2026, 7, 26)) == []
+
+
+def test_weekly_search_also_asks_for_city_holidays(monkeypatch):
+    queries, saved = [], {}
+    monkeypatch.setattr(local_events, "_place", lambda _cid: ("Alkmaar", "NL", "alkmaar|nl"))
+    monkeypatch.setattr(local_events.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(local_events.store, "get_settings", lambda _cid: {"country": "Netherlands"})
+    monkeypatch.setattr(local_events.store, "mutate_kv", lambda _key, fn: saved.update(fn(saved)[0]))
+    monkeypatch.setattr(local_events, "_horizon", lambda _cid: 14)
+    monkeypatch.setattr(local_events, "_search", lambda *_a, words=local_events._CITY_WORDS: queries.append(words) or [])
+    monkeypatch.setattr(local_events, "_extract", lambda _city, rows, *_a: [])
+    local_events.events("42")
+    assert len(queries) == 2 and "city holiday" in queries[1]
+    assert saved["alkmaar|nl"]["v"] == local_events._EVENTS_VERSION
+    local_events.events("42")
+    assert len(queries) == 2  # кэш нового вида — без повторного поиска

@@ -441,6 +441,17 @@ async def job_evening_weather(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_evening_weather failed for cid=%s", cid)
 
 
+async def job_weather_warn_tomorrow(context: ContextTypes.DEFAULT_TYPE):
+    """19:00: завтра гроза, шторм, сильный дождь, гололёд, снег, жара или мороз — предупреждение заранее."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "weather_warn") or settings.notification_paused(cid, "weather_warn"):
+            continue
+        try:
+            await settings.send_weather_warn_tomorrow(context.bot, cid)
+        except Exception:
+            logging.exception("job_weather_warn_tomorrow failed for cid=%s", cid)
+
+
 async def job_holidays(context: ContextTypes.DEFAULT_TYPE):
     """18:00: праздник страны или местное событие завтра — короткое напоминание."""
     for cid in access.get_allowed_cids():
@@ -700,6 +711,8 @@ def _build_application():
         for slot in settings.NOTIF_TIMES[kind][1]:
             jq.run_daily(job, time=_t(slot), days=days, data=slot,
                          **_job_options(f"{kind}_{slot.replace(':', '')}"))
+    jq.run_daily(job_weather_warn_tomorrow, time=_t(settings.WARN_TOMORROW_TIME),
+                 **_job_options("weather_warn_tomorrow"))
     # «План дня в отпуске» — по местному времени поездки: проверка каждые 15 минут, отправка в выбранный час.
     jq.run_repeating(job_trip_day, interval=900, first=60, **_job_options("trip_day_repeating"))
     jq.run_repeating(job_vacation_offer, interval=900, first=90, **_job_options("vacation_offer_repeating"))

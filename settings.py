@@ -107,6 +107,8 @@ def set_(cid, key, value):
 
     store.mutate_kv(SETTINGS_KEY, change)
 
+WARN_TOMORROW_TIME = "19:00"  # погодное предупреждение на завтра — вечером накануне
+
 # Время рассылок: (по умолчанию, варианты). Поезда NS приходят при сбое — без времени.
 NOTIF_TIMES = {
     "weather_warn":    ("08:00", ("07:00", "08:00", "09:00")),
@@ -202,7 +204,7 @@ def user_notif_label(cid, kind) -> str:
         return f"{title} · из Амстердама"
     time_label = notif_time(cid, kind)
     if kind == "weather_warn":
-        time_label += ", если есть повод"
+        time_label += f" и накануне {WARN_TOMORROW_TIME}, если есть повод"
     elif kind == "holidays":
         time_label = f"накануне {time_label}"
     elif kind == "weekend_events":
@@ -274,7 +276,7 @@ def _mark_transient_edit(bot, cid, message):
 
 def _notif_label(kind: str, label: str) -> str:
     if kind == "weather_warn":
-        return f"{label} (ежедневно в 08:00, если есть повод)"
+        return f"{label} (ежедневно в 08:00 и накануне в {WARN_TOMORROW_TIME}, если есть повод)"
     if kind == "weekend_events":
         return f"{label} (по пятницам в 10:00)"
     times = {
@@ -503,6 +505,20 @@ class _NotificationTrackingBot:
         return tracked_send
 
 
+async def send_weather_warn_tomorrow(bot, cid):
+    """Вечером накануне — «Погодное предупреждение на завтра», если завтра гроза, шторм, сильный дождь, гололёд,
+    снег, жара или мороз (тот же переключатель, что у утреннего предупреждения). Спокойно — ничего."""
+    import asyncio
+    import weather as _w
+    import weather_warn as _ww
+    s = store.get_settings(cid)
+    data = await asyncio.to_thread(_w.fetch_weather, s["lat"], s["lon"], 2)
+    msg = _ww.build_warning(data, cid, tomorrow=True)
+    if msg is not None:
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=notification_markup(
+            "weather_warn", [[InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]))
+
+
 async def _send_scheduled_notification(bot, cid, kind):
     if kind == "weather_warn":
         import asyncio
@@ -613,7 +629,7 @@ class NotificationOption:
 
 
 _ADMIN_NOTIFICATION_META = {
-    "weather_warn":    ("08:00, если есть повод", "Погодное предупреждение"),
+    "weather_warn":    ("08:00 и накануне 19:00, если есть повод", "Погодное предупреждение"),
     "weekend_events":  ("пт 10:00", "Концерты недели"),
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),

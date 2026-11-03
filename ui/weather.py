@@ -39,7 +39,7 @@ def forecast_unavailable():
     return b.build_stripped()
 
 
-def weather_warning(events, when="", icon="⚠️", country="", city=""):
+def weather_warning(events, when="", icon="⚠️", country="", city="", tomorrow=False):
     """Погодное предупреждение: «🌡️ Погодное предупреждение · ЮАР» → «Йоханнесбург:» жирным → события списком «•» →
     курсивом «Когда: …».
 
@@ -47,7 +47,8 @@ def weather_warning(events, when="", icon="⚠️", country="", city=""):
     без значков, рекомендаций «Что сделать» нет.
     """
     b = MessageBuilder()
-    b.section(" · ".join(part for part in (f"{icon or '⚠️'} Погодное предупреждение", country) if part))
+    title = "Погодное предупреждение на завтра" if tomorrow else "Погодное предупреждение"
+    b.section(" · ".join(part for part in (f"{icon or '⚠️'} {title}", country) if part))
     b.newline()
     if city:
         b.bold(f"{city}:")
@@ -56,7 +57,7 @@ def weather_warning(events, when="", icon="⚠️", country="", city=""):
         b.line(f"• {ev}")
     if when:
         b.spacer()
-        b.italic(f"Когда: {when}")
+        b.italic(f"Когда{' завтра' if tomorrow else ''}: {when}")
         b.newline()
     return b.build_stripped()
 

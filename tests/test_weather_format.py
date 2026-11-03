@@ -261,7 +261,7 @@ def test_weather_warning_is_a_notification_option_enabled_by_default(monkeypatch
     option = next(item for item in settings.get_notification_options() if item.key == "weather_warn")
 
     assert settings.notif_on("42", "weather_warn") is True
-    assert option.button_label == "Погодное предупреждение · 08:00, если есть повод"
+    assert option.button_label == "Погодное предупреждение · 08:00 и накануне 19:00, если есть повод"
 
 
 def test_weather_warning_can_be_disabled(monkeypatch):
@@ -524,3 +524,27 @@ def test_period_weather_uses_forecast_soon_and_last_year_later(monkeypatch):
         "tmin": 17, "tmax": 24, "rainy": 1, "days": 2, "wind": 9, "typical": False}
     assert later["typical"] and later["rainy"] == 1  # архив: дождь — по выпавшим миллиметрам
     assert calls[1] == ("https://archive-api.open-meteo.com/v1/archive", "2026-01-05", "2026-01-06")  # год назад
+
+
+def test_tomorrow_warning_uses_tomorrow_and_only_important_hazards(monkeypatch):
+    monkeypatch.setattr(weather_warn.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(weather_warn, "_local_when", lambda when, _cid: when)
+    hours = [f"2026-11-0{day}T{hour:02d}:00" for day in (3, 4) for hour in range(24)]
+    data = {
+        "daily": {"time": ["2026-11-03", "2026-11-04"], "temperature_2m_max": [12, 11],
+                  "temperature_2m_min": [6, 7], "windspeed_10m_max": [5, 12], "windgusts_10m_max": [9, 22],
+                  "precipitation_probability_max": [10, 90], "precipitation_sum": [0, 18],
+                  "weathercode": [3, 65], "uv_index_max": [7, 1]},
+        "hourly": {"time": hours,
+                   "precipitation_probability": [0] * 24 + [0] * 12 + [90] * 6 + [0] * 6,
+                   "windgusts_10m": [5] * 24 + [5] * 12 + [22] * 6 + [5] * 6},
+    }
+    today = weather_warn.build_warning(data, "42")
+    assert today.text.startswith("☀️ Погодное предупреждение\n")  # сегодня — только высокий UV
+    msg = weather_warn.build_warning(data, "42", tomorrow=True)
+    assert msg.text.startswith("💨 Погодное предупреждение на завтра\n\nAlkmaar:\n"
+                               "• Порывы ветра до 22 м/с.\n• Ожидается дождь с вероятностью 90%.")
+    assert "Когда завтра: 12:00–18:00" in msg.text
+    calm = {**data, "daily": {**data["daily"], "windgusts_10m_max": [9, 9], "precipitation_probability_max": [10, 10],
+                              "weathercode": [3, 3], "uv_index_max": [1, 8]}}
+    assert weather_warn.build_warning(calm, "42", tomorrow=True) is None  # UV завтра — не повод писать накануне

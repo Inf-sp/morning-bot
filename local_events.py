@@ -55,6 +55,10 @@ def _horizon(cid) -> int:
 
 
 _CITY_WORDS = "festivals local events pride parade city celebration"
+# Отдельный запрос о праздниках самого города (Alkmaars Ontzet, Leidens Ontzet, день города): общий запрос о
+# фестивалях их часто не находит.
+_HOLIDAY_WORDS = "city holiday traditional annual celebration day"
+_EVENTS_VERSION = 2  # 2 — с запросом о праздниках города (кэш старого вида собирается заново)
 _CITY_KINDS = ("Pride, городские фестивали, ярмарки, городские и местные праздники, карнавалы. Концерты отдельных "
                "артистов, спорт и выставки не нужны.")
 # Афиша поездки: что можно посмотреть в городе за время отпуска — шире, чем городские праздники «Моего дня».
@@ -117,20 +121,23 @@ def events(cid, fetch=True) -> list:
     if not city:
         return []
     saved = (store._load(config.LOCAL_EVENTS_KEY) or {}).get(key) or {}
-    if (saved and time.time() - float(saved.get("ts") or 0) < _TTL) or not fetch:
+    fresh = saved and saved.get("v") == _EVENTS_VERSION and time.time() - float(saved.get("ts") or 0) < _TTL
+    if fresh or not fetch:
         return list(saved.get("events") or [])
     today = datetime.now(config.TZ).date()
     country = store.get_settings(cid).get("country") or cc
     try:
         horizon = _horizon(cid)
-        found = _extract(city, _search(city, country, today, horizon), today, horizon)
+        rows = [*(_search(city, country, today, horizon) or []),
+                *(_search(city, country, today, horizon, words=_HOLIDAY_WORDS) or [])]
+        found = _extract(city, rows, today, horizon)
     except Exception:
         _log.warning("local events: search failed city=%s", city, exc_info=True)
         return list(saved.get("events") or [])  # сбой сети не запоминаем
 
     def mutate(data):
         data = data if isinstance(data, dict) else {}
-        data[key] = {"ts": time.time(), "events": found}
+        data[key] = {"v": _EVENTS_VERSION, "ts": time.time(), "events": found}
         return data, None
 
     store.mutate_kv(config.LOCAL_EVENTS_KEY, mutate)

@@ -67,7 +67,7 @@ def _no_local_events_search(monkeypatch):
     """Веб-поиск местных событий в тестах не выполняется."""
     import local_events
 
-    monkeypatch.setattr(local_events, "_search", lambda *_a: [])
+    monkeypatch.setattr(local_events, "_search", lambda *_a, **_k: [])
     yield
 
 

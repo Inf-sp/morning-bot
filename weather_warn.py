@@ -288,11 +288,29 @@ def _local_when(when, cid):
     return re.sub(r"\b(\d{1,2}):(\d{2})\b", move, str(when or ""))
 
 
-def build_warning(data, cid):
-    """Собирает MessageSpec погодного предупреждения или None (тихий день)."""
+# Накануне — только то, к чему стоит готовиться заранее: гроза, гололёд, шторм, сильный дождь, снег, жара, мороз.
+TOMORROW_KEYS = ("thunderstorm", "ice", "storm_wind", "heavy_rain", "snow", "heat", "cold")
+
+
+def tomorrow_view(data):
+    """Ответ fetch_weather, сдвинутый на завтра: дневные ряды с завтрашнего дня (часовые фильтруются по дате)."""
+    daily = data.get("daily") or {}
+    if len(daily.get("time") or []) < 2:
+        return None
+    return {**data, "daily": {key: (values[1:] if isinstance(values, list) else values)
+                              for key, values in daily.items()}}
+
+
+def build_warning(data, cid, tomorrow=False):
+    """Собирает MessageSpec погодного предупреждения или None (тихий день). tomorrow — накануне: прогноз на завтра
+    и только важные явления (TOMORROW_KEYS)."""
     from ui import weather as weather_ui
+    if tomorrow:
+        data = tomorrow_view(data)
+        if data is None:
+            return None
     ctx = collect_context(data, cid)
-    fired = evaluate(ctx)
+    fired = [h for h in evaluate(ctx) if not tomorrow or h.key in TOMORROW_KEYS]
     if not fired:
         return None
     top = fired[:MAX_EVENTS]
@@ -301,9 +319,10 @@ def build_warning(data, cid):
     for h in top:
         mark, _sep, text = h.event(ctx).partition(" ")
         icon = icon or mark
-        events.append(text)
+        events.append(text.replace("Сегодня ожидается", "Ожидается") if tomorrow else text)
     when = _local_when(_when_for(ctx, [h.key for h in top]), cid)
     import countries
     place = store.get_settings(cid) or {}
     country = countries.name_ru(place.get("cc")) or str(place.get("country") or "")
-    return weather_ui.weather_warning(events, when, icon, country=country, city=str(place.get("city") or ""))
+    return weather_ui.weather_warning(events, when, icon, country=country, city=str(place.get("city") or ""),
+                                      tomorrow=tomorrow)
