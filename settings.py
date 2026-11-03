@@ -21,6 +21,7 @@ NOTIF_TYPES = [
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
     ("flight_deals",    "Дешёвые билеты"),
+    ("week_holidays",   "Праздники и мероприятия"),  # по понедельникам: праздники и события города на неделю
     ("holidays",        "Праздники и концерты"),  # накануне: праздник, событие города, концерт твоего артиста
     ("trip_day",        "План дня в отпуске"),  # только в отпуске (notification_available)
 ]
@@ -115,6 +116,7 @@ NOTIF_TIMES = {
     "daily_words":     ("11:00", ("08:00", "11:00", "14:00", "18:00")),
     "evening_weather": (EVENING_WEATHER_TIME, ("18:00", "20:00", "21:00")),
     "weekend_events":  ("10:00", ("09:00", "10:00", "18:00")),
+    "week_holidays":   ("10:00", ("09:00", "10:00", "18:00")),  # по понедельникам
     "holidays":        ("18:00", ("18:00",)),  # накануне праздника или местного события
     "trip_day":        ("08:00", ("08:00", "09:00", "10:00")),  # «Мой день в отпуске» утром, по местному времени
 }
@@ -122,7 +124,8 @@ _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
-    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и концерты", "trip_day": "План дня в отпуске",
+    "flight_deals": "Дешёвые билеты", "holidays": "Праздники и концерты",
+    "week_holidays": "Праздники и мероприятия", "trip_day": "План дня в отпуске",
 }
 
 
@@ -167,7 +170,7 @@ def notif_due(cid, kind, slot) -> bool:
     return not slot or notif_time(cid, kind) == slot
 
 
-_NOTIF_DAYS = {"weekend_events": (4,)}  # пятница; остальные — ежедневно
+_NOTIF_DAYS = {"weekend_events": (4,), "week_holidays": (0,)}  # пятница, понедельник; остальные — ежедневно
 
 
 def next_notification(cid, now=None) -> str:
@@ -177,7 +180,9 @@ def next_notification(cid, now=None) -> str:
     now = now or datetime.now(config.TZ)
     best = None
     for kind in NOTIF_TIMES:
-        if (kind in ("weather_warn", "holidays") or not notification_available(cid, kind) or not notif_on(cid, kind)
+        # Предупреждение, праздники накануне и недельные праздники приходят, только когда есть о чём сказать.
+        if (kind in ("weather_warn", "holidays", "week_holidays") or not notification_available(cid, kind)
+                or not notif_on(cid, kind)
                 or notification_paused(cid, kind)):
             continue
         hour, minute = map(int, notif_time(cid, kind).split(":"))
@@ -191,7 +196,8 @@ def next_notification(cid, now=None) -> str:
         return ""
     moment, kind = best
     days = (moment.date() - now.date()).days
-    when = "сегодня" if days == 0 else "завтра" if days == 1 else "в пятницу"
+    weekdays = ("в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу", "в воскресенье")
+    when = "сегодня" if days == 0 else "завтра" if days == 1 else weekdays[moment.weekday()]
     return f"Следующая: {_NOTIF_TITLES[kind]} {when} в {moment:%H:%M}"
 
 
@@ -209,6 +215,8 @@ def user_notif_label(cid, kind) -> str:
         time_label = f"накануне {time_label}"
     elif kind == "weekend_events":
         time_label = f"пт {time_label}"
+    elif kind == "week_holidays":
+        time_label = f"пн {time_label}"
     return f"{title} · {time_label}"
 
 
@@ -224,7 +232,7 @@ def notif_on(cid, kind):
     # До появления переключателя погодные предупреждения приходили всем.
     # Сохраняем это поведение для старых профилей, пока пользователь сам их
     # не отключит.
-    if kind in ("weather_warn", "ns_disruptions", "holidays", "trip_day"):  # план дня в отпуске — тоже сразу
+    if kind in ("weather_warn", "ns_disruptions", "holidays", "trip_day", "week_holidays"):  # план дня в отпуске — тоже
         # Сбои NS включены по умолчанию: без города в Нидерландах они всё равно молчат.
         return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
@@ -279,6 +287,8 @@ def _notif_label(kind: str, label: str) -> str:
         return f"{label} (ежедневно в 08:00 и накануне в {WARN_TOMORROW_TIME}, если есть повод)"
     if kind == "weekend_events":
         return f"{label} (по пятницам в 10:00)"
+    if kind == "week_holidays":
+        return f"{label} (по понедельникам в 10:00)"
     times = {
         "daily_words": "11:00",
         "evening_weather": EVENING_WEATHER_TIME,
@@ -556,9 +566,34 @@ async def _send_scheduled_notification(bot, cid, kind):
         await flight_deals.check_user(bot, cid)
     elif kind == "holidays":
         await _send_holidays_eve(bot, cid)
+    elif kind == "week_holidays":
+        await send_week_holidays(bot, cid)
     elif kind == "trip_day" and notification_available(cid, kind):
         import myday  # утром в отпуске — сводка «Мой день в отпуске»: погода, образ, что попробовать, фраза дня
         await myday.send_plany(bot, cid, reply_markup=InlineKeyboardMarkup([notif_row()]))
+
+
+async def send_week_holidays(bot, cid):
+    """Понедельник: праздники недели с коротким пояснением и события города (дома и в отпуске — по Настройкам).
+    Ни праздников, ни событий — ничего."""
+    import asyncio
+    from datetime import datetime, timedelta
+    import local_events
+    import public_holidays
+    from ui import myday as myday_ui
+    from util import _MONTHS
+    place = store.get_settings(cid)
+    start = datetime.now(config.TZ).date()
+    end = start + timedelta(days=6)
+    holidays = await asyncio.to_thread(public_holidays.week_holidays, place.get("cc"), start, end)
+    events = await asyncio.to_thread(local_events.week_events, cid, start, end)
+    if not holidays and not events:
+        return
+    period = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if start.month == end.month
+              else f"{start.day} {_MONTHS[start.month - 1]} – {end.day} {_MONTHS[end.month - 1]}")
+    msg = myday_ui.week_holidays(place.get("city", ""), period, holidays, events)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True,
+                           reply_markup=InlineKeyboardMarkup([notif_row()]))
 
 
 async def _send_holidays_eve(bot, cid):
@@ -636,6 +671,7 @@ _ADMIN_NOTIFICATION_META = {
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
     "holidays":        ("накануне 18:00, если есть праздник или концерт", "Праздники и концерты"),
+    "week_holidays":   ("пн 10:00", "Праздники и мероприятия"),
     "trip_day":        ("08:00, в отпуске", "План дня в отпуске"),
 }
 

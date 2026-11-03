@@ -29,6 +29,59 @@ _RU_NAMES = {
 }
 
 
+# Коротко, что это за день (Нидерланды) — для недельной рассылки «Праздники и мероприятия».
+_ABOUT = {
+    "Nieuwjaarsdag": "выходной, вечером накануне — фейерверки",
+    "Goede Vrijdag": "для большинства рабочий день",
+    "Eerste Paasdag": "семейный завтрак и поиск яиц",
+    "Tweede Paasdag": "выходной, мебельные магазины и ярмарки",
+    "Koningsdag": "всё в оранжевом, блошиные рынки на улицах и вечеринки",
+    "Bevrijdingsdag": "фестивали свободы по всей стране",
+    "Hemelvaartsdag": "выходной, многие берут длинные выходные",
+    "Eerste Pinksterdag": "выходной, магазины часто закрыты",
+    "Tweede Pinksterdag": "выходной, фестивали и ярмарки",
+    "Eerste Kerstdag": "семейный ужин, магазины закрыты",
+    "Tweede Kerstdag": "выходной, прогулки и мебельные распродажи",
+}
+
+
+def _nth_weekday(year, month, weekday, nth):
+    """nth-й день недели месяца (weekday: пн=0)."""
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (nth - 1))
+
+
+def _nl_traditions(year) -> list:
+    """Традиционные дни Нидерландов, не выходные: дата по правилу, без сети."""
+    return [
+        (date(year, 2, 14), "Valentijnsdag", "День святого Валентина"),
+        (date(year, 5, 4), "Dodenherdenking", "в 20:00 две минуты молчания в память о погибших"),
+        (_nth_weekday(year, 5, 6, 2), "Moederdag", "День матери"),
+        (_nth_weekday(year, 6, 6, 3), "Vaderdag", "День отца"),
+        (_nth_weekday(year, 9, 1, 3), "Prinsjesdag", "король открывает парламентский год, карета в Гааге"),
+        (date(year, 11, 11), "Sint-Maarten", "дети с фонариками ходят по домам, поют и получают сладости"),
+        (date(year, 12, 5), "Sinterklaasavond", "вечер подарков и шуточных стихов"),
+        (date(year, 12, 31), "Oudejaarsavond", "oliebollen и фейерверки в полночь"),
+    ]
+
+
+def week_holidays(cc, start: date, end: date) -> list:
+    """Праздники в [start, end]: [{date, name, about}] — государственные (Nager.Date; название русское, если есть) и
+    для Нидерландов традиционные дни (Sint-Maarten, Sinterklaasavond…). Сбой источника — только традиции."""
+    cc = str(cc or "").upper()
+    found = {}
+    for holiday in holidays_between(cc, start, end):
+        local = holiday["local"] or holiday["name"]
+        found[(holiday["date"], local)] = {"date": holiday["date"], "name": _label(holiday),
+                                           "about": _ABOUT.get(local, "") if cc == "NL" else ""}
+    if cc == "NL":
+        for year in range(start.year, end.year + 1):
+            for day, name, about in _nl_traditions(year):
+                if start <= day <= end:
+                    found.setdefault((day.isoformat(), name), {"date": day.isoformat(), "name": name, "about": about})
+    return [found[key] for key in sorted(found)]
+
+
 def _year_holidays(year, cc):
     key = f"{cc}|{year}"
     cached = util.ttl_get("nager_holidays", key, _TTL_SECONDS)

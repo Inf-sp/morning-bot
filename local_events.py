@@ -164,13 +164,25 @@ def _ticketmaster_city(city, cc, today, end) -> list:
     return [event for event in events if event["name"]]
 
 
-def trip_afisha(cid, fetch=True) -> list:
+def week_events(cid, start, end, fetch=True) -> list:
+    """События города на неделю: праздники и фестивали города и его афиша (концерты, ярмарки, вечеринки, выставки) —
+    дата подтверждена цитатой со страницы; без повторов, по дате, не больше _MAX_EVENTS."""
+    found, seen = [], set()
+    for event in [*events(cid, fetch), *trip_afisha(cid, fetch, home=True)]:
+        name = str(event.get("name") or "").casefold()
+        if name and name not in seen and event["start"] <= end.isoformat() and event["end"] >= start.isoformat():
+            seen.add(name)
+            found.append(event)
+    return sorted(found, key=lambda event: event["start"])[:_MAX_EVENTS]
+
+
+def trip_afisha(cid, fetch=True, home=False) -> list:
     """Афиша города поездки на даты отпуска: концерты, фестивали, выставки и шоу из веб-поиска (дата подтверждена
     цитатой со страницы, как у events) и крупные концерты города из Ticketmaster. Недельный кэш; fetch=False — без
-    сети. Дома — []."""
+    сети. Дома — [] (home=True — афиша домашнего города для недельной рассылки)."""
     import vacation
     city, cc, key = _place(cid)
-    if not city or not vacation.active(cid):
+    if not city or not (home or vacation.active(cid)):
         return []
     key = f"afisha|{key}"
     saved = (store._load(config.LOCAL_EVENTS_KEY) or {}).get(key) or {}

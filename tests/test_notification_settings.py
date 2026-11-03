@@ -87,9 +87,10 @@ def test_settings_summary_line(monkeypatch):
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
 
-    assert settings.settings_summary("42").startswith("включено 3 · следующая: ")  # + праздники по умолчанию
+    # + «Праздники и концерты» и «Праздники и мероприятия» по умолчанию
+    assert settings.settings_summary("42").startswith("включено 4 · следующая: ")
     saved["notif_holidays"] = False
-    assert settings.settings_summary("42").startswith("включено 2 · следующая: ")
+    assert settings.settings_summary("42").startswith("включено 3 · следующая: ")
 
 
 def test_myday_blocks_toggle_and_reset_day_cache(monkeypatch):
@@ -218,3 +219,61 @@ def test_trip_day_comes_at_8_local_time_once_a_day(monkeypatch):
     clock["now"] = real_datetime(2026, 10, 29, 5, 0, tzinfo=ZoneInfo("UTC"))  # 07:00 в Кейптауне — рано
     asyncio.run(bot.job_trip_day(context))
     assert len(sent) == 1
+
+
+def test_week_holidays_digest_has_holidays_with_about_and_city_events(monkeypatch):
+    import asyncio
+    from datetime import date, datetime
+    import local_events
+    import public_holidays
+
+    holidays = public_holidays.week_holidays.__wrapped__ if hasattr(public_holidays.week_holidays, "__wrapped__") \
+        else public_holidays.week_holidays
+    monkeypatch.setattr(public_holidays, "holidays_between", lambda *_a: [])
+    found = holidays("NL", date(2026, 11, 9), date(2026, 11, 15))
+    assert found == [{"date": "2026-11-11", "name": "Sint-Maarten",
+                      "about": "дети с фонариками ходят по домам, поют и получают сладости"}]
+    assert holidays("DE", date(2026, 11, 9), date(2026, 11, 15)) == []  # традиции — только для Нидерландов
+    assert public_holidays._nth_weekday(2026, 9, 1, 3) == date(2026, 9, 15)  # Prinsjesdag — 3-й вторник сентября
+
+    sent = []
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs)
+
+    class Monday(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 9, 10, tzinfo=tz)
+
+    import datetime as dt_module
+    monkeypatch.setattr(dt_module, "datetime", Monday)
+    monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(local_events, "week_events", lambda _cid, _s, _e: [
+        {"name": "Sinterklaasintocht Alkmaar", "about": "прибытие Синтерклааса", "start": "2026-11-14",
+         "end": "2026-11-14", "url": "https://inalkmaar.nl/sint"},
+        {"name": "Filmfestival Alkmaar", "about": "", "start": "2026-11-03", "end": "2026-11-10", "url": ""}])
+    asyncio.run(settings.send_week_holidays(Bot(), "42"))
+    assert sent[0]["text"] == (
+        "🎉 Праздники и мероприятия · Alkmaar · 9–15 ноября\n\n"
+        "Праздники:\n• 11 ноября — Sint-Maarten: дети с фонариками ходят по домам, поют и получают сладости.\n\n"
+        "В городе:\n• 14 ноября — Sinterklaasintocht Alkmaar — прибытие Синтерклааса\n"
+        "• 3–10 ноября — Filmfestival Alkmaar")
+    sent.clear()
+    monkeypatch.setattr(local_events, "week_events", lambda *_a: [])
+    monkeypatch.setattr(public_holidays, "week_holidays", lambda *_a: [])
+    asyncio.run(settings.send_week_holidays(Bot(), "42"))
+    assert sent == []  # пустая неделя — без сообщения
+
+
+def test_week_events_merge_city_events_and_home_afisha(monkeypatch):
+    from datetime import date
+    import local_events
+    fest = {"name": "Popronde Alkmaar", "about": "", "start": "2026-11-13", "end": "2026-11-13", "url": ""}
+    later = {**fest, "name": "Winterfair", "start": "2026-11-28", "end": "2026-11-28"}
+    monkeypatch.setattr(local_events, "events", lambda _cid, fetch=True: [fest, later])
+    calls = []
+    monkeypatch.setattr(local_events, "trip_afisha", lambda _cid, fetch=True, home=False: calls.append(home) or [fest])
+    found = local_events.week_events("42", date(2026, 11, 9), date(2026, 11, 15))
+    assert [event["name"] for event in found] == ["Popronde Alkmaar"] and calls == [True]

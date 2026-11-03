@@ -452,6 +452,17 @@ async def job_weather_warn_tomorrow(context: ContextTypes.DEFAULT_TYPE):
             logging.exception("job_weather_warn_tomorrow failed for cid=%s", cid)
 
 
+async def job_week_holidays(context: ContextTypes.DEFAULT_TYPE):
+    """Понедельник: праздники и мероприятия города на неделю."""
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "week_holidays") or not _slot_due(context, cid, "week_holidays"):
+            continue
+        try:
+            await settings.send_scheduled_notification(context.bot, cid, "week_holidays")
+        except Exception:
+            logging.exception("job_week_holidays failed for cid=%s", cid)
+
+
 async def job_holidays(context: ContextTypes.DEFAULT_TYPE):
     """18:00: праздник страны или местное событие завтра — короткое напоминание."""
     for cid in access.get_allowed_cids():
@@ -706,6 +717,7 @@ def _build_application():
         ("daily_words", job_daily_words, tuple(range(7))),
         ("evening_weather", job_evening_weather, tuple(range(7))),
         ("holidays", job_holidays, tuple(range(7))),
+        ("week_holidays", job_week_holidays, (0,)),
     )
     for kind, job, days in notification_jobs:
         for slot in settings.NOTIF_TIMES[kind][1]:

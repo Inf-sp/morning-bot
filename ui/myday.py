@@ -43,6 +43,46 @@ def _split_word_translation(value):
     return cap_sentence(term.strip()), cap_sentence(translation.strip())
 
 
+def week_holidays(city, period, holidays, events) -> "MessageSpec":
+    """Недельная рассылка: «🎉 Праздники и мероприятия · Alkmaar · 3–9 ноября», «Праздники:» — «• 11 ноября —
+    Sint-Maarten: дети с фонариками…», «В городе:» — «• 3–8 ноября — Filmfestival Alkmaar — кинофестиваль»."""
+    from util import _MONTHS
+
+    def day_label(value):
+        from datetime import date
+        day = date.fromisoformat(value)
+        return f"{day.day} {_MONTHS[day.month - 1]}"
+
+    def span(start, end):
+        if start == end:
+            return day_label(start)
+        if start[:7] == end[:7]:
+            return f"{int(start[8:])}–{day_label(end)}"
+        return f"{day_label(start)} – {day_label(end)}"
+
+    b = MessageBuilder()
+    b.title(" · ".join(part for part in ("🎉 Праздники и мероприятия", city, period) if part))
+    if holidays:
+        b.bold("Праздники:")
+        b.newline()
+        for holiday in holidays:
+            b.line(f"• {day_label(holiday['date'])} — {holiday['name']}"
+                   + (f": {holiday['about']}." if holiday.get("about") else ""))
+    if events:
+        if holidays:
+            b.spacer()
+        b.bold("В городе:")
+        b.newline()
+        for event in events:
+            b.text_line(f"• {span(event['start'], event['end'])} — ")
+            url = str(event.get("url") or "")
+            b.bold_link(event["name"], url) if url.startswith("http") else b.text_line(event["name"])
+            if event.get("about"):
+                b.text_line(f" — {event['about']}")
+            b.newline()
+    return b.build_stripped()
+
+
 def holidays_eve(city, lines):
     """Рассылка накануне: «🎉 Завтра · Алкмар» и по строке на праздник или событие."""
     b = MessageBuilder()
