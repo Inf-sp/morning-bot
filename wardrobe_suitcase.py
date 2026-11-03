@@ -778,8 +778,19 @@ async def _add_flow(bot, cid, data, q=None):
                 msg=wardrobe_ui.suitcase_add_zone_screen(_view(suitcase["result"]), zone))
 
 
+def _offer_label(cid, result) -> str:
+    """«20 октября» — день, когда бот спросит о режиме отпуска (сохранённый чемодан дома, поездка впереди)."""
+    from util import _MONTHS
+    try:
+        start = date.fromisoformat(str((result or {}).get("start") or ""))
+    except ValueError:
+        return ""
+    return f"{start.day} {_MONTHS[start.month - 1]}" if start > _today() and not vacation.active(cid) else ""
+
+
 async def _show(bot, cid, result, kb, q=None, *, saved=False, msg=None):
-    msg = msg or wardrobe_ui.suitcase_screen(_view(result), saved=saved, trip=vacation.active(cid))
+    msg = msg or wardrobe_ui.suitcase_screen(_view(result), saved=saved, trip=vacation.active(cid),
+                                             offer=_offer_label(cid, result) if saved else "")
     if q is not None:
         try:
             await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
@@ -805,6 +816,7 @@ async def send(bot, cid, q=None):
     """«🧳 Собрать чемодан». Дома — сохранённый чемодан, иначе вопрос «Куда и когда едешь?»; в отпуске —
     подтверждённый чемодан этой страны или черновик под текущую поездку (за день не пересобирается)."""
     if not vacation.active(cid):
+        drop_finished(cid)
         saved = saved_suitcase(cid)
         if saved:
             await _show_saved(bot, cid, saved, q)
@@ -914,6 +926,17 @@ async def show_day(bot, cid, index=None, q=None, *, trip=False, status=None, loo
             "items": len(_flat(saved["result"]))}  # «Твой чемодан · 12 вещей · 17 образов»
     msg = wardrobe_ui.suitcase_day_card(head, looks[index], index, len(looks), _today().isoformat())
     await _deliver(bot, cid, msg, _day_kb(index, len(looks), trip), q, status)
+
+
+def drop_finished(cid) -> bool:
+    """Дома: чемодан поездки, которая уже закончилась, убирается — в «Отпуске» снова «Собрать чемодан». True — убран."""
+    if vacation.active(cid):
+        return False
+    end = str(((saved_suitcase(cid) or {}).get("trip") or {}).get("end") or "")
+    if not end or end >= _today().isoformat():
+        return False
+    _forget(cid)
+    return True
 
 
 def _forget(cid):

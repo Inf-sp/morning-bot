@@ -87,6 +87,7 @@ def test_empty_wardrobe_gets_a_basic_set_for_the_trip_weather(monkeypatch):
 def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch):
     import weather_location
     profile = _memory_profile(monkeypatch)
+    monkeypatch.setattr(wardrobe_suitcase, "_today", lambda: date(2026, 10, 1))  # поездка впереди
     monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
     monkeypatch.setattr(wardrobe_suitcase.vacation, "split_city_and_period",
                         lambda text: ("Кейптаун", (date(2026, 10, 20), date(2026, 10, 27))) if "20" in text
@@ -151,7 +152,8 @@ def test_home_suitcase_asks_city_and_dates_then_builds_and_confirms(monkeypatch)
     asyncio.run(wardrobe_suitcase.handle(bot, "42", "w_pack_ok"))
     assert wardrobe_suitcase.saved_suitcase("42")["trip"]["city"] == "Кейптаун"
     assert bot.sent[-1]["text"] == ("🧳 Чемодан · Кейптаун · 20–27 октября · 8 дней\n\n"  # без «✅ Чемодан сохранён»
-                                    "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь")
+                                    "Футболки и рубашки (1 вещь): серая футболка\n\nВсего в списке: 1 вещь\n\n"
+                                    "20 октября утром спрошу, включить ли режим отпуска.")
     assert [[b.callback_data for b in row] for row in bot.sent[-1]["reply_markup"].inline_keyboard] == [
         ["w_pack_add_s"], ["w_pack_del"], ["w_pack_back", "m_menu"]]
     assert wardrobe_suitcase.saved_suitcase("42")["declined"] == ["Белая футболка"]  # отказ помнится и после «Подтвердить»
@@ -625,3 +627,13 @@ def test_changed_today_look_resets_my_day_cache(monkeypatch):
     monkeypatch.setattr(wardrobe_suitcase, "_save_plan", lambda *_a: None)
     wardrobe_suitcase.another_look("42", 0)  # «Ещё вариант» на сегодня — «Мой день» пересоберётся
     assert resets == ["42"]
+
+
+def test_finished_trip_suitcase_is_dropped_at_home(monkeypatch):
+    profile = _memory_profile(monkeypatch)
+    monkeypatch.setattr(wardrobe_suitcase.vacation, "active", lambda _cid: False)
+    profile["suitcase_saved"] = {"trip": TRIP, "result": {"groups": []}}
+    monkeypatch.setattr(wardrobe_suitcase, "_today", lambda: date(2026, 10, 27))
+    assert not wardrobe_suitcase.drop_finished("42")  # последний день поездки — ещё нужен
+    monkeypatch.setattr(wardrobe_suitcase, "_today", lambda: date(2026, 10, 28))
+    assert wardrobe_suitcase.drop_finished("42") and "suitcase_saved" not in profile

@@ -473,12 +473,14 @@ async def job_trip_day(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_vacation_offer(context: ContextTypes.DEFAULT_TYPE):
-    """В день поездки из чемодана (с 08:00) — один раз спросить, включить ли режим отпуска."""
+    """В день поездки из чемодана (с 08:00) — один раз спросить, включить ли режим отпуска; вечером накануне
+    возвращения — продлить ли."""
     import vacation
 
     for cid in access.get_allowed_cids():
         try:
             await vacation.send_offer(context.bot, cid)
+            await vacation.send_return_ask(context.bot, cid)  # вечер накануне возвращения: продлить?
         except Exception:
             logging.exception("job_vacation_offer failed for cid=%s", cid)
 

@@ -530,6 +530,14 @@ def _trip_day(trip, today=None) -> int:
     return max(1, ((today or datetime.now(TZ).date()) - since).days + 1)
 
 
+def _trip_days(start, until) -> int:
+    """Всего дней отпуска: от начала до дня возвращения (в этот день город уже домашний); без даты — 0."""
+    try:
+        return max(0, (date.fromisoformat(str(until or "")) - start).days) if start else 0
+    except ValueError:
+        return 0
+
+
 def _vacation_blocks(cid) -> dict:
     """В отпуске: факты о стране с памяткой и фраза дня на языке страны; дома — {}."""
     import vacation
@@ -546,6 +554,7 @@ def _vacation_blocks(cid) -> dict:
         "word": vacation.phrase_today(cid) if vacation.replaces_learning(cid) else "",
         "try_dish": day_menu.trip_dish_today(cid),  # что попробовать сегодня — из меню Кухни, без AI
         "day": _trip_day({"since": start.isoformat()} if (start := vacation.trip_start(cid)) else {}),  # «Мой N день»
+        "days": _trip_days(start, (vacation.state(cid) or {}).get("until")),  # всего дней — «3 из 7»
         # Факт дня о стране — свой на каждый день поездки; набор готовится фоном при начале отпуска.
         "country_fact": vacation.fact_of_day(cid, "country") if user_settings.myday_block_on(cid, "fact") else "",
     }

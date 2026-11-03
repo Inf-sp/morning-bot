@@ -1262,6 +1262,9 @@ async def handle_callback(bot, cid, data, q=None):
             await send_home(bot, cid, q)
         else:
             await vacation.send_screen(bot, cid, q)
+    elif data.startswith("set_vacx_"):  # «+3 дня» / «+неделя» накануне возвращения
+        import vacation
+        await vacation.extend(bot, cid, data[len("set_vacx_"):], q)
     elif data == "set_vac_city":
         import vacation
         await vacation.ask_city(bot, cid)

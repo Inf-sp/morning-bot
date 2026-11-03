@@ -385,7 +385,7 @@ def _weather_block(b: MessageBuilder, data) -> None:
         b.line(line)
 
 
-def suitcase_screen(data, saved=False, trip=False):
+def suitcase_screen(data, saved=False, trip=False, offer=""):
     """Чек-лист чемодана: «🧳 Чемодан · ЮАР · 19 октября – 4 ноября · 17 дней» (страна поездки, а не город),
     погода поездки и конкретный совет одной строкой (маршрут — абзац на город, город жирным), категории — «Обувь
     (2 пары): белые кеды, …» абзацем на категорию; «Не хватает: …» — чего под погоду нет в шкафу; курсивом итог. Пустой шкаф —
@@ -422,6 +422,10 @@ def suitcase_screen(data, saved=False, trip=False):
             f"{shoes} {ru_plural(shoes, 'пара', 'пары', 'пар')} обуви" if shoes else "") if part)
         b.spacer()
         b.italic(f"Всего в списке: {total}")
+        b.newline()
+    if offer:  # сохранённый чемодан дома: что будет дальше
+        b.spacer()
+        b.italic(f"{offer} утром спрошу, включить ли режим отпуска.")
         b.newline()
     return b.build_stripped()
 

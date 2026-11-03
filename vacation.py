@@ -456,6 +456,7 @@ async def send_screen(bot, cid, q=None):
     import rich_delivery
     import wardrobe_suitcase
     from ui.navigation import nav_row
+    wardrobe_suitcase.drop_finished(cid)  # прошлая поездка — не «Мой чемодан»
     trip = suitcase_trip(cid)
     packed = bool(wardrobe_suitcase.saved_suitcase(cid))
     rows = [[InlineKeyboardButton("🧳 Мой чемодан" if packed else "🧳 Собрать чемодан", callback_data="w_pack")]]
@@ -498,6 +499,55 @@ async def send_offer(bot, cid):
         [InlineKeyboardButton("✈️ Начать отпуск", callback_data="set_vac_trip")],
         [InlineKeyboardButton("Не сейчас", callback_data="set_vac_no")],
     ]))
+
+
+RETURN_ASK_HOUR = 19  # вечером накануне дня возвращения, по местному времени поездки
+_RETURN_ASK_KEY = "vacation_return_asked"  # дата возвращения, о которой уже спросили
+EXTEND_CHOICES = (("+3 дня", 3), ("+неделя", 7))
+
+
+def return_ask_due(cid, now=None) -> bool:
+    """Вечер накануне дня возвращения (с 19:00 по местному времени), ещё не спрашивали об этой дате."""
+    current = state(cid) or {}
+    until = str(current.get("until") or "")
+    if not until:
+        return False
+    now = now or datetime.now(local_tz(cid))
+    if now.hour < RETURN_ASK_HOUR or (now.date() + timedelta(days=1)).isoformat() != until:
+        return False
+    return (store.get_profile(cid) or {}).get(_RETURN_ASK_KEY) != until
+
+
+async def send_return_ask(bot, cid):
+    """«🏠 Завтра домой»: ночью верну домашний город; продлить — «+3 дня» | «+неделя»; «Всё верно» убирает вопрос."""
+    if not return_ask_due(cid):
+        return
+    current = state(cid)
+    until = current["until"]
+    store.mutate_profile(cid, lambda profile: ({**profile, _RETURN_ASK_KEY: until}, None))  # до отправки
+    msg = vacation_ui.return_ask((current.get("home") or {}).get("city", ""))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"set_vacx_{days}") for label, days in EXTEND_CHOICES],
+        [InlineKeyboardButton("Всё верно", callback_data="set_vac_no")],
+    ]))
+
+
+async def extend(bot, cid, value, q=None):
+    """«+3 дня» / «+неделя»: дата возвращения позже; вопрос заменяется ответом «Отпуск продлён до …»."""
+    current = state(cid)
+    if not current or not str(value).isdigit() or not current.get("until"):
+        return
+    until = date.fromisoformat(current["until"]) + timedelta(days=int(value))
+    _save_merge(cid, current, {"until": until.isoformat()})
+    _reset_day_caches(cid)
+    msg = vacation_ui.extended(until_label(cid))
+    if q is not None:
+        try:
+            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=None)
+            return
+        except Exception:
+            _log.debug("vacation: extend edit failed", exc_info=True)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
 
 
 async def start_suitcase_trip(bot, cid, q=None):

@@ -867,3 +867,31 @@ def test_vacation_screen_has_suitcase_and_trip_start_and_morning_offer_once(monk
     assert vac.offer_due("42", dt(2026, 10, 20, 8, 5, tzinfo=tz))["city"] == "Кейптаун"
     profile["vacation_offer"] = "Кейптаун|2026-10-20|2026-10-27"
     assert vac.offer_due("42", dt(2026, 10, 21, 9, tzinfo=tz)) == {}  # спросили один раз за поездку
+
+
+def test_evening_before_return_asks_once_and_extend_moves_the_date(monkeypatch):
+    import asyncio
+    from datetime import datetime as dt, timezone
+    import vacation as vac
+    profile, saved = {}, {"home": {"city": "Alkmaar"}, "until": "2026-10-27", "cc": "ZA", "since": "2026-10-20"}
+    monkeypatch.setattr(vac.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(vac.store, "mutate_profile", lambda _cid, fn: profile.update(fn(dict(profile))[0]))
+    monkeypatch.setattr(vac, "state", lambda _cid: dict(saved))
+    monkeypatch.setattr(vac, "_save_merge", lambda _cid, _cur, patch: saved.update(patch))
+    monkeypatch.setattr(vac, "_reset_day_caches", lambda _cid: None)
+    utc = timezone.utc
+    assert not vac.return_ask_due("42", dt(2026, 10, 26, 18, tzinfo=utc))  # до 19:00
+    assert not vac.return_ask_due("42", dt(2026, 10, 25, 20, tzinfo=utc))  # не накануне
+    assert vac.return_ask_due("42", dt(2026, 10, 26, 19, 5, tzinfo=utc))
+    profile["vacation_return_asked"] = "2026-10-27"
+    assert not vac.return_ask_due("42", dt(2026, 10, 26, 21, tzinfo=utc))  # один раз
+    msg = vac.vacation_ui.return_ask("Alkmaar")
+    assert msg.text.startswith("🏠 Завтра домой\n\n• Ночью верну домашний город — Alkmaar")
+
+    class Bot:
+        sent = []
+
+        async def send_message(self, **kw):
+            self.sent.append(kw)
+    asyncio.run(vac.extend(Bot(), "42", "3"))
+    assert saved["until"] == "2026-10-30" and Bot.sent[-1]["text"].startswith("✈️ Отпуск продлён · до 30 октября")

@@ -399,6 +399,9 @@ def test_my_day_title_says_which_trip_day():
     assert myday._trip_day({}, date(2026, 10, 26)) == 0
     msg = myday_ui.day_summary("Пн, 26 октября", "Кейптаун", country="ZA", flag="🇿🇦", vacation={"day": 8})
     assert msg.text.startswith("Мой 8 день в отпуске · Пн, 26 октября · Кейптаун")
+    msg = myday_ui.day_summary("Пн, 26 октября", "Кейптаун", country="ZA", flag="🇿🇦", vacation={"day": 8, "days": 16})
+    assert msg.text.startswith("Мой 8 день в отпуске из 16 · Пн, 26 октября")
+    assert myday._trip_days(date(2026, 10, 19), "2026-11-04") == 16 and myday._trip_days(date(2026, 10, 19), "") == 0
 
 
 def test_trip_start_is_earliest_of_route_suitcase_and_mode(monkeypatch):
