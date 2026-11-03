@@ -70,9 +70,27 @@ def test_hub_shows_one_read_with_source_language_minutes_and_a_change_button():
             "Как сверхмассивные чёрные дыры набирают массу так быстро.\n\nТвоя библиотека") in msg.text
     links = [entity.url for entity in msg.entities if entity.type == "text_link"]
     assert links == ["https://q.example/bh"]
-    callbacks = [b.callback_data for row in leisure_ui.leisure_hub_kb(read=True).inline_keyboard for b in row]
-    assert callbacks[5] == "lz_read_next" and "lz_read_next" not in [
-        b.callback_data for row in leisure_ui.leisure_hub_kb().inline_keyboard for b in row]
+    rows = [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb(read=True).inline_keyboard]
+    assert rows[2] == ["lz_concerts", "lz_reads"]  # Концерты | Статьи — в два столбца, статья на экране или нет
+    assert rows == [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb().inline_keyboard]
+
+
+def test_reads_screen_shows_three_most_interesting_articles_as_bullets(monkeypatch):
+    profile = _profile(monkeypatch)
+    now = datetime(2026, 10, 18, 9, tzinfo=config.TZ)
+    items = [{"title": f"Plain story {n}", "link": f"https://x.example/{n}", "source": "Colossal", "lang": "EN",
+              "summary": "", "about": "Обычная история"} for n in range(3)]
+    items.insert(2, {"title": "A black hole near a quantum galaxy", "link": "https://q.example/bh", "source": "Quanta",
+                     "lang": "EN", "summary": "", "minutes": 6, "about": "Чёрная дыра растёт быстрее моделей"})
+    profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": "2026-10-18", "index": 0, "items": items}
+    top = leisure_reads.top("42", now.date())
+    assert [item["link"] for item in top] == ["https://q.example/bh", "https://x.example/0", "https://x.example/1"]
+    msg = leisure_ui.reads_screen(top)
+    assert msg.text.startswith("📰 Статьи\n\nСамое интересное:\n• A black hole near a quantum galaxy · Quanta · EN · "
+                               "6 мин — Чёрная дыра растёт быстрее моделей.\n• Plain story 0")
+    assert [e.url for e in msg.entities if e.type == "text_link"][0] == "https://q.example/bh"
+    assert [b.callback_data for b in msg.reply_markup.inline_keyboard[-1]] == ["m_leisure", "m_menu"]
+    assert leisure_reads.top("42", date(2026, 10, 19)) == []
 
 
 def test_old_day_set_is_rebuilt_with_a_teaser_and_the_same_articles(monkeypatch):

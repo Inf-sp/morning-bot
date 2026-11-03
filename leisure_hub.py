@@ -601,11 +601,21 @@ async def send_hub(bot, cid, q=None):
     await _show(bot, cid, msg, q)
 
 
-async def next_read(bot, cid, q=None):
-    """«Другая статья» под хабом: следующая статья набора дня на месте, без сети."""
+_READS_WAIT = 25  # набора статей ещё нет — ждём его сборку не дольше; не успел — честное «ещё собираются»
+
+
+async def send_reads(bot, cid, q=None):
+    """«📰 Статьи» в Досуге: три самые интересные статьи набора дня; набора нет — собираем сейчас, а не ждём ночи.
+    Старая кнопка «Другая статья» (lz_read_next) из истории чата открывает этот же экран."""
     import leisure_reads
-    await asyncio.to_thread(leisure_reads.advance, cid)
-    await send_hub(bot, cid, q)
+    items = await asyncio.to_thread(leisure_reads.top, cid)
+    if not items:
+        try:
+            await asyncio.wait_for(asyncio.to_thread(leisure_reads.build, cid), _READS_WAIT)
+        except Exception:
+            _log.warning("reads screen: build failed cid=%s", cid, exc_info=True)
+        items = await asyncio.to_thread(leisure_reads.top, cid)
+    await _show(bot, cid, leisure_ui.reads_screen(items), q)
 
 
 _CARDS_WAIT = 25  # пустой хаб ждёт карточки дня не дольше; остальное дособирается в фоне

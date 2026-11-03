@@ -921,16 +921,41 @@ def trip_country_screen(place, about=(), useful="", flag="") -> MessageSpec:
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
 
 
+def reads_screen(items) -> MessageSpec:
+    """«📰 Статьи»: «Самое интересное:» и три статьи пунктами «• Заголовок · источник · EN · N мин — анонс»
+    (заголовок в оригинале жирной ссылкой); ниже «Назад» (в Досуг) | «Главная»."""
+    b = MessageBuilder()
+    b.title("📰 Статьи")
+    items = [item for item in items or () if str(item.get("title") or "").strip()
+             and str(item.get("link") or "").startswith("http")]
+    if not items:
+        b.line("Статьи на сегодня ещё собираются — загляни чуть позже.")
+    else:
+        b.bold("Самое интересное:")
+        b.newline()
+        for item in items:
+            b.text_line("• ")
+            b.bold_link(" ".join(str(item["title"]).split()), str(item["link"]))
+            minutes = int(item.get("minutes") or 0)
+            meta = [item.get("source"), item.get("lang"), f"{minutes} мин" if minutes else ""]
+            b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
+            about = str(item.get("about") or "").strip()
+            if about:
+                b.text_line(f" — {_finish_sentence(about)}")
+            b.newline()
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+
+
 def leisure_hub_kb(read=False):
-    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже «Концерты»; под ними, если на
-    экране статья, — «Другая статья»."""
+    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже Концерты | Статьи.
+    read — прежний параметр (статья на экране), на кнопки больше не влияет."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
-        *([[InlineKeyboardButton("Другая статья", callback_data="lz_read_next")]] if read else []),
+        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts"),
+         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

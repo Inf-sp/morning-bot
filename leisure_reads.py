@@ -2,8 +2,8 @@
 
 Ночной прогрев (`build`) читает ленты темы дня и второй темы, берёт свежее за неделю, порядок — по ключевым словам
 интересов (без AI), время чтения — по тексту страницы. Одно предложение по-русски — один дешёвый AI-запрос на набор;
-без ответа — без предложения. Набор дня (до 6 статей, тема дня первой) хранится в профиле: хаб и «Другая статья»
-читают его без сети. Показанные статьи не возвращаются 30 дней.
+без ответа — без предложения. Набор дня (до 6 статей, тема дня первой) хранится в профиле: хаб и экран «Статьи»
+(три самые интересные) читают его без сети. Показанные статьи не возвращаются 30 дней.
 """
 import html
 import json
@@ -211,6 +211,21 @@ def current(cid, today=None) -> dict | None:
     if saved.get("date") != today.isoformat() or not items or saved.get("v") != _VERSION:
         return None  # набор старого вида — хаб запустит пересборку фоном
     return dict(items[int(saved.get("index") or 0) % len(items)])
+
+
+_TOP = 3  # «Статьи» в Досуге — три самые интересные статьи набора дня
+
+
+def top(cid, today=None) -> list:
+    """«Статьи»: три самые интересные статьи набора дня (по ключевым словам интересов, при равенстве — порядок
+    набора), без сети; набора на сегодня нет — []."""
+    today = today or datetime.now(config.TZ).date()
+    saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
+    items = saved.get("items") or []
+    if saved.get("date") != today.isoformat() or saved.get("v") != _VERSION:
+        return []
+    ranked = sorted(enumerate(items), key=lambda pair: (-max(_score(pair[1], theme) for theme in _THEMES), pair[0]))
+    return [dict(item) for _, item in ranked[:_TOP]]
 
 
 def advance(cid, today=None) -> dict | None:

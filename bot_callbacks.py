@@ -72,6 +72,9 @@ def _status_stages(data):
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
         return progress("🎬 Смотрю афиши кинотеатров...", "📺 Смотрю новые сериалы...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")
+    if data in ("lz_reads", "lz_read_next"):
+        return progress("📰 Листаю журналы...", "🔭 Ищу интересное о науке...", "🎨 Смотрю дизайн и фото...",
+                        "📝 Пишу анонсы...")
     if data == "lz_concerts" or data.startswith(("a_concerts", "concerts_")):
         return progress("🎫 Проверяю афиши...", "🎸 Ищу твоих артистов...", "🏟️ Смотрю площадки рядом...",
                         "📝 Собираю концерты...")
@@ -509,7 +512,8 @@ ROUTES = (
     R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     R("lz_country", lambda c: leisure_hub.send_trip_country(c.bot, c.cid, q=c.q)),  # «О стране» в Досуге отпуска
-    R("lz_read_next", lambda c: leisure_hub.next_read(c.bot, c.cid, q=c.q)),  # «Другая статья» в хабе
+    R("lz_reads", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # «Статьи» в хабе
+    R("lz_read_next", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # старая «Другая статья»
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
@@ -622,7 +626,7 @@ LEGACY_ALIASES = (
 
 
 # В отпуске у Досуга один экран — досуг страны: старые кнопки премьер, рекомендаций и концертов ведут в него.
-TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_lib")
+TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_reads", "lz_read_next", "lz_lib")
 
 
 def _legacy_alias(data, cid=None):
