@@ -276,3 +276,27 @@ def test_practical_info_sections_level_alternative_extra_and_advice():
         k: PRACTICAL[k] for k in ("publicationSections",)}}), "situation": "меньше поездов",
         "cause": "неисправный поезд", "alternative": "автобусы", "advice": "езжай через Zaandam"}).text
     assert "• Затронуты: Alkmaar – Hoorn.\n• Вместо поездов: автобусы.\n• Совет: езжай через Zaandam." in alert
+
+
+def test_foreign_or_ending_disruption_is_not_sent_and_dutch_is_never_shown(monkeypatch):
+    profile = {}
+    monkeypatch.setattr(ns_alerts.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(ns_alerts.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(ns_alerts.store, "mutate_profile", lambda _cid, fn: fn(profile))
+    monkeypatch.setattr(ns_alerts.ns_api, "station_codes", lambda _city: ["AMR"])
+    foreign = {"id": "f1", "type": "DISRUPTION", "title": "Amsterdam Centraal - Hoofddorp", "cause": "defect spoor",
+               "situation": "Er rijden minder treinen", "start": "", "until": "", "extra": "", "sections": []}
+    ending = {**foreign, "id": "e1", "title": "Alkmaar - Amsterdam Centraal",
+              "situation": "Tussen Alkmaar en Amsterdam Centraal zijn de beperkingen voorbij."}
+    monkeypatch.setattr(ns_alerts.ns_api, "active_disruptions", lambda _code: [foreign, ending])
+    bot = Bot()
+    asyncio.run(ns_alerts.check_user(bot, "42"))
+    assert bot.sent == [] and not (profile.get("ns_alerts") or {}).get("active")
+
+    def no_ai(*_a, **_k):
+        raise RuntimeError("down")
+    monkeypatch.setattr(ns_alerts.ai, "llm_json", no_ai)
+    item = ns_alerts._translate({"cause": "Defect spoor", "situation": "Er rijden minder treinen tussen A en B",
+                                 "extra": "De vertraging neemt af.", "advice": "Plan je reis opnieuw"})
+    assert (item["cause"], item["situation"], item["extra"], item["advice"]) == (
+        "неисправность пути", "Сбой в движении поездов", "задержки уменьшаются", "")

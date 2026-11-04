@@ -37,8 +37,45 @@ def _keyboard():
     return InlineKeyboardMarkup([notif_row()])
 
 
+# Частые формулировки NS — перевод без AI (и запас, если AI вернул нидерландский).
+_KNOWN_RU = {
+    "defect spoor": "неисправность пути", "defecte trein": "неисправный поезд", "een defecte trein": "неисправный поезд",
+    "seinstoring": "неисправность сигнализации", "wisselstoring": "неисправность стрелки",
+    "storing aan het spoor": "неисправность на путях", "storing aan de bovenleiding": "неисправность контактной сети",
+    "stroomstoring": "отключение электричества", "aanrijding met een persoon": "наезд на человека",
+    "aanrijding": "столкновение", "aanrijding met een voertuig": "столкновение с автомобилем",
+    "werkzaamheden": "ремонтные работы", "onverwachte werkzaamheden": "внеплановые работы",
+    "een eerdere verstoring": "предыдущий сбой", "koperdiefstal": "кража кабеля", "brand": "пожар",
+    "weersomstandigheden": "погодные условия", "politieonderzoek": "работа полиции",
+    "hulpverlening aan een reiziger": "помощь пассажиру", "personen langs het spoor": "люди у путей",
+    "minder treinen": "меньше поездов", "geen treinen": "поездов нет",
+    "de vertraging neemt af": "задержки уменьшаются",
+}
+
+
+def _known_ru(value) -> str:
+    return _KNOWN_RU.get(" ".join(str(value or "").casefold().strip(" .").split()), "")
+
+
+# Сбой уже заканчивается: «beperkingen voorbij», «rijden weer» — не повод для нового предупреждения.
+_ENDING_RE = re.compile(r"\b(?:voorbij|opgelost|hersteld|rijden (?:de treinen )?weer|neemt af)\b", re.IGNORECASE)
+
+
+def is_ending(item) -> bool:
+    return bool(_ENDING_RE.search(str(item.get("situation") or "")))
+
+
+def concerns_city(item, city) -> bool:
+    """Сбой касается города: его станция в участке, тексте NS или секциях («Amsterdam – Hoofddorp» для Алкмара —
+    нет, даже если NS прислал его в ленте станции)."""
+    city = str(city or "").casefold()
+    texts = [item.get("title"), item.get("situation"), *(item.get("sections") or [])]
+    return bool(city) and any(city in str(text or "").casefold() for text in texts)
+
+
 def _translate(disruption):
-    """Причина, ситуация и время в пути по-русски; без AI — оригинал NS."""
+    """Причина, ситуация, время в пути, замена и совет по-русски. Что не перевелось: частая формулировка — из словаря,
+    ситуация — «Сбой в движении поездов», остальное убирается (нидерландского текста пользователь не видит)."""
     fields = {key: disruption[key] for key in ("cause", "situation", "extra", "alternative", "advice")
               if disruption.get(key)}
     if not fields:
@@ -56,9 +93,15 @@ def _translate(disruption):
                 _CYRILLIC.search(str(value.get(key) or "")) for key in fields),
         )
     except Exception:
-        _log.info("NS disruption translation unavailable; using original text")
-        return disruption
-    translated = {key: str(data.get(key) or value) for key, value in fields.items()} if isinstance(data, dict) else {}
+        _log.info("NS disruption translation unavailable; using dictionary")
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    translated = {}
+    for key, value in fields.items():
+        text = str(data.get(key) or "")
+        if not _CYRILLIC.search(text):
+            text = _known_ru(value) or ("Сбой в движении поездов" if key == "situation" else "")
+        translated[key] = text
     return {**disruption, **translated}
 
 
@@ -81,12 +124,17 @@ async def check_user(bot, cid):
     feeds = await asyncio.gather(*(asyncio.to_thread(ns_api.active_disruptions, code) for code in codes))
     if any(feed is None for feed in feeds):  # NS не ответил — состояние не трогаем
         return
-    # Один сбой на нескольких станциях города (Alkmaar и Alkmaar Noord) — одно предупреждение.
-    current = list({item["id"]: item for feed in feeds for item in feed}.values())
+    # Один сбой на нескольких станциях города (Alkmaar и Alkmaar Noord) — одно предупреждение; только сбои, которые
+    # касаются города.
+    current = [item for item in {item["id"]: item for feed in feeds for item in feed}.values()
+               if concerns_city(item, city)]
     previous = {
         disruption_id: value if isinstance(value, dict) else {"title": str(value), "sig": disruption_id}
         for disruption_id, value in ((store.get_profile(cid).get(_STATE_KEY) or {}).get("active") or {}).items()
     }
+    # Новый сбой, который уже заканчивается («beperkingen voorbij»), не присылаем и не запоминаем — иначе потом
+    # пришло бы «восстановлено» о том, о чём не предупреждали.
+    current = [item for item in current if item["id"] in previous or not is_ending(item)]
     from datetime import datetime
     now = datetime.now(config.TZ).strftime("%Y-%m-%dT%H:%M")
     # Для сообщения «восстановлено»: с какого времени шёл сбой и его причина (по-русски — из предупреждения).
