@@ -140,7 +140,15 @@ def _grammar_title(phrase) -> str:
     topic, meaning = str(phrase.get("topic") or "").strip(), str(phrase.get("meaning") or "").strip()
     if "+" in meaning and re.search(r"[a-z]", meaning.split("+")[0], re.I):
         return meaning[:1].upper() + meaning[1:]
-    return f"{topic} → {meaning}" if meaning else topic
+    return f"{topic} — {meaning}" if meaning else topic
+
+
+def _grammar_points(explanation) -> list:
+    """Объяснение — пунктами по предложениям, не больше двух: «Неправильный глагол: ik ben, …», «В вопросе с jij —
+    ben jij.»."""
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z])", str(explanation or "").strip())
+                 if part.strip()]
+    return [_with_period(sentence) for sentence in sentences[:3]]
 
 
 def _grammar_explanation(phrase) -> str:
@@ -201,18 +209,28 @@ def learning_menu(home: dict):
         topic, explanation = _grammar_title(phrase), _grammar_explanation(phrase)
     else:  # прежний краткий формат правила (уроки страны отпуска)
         topic, explanation = _grammar_parts(phrase.get("rule"))
-    # Грамматика — заголовком, ниже её объяснение одним пунктом и пример — вторым; без повтора слов заголовка.
+    # Как погодное предупреждение: тема жирной подписью («Zijn — быть:»), объяснение пунктами по предложениям, ниже
+    # отдельным блоком «Пример:» — фраза → перевод. Без повтора слов заголовка в объяснении.
     example = (f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}"
                if phrase.get("more") and phrase.get("more_translation") else "")
-    points = [point for point in (str(explanation or "").split("\n\n")[0].strip(), example) if point]
-    if topic:
+    points = _grammar_points(str(explanation or "").split("\n\n")[0])
+    if topic and " — " not in topic and points and len(points[0].split()) <= 3 and ":" not in points[0]:
+        # «Zodra» + «Как только.» → заголовок «Zodra — как только:», без пункта из двух слов.
+        topic = f"{topic} — {_without_period(points[0])[:1].lower()}{_without_period(points[0])[1:]}"
+        points = points[1:]
+    points = points[:2]
+    if topic or points:
         b.spacer()
-        b.bold(f"Грамматика: {topic}:")
+        if topic:
+            b.bold(f"{topic}:")
+            b.newline()
+        for point in points:
+            b.line(f"• {point}")
+    if example:
+        b.spacer()
+        b.bold("Пример:")
         b.newline()
-    elif points:
-        b.spacer()
-    for point in points:
-        b.line(f"• {point}")
+        b.line(f"• {example}")
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
         b.spacer()
