@@ -745,10 +745,41 @@ def _active_monitor_errors(cutoff):
     ]
 
 
+_RATE_LIMIT_TEXT = "слишком много запросов"
+
+
+def _is_ai_rate_limit(entry) -> bool:
+    """429 провайдера ИИ: цепочка сразу берёт резерв, пользователь получает ответ."""
+    return (str(entry.get("service") or "") in provider_runtime.AI_PROVIDERS
+            and (_RATE_LIMIT_TEXT in str(entry.get("text") or entry.get("message") or "")
+                 or entry.get("status_code") == 429))
+
+
+def _rate_limit_summary(monitor_errors) -> list:
+    """Лимит запросов бесплатного тарифа (429) — ожидаемо, бот отвечает через резерв: не десятки строк, а одна на
+    сервис — «Gemini · лимит запросов · 18 раз за сутки, последний 22:57 · ответы через резерв»."""
+    counts, last = {}, {}
+    for entry in monitor_errors:
+        if _is_ai_rate_limit(entry):
+            service = str(entry.get("service") or "")
+            counts[service] = counts.get(service, 0) + 1
+            last[service] = max(last.get(service, 0), int(entry.get("ts") or 0))
+    rows = []
+    for service, count in counts.items():
+        spec = provider_runtime.SPEC_BY_KEY.get(service)
+        label = spec.label if spec else service
+        when = datetime.fromtimestamp(last[service], config.TZ).strftime("%H:%M")
+        rows.append((last[service], f"{label} · лимит запросов · {count} {_plural(count, 'раз', 'раза', 'раз')} "
+                                    f"за сутки, последний {when} · ответы через резерв"))
+    return rows
+
+
 def _active_error_rows(*, limit=40, include_hidden=True):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
-    monitor_errors = _active_monitor_errors(cutoff)
+    all_monitor_errors = _active_monitor_errors(cutoff)
+    rate_limits = _rate_limit_summary(all_monitor_errors)
+    monitor_errors = [entry for entry in all_monitor_errors if not _is_ai_rate_limit(entry)]
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
         for entry, count in _collapse_app_errors(errors)
@@ -757,11 +788,39 @@ def _active_error_rows(*, limit=40, include_hidden=True):
         for entry, count in _collapse_monitor_errors(monitor_errors)
     ]
     combined.sort(key=lambda item: item[0], reverse=True)
-    rows = [row for _ts, row in combined[:limit]]
+    rows = [row for _ts, row in sorted(rate_limits, reverse=True)] + [row for _ts, row in combined[:limit]]
     hidden_count = max(0, len(combined) - len(rows))
     if hidden_count and include_hidden:
         rows.append(f"… ещё {hidden_count} ошибок скрыто")
     return rows
+
+
+def errors_detail(now=None) -> dict:
+    """Ошибки за сутки как есть: сбои сервисов с кодом ответа и текстом (секреты уже вырезаны при записи) и ошибки
+    действий бота — чтобы по файлу понять причину, а не только «ошибка запроса»."""
+    now = float(now or time.time())
+    cutoff = now - DAY
+    services = [{"time": _log_date_time(entry.get("ts")), "service": entry.get("service"),
+                 "status_code": entry.get("status_code"), "text": entry.get("text"), "message": entry.get("message"),
+                 "exception": entry.get("exception_type"), "fallback": entry.get("fallback_target"),
+                 "recovered": bool(entry.get("recovered_at"))}
+                for entry in provider_runtime.history(limit=300)
+                if entry.get("ts", 0) >= cutoff and entry.get("event_type") == "error"]
+    actions = [{"time": _log_date_time(entry.get("ts")), **{key: entry.get(key) for key in (
+                   "section", "action", "status_code", "exception_type", "msg", "error", "file", "line", "function")
+                   if entry.get(key)}}
+               for entry in tracking.get_errors(limit=200) if entry.get("ts", 0) >= cutoff]
+    return {"services": services, "actions": actions}
+
+
+async def send_logs_file(bot, cid, q=None):
+    import io
+    import json
+    data = await asyncio.to_thread(errors_detail)
+    body = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode("utf-8")
+    await bot.send_document(chat_id=cid, document=io.BytesIO(body), filename="errors_24h.json",
+                            caption=f"⚠️ Ошибки за сутки: сервисы {len(data['services'])} · действия "
+                                    f"{len(data['actions'])} — код ответа и текст, без ключей")
 
 
 async def send_logs(bot, cid, q=None):
@@ -783,6 +842,7 @@ async def send_logs(bot, cid, q=None):
         visible_rows.append(f"… ещё {hidden_count} ошибок скрыто")
     buttons = []
     if combined_count:
+        buttons.append([InlineKeyboardButton("📄 Подробно файлом", callback_data="adm_logs_file")])
         buttons.append([InlineKeyboardButton(delete_label("Очистить ошибки"), callback_data="adm_logs_clear")])
     buttons.append(nav_row("adm_home"))
     kb = InlineKeyboardMarkup(buttons)

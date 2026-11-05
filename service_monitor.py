@@ -468,7 +468,10 @@ def check_all(*, force=False) -> None:
         # Проверка Groq и Cloudflare может расходовать лимит. Их
         # состояние обновляют реальные попытки из цепочки; фон проверяет лишь
         # основной сервис и последний резерв.
-        if spec.key in provider_runtime.AI_PROVIDERS and spec.key not in ("gemini", "openrouter"):
+        # Groq, Cerebras и GitHub проверяются бесплатным списком моделей раз в час: без этого статус резерва,
+        # до которого цепочка редко доходит, неделями показывал старую ошибку. Cloudflare — только реальными
+        # запросами: его проверка — вызов модели за нейроны.
+        if spec.key == "cloudflare":
             continue
         if spec.key == "tavily" and provider_runtime.tavily_monthly_quota_exhausted(now):
             continue

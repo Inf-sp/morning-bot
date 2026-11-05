@@ -1452,6 +1452,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_logs":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_logs(b, c, q))
+    elif data == "adm_logs_file":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_logs_file(b, c, q))
     elif data == "adm_logs_clear":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.clear_logs(b, c, q))

@@ -113,7 +113,7 @@ def test_logs_have_only_clear_and_navigation_rows(monkeypatch):
     asyncio.run(admin.send_logs(bot, "42"))
 
     labels = [[button.text for button in row] for row in bot.sent[0]["reply_markup"].inline_keyboard]
-    assert labels == [["❌ Очистить ошибки"], ["⬅️ Назад"], ["#️⃣ Главная"]]
+    assert labels == [["📄 Подробно файлом"], ["❌ Очистить ошибки"], ["⬅️ Назад"], ["#️⃣ Главная"]]
     assert all("Скопировать" not in button for row in labels for button in row)
 
 
@@ -624,3 +624,23 @@ def test_compact_rows_fold_green_data_services_but_keep_limits_and_problems(monk
         "AI", "Данные", "🟢 Tavily · Поиск · 983/1 000 осталось", "🟡 NS · Поезда · сервис не ответил",
         "🟢 Ещё работают: OpenWeather, TMDB"]
     assert len(service_monitor.rows()) == 6  # полный вид — как раньше
+
+
+def test_errors_fold_rate_limits_and_export_details(monkeypatch):
+    now = int(admin.time.time())
+    history = [
+        {"ts": now - 60, "service": "gemini", "event_type": "error", "text": "Gemini: слишком много запросов",
+         "status_code": 429, "message": "RESOURCE_EXHAUSTED"},
+        {"ts": now - 120, "service": "gemini", "event_type": "error", "text": "Gemini: слишком много запросов",
+         "status_code": 429, "message": "RESOURCE_EXHAUSTED"},
+        {"ts": now - 30, "service": "gemini", "event_type": "error", "text": "Gemini: ошибка запроса",
+         "status_code": 400, "message": "Invalid JSON payload received. Unknown name"},
+    ]
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: history)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
+    rows = admin._active_error_rows(limit=40, include_hidden=False)
+    assert rows[0].startswith("Gemini · лимит запросов · 2 раза за сутки, последний ") and rows[0].endswith("через резерв")
+    assert len(rows) == 2 and "ошибка запроса" in rows[1]  # 429 не плодят строк
+    detail = admin.errors_detail(now)
+    assert [row["status_code"] for row in detail["services"]] == [429, 429, 400]
+    assert detail["services"][2]["message"].startswith("Invalid JSON payload")
