@@ -23,10 +23,9 @@ def test_add_series_without_word_favorites_is_an_add_not_a_recommendation():
     assert assistant._detect_love_add("люблю фильмы про космос") is None
 
 
-def test_question_about_a_series_goes_to_assistant_not_recommendation():
-    assert assistant._detect_intent("Что за сериал шитс крик") is None
-    assert assistant._detect_intent("кто такой Дени Вильнёв") is None
-    assert assistant._detect_intent("посоветуй сериал") == "tv"  # карточка сериала, не фильма
+def test_question_about_a_series_is_not_a_library_add():
+    assert assistant._detect_love_add("Что за сериал шитс крик") is None
+    assert assistant._detect_love_add("посоветуй сериал") is None
 
 
 def test_chat_add_saves_verified_title_or_asks_to_clarify(monkeypatch):

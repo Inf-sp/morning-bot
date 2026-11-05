@@ -49,6 +49,15 @@ async def handle(update, context, remove_reply_keyboard):
         await assistant.try_add_love_from_chat(bot, cid, text)
         return
 
+    # «Добавь в шкаф …» и «добавь … в холодильник» — тоже раньше словаря: иначе он принял бы их за новые слова.
+    if assistant.detect_wardrobe_add(text) is not None:
+        store.pending_input.pop(cid, None)
+        await assistant.try_add_wardrobe_from_chat(bot, cid, text)
+        return
+    if fridge._fridge_payload_from_chat(text) and await fridge.try_add_fridge_from_chat(bot, cid, text):
+        store.pending_input.pop(cid, None)
+        return
+
     # Сбрасываем только прежний pending: обработчик словаря может открыть новый
     # шаг уточнения перевода.
     previous_kind = store.pending_input.get(cid)

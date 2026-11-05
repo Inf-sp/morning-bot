@@ -27,7 +27,8 @@ _TOPICS = (
     ("leisure", re.compile(
         r"(фильм|кино|сериал|посмотреть|музык|артист|исполнител|альбом|песн|трек|"
         r"концерт|послушать)", re.I)),
-    ("weather", re.compile(r"(погод|дожд|зонт|холодн|жарк|ветер|ветр|мороз)", re.I)),
+    ("concerts", re.compile(r"(концерт|выступ|тур[еаы]?\b|афиш|билет|фестивал)", re.I)),
+    ("weather", re.compile(r"(погод|дожд|зонт|холодн|жарк|ветер|ветр|мороз|прогноз|температур)", re.I)),
 )
 
 
@@ -100,20 +101,35 @@ def _leisure(cid):
     return ("Любимое пользователя:\n" + "\n".join(lines)) if lines else ""
 
 
+def _concerts(cid):
+    """Ближайшие концерты артистов пользователя из кэша (без сети): «Tove Lo — 12 ноября, AFAS Live, Amsterdam»."""
+    import leisure_concerts
+    lines = []
+    for item in leisure_concerts.cached_favorite_concerts(cid, 10):
+        place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
+        lines.append(" — ".join(part for part in (item.get("artist"), ", ".join(
+            part for part in (item.get("date"), item.get("time"), place) if part)) if part))
+    return ("Ближайшие концерты артистов пользователя (дата ГГГГ-ММ-ДД):\n" + "\n".join(lines)) if lines else ""
+
+
 def _weather(cid):
+    """Погода на сегодня и завтра в городе из Настроек (кэш прогноза)."""
     import weather
     settings_data = store.get_settings(cid) or {}
     city = str(settings_data.get("city") or "").strip()
+    days = []
     try:
-        daily = (weather.fetch_weather(settings_data["lat"], settings_data["lon"], 1) or {}).get("daily") or {}
-        tmax = round(daily["temperature_2m_max"][0])
-        rain = int(daily["precipitation_probability_max"][0] or 0)
-        wind = round(daily["windspeed_10m_max"][0] or 0)
-        today = f"сегодня до {tmax:+d}°, вероятность дождя {rain}%, ветер до {wind} м/с"
+        daily = (weather.fetch_weather(settings_data["lat"], settings_data["lon"], 2) or {}).get("daily") or {}
+        for index, label in enumerate(("сегодня", "завтра")[:len(daily.get("time") or [])]):
+            tmax = round(daily["temperature_2m_max"][index])
+            tmin = round(daily["temperature_2m_min"][index])
+            rain = int(daily["precipitation_probability_max"][index] or 0)
+            wind = round(daily["windspeed_10m_max"][index] or 0)
+            days.append(f"{label} от {tmin:+d}° до {tmax:+d}°, вероятность дождя {rain}%, ветер до {wind} м/с")
     except Exception:
-        today = ""
-    parts = [part for part in (f"Город: {city}" if city else "", today) if part]
-    return ("Погода: " + ", ".join(parts)) if parts else ""
+        days = days[:1]
+    parts = [part for part in (f"Город: {city}" if city else "", *days) if part]
+    return ("Погода: " + "; ".join(parts)) if parts else ""
 
 
 def build(cid, text) -> str:

@@ -3,15 +3,12 @@ import logging
 import re
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import store
 import ai
 import util
 import verify
 import research
 import rich_delivery
-import menu
-import myday
 import secure
 import assistant_context
 from ui import assistant as assistant_ui
@@ -128,72 +125,6 @@ def _short_reply_answer(kind: str) -> str:
     return "Понял."  # CONFIRMATION и фолбэк
 
 
-_OUTFIT_WORDS = ("надеть", "надену", "одеть", "в чём пойти", "в чем пойти", "носить", "образ дня", "образ на")
-
-# (ключевые слова, action); порядок важен: одежда раньше еды и концертов («что надеть на ужин»)
-_INTENT_MAP = [
-    (("что сегодня", "что на сегодня", "план на день", "дела на день", "расписан", "планировать день", "мой день"),
-     "day_plan"),
-    (_OUTFIT_WORDS, "outfit"),
-    (("завтрак", "обед", "ужин", "поесть", "приготовить", "рецепт",
-      "покушать", "голоден", "голодна", "что поесть", "что покушать",
-      "что приготовить", "чего поесть"), "meal_picker"),
-    (("холодильник", "из холодильника", "что есть дома", "что есть в холодильнике", "остатк"),
-     "fridge"),
-    (("что посмотреть", "фильм", "сериал", "кино"), "movie"),
-    (("что послушать", "послушать", "музыку", "музыка", "плейлист"), "music"),
-    (("концерт", "афиша"), "concerts"),
-    (("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "де/хет", "de/het"), "learn"),
-    (("словар", "лексик", "какое слово", "слово дня", "переведи слово"), "dictionary"),
-    (("погода", "дождь", "температура", "зонт", "прогноз"), "weather"),
-]
-
-# Эти разделы открываются только короткой командой («посоветуй фильм», «что надеть», «какая погода»); с
-# подробностями («в самолёте», «на ужин в ресторан», «в Риме в мае») отвечает ассистент с данными пользователя.
-_INTENT_STEMS = {
-    "movie": ("посмотр", "смотр", "фильм", "сериал", "кино"),
-    "music": ("послуша", "слуша", "музык", "плейлист"),
-    "outfit": ("надет", "наден", "одет", "одеть", "образ", "носить", "пойти"),
-    "weather": ("погод", "дожд", "температур", "зонт", "прогноз"),
-    "learn": ("нидерландск", "голландск", "dutch", "английск", "english", "phrasal", "язык"),
-}
-_COMMAND_FILLER = {
-    "посоветуй", "посоветуйте", "подскажи", "подскажите", "предложи", "порекомендуй", "покажи", "дай", "давай",
-    "хочу", "хочется", "можно", "можешь", "что", "чего", "какой", "какая", "какое", "какую", "мне", "нам", "меня",
-    "для", "тебя", "есть", "сегодня", "сейчас", "вечером", "вечер", "пожалуйста", "плиз", "нибудь", "что-нибудь",
-    "что-то", "какой-нибудь", "хороший", "хорошее", "хорошую", "интересный", "интересное", "новый", "новое", "будет",
-    "нужен", "нужно", "улице", "там", "вообще", "один", "одно", "учить", "заниматься", "урок", "включи", "открой",
-}
-_MANY_RE = re.compile(r"(?<!\w)(какие|фильмы|фильмов|сериалы|сериалов|подборк|список|топ|несколько|вариант)", re.I)
-
-
-def _has_keyword(t, keywords) -> bool:
-    return any(re.search(rf"(?<!\w){re.escape(keyword)}", t) for keyword in keywords)
-
-
-def _command_rest(t, action) -> list:
-    """Слова сообщения сверх команды раздела: без ключевых слов раздела и служебных слов."""
-    stems = _INTENT_STEMS.get(action, ())
-    words = re.findall(r"[а-яёa-z]+(?:-[а-яёa-z]+)*", t)
-    return [word for word in words if len(word) > 2 and word not in _COMMAND_FILLER
-            and not any(word.startswith(stem) for stem in stems)]
-
-
-_RECIPE_INGREDIENT_RE = re.compile(
-    r"\bприготовить\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
-)
-_MEAL_WITH_INGREDIENT_RE = re.compile(
-    r"\b(завтрак|обед|ужин)\s+(?:из|с)\s+([^?!.…]+)", re.IGNORECASE,
-)
-_GENERIC_RECIPE_INGREDIENTS = {"этого", "того", "них", "холодильника", "продуктов"}
-# Слова общей просьбы «что приготовить?» — без них в тексте остаётся суть конкретного запроса.
-_RECIPE_FILLER = {
-    "есть", "рецепт", "рецепта", "рецепты", "рецептик", "дай", "подскажи", "посоветуй", "предложи", "скинь",
-    "какой", "какие", "какой-нибудь", "что", "чего", "нибудь", "приготовить", "сготовить", "поесть", "покушать",
-    "можно", "мне", "нам", "пожалуйста", "хочу", "хочется", "на", "в", "к", "и", "или", "а", "у", "тебя",
-    "сегодня", "завтрак", "обед", "ужин", "завтрака", "обеда", "ужина", "быстро", "простой", "простое",
-}
-
 _LOVE_ADD_VERB_RE = re.compile(r"\b(добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)\b", re.I)
 _LOVE_WORD_RE = re.compile(r"\bв\s+(?:мои\s+|мой\s+)?любим(?:ые|ое|ых|ый|ую)\b", re.I)
 # «Добавь сериал X» — глагол сразу перед категорией: слово «любимые» не обязательно.
@@ -241,6 +172,43 @@ def _detect_love_add(text: str):
     payload = _LOVE_CATEGORY_KEY_RE.sub(" ", payload, count=1)
     payload = re.sub(r"[ \t]+", " ", payload).strip(" \t\n\r:;,.-–—")
     return store_key, folder_label, payload  # пустое название — открыть добавление этой вкладки
+
+
+_WARDROBE_ADD_VERB = r"(?:добавь|добавить|занеси|запиши|сохрани|сохранить|закинь)"
+_WARDROBE_PLACE = r"(?:в\s+(?:мой\s+)?(?:шкаф|гардероб))"
+_WARDROBE_ADD_RES = (
+    # «добавь в шкаф: чёрная футболка», «добавь мне в гардероб белые кеды»
+    re.compile(rf"^\s*{_WARDROBE_ADD_VERB}\s+(?:мне\s+)?{_WARDROBE_PLACE}\s*[:\-—]?\s*(.*)$", re.I | re.S),
+    # «добавь чёрную футболку в шкаф»
+    re.compile(rf"^\s*{_WARDROBE_ADD_VERB}\s+(?:мне\s+)?(.+?)\s+{_WARDROBE_PLACE}\s*[.!]?\s*$", re.I | re.S),
+    # «добавь вещь синие джинсы», «добавь одежду: …»
+    re.compile(rf"^\s*{_WARDROBE_ADD_VERB}\s+(?:мне\s+)?(?:одежду|вещь|вещи)\s*[:\-—]?\s*(.*)$", re.I | re.S),
+)
+
+
+def detect_wardrobe_add(text: str):
+    """«Добавь в шкаф чёрную футболку» → «чёрную футболку»; команда без вещи → ""; не команда шкафа → None.
+    Без этого словарь принимал «в шкаф чёрную футболку» за новое слово."""
+    for pattern in _WARDROBE_ADD_RES:
+        matched = pattern.search(str(text or ""))
+        if matched:
+            payload = re.sub(r"\s+", " ", matched.group(1)).strip(" \t\n\r:;,.-–—")
+            return re.sub(rf"\s*{_WARDROBE_PLACE}$", "", payload, flags=re.I).strip()
+    return None
+
+
+async def try_add_wardrobe_from_chat(bot, cid, text) -> bool:
+    """Вещь из чата — в шкаф (тот же разбор, что у «Добавить вещь»); без вещи — вопрос, что добавить."""
+    payload = detect_wardrobe_add(text)
+    if payload is None:
+        return False
+    import wardrobe
+    if payload:
+        await wardrobe.add_item(bot, cid, payload)
+    else:
+        import wardrobe_router
+        await wardrobe_router.handle_callback(bot, cid, None, "w_add")
+    return True
 
 
 async def try_add_love_from_chat(bot, cid, text):
@@ -307,115 +275,6 @@ async def try_add_love_from_chat(bot, cid, text):
     return True
 
 
-def _detect_intent(text: str):
-    t = text.lower()
-    informational_markers = (
-        "как запомнить", "как различать", "в чём разница", "в чем разница",
-        "чем отличается", "чем отличаются", "различие между", "разница между",
-        "что значит", "что означает", "объясни", "объясните",
-        # Вопрос о конкретном фильме или человеке — ответ ассистента, не подборка.
-        "что за ", "кто такой", "кто такая", "кто такие", "расскажи", "о чём", "о чем",
-        "про что", "сколько сезонов", "чем закончил",
-    )
-    if any(marker in t for marker in informational_markers):
-        return None
-    action = next((action for keywords, action in _INTENT_MAP if _has_keyword(t, keywords)), None)
-    if action not in _INTENT_STEMS:
-        return action
-    rest = _command_rest(t, action)
-    if action == "movie":  # несколько или под ситуацию — подборка; короткая команда — карточка своего типа
-        if rest or _MANY_RE.search(t):
-            return "movie_list"
-        return "tv" if "сериал" in t and "фильм" not in t else "movie"
-    if action == "weather" and rest == ["завтра"]:
-        return "weather_tomorrow"
-    return None if rest else action
-
-
-def _specific_recipe_request(text: str):
-    """«есть рецепт быстрой выпечки в духовке к чаю из гранолы» → сама просьба для рецепта; общий
-    вопрос («что приготовить на ужин?», «дай рецепт») → None — тогда выбор «Завтрак / Обед / Ужин»."""
-    words = re.findall(r"[а-яёa-z-]+", str(text or "").casefold())
-    meaningful = [word for word in words if word not in _RECIPE_FILLER and len(word) > 2]
-    if len(meaningful) < 2:
-        return None
-    return " ".join(str(text).split()).strip(" ?!.")[:200]
-
-
-def _recipe_ingredients_from_chat(text: str):
-    """Return an explicitly named ingredient for a direct recipe card."""
-    if _has_keyword(str(text or "").lower(), _OUTFIT_WORDS):  # «что надеть на ужин с друзьями» — не рецепт
-        return None
-    meal_matched = _MEAL_WITH_INGREDIENT_RE.search(text or "")
-    if meal_matched:
-        meal = meal_matched.group(1).casefold()
-        ingredients = re.sub(r"\s+", " ", meal_matched.group(2)).strip(" ,;:—-.")
-        if ingredients and ingredients.casefold() not in _GENERIC_RECIPE_INGREDIENTS:
-            return f"{meal} с {ingredients}"[:160]
-    matched = _RECIPE_INGREDIENT_RE.search(text or "")
-    if not matched:
-        return None
-    ingredients = re.sub(r"\s+", " ", matched.group(1)).strip(" ,;:—-.")
-    if not ingredients or ingredients.casefold() in _GENERIC_RECIPE_INGREDIENTS:
-        return None
-    return ingredients[:160]
-
-
-async def _run_intent(bot, cid, action, recipe_ingredients=None):
-    import cooking
-    import leisure_movies
-    import settings
-    import wardrobe
-    import fridge
-    import leisure_concerts
-    import leisure_music
-    import learning_dictionary as dictionary
-    import weather as wx
-    # Ответы ассистента на свободный текст не должны нести кнопку «⬅️ Назад» -
-    # пользователь не открывал раздел через меню, и вести её было бы некуда.
-    no_kb_bot = settings._NoKbBot(bot)
-    if action == "meal_request":
-        # Конкретная просьба — рецепт именно под неё, а не общий выбор приёма пищи.
-        await cooking.send_recipe(bot, cid, f"по просьбе пользователя: {recipe_ingredients}")
-    elif action == "meal_recipe":
-        is_meal_request = str(recipe_ingredients or "").casefold().startswith(
-            ("завтрак ", "обед ", "ужин ")
-        )
-        constraint = recipe_ingredients if is_meal_request else f"блюдо из {recipe_ingredients}"
-        await cooking.send_recipe(bot, cid, constraint)
-    elif action == "meal_picker":
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🥐 Завтрак", callback_data="a_recipe_breakfast"),
-            InlineKeyboardButton("🥗 Обед",    callback_data="a_recipe_lunch"),
-            InlineKeyboardButton("🍲 Ужин",    callback_data="a_recipe_dinner"),
-        ]])
-        await bot.send_message(chat_id=cid, text="🍽 <b>Что готовим?</b>",
-                               parse_mode="HTML", reply_markup=kb)
-    elif action == "day_plan":
-        await myday.send_plany(no_kb_bot, cid, force=True)
-    elif action == "fridge":
-        await fridge.send_fridge_recipe(no_kb_bot, cid)
-    elif action == "movie_list":
-        import movie_discovery  # подборка под просьбу; не собралась — карточка фильма дня
-        if not await movie_discovery.send_movie_list(bot, cid, recipe_ingredients):
-            await leisure_movies.send_recos(no_kb_bot, cid, "movie")
-    elif action in ("movie", "tv"):
-        await leisure_movies.send_recos(no_kb_bot, cid, action)
-    elif action == "music":
-        await leisure_music.send_listen(no_kb_bot, cid)
-    elif action == "concerts":
-        await leisure_concerts.find_concerts(no_kb_bot, cid, "home")
-    elif action == "learn":
-        text, entities, kb = menu.menu_screen("m_learn", cid)
-        await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
-    elif action == "dictionary":
-        await dictionary.send_dict(no_kb_bot, cid)
-    elif action == "outfit":
-        await wardrobe.send_looks(no_kb_bot, cid)
-    elif action in ("weather", "weather_tomorrow"):
-        await wx.send_weather(no_kb_bot, cid, "tomorrow" if action == "weather_tomorrow" else "today")
-
-
 # Плавная печать целого ответа: до ~12 шагов по ~0.12 с (≈1.5 с на ответ).
 _TYPE_CHUNK_CHARS = 80
 _TYPE_MAX_STEPS = 12
@@ -472,21 +331,9 @@ async def chat_reply(bot, cid, text):
 
     await bot.send_chat_action(chat_id=cid, action="typing")
 
-    # Intent-роутинг — сразу запускаем нужную функцию
-    recipe_ingredients = _recipe_ingredients_from_chat(text)
-    intent = "meal_recipe" if recipe_ingredients else _detect_intent(text)
-    if intent == "movie_list":
-        recipe_ingredients = text
-    if intent == "meal_picker":
-        request = _specific_recipe_request(text)
-        if request:
-            intent, recipe_ingredients = "meal_request", request
-    if intent:
-        await _run_intent(bot, cid, intent, recipe_ingredients)
-        store.last_surface[str(cid)] = "chat"
-        return
-
-    # Фолбэк - LLM-ответ без прикрепленного главного меню
+    # Любой вопрос или просьба в чате — ответ ИИ с данными пользователя по теме (шкаф, продукты, любимое, концерты,
+    # погода). Экраны разделов чат не открывает: «когда концерт Tove Lo?» — ответ, а не список концертов. Команды
+    # добавления (слово, вещь, продукт, фильм, музыка) разбирает bot_text раньше.
     hist = store.chat_history.get(str(cid), [])
     prompt_text = text
     if research.requires_explicit_web_search(text):

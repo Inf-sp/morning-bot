@@ -813,22 +813,6 @@ def _trip_titles(b: MessageBuilder, label, items) -> None:
         b.newline()
 
 
-def movie_list_screen(title, items) -> MessageSpec:
-    """Подборка по просьбе из чата: «🎬 Фильмы в самолёт», по строке на работу — название жирной ссылкой на трейлер ·
-    год · жанры — чем подходит. Кнопок нет: это ответ ассистента."""
-    b = MessageBuilder()
-    b.title(title)
-    for item in items:
-        b.text_line("- ")
-        b.bold_link(item["name"], trailer_link(item))
-        meta = [str(item.get("year") or ""), str(item.get("genres") or "").replace(", ", " · ")]
-        b.text_line("".join(f" · {value}" for value in meta if value.strip()))
-        if item.get("why"):
-            b.text_line(f" — {item['why'][:1].lower()}{item['why'][1:]}")
-        b.newline()
-    return b.build_stripped()
-
-
 def _trip_music(b: MessageBuilder, hits, legends) -> None:
     """«Хиты страны:» — «трек — артист», «Легенды:» — «артист — главный трек»: списками, как кино и сериалы, по
     строке на пункт со ссылкой на YouTube Music."""
