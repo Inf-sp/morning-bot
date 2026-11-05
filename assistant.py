@@ -296,10 +296,26 @@ def _typing_pieces(text):
     return pieces
 
 
+# Слова, на которых фраза не заканчивается: ответ, оборванный на них, — обрезан лимитом, а не дописан.
+_DANGLING_WORDS = {"и", "а", "но", "или", "в", "во", "на", "с", "со", "к", "ко", "о", "об", "по", "для", "из", "от",
+                   "до", "за", "у", "при", "про", "что", "как", "чтобы", "это", "the", "and", "of", "to"}
+
+
+def _looks_cut(text: str) -> bool:
+    """Ответ оборван посреди фразы: открытая кавычка или скобка, последнее слово — предлог или союз."""
+    words = re.findall(r"[\w-]+", text.casefold())
+    return (text.count("«") > text.count("»") or text.count("(") > text.count(")")
+            or (bool(words) and words[-1] in _DANGLING_WORDS and text[-1:].isalnum()))
+
+
 def _with_final_period(text: str) -> str:
     """Ответ модели иногда обрывается без точки — дописываем её после слова, цифры,
-    кавычки или скобки; знаки препинания, эмодзи и код не трогаем."""
+    кавычки или скобки; знаки препинания, эмодзи и код не трогаем. Оборванный посреди фразы ответ
+    («охватит «Гарри Поттер и») — до последнего законченного предложения, а не с точкой после обрывка."""
     text = (text or "").rstrip()
+    if text and not text.endswith("```") and _looks_cut(text):
+        ends = [match.end() for match in re.finditer(r"[.!?…](?=\s|$)", text)]
+        return text[:ends[-1]].rstrip() if ends else text + "…"
     if text and not text.endswith("```") and (text[-1].isalnum() or text[-1] in "»\")'"):
         return text + "."
     return text

@@ -118,7 +118,9 @@ def _record_module(provider, ok, payload=None):
 OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
 # Хватает на честную попытку каждого резерва; ожидание видно в живом черновике.
 FREE_CHAT_BUDGET_SECONDS = 15.0
-FREE_CHAT_MAX_TOKENS = 350
+# Потолок, а не длина: краткость задаёт системная инструкция. 350 обрезали ответ посреди фразы — у gpt-oss
+# в этот лимит входят и «размышления», а ответ со свежими фактами («Что известно:» и пункты) длиннее.
+FREE_CHAT_MAX_TOKENS = 1000
 FREE_CHAT_ROUTE_VERSION = "free-chat-concise-v5"
 FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"

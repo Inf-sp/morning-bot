@@ -166,3 +166,10 @@ def test_answer_keeps_its_final_period_and_bot_style_bullets():
     assert one.text == "Точного срока пока нет — сериал в разработке у HBO Max." and not one.entities
     many = assistant_answer("Подтверждено 25 декабря 2026 года!\nЧто известно:\n* Первый сезон — 8 серий.")
     assert many.text == "Подтверждено 25 декабря 2026 года!\n\nЧто известно:\n• Первый сезон — 8 серий."
+
+
+def test_answer_cut_mid_phrase_ends_at_the_last_full_sentence():
+    cut = "25 декабря 2026 года – премьера первого сезона.\n\nСериал будет выпускаться HBO, первый сезон охватит «Гарри Поттер и"
+    assert assistant._with_final_period(cut) == "25 декабря 2026 года – премьера первого сезона."
+    assert assistant._with_final_period("Да, это так") == "Да, это так."  # просто без точки — дописать
+    assert assistant._with_final_period("Первый сезон — 8 серий и") == "Первый сезон — 8 серий и…"

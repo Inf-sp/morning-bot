@@ -168,7 +168,8 @@ def test_free_chat_prompt_requires_short_human_answers_for_europe_and_america():
 
 
 def test_free_chat_has_a_small_response_and_time_budget():
-    assert ai.FREE_CHAT_MAX_TOKENS <= 350
+    # Потолок с запасом на «размышления» gpt-oss и ответ со свежими фактами; краткость — в системной инструкции.
+    assert ai.FREE_CHAT_MAX_TOKENS <= 1000
     assert ai.FREE_CHAT_BUDGET_SECONDS <= 15
     # Каждый резерв получает реальную попытку, а не 2 секунды.
     assert min(ai._FREE_CHAT_PROVIDER_TIMEOUTS.values()) >= 4
