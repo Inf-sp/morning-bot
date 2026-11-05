@@ -372,8 +372,16 @@ def _clock(value, tz=None):
     return parsed.astimezone(tz or TZ).strftime("%H:%M")
 
 
+PRECIPITATION_ICONS = ("🌧️", "☀️🌧️", "❄️", "🌩️")  # дождь, ливень в жару, снег, гроза — их вечером не заменяем
+
+
+def evening_icon(icon, label):
+    """Вечером без дождя и снега — 🌘 вместо солнца, облаков или ветра: вечер не «солнечный»."""
+    return "🌘" if label == "Вечером" and icon not in PRECIPITATION_ICONS else icon
+
+
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
-    icon = weather_icon(code, temp, rain, wind_ms, rain_mm, clouds)
+    icon = evening_icon(weather_icon(code, temp, rain, wind_ms, rain_mm, clouds), label)
     return "🌑" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
 
 
@@ -459,6 +467,7 @@ def today_conditions(data, now):
     raining_now = bool(current_precipitation_text(current_code))
     icon = (weather_icon(current_code, tmax, 100, wind) if raining_now
             else weather_icon(code, tmax, rain, wind, rain_mm, clouds))
+    icon = evening_icon(icon, current_period_label(now))  # как в «Моём дне»
     return {"tmax": tmax, "tmin": tmin, "rain": raining_now or _rain_real(rain, rain_mm), "wind": wind,
             "code": code, "clouds": clouds, "icon": icon, "rain_periods": list(rain_periods or [])}
 

@@ -234,3 +234,12 @@ def learning_level_settings(language):
     b.spacer()
     b.text_line("Выбери сложность практики и словаря.")
     return b.build()
+
+
+def removed_from_training(term):
+    """«❌ Слово **Bespreken** было удалено из обучения» — одной строкой, слово жирным."""
+    b = MessageBuilder()
+    b.text_line("❌ Слово ")
+    b.bold(str(term or "").strip())
+    b.text_line(" было удалено из обучения")
+    return b.build_stripped()

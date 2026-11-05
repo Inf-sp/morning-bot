@@ -241,7 +241,11 @@ def test_remove_from_training_deletes_dictionary_entry_and_future_queue_items(mo
     assert repository.deleted == ("nl", "Gevolg")
     assert state["current"]["_removed"] is True
     assert len(state["queue"]) == 1
-    assert "✅ Удалено из обучения" in FakeQuery.message.text
+    assert "❌ Слово Gevolg было удалено из обучения" in FakeQuery.message.text
+    from ui import learning as learning_ui
+    msg = learning_ui.removed_from_training("Bespreken")
+    bold = [msg.text[e.offset:e.offset + e.length] for e in msg.entities if e.type == "bold"]
+    assert msg.text == "❌ Слово Bespreken было удалено из обучения" and bold == ["Bespreken"]
     trainer_session.finish(cid)
     trainer_session.start(cid, "nl", [])
     trainer_session.register_poll(cid, "old-poll")

@@ -334,9 +334,9 @@ async def remove_from_training(bot, cid, task_id="", q=None):
         if str(entry_term(item.get("entry") or "")).casefold() != term_key
     ]
     data["_removed"] = True
-    text = f"✅ Удалено из обучения\n\n{_trainer_display_term(data)}"
     markup = _result_keyboard(data, allow_remove=False)
-    await rich_delivery.show(bot, cid, text, reply_markup=markup, query=q)
+    await rich_delivery.show(bot, cid, learning_ui.removed_from_training(_trainer_display_term(data)),
+                             reply_markup=markup, query=q)
 
 
 def _reinsert_failed(state, data):

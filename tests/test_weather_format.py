@@ -112,6 +112,11 @@ def test_period_icon_follows_period_rain_and_clouds():
     assert weather._period_weather_icon("Днём", 61, 20, 0, 6, 0) == "☁️"
     assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌑"
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
+    assert weather._period_weather_icon("Вечером", 0, 15, 0, 2, 0) == "🌘"  # ясно
+    assert weather._period_weather_icon("Вечером", 3, 15, 0, 9, 0) == "🌘"  # облачно и ветер
+    assert weather._period_weather_icon("Вечером", 61, 15, 90, 2, 4) == "🌧️"  # дождь — как был
+    assert weather._period_weather_icon("Вечером", 73, -2, 90, 2, 4) == "❄️"  # снег — как был
+    assert weather.evening_icon("☀️", "Днём") == "☀️"
 
 
 def test_sun_clock_keeps_provider_local_time():

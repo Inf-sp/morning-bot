@@ -616,7 +616,7 @@ def _build_day_text(cid, *, refresh_current=False):
             rain_when = ", ".join(rain_p[:-1]) + " и " + rain_p[-1]
         else:
             rain_when = "".join(rain_p)
-        weather_icon = icon
+        weather_icon = weather.evening_icon(icon, _weather_period())  # вечером без осадков — 🌘
         if current_precipitation:
             rain_part = current_precipitation
             if rain_when:
