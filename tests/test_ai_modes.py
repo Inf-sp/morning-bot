@@ -97,13 +97,14 @@ def test_all_cooling_providers_are_still_tried_in_order(chain):
     assert chain == ["gemini", "groq"]
 
 
-def test_background_waits_for_primary_with_timeout_breaker_only(chain, monkeypatch):
+def test_background_starts_without_gemini_to_keep_its_quota_for_taps(chain, monkeypatch):
     monkeypatch.setattr(ai, "BACKGROUND_RETRY_PAUSE_SECONDS", 0)
     _ask(), _ask()
     chain.clear()
     with ai.background_mode():
         _ask()
-    assert chain == ["gemini", "gemini", "groq"]  # primary tried + one retry
+    assert chain == ["groq"]  # ночной прогрев и рассылки — сначала резерв, Gemini — последним
+    assert ai._background_order(("gemini", "cerebras", "groq")) == ("cerebras", "groq", "gemini")
     provider_runtime.note_ai_failure("gemini", kind="rate_limit", seconds=300)
     chain.clear()
     with ai.background_mode():

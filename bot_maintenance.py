@@ -83,6 +83,9 @@ async def job_normalize_favorite_collections(context):
         logging.exception("Favorite collections normalization failed")
 
 
+WARM_ACTIVE_DAYS = 3  # ночной прогрев — только тем, кто открывал бота за эти дни
+
+
 @ai.background_job
 async def job_warm_home_pages(context):
     """Молча готовит главные экраны на день.
@@ -97,7 +100,13 @@ async def job_warm_home_pages(context):
     retry_missing = scheduled_section == "retry"
     retry_myday = False
     night = {}  # раздел → упавшие шаги по всем пользователям; None — раздел собрался
-    for cid in access.get_allowed_cids():
+    # Только тем, кто был в боте за последние WARM_ACTIVE_DAYS дней: неактивному экраны соберутся при открытии,
+    # а ночной прогрев «впрок» тратил ИИ на тех, кто их не увидит.
+    cids = access.get_allowed_cids()
+    active = tracking.recently_active(cids, WARM_ACTIVE_DAYS)
+    if len(active) < len(cids):
+        logging.info("home cache warm: %s of %s users active in %s days", len(active), len(cids), WARM_ACTIVE_DAYS)
+    for cid in active:
         if tracking.has_active_actions():
             logging.info("home cache warm skipped: user action active")
             retry_myday = retry_myday or finalizing_myday

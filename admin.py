@@ -102,7 +102,8 @@ async def send_home(bot, cid, q=None):
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
         [InlineKeyboardButton("💾 Прислать копию базы", callback_data="adm_backup"),
          InlineKeyboardButton("🔁 Перезапустить бота", callback_data="adm_restart")],
-        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users"),
+         InlineKeyboardButton("🧮 ИИ по разделам", callback_data="adm_ai_usage")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
@@ -294,6 +295,13 @@ async def send_api_check(bot, cid, q=None):
         nav_row("adm_home"),
     ])
     await _show(bot, cid, ui.api_check(results), kb, q)
+
+
+async def send_ai_usage(bot, cid, q=None):
+    """Запросы и токены ИИ по разделам: сегодня и за 7 дней (api_usage.record_ai_module)."""
+    import api_usage
+    kb = InlineKeyboardMarkup([nav_row("adm_home")])
+    await _show(bot, cid, ui.ai_usage(api_usage.ai_module_usage(1), api_usage.ai_module_usage(7)), kb, q)
 
 
 _REFRESH_CARDS = (

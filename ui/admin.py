@@ -300,3 +300,64 @@ def api_check(results):
     for result in results:
         b.line(api_check_row(result))
     return b.build_stripped()
+
+
+# Подписи разделов для «ИИ по разделам»; неизвестный модуль показывается как есть.
+_AI_MODULE_LABELS = {
+    "food": "Кухня", "cooking": "Кухня", "recipe_generation": "Кухня", "day_menu": "Кухня",
+    "wardrobe": "Гардероб", "wardrobe_photo": "Гардероб · фото", "wardrobe_suitcase": "Чемодан",
+    "leisure": "Досуг", "leisure_hub": "Досуг", "leisure_collection": "Досуг", "movie_discovery": "Кино",
+    "leisure_concerts": "Концерты", "local_events": "События города", "vacation": "Отпуск",
+    "learning": "Обучение", "learning_game": "Детектив", "learning_trainer": "Тренажёр",
+    "learning_dict_add": "Словарь", "learning_dictionary_rebuild": "Словарь", "learning_srs_migration": "Словарь",
+    "learning_explain": "Обучение", "ns": "Поезда NS", "countries": "Страны", "weather": "Погода",
+    "assistant": "Ассистент", "other": "Прочее",
+}
+
+
+def _tokens_label(count) -> str:
+    count = int(count or 0)
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f} млн".replace(".", ",")
+    if count >= 1000:
+        return f"{round(count / 1000)} тыс."
+    return str(count)
+
+
+def ai_usage(today: dict, week: dict):
+    """«🧮 ИИ по разделам»: сегодня и за 7 дней — «• Кухня — 12 запр. · 18 тыс. ток. · фон 4 · кэш 3», дороже выше."""
+    b = MessageBuilder()
+    b.bold("🧮 ИИ по разделам")
+    b.newline()
+    for title, rows in (("Сегодня:", today), ("За 7 дней:", week)):
+        b.spacer()
+        b.bold(title)
+        b.newline()
+        merged = {}
+        for module, row in (rows or {}).items():
+            label = _AI_MODULE_LABELS.get(module, module)
+            out = merged.setdefault(label, {"req": 0, "fail": 0, "in": 0, "out": 0, "cache": 0, "bg": 0})
+            for key in out:
+                out[key] += int(row.get(key) or 0)
+        if not merged:
+            b.line("Запросов не было.")
+            continue
+        ordered = sorted(merged.items(), key=lambda item: (-(item[1]["in"] + item[1]["out"]), -item[1]["req"]))
+        for label, row in ordered[:12]:
+            parts = [f"{row['req']} запр."]
+            if row["in"] + row["out"]:
+                parts.append(f"{_tokens_label(row['in'] + row['out'])} ток.")
+            if row["fail"]:
+                parts.append(f"сбоев {row['fail']}")
+            if row["bg"]:
+                parts.append(f"фон {row['bg']}")
+            if row["cache"]:
+                parts.append(f"кэш {row['cache']}")
+            b.line(f"• {label} — " + " · ".join(parts))
+        total_req = sum(row["req"] for row in merged.values())
+        total_tokens = sum(row["in"] + row["out"] for row in merged.values())
+        b.line(f"Всего: {total_req} запр. · {_tokens_label(total_tokens)} ток.")
+    b.spacer()
+    b.italic("Фон — ночной прогрев и рассылки; кэш — ответ без запроса к ИИ. Токены — по данным провайдеров.")
+    b.newline()
+    return b.build_stripped()

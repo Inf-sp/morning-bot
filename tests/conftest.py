@@ -111,3 +111,10 @@ def _no_trip_facts_ai(monkeypatch):
     import wardrobe_suitcase
     monkeypatch.setattr(wardrobe_suitcase, "_sync_today", lambda _cid, looks, _saved: looks)  # погода сегодня — без сети
     yield
+
+
+@pytest.fixture(autouse=True)
+def _everyone_recently_active(monkeypatch):
+    """Ночной прогрев в тестах идёт всем пользователям; фильтр по активности проверяет свой тест."""
+    import tracking
+    monkeypatch.setattr(tracking, "recently_active", lambda cids, _days, now=None: list(cids))

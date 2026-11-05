@@ -36,6 +36,17 @@ BACKGROUND_BUDGET_SECONDS = 120.0
 BACKGROUND_PROVIDER_TIMEOUT_SECONDS = 50.0
 BACKGROUND_RETRY_PAUSE_SECONDS = 2.0
 _AI_MODE = contextvars.ContextVar("ai_mode", default="live")
+# Раздел текущего AI-вызова — для счётчика «ИИ по разделам» (api_usage.record_ai_module); пусто — служебный запрос.
+_AI_MODULE = contextvars.ContextVar("ai_module", default="")
+
+
+def _record_module(provider, ok, payload=None):
+    module = _AI_MODULE.get()
+    if not module:
+        return
+    tokens_in, tokens_out = api_usage.response_tokens(payload) if ok else (0, 0)
+    api_usage.record_ai_module(module, provider=provider, ok=ok, tokens_in=tokens_in, tokens_out=tokens_out,
+                               background=_is_background())
 OPENROUTER_FALLBACK_RESERVE_SECONDS = 2.5
 # Хватает на честную попытку каждого резерва; ожидание видно в живом черновике.
 FREE_CHAT_BUDGET_SECONDS = 15.0
@@ -618,6 +629,8 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
         api_usage.record_request(
             meter_service, ok=ok, monitor_result=monitor_result, **kwargs,
         )
+        if not ok:
+            _record_module(service, False)
         if meter_service != service and monitor_result:
             try:
                 provider_runtime.record_result(service, ok, **kwargs)
@@ -677,6 +690,11 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
                                cooldown_until=cooldown_until)
     if service != "gemini":
         record_usage(True, latency_ms=int((time.time() - t0) * 1000), headers=r.headers)
+    try:
+        payload = r.json()
+    except Exception:
+        payload = None
+    _record_module(service, True, payload)
     return r
 
 
@@ -715,6 +733,7 @@ def _stream_post(url, headers, payload, timeout, name, timeout_cap=None, usage_s
             if status_code is not None:
                 details["status_code"] = status_code
         api_usage.record_request(meter_service, ok=ok, **details)
+        _record_module(service, ok)
         if meter_service != service:
             try:
                 provider_runtime.record_result(service, ok, **details)
@@ -1003,12 +1022,19 @@ def _gemini_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
 
 
 async def allm_image_json(image_bytes, mime_type, prompt, max_tokens=1000):
+    def run():
+        token = _AI_MODULE.set("wardrobe_photo")  # фото вещи — отдельной строкой в «ИИ по разделам»
+        try:
+            return _run_with_deadline(
+                "wardrobe",
+                COMPLEX_BUDGET_SECONDS,
+                lambda: _gemini_image_json(image_bytes, mime_type, prompt, max_tokens),
+            )
+        finally:
+            _AI_MODULE.reset(token)
+
     return await asyncio.to_thread(
-        lambda: _run_with_deadline(
-            "wardrobe",
-            COMPLEX_BUDGET_SECONDS,
-            lambda: _gemini_image_json(image_bytes, mime_type, prompt, max_tokens),
-        )
+        run
     )
 
 def _looks_bad_fallback_text(text: str, response_mode: ResponseMode = "plain_text") -> bool:
@@ -1417,6 +1443,24 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
               allow_personal_openrouter=False, cache_context=None, response_validator=None):
     if not module:
         module = _caller_module()
+    token = _AI_MODULE.set(module or "other")
+    try:
+        return _llm_chain(prompt, max_tokens, temperature, order, tier, module, route, fallback_allowed,
+                          privacy_level, response_mode, fallback_policy, allow_personal_openrouter, cache_context,
+                          response_validator)
+    finally:
+        _AI_MODULE.reset(token)
+
+
+def _background_order(order):
+    """Фоновые задания (ночной прогрев, рассылки) — сначала не Gemini: его дневной лимит остаётся на нажатия."""
+    order = tuple(order)
+    return tuple(name for name in order if _monitor_name(name) != "gemini") + tuple(
+        name for name in order if _monitor_name(name) == "gemini")
+
+
+def _llm_chain(prompt, max_tokens, temperature, order, tier, module, route, fallback_allowed, privacy_level,
+               response_mode, fallback_policy, allow_personal_openrouter, cache_context, response_validator):
     if fallback_policy is None and privacy_level != "sensitive":
         # Резерв включён в одном месте для всех обычных текстовых и JSON-сценариев.
         # Чувствительные данные по-прежнему не покидают основного провайдера.
@@ -1434,6 +1478,7 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     cached = _cache_get(cache_key, cache_ttl)
     if cached:
         if _is_cacheable_response(cached, response_mode):
+            api_usage.record_ai_module(module or "other", cached=True)
             return cached
         # Ранее закэширован ответ, который не парсится как JSON (баг, уже
         # исправлен на записи) - не отдаём его снова на TTL модуля (до 30 дней),
@@ -1444,6 +1489,8 @@ def _llm_impl(prompt, max_tokens=1200, temperature=0.7, order=None, tier=None, m
     ) else None
     breaker_skip = _breaker_skip_set(order, include_openrouter=policy.openrouter_allowed)
     order = _reorder_for_cooldown(_reorder_for_monitor(order), skip=breaker_skip)
+    if _is_background():
+        order = _background_order(order)
     calls = {
         "gemini": lambda: _gen_gemini(prompt, max_tokens, temperature, response_mode),
         GROQ_SIMPLE: lambda: _gen_groq(
@@ -1940,19 +1987,27 @@ def _chat_chain_impl(history, cid=None, emit=None):
 
 
 def chat_chain(history, cid=None, budget_seconds=None):
-    return _run_with_deadline(
-        "assistant",
-        budget_seconds or FREE_CHAT_BUDGET_SECONDS,
-        lambda: _chat_chain_impl(history, cid),
-    )
+    token = _AI_MODULE.set("assistant")
+    try:
+        return _run_with_deadline(
+            "assistant",
+            budget_seconds or FREE_CHAT_BUDGET_SECONDS,
+            lambda: _chat_chain_impl(history, cid),
+        )
+    finally:
+        _AI_MODULE.reset(token)
 
 
 def chat_chain_stream(history, cid=None, emit=None, budget_seconds=None):
-    return _run_with_deadline(
-        "assistant",
-        budget_seconds or FREE_CHAT_BUDGET_SECONDS,
-        lambda: _chat_chain_impl(history, cid, emit or (lambda _delta: None)),
-    )
+    token = _AI_MODULE.set("assistant")
+    try:
+        return _run_with_deadline(
+            "assistant",
+            budget_seconds or FREE_CHAT_BUDGET_SECONDS,
+            lambda: _chat_chain_impl(history, cid, emit or (lambda _delta: None)),
+        )
+    finally:
+        _AI_MODULE.reset(token)
 
 
 # --- async-обёртки для вызова из async-обработчиков без блокировки event loop ---

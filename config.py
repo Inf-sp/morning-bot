@@ -102,6 +102,7 @@ RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()
 RAILWAY_REPLICA_ID = os.environ.get("RAILWAY_REPLICA_ID", "").strip()
 
 API_USAGE_KEY = "api_usage.json"
+AI_MODULE_USAGE_KEY = "ai_module_usage.json"  # {день: {раздел: {req, fail, in, out, cache, bg, providers}}} — ИИ по разделам
 SERVICE_MONITOR_KEY = "service_monitor.json"
 
 TZ = ZoneInfo("Europe/Amsterdam")

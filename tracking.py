@@ -441,6 +441,13 @@ def active_count(days: int = 1) -> int:
     return sum(1 for r in _all().values() if r.get("last_ts", 0) >= cutoff)
 
 
+def recently_active(cids, days: int, *, now=None) -> list:
+    """Те из cids, кто нажимал или писал боту за последние days суток (порядок cids сохраняется)."""
+    cutoff = (time.time() if now is None else now) - days * DAY
+    records = _all()
+    return [cid for cid in cids if float((records.get(str(cid)) or {}).get("last_ts") or 0) >= cutoff]
+
+
 def active_today_count(cids=None, *, now=None) -> int:
     """Users with at least one action since local midnight."""
     current = datetime.now(config.TZ) if now is None else datetime.fromtimestamp(now, config.TZ)

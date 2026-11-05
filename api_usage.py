@@ -430,3 +430,77 @@ def seconds_until_gemini_slot(limit: int = 4, window: int = 60) -> float:
     if len(starts) < limit:
         return 0
     return max(0, window - (time.time() - starts[0]))
+
+
+# ---------- ИИ по разделам ----------
+_AI_MODULE_DAYS = 14
+
+
+def response_tokens(payload) -> tuple[int, int]:
+    """(вход, выход) токенов из ответа провайдера: Gemini — usageMetadata (выход вместе с «размышлениями»),
+    OpenAI-совместимые и Cloudflare — usage; нет данных — (0, 0)."""
+    if not isinstance(payload, dict):
+        return 0, 0
+    meta = payload.get("usageMetadata")
+    if isinstance(meta, dict):
+        return (int(meta.get("promptTokenCount") or 0),
+                int(meta.get("candidatesTokenCount") or 0) + int(meta.get("thoughtsTokenCount") or 0))
+    result = payload.get("result")
+    usage = payload.get("usage") or (result.get("usage") if isinstance(result, dict) else None)
+    if isinstance(usage, dict):
+        return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    return 0, 0
+
+
+def record_ai_module(module: str, *, provider: str = "", ok: bool = True, tokens_in: int = 0,
+                     tokens_out: int = 0, cached: bool = False, background: bool = False) -> None:
+    """Один запрос раздела к ИИ (или ответ из кэша) — в дневной счётчик; сбой учёта бота не роняет."""
+    module = str(module or "other")
+    day = _bucket("day")
+    cutoff = _bucket("day", _now() - timedelta(days=_AI_MODULE_DAYS))
+
+    def mut(data):
+        data = data if isinstance(data, dict) else {}
+        for old in [key for key in data if key < cutoff]:
+            data.pop(old, None)
+        row = data.setdefault(day, {}).setdefault(module, {})
+        if cached:
+            row["cache"] = int(row.get("cache") or 0) + 1
+            return data, None
+        row["req"] = int(row.get("req") or 0) + 1
+        if not ok:
+            row["fail"] = int(row.get("fail") or 0) + 1
+        if background:
+            row["bg"] = int(row.get("bg") or 0) + 1
+        row["in"] = int(row.get("in") or 0) + int(tokens_in or 0)
+        row["out"] = int(row.get("out") or 0) + int(tokens_out or 0)
+        if provider:
+            providers = row.setdefault("providers", {})
+            providers[provider] = int(providers.get(provider) or 0) + 1
+        return data, None
+
+    try:
+        store.mutate_kv(config.AI_MODULE_USAGE_KEY, mut)
+    except Exception:
+        _log.debug("record_ai_module: ignored error", exc_info=True)
+
+
+def ai_module_usage(days: int = 1) -> dict:
+    """Сумма по разделам за последние days дней (сегодня — 1): {раздел: {req, fail, in, out, cache, bg, providers}}."""
+    try:
+        data = store._load(config.AI_MODULE_USAGE_KEY) or {}
+    except Exception:
+        return {}
+    since = _bucket("day", _now() - timedelta(days=max(1, days) - 1))
+    total = {}
+    for day, modules in data.items():
+        if day < since or not isinstance(modules, dict):
+            continue
+        for module, row in modules.items():
+            out = total.setdefault(module, {"req": 0, "fail": 0, "in": 0, "out": 0, "cache": 0, "bg": 0,
+                                            "providers": {}})
+            for key in ("req", "fail", "in", "out", "cache", "bg"):
+                out[key] += int((row or {}).get(key) or 0)
+            for provider, count in ((row or {}).get("providers") or {}).items():
+                out["providers"][provider] = out["providers"].get(provider, 0) + int(count or 0)
+    return total
