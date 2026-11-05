@@ -29,6 +29,7 @@ def test_every_question_gets_an_ai_answer(monkeypatch, question):
     calls, sent = [], []
     monkeypatch.setattr(assistant.store, "chat_history", {})
     monkeypatch.setattr(assistant.research, "requires_explicit_web_search", lambda _text: False)
+    monkeypatch.setattr(assistant.research, "needs_fresh_facts", lambda _text: False)
     monkeypatch.setattr(assistant_context, "build", lambda _cid, _text: "")
 
     async def no_draft(*_a, **_k):
@@ -60,7 +61,9 @@ def test_every_question_gets_an_ai_answer(monkeypatch, question):
     monkeypatch.setattr(assistant.util.StatusManager, "start", start)
     monkeypatch.setattr(assistant.ai, "achat_chain", chain)
     asyncio.run(assistant.chat_reply(Bot(), "42", question))
-    assert calls == [question] and len(sent) == 1 and sent[0].startswith("Ответ по делу")
+    assert len(calls) == 1 and calls[0].startswith(question) and "Сегодня " in calls[0]  # дата — в запросе
+    assert len(sent) == 1 and sent[0].startswith("Ответ по делу")
+    assert assistant.store.chat_history["42"][0]["content"] == question  # в истории — только вопрос
 
 
 def test_wardrobe_and_fridge_add_commands_are_recognised():
@@ -113,3 +116,53 @@ def test_concert_question_gets_upcoming_concerts_of_my_artists(monkeypatch):
     assert "concerts" in assistant_context.topics("Когда концерт Tove Lo?")
     block = assistant_context._concerts("42")
     assert "Tove Lo — 2026-11-12, 20:00, AFAS Live, Amsterdam" in block
+
+
+def test_fresh_fact_question_is_answered_from_a_fresh_english_search(monkeypatch):
+    import research
+    assert research.needs_fresh_facts("Когда выйдет сериал о Гарри Поттере?")
+    assert research.needs_fresh_facts("Дата премьеры нового сезона Severance")
+    assert not research.needs_fresh_facts("Что надеть сегодня?") and not research.needs_fresh_facts("Посоветуй фильм")
+    searched, calls = [], []
+    monkeypatch.setattr(assistant.store, "chat_history", {})
+    monkeypatch.setattr(assistant_context, "build", lambda _cid, _text: "")
+    monkeypatch.setattr(assistant, "_english_query", lambda _text: "HBO Harry Potter series release date")
+    monkeypatch.setattr(assistant.research, "web_search", lambda query, n, **kw: searched.append((query, n, kw["scenario"]))
+                        or [{"title": "HBO confirms Harry Potter premiere", "content": "The series premieres December 25, 2026 on HBO Max."}])
+
+    async def no_draft(*_a, **_k):
+        return None
+
+    class Status:
+        async def stop(self, delete=True):
+            return None
+
+        async def replace(self, text, **_kwargs):
+            return True
+
+    async def start(*_a, **_k):
+        return Status()
+
+    async def chain(history, _cid):
+        calls.append(history[-1]["content"])
+        return "Подтверждено 25 декабря 2026 года!\nЧто известно:\n- 8 серий"
+
+    class Bot:
+        async def send_chat_action(self, **_k):
+            return None
+
+    monkeypatch.setattr(assistant.rich_delivery, "start_draft", no_draft)
+    monkeypatch.setattr(assistant.util.StatusManager, "start", start)
+    monkeypatch.setattr(assistant.ai, "achat_chain", chain)
+    asyncio.run(assistant.chat_reply(Bot(), "42", "Когда выйдет сериал о Гарри Поттере?"))
+    assert searched == [("HBO Harry Potter series release date", 5, "fresh_facts")]
+    assert "December 25, 2026" in calls[0] and "не по своим старым знаниям" in calls[0]
+    assert "December" not in assistant.store.chat_history["42"][0]["content"]  # источники не копятся в истории
+
+
+def test_answer_keeps_its_final_period_and_bot_style_bullets():
+    from ui.assistant import assistant_answer
+    one = assistant_answer("Точного срока пока нет — сериал в разработке у HBO Max.")
+    assert one.text == "Точного срока пока нет — сериал в разработке у HBO Max." and not one.entities
+    many = assistant_answer("Подтверждено 25 декабря 2026 года!\nЧто известно:\n* Первый сезон — 8 серий.")
+    assert many.text == "Подтверждено 25 декабря 2026 года!\n\nЧто известно:\n• Первый сезон — 8 серий."

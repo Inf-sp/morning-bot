@@ -22,6 +22,7 @@ def _clean_line(line: str) -> str:
     line = re.sub(r"^#{1,6}\s*", "", line)
     line = re.sub(r"\*\*(.*?)\*\*", r"\1", line)
     line = re.sub(r"__(.*?)__", r"\1", line)
+    line = re.sub(r"^[*•–]\s+", "- ", line.strip())  # пункты модели «* …», «• …» — один вид списка
     return line.strip()
 
 
@@ -57,13 +58,16 @@ def _split_leading_label(line: str):
     return label, (match.group(2) or "").strip()
 
 
+_TITLE_MAX = 80  # первая строка длиннее — это уже ответ, а не заголовок
+
+
 def _rich_assistant_message(title, lines, quote_flags):
     """Render the same assistant answer as native headings/lists/quotes.
 
     The plain ``MessageBuilder`` output below remains the universal fallback;
     this function only describes presentation and never makes content choices.
     """
-    blocks = [rich.heading(title, size=3)]
+    blocks = [rich.heading(title, size=3)] if title else []
     bullets = []
 
     def flush_bullets():
@@ -113,11 +117,15 @@ def assistant_answer(answer: str):
     if not lines:
         lines = ["Пусто", "Попробуй ещё раз."]
 
-    title = _strip_title_emoji(lines[0]).rstrip(".:") or "Ответ"
-    body = lines[1:]
+    # Заголовок — только короткая первая строка над текстом («Подтверждено 25 декабря 2026 года!»). Ответ одной
+    # строкой или длинное первое предложение — обычный текст со своей точкой, а не жирный заголовок без неё.
+    first = _strip_title_emoji(lines[0])
+    is_title = len(lines) > 1 and len(first) <= _TITLE_MAX and not first.endswith(".")
+    title = first.rstrip(":") if is_title else ""
+    body = lines[1:] if is_title else lines
     b = MessageBuilder()
-    b.section(title)
-    if body:
+    if title:
+        b.section(title)
         b.spacer()
 
     normalized_lines = []
@@ -151,7 +159,7 @@ def assistant_answer(answer: str):
                 lowercase=False,
             )
         else:
-            b.add(normalized)
+            b.add("• " + normalized[2:] if normalized.startswith("- ") else normalized)  # пункты — как во всём боте
         if idx != len(normalized_lines) - 1:
             if (
                 normalized.startswith("- ") and next_line.startswith("- ")

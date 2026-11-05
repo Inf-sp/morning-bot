@@ -71,6 +71,8 @@ _TAVILY_SCENARIOS = {
     "concert_specific": {"ttl": 12 * 3600, "economy": False, "advanced": False},
     "game_releases": {"ttl": 7 * 86400, "economy": False, "advanced": False},
     "local_events": {"ttl": 7 * 86400, "economy": False, "advanced": False},  # раз в неделю на город
+    # Вопрос ассистенту о свежих фактах (дата выхода, премьера, новости): без поиска модель отвечает по старым знаниям.
+    "fresh_facts": {"ttl": 6 * 3600, "economy": False, "advanced": False},
 }
 _EXPLICIT_RESEARCH_RE = re.compile(
     r"\b(?:найди\s+(?:актуальн|источник)|что\s+сейчас\s+известно|проверь\s+в\s+интернете|"
@@ -80,6 +82,21 @@ _EXPLICIT_RESEARCH_RE = re.compile(
 
 def requires_explicit_web_search(text: str) -> bool:
     return bool(_EXPLICIT_RESEARCH_RE.search(str(text or "")))
+
+
+# Вопросы, ответ на которые меняется со временем: даты выхода, премьеры, сезоны, новости, курсы, результаты.
+_FRESH_FACTS_RE = re.compile(
+    r"(когда\s+(?:выйд|выход|выйдет|начн|стартует|покаж|будет\s+(?:премьер|релиз|сезон|концерт|выход))|"
+    r"дат[аыу]\s+(?:выход|премьер|релиз|старт)|премьер|релиз|нов(?:ый|ого)\s+сезон|\d+\s*(?:-?й)?\s+сезон|"
+    r"анонс|новост|что\s+известно|последн(?:ие|яя|ий|ее)\s+(?:новост|верси|данн)|вышел\s+ли|выйдет\s+ли|"
+    r"подтвержд|расписани|курс\s+(?:евро|доллар|валют)|кто\s+выиграл|результат\w*\s+(?:матч|выбор|игр))",
+    re.I,
+)
+
+
+def needs_fresh_facts(text: str) -> bool:
+    """Вопрос о том, что меняется со временем (дата выхода, премьера, новости) — ответ по свежему поиску."""
+    return bool(_FRESH_FACTS_RE.search(str(text or "")))
 
 
 def _tavily_allowed(scenario: str, *, search_depth: str = "basic") -> bool:
