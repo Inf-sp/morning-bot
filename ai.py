@@ -671,10 +671,16 @@ def _without_schema(service, status, body, payload):
 
 def _fallback_request(service, status, body, url, payload):
     """(url, payload) без JSON-схемы, если провайдер её не принял (400); на запасной модели, если провайдер снял
-    модель (404); иначе None."""
+    модель (404) или она закрыта для ключа (403 о модели — ограничения проекта Groq); иначе None."""
     plain = _without_schema(service, status, body, payload)
     if plain is not None:
         return url, plain
+    if (status == 403 and service == "groq" and isinstance(payload, dict) and "model" in str(body or "").casefold()
+            and payload.get("model") and payload["model"] != GROQ_FALLBACK_MODEL):
+        old = payload["model"]
+        _MODEL_OVERRIDES[old] = GROQ_FALLBACK_MODEL
+        _log.warning("groq model %s is not allowed for this key (403); switching to %s", old, GROQ_FALLBACK_MODEL)
+        return url, {**payload, "model": GROQ_FALLBACK_MODEL}
     if status != 404 or not isinstance(payload, dict):
         return None
     if service == "gemini":
@@ -1318,6 +1324,9 @@ def _mark_cooldown(name, err):
         if retry_after:
             seconds = max(seconds, min(int(retry_after), 3600))
         provider_runtime.note_ai_failure(provider, kind="rate_limit", seconds=seconds)
+    elif status == 403 and "model" in str(err).casefold() and not any(
+            marker in str(err).casefold() for marker in ("api key", "invalid key", "unauthorized")):
+        return  # модель закрыта для ключа — запрос уже ушёл на запасную модель; провайдер целиком не выключаем
     elif status in (401, 403):
         provider_runtime.note_ai_failure(provider, kind="auth")
     else:

@@ -288,6 +288,10 @@ def attention() -> list[str]:
         if kind == "auth":
             env = _ENV_KEYS.get(service)
             out.append(f"{label} — ключ не принимается" + (f": обнови {env}" if env else ""))
+        elif kind == "model":
+            out.append(f"{label} — модель закрыта для ключа: открой её в настройках проекта или смени модель")
+        elif kind == "access_denied":
+            out.append(f"{label} — доступ запрещён (403): проверь права ключа")
         elif kind == "quota":
             out.append(f"{label} — лимит исчерпан")
         else:

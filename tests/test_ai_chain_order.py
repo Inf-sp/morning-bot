@@ -195,3 +195,24 @@ def test_github_models_missing_model_switches_to_fallback_and_key_is_hidden(monk
     monkeypatch.setattr(ai.config, "GITHUB_API_KEY", "github_pat_secret")
     assert "github_pat_secret" not in ai.secure.redact("token github_pat_secret")
     assert provider_runtime.is_configured("github")
+
+
+def test_groq_model_closed_for_the_key_is_not_an_auth_error_and_switches_model():
+    import ai
+    body = '{"error":{"message":"The model `qwen/qwen3.8-27b` is blocked at the project level","code":"model_permission_blocked_project"}}'
+    assert provider_runtime._friendly_error(body, 403, "groq") == ("model", "модель закрыта для ключа")
+    assert provider_runtime._friendly_error("invalid api key", 401, "groq")[0] == "auth"
+    assert provider_runtime._friendly_error("API key not valid", 403, "gemini")[0] == "auth"
+    assert provider_runtime._friendly_error("Forbidden", 403, "openrouter") == ("access_denied", "доступ запрещён")
+    try:
+        url, payload = ai._fallback_request("groq", 403, body, "https://api.groq.com/x", {"model": "qwen/qwen3.8-27b"})
+        assert payload["model"] == ai.GROQ_FALLBACK_MODEL and ai._resolve_model("qwen/qwen3.8-27b") == ai.GROQ_FALLBACK_MODEL
+        assert ai._fallback_request("groq", 403, "Forbidden", "u", {"model": "qwen/qwen3.8-27b"}) is None  # не о модели
+    finally:
+        ai._MODEL_OVERRIDES.pop("qwen/qwen3.8-27b", None)
+    provider_runtime._ai_breaker.clear()
+    ai._mark_cooldown("groq", ai.LLMProviderError("groq", f"groq 403: {body}", status_code=403))
+    assert provider_runtime.ai_breaker_kind("groq") == ""  # модели нет — Groq целиком не выключается
+    ai._mark_cooldown("groq", ai.LLMProviderError("groq", "groq 401: invalid key", status_code=401))
+    assert provider_runtime.ai_breaker_kind("groq") == "auth"
+    provider_runtime._ai_breaker.clear()

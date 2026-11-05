@@ -598,6 +598,9 @@ def test_admin_home_says_what_to_fix_and_folds_quiet_services(monkeypatch):
     items = service_monitor.attention()
     assert items == ["Groq — ключ не принимается: обнови GROQ_API_KEY",
                      "Tavily — осталось 50 из 1 000 на месяц"]
+    states["groq"] = {"status": "down", "error_type": "model", "last_error": "модель закрыта для ключа"}
+    assert service_monitor.attention()[0].startswith("Groq — модель закрыта для ключа")  # не «обнови ключ»
+    states["groq"] = {"status": "down", "error_type": "auth", "last_error": "ошибка авторизации"}
     monkeypatch.setattr(admin.service_monitor, "rows", lambda compact=False: ["AI", "🔴 Groq · Резерв 2 · ошибка"])
     monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True: ["x", "y"])
     monkeypatch.setattr(admin, "activity_line", lambda: "👥 Сегодня 1 из 2 · ИИ 12 запросов")

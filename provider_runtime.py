@@ -449,8 +449,16 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
     # Do not infer a quota incident from an arbitrary exception message.
     if code == 429:
         return "rate_limit", "слишком много запросов"
-    if code in (401, 403) or any(value in low for value in ("unauthorized", "forbidden", "invalid api key")):
+    key_problem = any(value in low for value in (
+        "unauthorized", "invalid api key", "api key not valid", "invalid key", "incorrect api key"))
+    if code == 401 or key_problem:
         return "auth", "ошибка авторизации"
+    if code == 403 and "model" in low:
+        # Ключ рабочий, но эта модель ему закрыта (ограничения проекта Groq и т. п.): не «ошибка авторизации» —
+        # иначе админка звала менять ключ, а пауза выключала все модели провайдера.
+        return "model", "модель закрыта для ключа"
+    if code == 403 or "forbidden" in low:
+        return "access_denied", "доступ запрещён"
     if code in (408, 504) or any(value in low for value in ("timeout", "timed out")):
         return "timeout", "сервис не ответил"
     if any(value in low for value in ("connection", "network", "dns", "name resolution")):
