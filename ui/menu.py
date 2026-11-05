@@ -389,7 +389,8 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (холодильник остался дома).
     trip — в отпуске: «Пробуем в отпуске» — одно блюдо trip_dish и факт о кухне fact (_trip_menu).
-    stats — {"products": N, "meals": M}: курсивная строка «Твой холодильник · …» внизу.
+    stats — {"products": N, "at_home": [...]}: курсивная строка внизу — «Есть дома для меню: …» (продукты из
+    холодильника, которые есть в блюдах дня), иначе «Твой холодильник · N продуктов».
     """
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     if trip:
@@ -411,17 +412,22 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
         note = _cooking_text(dish.get("note"))
         b.line(f"• {label} — {dish['name']}" + (f", {note[:1].lower()}{note[1:]}" if note else ""))
     if stats:
+        at_home = [str(name).strip() for name in stats.get("at_home") or () if str(name).strip()][:_AT_HOME_MAX]
         b.spacer()
-        b.italic(fridge_stats_line(stats.get("products"), stats.get("meals")))
+        b.italic("Есть дома для меню: " + ", ".join(name[:1].lower() + name[1:] for name in at_home)
+                 if at_home else fridge_stats_line(stats.get("products")))
         b.newline()
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes],
                                                       show_mine=show_mine))
 
 
-def fridge_stats_line(products, meals) -> str:
-    products, meals = int(products or 0), int(meals or 0)
-    return (f"Твой холодильник · {products} {ru_plural(products, 'продукт', 'продукта', 'продуктов')}"
-            f" · {meals} {ru_plural(meals, 'приём', 'приёма', 'приёмов')} пищи")
+_AT_HOME_MAX = 5
+
+
+def fridge_stats_line(products, meals=None) -> str:
+    """«Твой холодильник · 75 продуктов» (число приёмов пищи владелец счёл бесполезным и оно не показывается)."""
+    products = int(products or 0)
+    return f"Твой холодильник · {products} {ru_plural(products, 'продукт', 'продукта', 'продуктов')}"
 
 
 def food_menu(idea=None, *, meal="", from_fridge=False):

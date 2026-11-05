@@ -99,7 +99,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
         "dinner": {"name": "Lasagna", "note": ""},
     }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.",
-        stats={"products": 77, "meals": 3})
+        stats={"products": 77, "at_home": []})
 
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
@@ -108,9 +108,9 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "• Завтрак — Crostata, песочный пирог с джемом\n"
         "• Обед — Pasta al pomodoro, паста с томатами\n"
         "• Ужин — Lasagna\n\n"
-        "Твой холодильник · 77 продуктов · 3 приёма пищи"
+        "Твой холодильник · 77 продуктов"  # без «3 приёма пищи»
     )
-    assert menu_ui.fridge_stats_line(1, 1) == "Твой холодильник · 1 продукт · 1 приём пищи"
+    assert menu_ui.fridge_stats_line(1) == "Твой холодильник · 1 продукт"
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
@@ -390,3 +390,16 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
     with pytest.raises(Rebuild):  # меню сменилось на русскую — собираем новый рецепт
         recipe_generation.get_cooking_home_idea("42", cuisine="russian")
     assert asked == [True, True]  # «Из моих продуктов» читает только свою ячейку
+
+
+def test_footer_names_what_from_the_fridge_is_in_todays_menu():
+    import menu
+    day = {"cuisine": "french", "dishes": {
+        "breakfast": {"name": "Chausson aux pommes", "note": "слойка с яблоком"},
+        "lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"},
+        "dinner": {"name": "Cassoulet", "note": "фасоль с мясом и колбасками"},
+    }}
+    fridge = ["Яблоки", "Картофель", "Фасоль", "Соль", "Молоко", "Лук"]
+    assert menu.products_in_menu(fridge, day) == ["Яблоки", "Картофель", "Фасоль"]  # «соль» не в «фасоль»
+    msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Яблоки", "Картофель"]})
+    assert msg.text.endswith("Есть дома для меню: яблоки, картофель")
