@@ -6,7 +6,6 @@
 """
 import asyncio
 import logging
-from datetime import date
 from itertools import zip_longest
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,6 +19,7 @@ import store
 import tmdb
 from ui import leisure as leisure_ui
 from ui.navigation import nav_row
+import util
 
 _log = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def _marker(value) -> str:
 async def _items(cid, kind) -> list[dict]:
     if kind == "movie":
         # Только фильмы, которые уже идут в кино: будущие премьеры не советуем.
-        today = date.today().isoformat()
+        today = util.local_today().isoformat()
         import countries
         import movie_recommendation
         off = movie_recommendation.regions_off(cid)

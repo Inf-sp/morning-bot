@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from datetime import date
 
 import requests
 
@@ -171,7 +170,7 @@ def source_recipes(meal_type: str, *, ingredients: str = "", limit: int = 10,
         stub for stub in unique.values()
         if str(stub.get("strMeal") or "").strip().casefold() not in avoided
     ]
-    salt = f"{date.today().isoformat()}:{'|'.join(sorted(avoided))}:{meal_type}:{ingredients}"
+    salt = f"{util.local_today().isoformat()}:{'|'.join(sorted(avoided))}:{meal_type}:{ingredients}"
     candidates.sort(key=lambda stub: hashlib.sha256(
         f"{salt}:{stub.get('idMeal', '')}".encode("utf-8")
     ).hexdigest())

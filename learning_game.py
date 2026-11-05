@@ -14,6 +14,7 @@ import config
 import store
 import verify
 from ui import learning as learning_ui
+import util
 
 _log = logging.getLogger(__name__)
 
@@ -211,9 +212,9 @@ def _game_recent(cid):
 
     Записи без даты (до появления дат) считаются свежими; дата им ставится при следующей игре.
     """
-    from datetime import date, timedelta
+    from datetime import timedelta
     seen_at = (store.get_profile(cid) or {}).get("game_seen_at") or {}
-    cutoff = (date.today() - timedelta(days=_REPEAT_AFTER_DAYS)).isoformat()
+    cutoff = (util.local_today() - timedelta(days=_REPEAT_AFTER_DAYS)).isoformat()
     return [name for name in _game_seen_all(cid) if str(seen_at.get(name.casefold()) or "9999") >= cutoff]
 
 
@@ -243,7 +244,6 @@ def _set_game_recent(cid, rec):
 
 
 def _remember_game_answer(cid, d):
-    from datetime import date
     names = [str(name or "").strip() for name in [d.get("answer", ""), *(d.get("aliases") or [])]]
     names = [name for name in names if name]
     rec = _game_seen_all(cid)
@@ -251,7 +251,7 @@ def _remember_game_answer(cid, d):
         if not any(_game_same(name, old) for old in rec):
             rec.append(name)
     _set_game_recent(cid, rec)
-    today = date.today().isoformat()
+    today = util.local_today().isoformat()
 
     def stamp(profile):
         seen_at = dict(profile.get("game_seen_at") or {})

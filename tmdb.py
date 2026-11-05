@@ -711,7 +711,7 @@ def get_now_playing(country_code, language=_LANG, max_results=10):
         empty_ttl=30 * 60,
         error_ttl=15 * 60,
     )
-    today = date.today()
+    today = util.local_today()
     earliest = today - timedelta(days=70)
     limit = max(1, int(max_results or 10))
     confirmed = []

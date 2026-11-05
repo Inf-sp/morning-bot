@@ -17,6 +17,7 @@ import recommendation_stoplist
 import recommendation_rotation as rotation
 import store
 import tmdb
+import util
 
 # Стартовый порог рейтинга и ступени понижения при пустом результате.
 RATING_STEPS = (7.0,)
@@ -240,7 +241,7 @@ def _score(c, taste, prefs=None):
                 released = date.fromisoformat(str(c.get("release_date") or "")[:10])
             except ValueError:
                 released = None
-            if released and released >= date.today() - timedelta(days=730):
+            if released and released >= util.local_today() - timedelta(days=730):
                 score += 2.5
     return score
 

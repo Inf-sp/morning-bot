@@ -180,7 +180,7 @@ def new_releases(genre_key, cc="us", today=None) -> list[dict]:
     wanted = GENRE_IDS.get(genre_key)
     if not wanted:
         return []
-    since = (today or date.today()) - timedelta(days=FRESH_DAYS)
+    since = (today or util.local_today()) - timedelta(days=FRESH_DAYS)
     feed = _feed(str(cc or "us").lower())
     if not feed:
         return sorted(filter(is_fresh_album, _deezer_releases(genre_key, since)), key=lambda item: item["date"], reverse=True)

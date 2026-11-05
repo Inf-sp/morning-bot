@@ -295,7 +295,7 @@ def _latest_album(name) -> dict:
     matches = _musicbrainz_artists(_known_name(name))
     if not matches or not matches[0].get("id"):
         return {}
-    today = time.strftime("%Y-%m-%d")
+    today = util.local_today().isoformat()
     groups = _mb_get("release-group", {"artist": matches[0]["id"], "type": "album", "limit": 100})
     albums = [group for group in groups.get("release-groups") or []
               if group.get("primary-type") == "Album" and not group.get("secondary-types")

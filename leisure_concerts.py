@@ -398,7 +398,7 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     import secure
     from datetime import datetime
     import research
-    year = time.strftime('%Y')
+    year = str(util.local_today().year)
     query = f'{artist} official tour dates {cname} {year}'
     try:
         results_batches = [await asyncio.to_thread(

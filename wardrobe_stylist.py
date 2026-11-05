@@ -6,13 +6,14 @@
 Иначе — None, и карточку собирают правила кода. Носки бот не советует: это решение пользователя.
 """
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
 import ai
 import config
 import research
 import store
 from wardrobe_model import public_item_name
+import util
 
 _log = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ JSON без Markdown: {{"trends":["..."]}}"""
 
 def weekly_trends(styles=(), today=None):
     """5–7 трендов сезона для стилей пользователя; кэш на неделю, без поиска — база."""
-    today = today or date.today()
+    today = today or util.local_today()
     key = ",".join(sorted(styles)) or "-"
     cache = store._load(config.WARDROBE_TRENDS_CACHE_KEY)
     cache = cache if isinstance(cache, dict) and cache.get("version") == _TRENDS_VERSION else {}

@@ -24,6 +24,14 @@ LOADING_PHRASES = [
     "⏳ Формулирую ответ…",
 ]
 
+def local_today():
+    """Сегодня по часовому поясу бота (config.TZ, Амстердам), а не сервера: VM живёт в UTC, и с 00:00 до 01:00–02:00
+    по Амстердаму date.today() ещё вчерашний."""
+    from datetime import datetime
+    import config
+    return datetime.now(config.TZ).date()
+
+
 def loading_phrase() -> str:
     return random.choice(LOADING_PHRASES)
 
