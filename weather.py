@@ -376,8 +376,8 @@ PRECIPITATION_ICONS = ("🌧️", "☀️🌧️", "❄️", "🌩️")  # до�
 
 
 def evening_icon(icon, label):
-    """Вечером без дождя и снега — 🌘 вместо солнца, облаков или ветра: вечер не «солнечный»."""
-    return "🌘" if label == "Вечером" and icon not in PRECIPITATION_ICONS else icon
+    """Вечером без дождя и снега — 🌒 вместо солнца, облаков или ветра: вечер не «солнечный»."""
+    return "🌒" if label == "Вечером" and icon not in PRECIPITATION_ICONS else icon
 
 
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
