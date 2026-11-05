@@ -260,16 +260,66 @@ def idle_line(now=None) -> str:
     return f"💤 Давно без запросов: {' · '.join(parts)}" if parts else ""
 
 
-def rows() -> list[str]:
+# Где менять ключ, если сервис его не принимает: имя переменной в /etc/morning-bot.env.
+_ENV_KEYS = {
+    "gemini": "GEMINI_API_KEY", "cerebras": "CEREBRAS_API_KEY", "groq": "GROQ_API_KEY",
+    "cloudflare": "CF_API_TOKEN", "github": "GITHUB_API_KEY", "openrouter": "OPENROUTER_API_KEY",
+    "openweather": "WEATHER_API_KEY", "firecrawl": "FIRECRAWL_API_KEY", "tavily": "TAVILY_API_KEY",
+    "tmdb": "TMDB_API_KEY", "youtube": "YOUTUBE_API_KEY", "spoonacular": "SPOONACULAR_API_KEY",
+    "ticketmaster": "TICKETMASTER_API_KEY", "ns": "NS_API_KEY", "pexels": "PEXELS_API_KEY",
+    "unsplash": "UNSPLASH_ACCESS_KEY",
+}
+_TAVILY_LOW_SHARE = 0.1  # меньше 10% месячного лимита — предупредить заранее
+
+
+def attention() -> list[str]:
+    """Что сделать руками: настроенный сервис не принимает ключ, исчерпал лимит или лежит; Tavily на исходе.
+    «Groq — ключ не принимается: обнови GROQ_API_KEY». Всё в порядке — []."""
+    current = _load().get("services") or {}
+    out = []
+    for service in (*_AI_SERVICES, *_DATA_SERVICES):
+        if not _configured(service):
+            continue
+        state = current.get(service) or provider_runtime.get_state(service)
+        if _display_status(state) != DOWN:
+            continue
+        label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+        kind = str(state.get("error_type") or "")
+        if kind == "auth":
+            env = _ENV_KEYS.get(service)
+            out.append(f"{label} — ключ не принимается" + (f": обнови {env}" if env else ""))
+        elif kind == "quota":
+            out.append(f"{label} — лимит исчерпан")
+        else:
+            out.append(f"{label} — {state.get('last_error') or 'не отвечает'}")
+    try:
+        budget = api_usage.tavily_budget()
+        if _configured("tavily") and budget["total"] and budget["remaining"] < budget["total"] * _TAVILY_LOW_SHARE:
+            out.append(f"Tavily — осталось {_number(budget['remaining'])} из {_number(budget['total'])} на месяц")
+    except Exception:
+        _log.debug("attention: tavily budget unavailable", exc_info=True)
+    return out
+
+
+def rows(compact=False) -> list[str]:
+    """Строки «AI» и «Данные». compact — у данных только то, что требует взгляда (не 🟢 или с лимитом «осталось»),
+    остальные работающие — одной строкой «🟢 Ещё работают: OpenWeather, TMDB, …»."""
     current = _load().get("services") or {}
     out = ["AI"]
     for service in _AI_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
         out.append(_safe_row(service, state))
     out.append("Данные")
+    quiet = []
     for service in _DATA_SERVICES:
         state = current.get(service) or provider_runtime.get_state(service)
-        out.append(_safe_row(service, state))
+        row = _safe_row(service, state)
+        if compact and row.startswith(_DOT[OK]) and "осталось" not in row:
+            quiet.append(SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service)
+            continue
+        out.append(row)
+    if quiet:
+        out.append(f"{_DOT[OK]} Ещё работают: {', '.join(quiet)}")
     for service in ("telegram", "database"):
         state = current.get(service) or provider_runtime.get_state(service)
         if state.get("status") not in (OK, UNKNOWN):

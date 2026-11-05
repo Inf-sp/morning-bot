@@ -38,7 +38,7 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
          *, system_dot=None, system_text=None, system_line=None,
          notif_line=None, users_line=None, data_line=None, logs_line=None,
          system_rows=None, error_rows=None, version_line=None, idle_line=None,
-         server_line=None, night_line=None):
+         server_line=None, night_line=None, activity_line=None, attention=None):
     """Render the admin home screen.
 
     The compact metric form is used by the current screen.  The older
@@ -49,10 +49,16 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     b.bold(ui_label("admin", "Админ"))
     b.newline()
     b.spacer()
-    head = [line for line in (version_line, server_line, night_line) if line]
+    head = [line for line in (version_line, server_line, night_line, activity_line) if line]
     for line in head:
         b.line(line)
     if head:
+        b.spacer()
+    if attention:  # что сделать руками — над списком сервисов
+        b.bold("⚠️ Нужно внимание:")
+        b.newline()
+        for item in attention:
+            b.line(f"• {item}")
         b.spacer()
     if system_rows is not None:
         # Порядок: версия → AI → Данные. У каждой строки сервиса — точка статуса,
@@ -68,7 +74,8 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
                 b.line(row if row.startswith(_STATUS_DOTS) else f"⚪ {row}")  # нет данных
         if idle_line:  # сервисы без реальных запросов от недели — видно, что давно не используется
             b.spacer()
-            b.line(idle_line)
+            b.italic(idle_line.removeprefix("💤 "))
+            b.newline()
         return b.build_stripped()
     if system_dot is not None or system_text is not None:
         dot = system_dot if system_dot is not None else status_dot

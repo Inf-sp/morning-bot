@@ -50,9 +50,10 @@ def test_tracking_keeps_diagnostic_context_and_redacts_secrets(monkeypatch):
 
 
 def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch):
-    monkeypatch.setattr(admin.service_monitor, "rows", lambda: ["⚪ Gemini · Везде · лимит неизвестен"])
+    monkeypatch.setattr(admin.service_monitor, "rows", lambda compact=False: ["⚪ Gemini · Везде · лимит неизвестен"])
+    monkeypatch.setattr(admin.service_monitor, "attention", lambda: [])
     monkeypatch.setattr(admin.provider_runtime, "states", lambda: [])
-    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5: [])
+    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True: [])
     bot = RecordingBot()
 
     asyncio.run(admin.send_api_ai(bot, "42"))
@@ -63,10 +64,10 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🔄 Обновить карточки"], ["💾 Прислать копию базы"], ["🔁 Перезапустить бота"],
+        ["🩺 Проверить API"], ["🔄 Обновить карточки"], ["💾 Прислать копию базы"], ["🔁 Перезапустить бота"],
         ["👥 Пользователи"], ["🧮 ИИ по разделам"], ["🚆 Ответ NS"], ["#️⃣ Главная"],
     ]  # админка — все кнопки в один столбец
-    assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок на экране нет
+    assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок нет — нет и кнопки
 
 
 def test_admin_card_refresh_menu_has_all_cards():
@@ -580,3 +581,43 @@ def test_refresh_my_day_sends_fresh_card(monkeypatch):
     monkeypatch.setattr(myday, "send_plany", plany)
     asyncio.run(admin.refresh_card(object(), "42", "myday"))
     assert calls == [("refresh", "myday", True), ("menu", "✅ ☀️ Мой день обновлена."), ("plany", "42")]
+
+
+def test_admin_home_says_what_to_fix_and_folds_quiet_services(monkeypatch):
+    import service_monitor
+    states = {
+        "groq": {"status": "down", "error_type": "auth", "last_error": "ошибка авторизации"},
+        "gemini": {"status": "warning", "error_type": "rate_limit"},
+        "tmdb": {"status": "ok"},
+    }
+    monkeypatch.setattr(service_monitor, "_load", lambda: {"services": states})
+    monkeypatch.setattr(service_monitor.provider_runtime, "get_state", lambda service: states.get(service, {"status": "ok"}))
+    monkeypatch.setattr(service_monitor, "_configured", lambda service: service in ("groq", "gemini", "tmdb", "tavily"))
+    monkeypatch.setattr(service_monitor.api_usage, "tavily_budget",
+                        lambda: {"remaining": 50, "total": 1000, "mode": "economy", "daily_budget": 2})
+    items = service_monitor.attention()
+    assert items == ["Groq — ключ не принимается: обнови GROQ_API_KEY",
+                     "Tavily — осталось 50 из 1 000 на месяц"]
+    monkeypatch.setattr(admin.service_monitor, "rows", lambda compact=False: ["AI", "🔴 Groq · Резерв 2 · ошибка"])
+    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True: ["x", "y"])
+    monkeypatch.setattr(admin, "activity_line", lambda: "👥 Сегодня 1 из 2 · ИИ 12 запросов")
+    bot = RecordingBot()
+    asyncio.run(admin.send_home(bot, "42"))
+    text = bot.sent[0]["text"]
+    assert "👥 Сегодня 1 из 2 · ИИ 12 запросов\n\n⚠️ Нужно внимание:\n• Groq — ключ не принимается: обнови GROQ_API_KEY" in text
+    assert bot.sent[0]["reply_markup"].inline_keyboard[0][0].text == "⚠️ Ошибки · 2"
+
+
+def test_compact_rows_fold_green_data_services_but_keep_limits_and_problems(monkeypatch):
+    import service_monitor
+    rows = {"openweather": "🟢 OpenWeather · Погода · 29 сегодня", "tavily": "🟢 Tavily · Поиск · 983/1 000 осталось",
+            "tmdb": "🟢 TMDB · Кино · 1 748 сегодня", "ns": "🟡 NS · Поезда · сервис не ответил"}
+    monkeypatch.setattr(service_monitor, "_DATA_SERVICES", tuple(rows))
+    monkeypatch.setattr(service_monitor, "_AI_SERVICES", ())
+    monkeypatch.setattr(service_monitor, "_load", lambda: {"services": {}})
+    monkeypatch.setattr(service_monitor.provider_runtime, "get_state", lambda _service: {"status": "ok"})
+    monkeypatch.setattr(service_monitor, "_safe_row", lambda service, _state: rows[service])
+    assert service_monitor.rows(compact=True) == [
+        "AI", "Данные", "🟢 Tavily · Поиск · 983/1 000 осталось", "🟡 NS · Поезда · сервис не ответил",
+        "🟢 Ещё работают: OpenWeather, TMDB"]
+    assert len(service_monitor.rows()) == 6  # полный вид — как раньше

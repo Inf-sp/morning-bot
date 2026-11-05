@@ -96,9 +96,29 @@ def _error_signature(entry):
 _GREEN = {"style": "success"}
 
 
+def activity_line() -> str:
+    """«👥 Сегодня 2 из 3 · ИИ 146 запросов · 210 тыс. токенов» — кто был в боте и сколько ушло на ИИ за день."""
+    import api_usage
+    from ui.admin import _tokens_label
+    cids = access.get_allowed_cids()
+    parts = [f"👥 Сегодня {tracking.active_today_count(cids)} из {len(cids)}"]
+    usage = api_usage.ai_module_usage(1)
+    requests_today = sum(int(row.get("req") or 0) for row in usage.values())
+    tokens_today = sum(int(row.get("in") or 0) + int(row.get("out") or 0) for row in usage.values())
+    if requests_today:
+        parts.append(f"ИИ {requests_today} {_plural(requests_today, 'запрос', 'запроса', 'запросов')}")
+    if tokens_today:
+        parts.append(f"{_tokens_label(tokens_today)} токенов")
+    return " · ".join(parts)
+
+
 async def send_home(bot, cid, q=None):
-    monitor_rows = service_monitor.rows()
+    monitor_rows = service_monitor.rows(compact=True)
+    errors_today = len(_active_error_rows(limit=200, include_hidden=False))
     kb = InlineKeyboardMarkup([
+        # Ошибки за сутки — кнопкой с числом, только когда они есть; сами строки — на экране ошибок.
+        *([[InlineKeyboardButton(f"⚠️ Ошибки · {errors_today}", callback_data="adm_logs")]] if errors_today else []),
+        [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
         [InlineKeyboardButton("💾 Прислать копию базы", callback_data="adm_backup"),
          InlineKeyboardButton("🔁 Перезапустить бота", callback_data="adm_restart")],
@@ -113,6 +133,8 @@ async def send_home(bot, cid, q=None):
         server_line=server_line(),
         night_line=night_line(cid),
         idle_line=service_monitor.idle_line(),
+        activity_line=activity_line(),
+        attention=service_monitor.attention(),
     )
     await _show(bot, cid, msg, kb, q)
 
