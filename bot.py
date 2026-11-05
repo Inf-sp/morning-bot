@@ -619,7 +619,9 @@ def _build_application():
         request=request,
         get_updates_request=updates_request,
     )
-    app = Application.builder().bot(bot).post_init(post_init).build()
+    import update_processor  # разные чаты — параллельно, один чат — по очереди (не ждут чужого ИИ)
+    app = (Application.builder().bot(bot).post_init(post_init)
+           .concurrent_updates(update_processor.PerChatUpdateProcessor()).build())
     app.add_error_handler(global_error_handler)
     app.add_handler(MessageHandler(filters.ALL, message_activity_handler), group=-1)
     app.add_handler(CommandHandler("start", start))

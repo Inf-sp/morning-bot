@@ -64,7 +64,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
         ["🔄 Обновить карточки"], ["💾 Прислать копию базы"], ["🔁 Перезапустить бота"],
-        ["👥 Пользователи"], ["🧮 ИИ по разделам"], ["#️⃣ Главная"],
+        ["👥 Пользователи"], ["🧮 ИИ по разделам"], ["🚆 Ответ NS"], ["#️⃣ Главная"],
     ]  # админка — все кнопки в один столбец
     assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок на экране нет
 

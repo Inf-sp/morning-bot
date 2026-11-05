@@ -1422,6 +1422,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data in ("adm_system", "adm_api_ai"):
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_home(b, c, q))
+    elif data == "adm_ns_raw":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_ns_raw(b, c, q))
     elif data == "adm_ai_usage":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_ai_usage(b, c, q))

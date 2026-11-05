@@ -102,7 +102,8 @@ RAILWAY_SERVICE_NAME = os.environ.get("RAILWAY_SERVICE_NAME", "").strip()
 RAILWAY_REPLICA_ID = os.environ.get("RAILWAY_REPLICA_ID", "").strip()
 
 API_USAGE_KEY = "api_usage.json"
-AI_MODULE_USAGE_KEY = "ai_module_usage.json"  # {день: {раздел: {req, fail, in, out, cache, bg, providers}}} — ИИ по разделам
+AI_MODULE_USAGE_KEY = "ai_module_usage.json"
+NS_LAST_RAW_KEY = "ns_last_raw.json"  # {ts, path, items} — последний непустой ответ NS о сбоях/работах для сверки в админке  # {день: {раздел: {req, fail, in, out, cache, bg, providers}}} — ИИ по разделам
 SERVICE_MONITOR_KEY = "service_monitor.json"
 
 TZ = ZoneInfo("Europe/Amsterdam")

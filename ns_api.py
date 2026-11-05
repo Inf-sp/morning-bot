@@ -41,7 +41,41 @@ def _get(path, params=None):
             latency_ms=int((time.monotonic() - started) * 1000))
         return None
     api_usage.record_request("ns", True, latency_ms=int((time.monotonic() - started) * 1000))
+    if path.startswith("/disruptions/"):
+        _remember_raw(path, data)
     return data
+
+
+_RAW_ITEMS = 5  # сколько записей ответа NS хранить для сверки разбора
+
+
+def _remember_raw(path, data):
+    """Последний непустой ответ о сбоях и работах — как прислал NS (до 5 записей), для админки «Ответ NS»."""
+    rows = data if isinstance(data, list) else (data.get("payload") or []) if isinstance(data, dict) else []
+    if not rows:
+        return
+    import store
+    entry = {"ts": int(time.time()), "path": path, "items": rows[:_RAW_ITEMS]}
+    try:
+        store.mutate_kv(config.NS_LAST_RAW_KEY, lambda _old: (entry, None))
+    except Exception:
+        _log.debug("NS raw sample not saved", exc_info=True)
+
+
+def last_raw() -> dict:
+    """Сохранённый ответ NS и наш разбор каждой записи рядом: {ts, path, items: [{raw, parsed}]}; нет — {}."""
+    import store
+    saved = store._load(config.NS_LAST_RAW_KEY) or {}
+    if not saved.get("items"):
+        return {}
+    today = util.local_today()
+    items = []
+    for raw in saved["items"]:
+        parsed = parse_disruption(raw) or parse_works(raw, today) or {"type": raw.get("type") if isinstance(raw, dict)
+                                                                    else "", "practical": practical(raw)
+                                                                    if isinstance(raw, dict) else {}}
+        items.append({"raw": raw, "parsed": parsed})
+    return {"ts": saved.get("ts"), "path": saved.get("path"), "items": items}
 
 
 def station_codes(city):

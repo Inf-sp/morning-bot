@@ -327,3 +327,16 @@ def test_one_untranslated_field_does_not_reject_the_whole_translation(monkeypatc
     assert captured["validator"]({"cause": "неисправность пути", "situation": "minder treinen", "advice": "Via Zaandam"})
     assert not captured["validator"]({"cause": "defect spoor", "situation": "minder treinen"})
     assert (item["cause"], item["situation"], item["advice"]) == ("неисправность пути", "меньше поездов", "")
+
+
+def test_last_raw_ns_answer_is_kept_with_our_parse_for_admin(monkeypatch):
+    saved = {}
+    import store
+    monkeypatch.setattr(store, "mutate_kv", lambda _key, fn: saved.update(fn(dict(saved))[0]))
+    monkeypatch.setattr(store, "_load", lambda _key: saved)
+    ns_api._remember_raw("/disruptions/v3/station/AMR", {"payload": []})
+    assert saved == {}  # пустой ответ не затирает последний полезный
+    ns_api._remember_raw("/disruptions/v3/station/AMR", {"payload": [RAW, PRACTICAL]})
+    data = ns_api.last_raw()
+    assert data["path"].endswith("/AMR") and [item["raw"]["id"] for item in data["items"]] == ["7001", "w1"]
+    assert data["items"][0]["parsed"]["cause"] == "defecte trein"  # рядом — как понял бот

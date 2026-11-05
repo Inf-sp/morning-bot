@@ -104,6 +104,7 @@ async def send_home(bot, cid, q=None):
          InlineKeyboardButton("🔁 Перезапустить бота", callback_data="adm_restart")],
         [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users"),
          InlineKeyboardButton("🧮 ИИ по разделам", callback_data="adm_ai_usage")],
+        [InlineKeyboardButton("🚆 Ответ NS", callback_data="adm_ns_raw")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
@@ -295,6 +296,25 @@ async def send_api_check(bot, cid, q=None):
         nav_row("adm_home"),
     ])
     await _show(bot, cid, ui.api_check(results), kb, q)
+
+
+async def send_ns_raw(bot, cid, q=None):
+    """Последний непустой ответ NS о сбоях и работах файлом JSON: запись NS как есть и рядом наш разбор — сверить,
+    правильно ли бот понимает участки, замену поездов, время и советы."""
+    import io
+    import json
+    import ns_api
+    data = await asyncio.to_thread(ns_api.last_raw)
+    kb = InlineKeyboardMarkup([nav_row("adm_home")])
+    if not data:
+        await _show(bot, cid, ui.notice("🚆 Ответ NS", "Сбоев и работ на станциях ещё не было — сохранять нечего."),
+                    kb, q)
+        return
+    body = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode("utf-8")
+    when = _log_date_time(data.get("ts"))
+    await bot.send_document(chat_id=cid, document=io.BytesIO(body), filename="ns_last_response.json",
+                            caption=f"🚆 Ответ NS · {when} · записей {len(data['items'])}: raw — как прислал NS, "
+                                    "parsed — как понял бот")
 
 
 async def send_ai_usage(bot, cid, q=None):
