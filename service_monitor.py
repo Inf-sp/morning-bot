@@ -292,6 +292,10 @@ def attention() -> list[str]:
             out.append(f"{label} — модель закрыта для ключа: открой её в настройках проекта или смени модель")
         elif kind == "access_denied":
             out.append(f"{label} — доступ запрещён (403): проверь права ключа")
+        elif kind == "quota" and "кредит" in str(state.get("last_error") or ""):
+            env = _ENV_KEYS.get(service)
+            out.append(f"{label} — закончились оплаченные кредиты: пополни счёт или замени {env or 'ключ'} на ключ "
+                       "бесплатного проекта")
         elif kind == "quota":
             out.append(f"{label} — лимит исчерпан")
         else:

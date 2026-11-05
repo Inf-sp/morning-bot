@@ -548,10 +548,23 @@ def _next_local_day_seconds() -> int:
     return max(3600, int((tomorrow - now).total_seconds()))
 
 
+GEMINI_BILLING_PAUSE_SECONDS = 3 * 3600  # кредиты кончились: повтор раз в 3 часа, а не каждую минуту
+_BILLING_MARKERS = ("prepayment credits", "credits are depleted", "billing", "payment required",
+                    "insufficient credit", "out of credits")
+
+
+def is_billing_error(status_code=None, body="") -> bool:
+    """Закончились оплаченные кредиты (Gemini: 402 «Your prepayment credits are depleted») — не лимит запросов: само
+    не пройдёт, нужно пополнить счёт или сменить ключ."""
+    return int(status_code or 0) == 402 or any(marker in str(body or "").lower() for marker in _BILLING_MARKERS)
+
+
 def _classify_gemini_limit(body="", headers=None) -> tuple[str, int | None, int]:
     text = (body or "")
     low = text.lower()
     retry_after = _parse_retry_seconds(headers, text)
+    if is_billing_error(body=text):
+        return "billing", retry_after, GEMINI_BILLING_PAUSE_SECONDS
     compact = re.sub(r"[^a-z0-9]+", "", low)
     if any(x in compact for x in ("requestsperday", "perday", "rpd", "daily")):
         return "RPD", retry_after, _next_local_day_seconds()
@@ -595,7 +608,7 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         state = api_usage.gemini_state(1)
         scope = (getattr(err, "limit_scope", "") or state.get("cooldown_scope") or "").upper()
         cooldown_until = int(getattr(err, "cooldown_until", None) or state.get("cooldown_until") or 0)
-        if scope == "RPD":
+        if scope in ("RPD", "BILLING"):
             seconds = state.get("cooldown_seconds") or max(
                 0, cooldown_until - int(time.time()),
             )
@@ -604,7 +617,8 @@ def _log_gemini_limit(kind: str, err: Exception | None = None, fallback: bool = 
         dedup_token = f"{kind or 'gemini_rate_limit'}:{scope or 'limit'}:{cooldown_until}:{bool(fallback)}"
         if not api_usage.should_log_gemini_limit(dedup_token):
             return
-        first = f"Gemini · лимит {scope}".strip()
+        first = ("Gemini · закончились оплаченные кредиты — пополни счёт в AI Studio или смени ключ"
+                 if scope == "BILLING" else f"Gemini · лимит {scope}".strip())
         second = "Fallback включён" if fallback else "Fallback будет использован"
         if seconds:
             second += f" · повтор после {_cooldown_phrase(int(seconds))}"
@@ -758,7 +772,7 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
             and _is_json_validation_error(r.status_code, body)
         )
         record_usage(
-            False, status_code=r.status_code, error=f"HTTP {r.status_code}",
+            False, status_code=r.status_code, error=f"HTTP {r.status_code}: {body}" if body else f"HTTP {r.status_code}",
             latency_ms=int((time.time() - t0) * 1000), headers=r.headers,
             monitor_result=not json_validation_failure,
         )
@@ -767,7 +781,8 @@ def _post(url, headers, payload, timeout, name, timeout_cap=None, usage_service=
             retry_after = int(r.headers.get("Retry-After") or 0) or None
         except Exception:
             retry_after = None
-        if service == "gemini" and (r.status_code == 429 or "RESOURCE_EXHAUSTED" in (r.text or "")):
+        if service == "gemini" and (r.status_code == 429 or "RESOURCE_EXHAUSTED" in (r.text or "")
+                                    or is_billing_error(r.status_code, r.text)):
             limit_scope, parsed_retry, cooldown_seconds = _classify_gemini_limit(r.text or "", r.headers)
             limit_scope = limit_scope or "limit"
             retry_after = retry_after or parsed_retry

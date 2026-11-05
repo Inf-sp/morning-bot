@@ -442,6 +442,9 @@ def _friendly_error(error="", status_code=None, provider="") -> tuple[str, str]:
     code = int(status_code or 0)
     if provider == "spoonacular" and code == 402:
         return "quota", "дневной лимит исчерпан"
+    if code == 402 or any(marker in low for marker in ("prepayment credits", "credits are depleted",
+                                                         "payment required", "insufficient credit")):
+        return "quota", "закончились оплаченные кредиты"
     if provider == "tavily" and code == 432:
         return "quota", "лимит тарифа исчерпан"
     # A 429 is an explicit response from the provider, but it normally means

@@ -644,3 +644,12 @@ def test_errors_fold_rate_limits_and_export_details(monkeypatch):
     detail = admin.errors_detail(now)
     assert [row["status_code"] for row in detail["services"]] == [429, 429, 400]
     assert detail["services"][2]["message"].startswith("Invalid JSON payload")
+
+
+def test_attention_names_depleted_gemini_credits(monkeypatch):
+    import service_monitor
+    states = {"gemini": {"status": "down", "error_type": "quota", "last_error": "закончились оплаченные кредиты"}}
+    monkeypatch.setattr(service_monitor, "_load", lambda: {"services": states})
+    monkeypatch.setattr(service_monitor, "_configured", lambda service: service == "gemini")
+    assert service_monitor.attention() == [
+        "Gemini — закончились оплаченные кредиты: пополни счёт или замени GEMINI_API_KEY на ключ бесплатного проекта"]

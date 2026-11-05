@@ -216,3 +216,15 @@ def test_groq_model_closed_for_the_key_is_not_an_auth_error_and_switches_model()
     ai._mark_cooldown("groq", ai.LLMProviderError("groq", "groq 401: invalid key", status_code=401))
     assert provider_runtime.ai_breaker_kind("groq") == "auth"
     provider_runtime._ai_breaker.clear()
+
+
+def test_gemini_out_of_prepaid_credits_is_billing_not_a_minute_rate_limit():
+    import ai
+    body = ('{"error": {"code": 402, "message": "Your prepayment credits are depleted. Please go to AI Studio at '
+            'https://ai.studio/projects to manage your project and billing."}}')
+    assert ai.is_billing_error(402, "") and ai.is_billing_error(429, body) and not ai.is_billing_error(429, "quota")
+    scope, _retry, pause = ai._classify_gemini_limit(body)
+    assert scope == "billing" and pause == ai.GEMINI_BILLING_PAUSE_SECONDS  # 3 часа, а не «повтор после 52 сек»
+    assert provider_runtime._friendly_error(body, 429, "gemini") == ("quota", "закончились оплаченные кредиты")
+    assert provider_runtime._friendly_error("HTTP 402", 402, "gemini")[1] == "закончились оплаченные кредиты"
+    assert provider_runtime._friendly_error("HTTP 402", 402, "spoonacular")[1] == "дневной лимит исчерпан"
