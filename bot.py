@@ -747,6 +747,8 @@ def main():
         identity["hostname"], identity["started_at"],
     )
     storage_driver.check_backend()
+    import http_pool
+    http_pool.install()  # keep-alive для всех внешних API и ИИ: без нового TLS на каждый запрос
     lease = PollingLease()
     if not lease.acquire():
         raise SystemExit("Polling lease was not acquired")

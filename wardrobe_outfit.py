@@ -11,7 +11,6 @@ from wardrobe_model import (
     CLOTHING_ZONES,
     ZONE_ORDER,
     flat_items as _flat_wardrobe_items,
-    public_item_name,
 )
 
 WARDROBE_OUTERWEAR_MAX_TEMP = 20

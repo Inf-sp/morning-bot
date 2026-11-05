@@ -8,7 +8,7 @@ import config
 import store
 import sun
 import ai
-from util import cap_sentence, flag_from_cc, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
+from util import flag_from_cc, _MONTHS, _WEEKDAYS, _WEEKDAY_SHORT
 from ui import weather as weather_ui
 import weather_provider as _provider
 from weather_weekly import (

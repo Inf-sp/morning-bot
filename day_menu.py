@@ -14,7 +14,7 @@ import ai
 import config
 import secure
 import store
-from recipe_generation import TYPICAL_DISHES, typical_dish_line
+from recipe_generation import TYPICAL_DISHES
 
 _log = logging.getLogger(__name__)
 

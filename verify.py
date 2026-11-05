@@ -152,3 +152,50 @@ async def safe_error(bot, cid, exc, *, skill=None, back="m_menu"):
             await bot.send_message(chat_id=cid, text=out)
         except Exception:
             _log.debug("safe_error: ignored error", exc_info=True)
+
+
+# ================= ПРОВЕРКА ПРОЕКТА: python verify.py =================
+def _check_compile() -> bool:
+    import compileall
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    return bool(compileall.compile_dir(here, quiet=1, rx=re.compile(r"[/\\]\.(git|venv)")))
+
+
+def _check_ruff() -> bool:
+    """Линтер по ruff.toml: только классы ошибок (неопределённые имена, async, даты без часового пояса…)."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    command = [shutil.which("ruff")] if shutil.which("ruff") else [sys.executable, "-m", "ruff"]
+    try:
+        result = subprocess.run([*command, "check", "--no-cache", "."], cwd=here, capture_output=True, text=True)
+    except OSError:
+        result = None
+    if result is None or "No module named ruff" in (result.stderr or ""):
+        print("✗ ruff не установлен: python -m pip install -r requirements-dev.txt")
+        return False
+    if result.returncode != 0:
+        print(result.stdout.strip() or result.stderr.strip())
+    return result.returncode == 0
+
+
+def _check_routing() -> bool:
+    import routing
+    return routing.main() == 0
+
+
+def main() -> int:
+    """Компиляция, линтер и кнопки без обработчика; код выхода 1 — есть ошибки."""
+    results = []
+    for name, check in (("компиляция", _check_compile), ("ruff", _check_ruff), ("кнопки", _check_routing)):
+        ok = check()
+        results.append(ok)
+        print(f"{'✓' if ok else '✗'} {name}")
+    return 0 if all(results) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

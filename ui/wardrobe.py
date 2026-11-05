@@ -2,7 +2,6 @@ import re
 
 from .builder import MessageBuilder
 from .text import ru_plural
-from util import _WEEKDAYS
 from wardrobe_model import public_zone_name, zone_of
 
 
@@ -494,7 +493,6 @@ def suitcase_day_card(data, look, index, total, today=""):
     вещи списком «- …», как в «Надень сегодня» (носков нет — их выбирает пользователь); курсивом «Твой чемодан ·
     12 вещей · 17 образов».
     Дат и температуры нет. Листание — кнопками."""
-    from datetime import date
     data, look = data or {}, look or {}
     days = int(data.get("days") or total or 0)
     b = MessageBuilder()

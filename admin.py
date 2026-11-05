@@ -230,7 +230,7 @@ async def send_backup(bot, cid, q=None):
             text = f"База {round(size / _MB)} МБ — больше лимита Telegram в 50 МБ, прислать нельзя."
             await _show(bot, cid, ui.notice("💾 Копия базы", text), back, q)
             return
-        with open(path, "rb") as file:
+        with open(path, "rb") as file:  # noqa: ASYNC230 — открыть файл мгновенно, читает его отправка Telegram
             await bot.send_document(chat_id=cid, document=file, filename=os.path.basename(path),
                                     caption=f"💾 Копия базы · {max(1, round(size / _MB))} МБ")
 

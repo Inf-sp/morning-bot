@@ -270,7 +270,7 @@ def _safe_trigger(hazard, ctx) -> bool:
 def _local_when(when, cid):
     """«11:00–18:00» из прогноза (время Амстердама) — во время места: в отпуске сдвигаем на разницу поясов."""
     import re
-    from datetime import datetime, timedelta
+    from datetime import datetime
     import vacation
     try:
         local = vacation.local_tz(cid)

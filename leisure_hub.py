@@ -659,7 +659,6 @@ def _trip_screen(cid, data):
     concerts = leisure_concerts.cached_favorite_concerts(cid, 5)
     # Заголовок — страна (страны маршрута), а не город: «🇿🇦 Досуг в отпуске · ЮАР».
     where = vacation.countries_label(vacation.trip_countries(cid)) or countries.name_ru(cc) or place.get("city") or cc
-    from ui import vacation as vacation_ui
     # Одно развлечение на день из заранее готового списка поездки; справка о стране — в «Полезно» «Моего дня».
     # Внизу курсивом — главный совет к активностям; пока списка нет — прежняя строка.
     activities = vacation.trip_activities(cid, fetch=False)

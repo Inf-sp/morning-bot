@@ -25,10 +25,11 @@
 
 ```bash
 python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt   # pytest и ruff — для проверок, на сервер не ставится
 python bot.py
 python -m py_compile path/to/changed_file.py
-python routing.py                 # после изменения callback-ов
-python verify.py                  # когда нужна общая проверка контрактов
+python routing.py                 # после изменения callback-ов: у каждой кнопки проекта есть обработчик
+python verify.py                  # общая проверка: компиляция + ruff (ruff.toml) + кнопки; код выхода 1 — ошибки
 python -m pytest -q path::test    # только целевые тесты
 ```
 

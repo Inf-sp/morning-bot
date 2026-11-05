@@ -364,7 +364,6 @@ def _recipe_ingredients_from_chat(text: str):
 async def _run_intent(bot, cid, action, recipe_ingredients=None):
     import cooking
     import leisure_movies
-    import myday
     import settings
     import wardrobe
     import fridge

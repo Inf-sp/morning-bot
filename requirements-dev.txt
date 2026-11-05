@@ -1,0 +1,4 @@
+# Для разработки и проверок (на сервер не ставится): python -m pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1
+ruff==0.16.8

@@ -1677,7 +1677,7 @@ RECIPE_BATCH_MAX_TOKENS = 2600
 
 def _season_hint() -> str:
     """Сезонная подсказка по текущему месяцу сервера (§5.2). Без геолокации пользователя."""
-    month = datetime.now(TZ).month if TZ else datetime.now().month
+    month = datetime.now(TZ).month if TZ else datetime.now().month  # noqa: DTZ005 — без TZ только в тестах
     if month in (6, 7, 8):
         return "Сейчас лето: предпочитай лёгкие блюда — салаты, гриль, свежие овощи, холодные супы."
     if month in (12, 1, 2):

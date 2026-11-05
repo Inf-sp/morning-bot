@@ -5,6 +5,8 @@ from urllib.parse import quote_plus
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from util import local_today
+
 from .builder import MessageBuilder, MessageSpec, u16_len
 from .constants import ui_label
 from .navigation import nav_row
@@ -649,14 +651,14 @@ def album_meta(album) -> list:
     if not title or not released[:4].isdigit():
         return []
     day = _parse_event_date(released[:10]) if len(released) >= 10 else None
-    current = day and day.year == date.today().year
+    current = day and day.year == local_today().year
     return [f"«{title}»", _format_date_label(day) if current else released[:4]]
 
 
 def _event_date_label(value) -> str:
     """Дата события в хабе — как у концертов: «16 октября», год только если не текущий."""
     day = _parse_event_date(str(value or "")[:10])
-    return _format_date_label(day, include_year=day.year != date.today().year) if day else ""
+    return _format_date_label(day, include_year=day.year != local_today().year) if day else ""
 
 
 def _weekly_concert_rows(b: MessageBuilder, title, items):

@@ -200,3 +200,67 @@ def _iter_all_ifs(node, subject_name="data"):
             if m is not None:
                 kind, values = m
                 yield kind, values, n.body
+
+
+# ---------- проверка всех кнопок: python routing.py ----------
+# Подстановки для f-строк вида f"a_concerts_{cc}": кнопка считается живой, если роутер принимает хоть одну.
+_SAMPLES = ("nl", "en", "movie", "music", "series", "tv", "game", "breakfast", "lunch", "dinner", "home",
+            "casual", "0", "1", "x")
+_SKIP_DIRS = ("tests/", "tools/")
+
+
+def _project_files():
+    root = _HERE
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if not name.startswith((".", "__"))]
+        for name in files:
+            path = os.path.relpath(os.path.join(folder, name), root)
+            if name.endswith(".py") and not path.startswith(_SKIP_DIRS):
+                yield path
+
+
+def button_callbacks():
+    """(callback_data, место, динамическая ли) для всех кнопок проекта: литералы и f-строки по их началу."""
+    found = []
+    for path in sorted(_project_files()):
+        tree = ast.parse(_read_source(path))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.keyword) and node.arg == "callback_data"):
+                continue
+            value = node.value
+            where = f"{path}:{value.lineno}"
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                found.append((value.value, where, False))
+            elif isinstance(value, ast.JoinedStr) and value.values and isinstance(value.values[0], ast.Constant):
+                found.append((str(value.values[0].value), where, True))
+    return found
+
+
+def unhandled_buttons():
+    """Кнопки, которые ни один обработчик не примет: [(callback_data, место, причина)]."""
+    problems = []
+    for data, where, dynamic in button_callbacks():
+        if data == "noop":
+            continue
+        if dynamic:
+            if any(resolve_callback_handler(data + sample)["handled"] for sample in _SAMPLES):
+                continue
+            problems.append((data + "…", where, resolve_callback_handler(data + _SAMPLES[0])["detail"]))
+            continue
+        result = resolve_callback_handler(data)
+        if not result["handled"]:
+            problems.append((data, where, result["detail"]))
+    return problems
+
+
+def main() -> int:
+    buttons = button_callbacks()
+    problems = unhandled_buttons()
+    for data, where, detail in problems:
+        print(f"✗ {data} — {where}: {detail}")
+    print(f"routing: кнопок {len(buttons)}, без обработчика {len(problems)}")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

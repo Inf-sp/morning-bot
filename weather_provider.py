@@ -614,7 +614,7 @@ def _fallback_weather(key, cache_key, lat, lon, error):
         data = _fetch_open_meteo(lat, lon)
     except Exception:
         _log.warning("weather: open-meteo fallback failed", exc_info=True)
-        raise error
+        raise error from None  # главная причина — сбой OpenWeather; сбой резерва уже в логе
     _log.warning("weather: OpenWeather unavailable (%s), using Open-Meteo", type(error).__name__)
     _WX_CACHE[key] = (time.time(), deepcopy(data))
     _persistent_cache_save(cache_key, data)

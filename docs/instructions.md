@@ -46,8 +46,8 @@ Railway запускает тот же `python bot.py`. Секреты и клю
 Перед деплоем запускай подходящие тесты и минимум:
 
 ```bash
-python -m compileall -q .
-python verify.py
+python -m pip install -r requirements-dev.txt   # один раз: pytest и ruff
+python verify.py                                 # компиляция + ruff (ruff.toml) + кнопки без обработчика
 ```
 
 После изменения callback-ов дополнительно запускай `python routing.py`. Номер

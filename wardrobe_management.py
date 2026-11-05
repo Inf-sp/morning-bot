@@ -168,8 +168,8 @@ def _replace_item(cid, item_id, replacement):
     changed = {"ok": False}
 
     def _mut(w):
-        for zone, subcats in w.get("zones", {}).items():
-            for subcat, items in subcats.items():
+        for _zone, subcats in w.get("zones", {}).items():
+            for _subcat, items in subcats.items():
                 for index, item in enumerate(list(items)):
                     if item.get("id") != item_id:
                         continue
