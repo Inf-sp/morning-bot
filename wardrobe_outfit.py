@@ -384,6 +384,9 @@ def select_outfit_candidates(w, weather_ctx):
             elif weather_ctx.get("strong_wind"):
                 # Порывы: есть непродуваемая — только она.
                 items = [it for it in items if it.get("wind_ok") or it.get("rain_ok")] or items
+            if rules.colder_than(weather_ctx, rules.WARM_OUTER_FEELS_MAX):
+                # Холодно: не ветровка, если в шкафу (после правил дождя и ветра) есть теплее.
+                items = [it for it in items if not rules.light_outerwear(it)] or items
         elif zone == "Аксессуары" and (weather_ctx.get("hot") or weather_ctx.get("sunny")):
             # Очки могут лежать дальше первых двух аксессуаров, которые попадут
             # в перебор, поэтому поднимаем их до ограничения пула кандидатов.
@@ -662,7 +665,9 @@ def top_outfits(w, weather_ctx, wardrobe_history, prefs_text, previous_item_ids=
         for zone in optional_zones:
             top = _top_candidates(_zone_items(zone), limit=width - 1, selected_styles=selected_styles)
             # В дождь, ветер и прохладу верхняя одежда обязательна, если она есть в шкафу.
-            mandatory = zone == "Верхняя одежда" and rules.needs_outerwear(weather_ctx)
+            # В дождь, ветер и прохладу — куртка; в холод (ощущается ниже 12°) — ещё и кофта, если они есть.
+            mandatory = ((zone == "Верхняя одежда" and rules.needs_outerwear(weather_ctx))
+                         or (zone == "Кофты" and rules.colder_than(weather_ctx, rules.WARM_LAYER_FEELS_MAX)))
             pools.append(_pool(zone, top if mandatory else [None] + top))
         for combo in itertools.product(*pools):
             yield [it for it in combo if it is not None]

@@ -400,3 +400,32 @@ def test_new_look_button_does_not_ask_the_ai_stylist(monkeypatch):
     assert asked == [1]  # образ дня — стилист выбирает
     asyncio.run(wardrobe.send_looks(None, 1, silent=True, previous_item_ids=["tee"]))
     assert asked == [1] and saved["ids"]  # «Новый образ» — по оценке кода, без запроса к ИИ
+
+
+def test_cold_morning_gets_a_warm_layer_and_not_a_windbreaker():
+    shirt = _it("shirt", "Верх", "Голубая рубашка", "голубой")
+    trousers = _it("trousers", "Низ", "Бежевые строгие брюки", "бежевый")
+    boots = _it("boots", "Обувь", "Чёрные Timberland кроссовки", "чёрный")
+    windbreaker = _it("wind", "Верхняя одежда", "Бежевая ветровка", "бежевый", wind_ok=True)
+    coat = _it("coat", "Верхняя одежда", "Чёрное шерстяное пальто", "чёрный", warmth="тёплые")
+    sweater = _it("sweater", "Кофты", "Серый свитер", "серый", warmth="тёплые")
+    ctx = wear_window(_hourly(7, 4), NOW)  # ощущается +4°
+    assert rules.colder_than(ctx, rules.WARM_OUTER_FEELS_MAX) and rules.light_outerwear(windbreaker)
+    w = _wardrobe(TEE, shirt, trousers, boots, windbreaker, coat, sweater)
+    outfits = top_outfits(w, ctx, [], "", selected_styles=[])
+    assert outfits and all({"sweater", "coat"} <= _ids(outfit) and "wind" not in _ids(outfit) for outfit in outfits)
+    # Тёплой куртки нет — ветровка остаётся (лучше, чем без верхней одежды), а свитер обязателен.
+    outfits = top_outfits(_wardrobe(TEE, shirt, trousers, boots, windbreaker, sweater), ctx, [], "", selected_styles=[])
+    assert all({"sweater", "wind"} <= _ids(outfit) for outfit in outfits)
+    # Прохладно, но не холодно (+14°) — кофта по желанию, ветровка подходит.
+    mild = wear_window(_hourly(16, 14), NOW)
+    assert not rules.colder_than(mild, rules.WARM_LAYER_FEELS_MAX)
+
+
+def test_look_card_ends_with_a_tip_not_outfit_count():
+    look = {"items": [{"name": "Белая футболка", "zone": "Верх"}], "stats": {"items": 36, "outfits": 466},
+            "closing": "Подверни рукава до середины предплечья, чтобы образ выглядел легче."}
+    text = render_wardrobe_message(look).text
+    assert text.endswith("Подверни рукава до середины предплечья, чтобы образ выглядел легче.") and "образов" not in text
+    no_tip = render_wardrobe_message({"items": look["items"], "stats": look["stats"]}).text
+    assert "образов" not in no_tip

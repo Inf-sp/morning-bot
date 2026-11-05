@@ -14,6 +14,9 @@ _LIGHT_BOTTOM = ("лён", "лен", "льнян", "linen")
 SHORTS_FEELS_MIN = 20   # °C «ощущается» в самый холодный час окна
 SWEATER_FEELS_MAX = 18  # °C: кофта поверх футболки — только если холоднее (или холодное утро)
 SHORTS_GUST_MAX = 8     # м/с
+WARM_LAYER_FEELS_MAX = 12  # °C «ощущается»: холоднее — кофта (свитер, худи) в образе обязательна, если есть в шкафу
+WARM_OUTER_FEELS_MAX = 8   # °C: холоднее — не ветровка и не лёгкая куртка, если в шкафу есть теплее
+_LIGHT_OUTER = ("ветровк", "дождевик", "windbreaker", "анорак", "overshirt", "оверши", "шакет", "shacket")
 
 
 def _facts(item):
@@ -90,6 +93,16 @@ def is_light(item):
 
 def rain_shoe_ok(item):
     return not _has(item, _RAIN_BAD_SHOES)
+
+
+def colder_than(ctx, limit) -> bool:
+    low = feels_low(ctx)
+    return low is not None and low < limit
+
+
+def light_outerwear(item) -> bool:
+    """Ветровка, дождевик, лёгкая куртка — не греют в холод."""
+    return item.get("warmth") == "лёгкие" or _has(item, _LIGHT_OUTER)
 
 
 def needs_outerwear(ctx):

@@ -125,11 +125,11 @@ def render_wardrobe_message(look_data):
         for item in items:
             b.line(f"• {item}")
 
-    # Нижняя строка курсивом — статистика шкафа: «Твой шкаф · 37 вещей · 528 образов».
-    # Без статистики (старые данные) — прежняя финальная фраза о стиле.
+    # Нижняя строка курсивом — совет к этому образу (как носить, сочетание цветов, стиль; меняется по дням и
+    # образам); без него — «Твой шкаф · 36 вещей».
     stats = look_data.get("stats") or {}
-    closing = (wardrobe_stats_line(stats.get("items"), stats.get("outfits")) if stats.get("items")
-               else _clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, ""))
+    closing = (_clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, "")
+               or (wardrobe_stats_line(stats.get("items")) if stats.get("items") else ""))
     if closing:
         b.spacer()
         b.italic(closing)
@@ -192,9 +192,11 @@ def _pluralize_items(n):
     return "вещей"
 
 
-def wardrobe_stats_line(items, outfits) -> str:
-    items, outfits = int(items or 0), int(outfits or 0)
-    return f"Твой шкаф · {items} {_pluralize_items(items)} · {outfits} {_outfits_word(outfits)}"
+def wardrobe_stats_line(items, outfits=None) -> str:
+    """«Твой шкаф · 36 вещей»; с outfits — ещё «· 466 образов» (прежний вид, для старых вызовов)."""
+    items = int(items or 0)
+    line = f"Твой шкаф · {items} {_pluralize_items(items)}"
+    return line if outfits is None else f"{line} · {int(outfits or 0)} {_outfits_word(int(outfits or 0))}"
 
 
 def _outfits_word(n):
