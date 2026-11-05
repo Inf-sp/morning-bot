@@ -2,7 +2,7 @@ import re
 from telegram import MessageEntity
 
 from .text import finish_dot
-from .builder import MessageBuilder
+from .builder import MessageBuilder, MessageSpec
 from .leisure import trailer_link, youtube_music_link
 from util import cap_sentence
 
@@ -43,7 +43,7 @@ def _split_word_translation(value):
     return cap_sentence(term.strip()), cap_sentence(translation.strip())
 
 
-def week_holidays(city, period, holidays, events) -> "MessageSpec":
+def week_holidays(city, period, holidays, events) -> MessageSpec:
     """Недельная рассылка: «🎉 Праздники и мероприятия · Alkmaar · 3–9 ноября», «Праздники:» — «• 11 ноября —
     Sint-Maarten: дети с фонариками…», «В городе:» — «• 3–8 ноября — Filmfestival Alkmaar — кинофестиваль»."""
     from util import _MONTHS

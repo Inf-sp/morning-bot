@@ -58,7 +58,8 @@ def _known_ru(value) -> str:
 
 
 # Сбой уже заканчивается: «beperkingen voorbij», «rijden weer» — не повод для нового предупреждения.
-_ENDING_RE = re.compile(r"\b(?:voorbij|opgelost|hersteld|rijden (?:de treinen )?weer|neemt af)\b", re.IGNORECASE)
+_ENDING_RE = re.compile(r"\b(?:voorbij|(?:is|zijn) (?:weer )?(?:opgelost|hersteld)|rijden (?:de treinen )?weer|"
+                        r"neemt af)\b", re.IGNORECASE)
 
 
 def is_ending(item) -> bool:
@@ -69,7 +70,7 @@ def concerns_city(item, city) -> bool:
     """Сбой касается города: его станция в участке, тексте NS или секциях («Amsterdam – Hoofddorp» для Алкмара —
     нет, даже если NS прислал его в ленте станции)."""
     city = str(city or "").casefold()
-    texts = [item.get("title"), item.get("situation"), *(item.get("sections") or [])]
+    texts = [item.get("title"), item.get("situation"), *(item.get("sections") or []), *(item.get("stations") or [])]
     return bool(city) and any(city in str(text or "").casefold() for text in texts)
 
 
@@ -89,8 +90,11 @@ def _translate(disruption):
             cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 3},
             # Ответ без кириллицы (модель вернула нидерландский) — брак: пробуем следующий
             # провайдер и не кэшируем.
-            result_validator=lambda value: isinstance(value, dict) and all(
-                _CYRILLIC.search(str(value.get(key) or "")) for key in fields),
+            # Хотя бы причина или ситуация по-русски; поле без перевода ниже заменяется словарём или убирается.
+            result_validator=lambda value: isinstance(value, dict) and any(
+                _CYRILLIC.search(str(value.get(key) or "")) for key in ("cause", "situation") if key in fields)
+            or (isinstance(value, dict) and not ({"cause", "situation"} & set(fields))
+                and any(_CYRILLIC.search(str(value.get(key) or "")) for key in fields)),
         )
     except Exception:
         _log.info("NS disruption translation unavailable; using dictionary")

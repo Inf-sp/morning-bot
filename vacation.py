@@ -520,7 +520,8 @@ def return_ask_due(cid, now=None) -> bool:
 
 async def send_return_ask(bot, cid):
     """«🏠 Завтра домой»: ночью верну домашний город; продлить — «+3 дня» | «+неделя»; «Всё верно» убирает вопрос."""
-    if not return_ask_due(cid):
+    import asyncio
+    if not await asyncio.to_thread(return_ask_due, cid):  # local_tz может сходить в сеть
         return
     current = state(cid)
     until = current["until"]

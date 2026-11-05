@@ -108,12 +108,13 @@ def practical(raw) -> dict:
     """Практическое для пассажира: участки (sections), что с поездами (level), дополнительное время (extra_min),
     чем заменили поезда (alternative) и совет NS (advice). Чего нет в ответе NS — пусто."""
     span = next((span for span in raw.get("timespans") or [] if isinstance(span, dict)), {})
-    sections, levels = [], set()
+    sections, levels, names = [], set(), []
     for publication in raw.get("publicationSections") or []:
         if not isinstance(publication, dict):
             continue
         stations = [_station_name(station) for station in ((publication.get("section") or {}).get("stations") or [])]
         stations = [name for name in stations if name]
+        names += [name for name in stations if name not in names]
         if len(stations) >= 2:
             label = f"{stations[0]} – {stations[-1]}"
             if label not in sections:
@@ -125,6 +126,7 @@ def practical(raw) -> dict:
     advices = [str(advice).strip() for advice in span.get("advices") or [] if str(advice or "").strip()]
     return {
         "sections": sections[:3],
+        "stations": names,  # все станции затронутых секций — Alkmaar в середине Amsterdam – Den Helder тоже
         "level": next((text for key, text in _LEVELS if key in levels), ""),
         "extra_min": _travel_minutes(raw.get("summaryAdditionalTravelTime"))
         or _travel_minutes(span.get("additionalTravelTime")),

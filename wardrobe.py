@@ -207,7 +207,6 @@ def _get_cached_look(cid):
         return None
     if cached.get("copy_validator_version") != COPY_VALIDATOR_VERSION:
         return None
-    look_data = cached.get("look_data") or {}
     return cached
 
 
@@ -760,8 +759,19 @@ def toggle_oversize(cid, item_id) -> bool:
         return False  # «оверсайз» в названии — снимается через «Изменить»
     else:
         fit = "оверсайз"
-    ok = _replace_item(cid, item_id, {**item, "zone": item.get("zone") or zone,
-                                      "subcategory": item.get("subcategory") or subcat, "fit": fit})
+    changed = {"ok": False}
+
+    def mutate(w):  # на месте: вещь не переезжает в конец категории
+        for _zone, subcats in (w.get("zones") or {}).items():
+            for items in subcats.values():
+                for stored in items:
+                    if stored.get("id") == item_id:
+                        stored["fit"] = fit
+                        changed["ok"] = True
+                        return
+
+    store.mutate_wardrobe(cid, mutate)
+    ok = changed["ok"]
     if ok:
         store.clear_wardrobe_daylook(cid)
     return ok

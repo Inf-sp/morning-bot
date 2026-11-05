@@ -683,7 +683,7 @@ def test_oversized_tee_is_worn_alone_and_toggles_in_item_card(monkeypatch):
     monkeypatch.setattr(wardrobe.store, "clear_wardrobe_daylook", lambda _cid: None)
     bot = RecordingBot()
     asyncio.run(wardrobe_router.handle_callback(bot, "42", None, "w_ovs_tee"))
-    assert saved["zones"]["Верх"]["Футболки"][0]["fit"] == "оверсайз"
+    assert saved["zones"]["Верх"]["Футболки"][0]["fit"] == "оверсайз"  # на своём месте в категории
     labels = _labels(bot.message["reply_markup"])
     assert ["✅ Оверсайз"] in labels and "Посадка: оверсайз" in bot.message["text"]
     asyncio.run(wardrobe_router.handle_callback(bot, "42", None, "w_ovs_tee"))

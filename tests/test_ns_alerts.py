@@ -29,7 +29,7 @@ def test_parse_keeps_disruptions_and_calamities_but_not_maintenance():
         "id": "7001", "type": "DISRUPTION", "title": "Alkmaar – Amsterdam Centraal",
         "cause": "defecte trein", "situation": "minder treinen",
         "start": "", "until": "2026-10-08T18:30:00+0200", "extra": "tot 30 minuten extra reistijd",
-        "sections": [], "level": "", "extra_min": "", "alternative": "", "advice": "",
+        "sections": [], "stations": [], "level": "", "extra_min": "", "alternative": "", "advice": "",
     }
     calamity = ns_api.parse_disruption({"id": "c1", "type": "CALAMITY", "title": "Brand", "description": "Geen treinen"})
     assert calamity["situation"] == "Geen treinen"
@@ -266,7 +266,8 @@ PRACTICAL = {
 
 def test_practical_info_sections_level_alternative_extra_and_advice():
     info = ns_api.practical(PRACTICAL)
-    assert info == {"sections": ["Alkmaar – Hoorn"], "level": "поездов нет или почти нет", "extra_min": "+15–30 мин",
+    assert info == {"sections": ["Alkmaar – Hoorn"], "stations": ["Alkmaar", "Heerhugowaard", "Hoorn"],
+                    "level": "поездов нет или почти нет", "extra_min": "+15–30 мин",
                     "alternative": "Bussen tussen Alkmaar en Hoorn", "advice": "Reis via Zaandam"}
     works = {**ns_api.parse_works(PRACTICAL, _date(2026, 10, 11)),
              "alternative": "автобусы между Alkmaar и Hoorn", "advice": "езжай через Zaandam"}
@@ -300,3 +301,29 @@ def test_foreign_or_ending_disruption_is_not_sent_and_dutch_is_never_shown(monke
                                  "extra": "De vertraging neemt af.", "advice": "Plan je reis opnieuw"})
     assert (item["cause"], item["situation"], item["extra"], item["advice"]) == (
         "неисправность пути", "Сбой в движении поездов", "задержки уменьшаются", "")
+
+
+def test_city_in_the_middle_of_a_section_counts_and_repair_in_progress_is_not_ending():
+    raw = {**RAW, "title": "Amsterdam Centraal - Den Helder", "publicationSections": [
+        {"section": {"stations": [{"name": "Amsterdam Centraal"}, {"name": "Alkmaar"}, {"name": "Den Helder"}]},
+         "consequence": {"level": "LESS_TRAINS"}}]}
+    item = ns_api.parse_disruption(raw)
+    assert item["sections"] == ["Amsterdam Centraal – Den Helder"]
+    assert ns_alerts.concerns_city(item, "Alkmaar")  # Alkmaar — промежуточная станция
+    assert not ns_alerts.concerns_city({"title": "Amsterdam Centraal - Hoofddorp", "stations": []}, "Alkmaar")
+    assert not ns_alerts.is_ending({"situation": "De storing wordt hersteld."})  # ремонтируют — сбой идёт
+    assert ns_alerts.is_ending({"situation": "De storing is opgelost."})
+
+
+def test_one_untranslated_field_does_not_reject_the_whole_translation(monkeypatch):
+    captured = {}
+
+    def fake_llm_json(*_args, result_validator=None, **_kwargs):
+        captured["validator"] = result_validator
+        return {"cause": "неисправность пути", "situation": "меньше поездов", "advice": "Via Zaandam"}
+
+    monkeypatch.setattr(ns_alerts.ai, "llm_json", fake_llm_json)
+    item = ns_alerts._translate({"cause": "defect spoor", "situation": "minder treinen", "advice": "Via Zaandam"})
+    assert captured["validator"]({"cause": "неисправность пути", "situation": "minder treinen", "advice": "Via Zaandam"})
+    assert not captured["validator"]({"cause": "defect spoor", "situation": "minder treinen"})
+    assert (item["cause"], item["situation"], item["advice"]) == ("неисправность пути", "меньше поездов", "")
