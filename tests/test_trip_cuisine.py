@@ -284,7 +284,7 @@ def test_food_tips_without_digits_are_dropped(monkeypatch):
 def test_travel_phrases_built_for_whole_trip_in_batches_and_three_per_day(monkeypatch):
     from datetime import date
     monkeypatch.setattr(vacation, "travel_phrases", REAL_TRAVEL_PHRASES)
-    saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-29"}  # 10 дней — 50 фраз, два запроса
+    saved = {"cc": "ZA", "since": "2026-10-20", "until": "2026-10-29"}  # 10 дней — 30 фраз: запросы на 25 и на 5
     monkeypatch.setattr(vacation, "state", lambda _cid: saved)
     monkeypatch.setattr(vacation, "_save", lambda _cid, value: saved.update(value))
     monkeypatch.setattr(vacation, "guide", lambda _cid: {"language_ru": "Африкаанс"})
@@ -299,7 +299,7 @@ def test_travel_phrases_built_for_whole_trip_in_batches_and_three_per_day(monkey
 
     monkeypatch.setattr(vacation.ai, "llm_json", fake)
     items = vacation.travel_phrases("42")
-    assert len(items) == 50 and len(prompts) == 2
+    assert len(items) == 30 and len(prompts) == 2 and "Напиши 5 разных" in prompts[1]
     assert "Не базовые приветствия" in prompts[0] and "Не повторяй" in prompts[1] and "Frase 0" in prompts[1]
     assert vacation.travel_phrases("42") == items and len(prompts) == 2  # запас уже на весь отпуск — без запросов
     day1 = vacation.phrases_today("42", date(2026, 10, 20))

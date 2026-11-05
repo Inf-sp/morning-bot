@@ -322,7 +322,7 @@ def _world_fact():
         line = ai.llm(
             f"Сейчас в {name} {t:+.0f}°C (реальные данные). Напиши ОДНУ фразу, начни СТРОГО со слов "
             f"«Кстати, сегодня в {name} ...», с лёгким юмором, на русском, 1 предложение, без markdown.",
-            120, 1.05, tier="cheap", fallback_allowed=True,
+            120, 1.05, tier="light", fallback_allowed=True,
             privacy_level="public", response_mode="plain_text").strip().splitlines()[0]
     except Exception:
         line = f"Кстати, сегодня в {name} около {t:+.0f}°C."

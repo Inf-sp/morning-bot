@@ -31,6 +31,7 @@ def loading_phrase() -> str:
 _BACKGROUND_TASKS = set()
 _OFF_LOOP_STARTED = {}
 OFF_LOOP_RETRY_SECONDS = 600
+OFF_LOOP_FAIL_SECONDS = 3600  # сборка упала или вернула пусто — следующая попытка не раньше чем через час
 
 
 async def _detached(coro):
@@ -67,13 +68,27 @@ def build_off_loop(key, func, *args) -> None:
     """Запускает func(*args) в отдельном потоке, не дожидаясь результата: из потока событий — в его executor, из
     рабочего потока — фоновым потоком.
 
-    Один запуск на key; после неудачи следующий — не раньше OFF_LOOP_RETRY_SECONDS.
+    Один запуск на key не чаще OFF_LOOP_RETRY_SECONDS; если сборка упала или вернула пусто — следующая не раньше
+    OFF_LOOP_FAIL_SECONDS (без этого каждое открытие экрана снова звало ИИ, который не отвечает).
     """
     now = time.monotonic()
     started = _OFF_LOOP_STARTED.get(key)
     if started is not None and now - started < OFF_LOOP_RETRY_SECONDS:
         return
     _OFF_LOOP_STARTED[key] = now
+
+    def failed():
+        _OFF_LOOP_STARTED[key] = time.monotonic() + OFF_LOOP_FAIL_SECONDS - OFF_LOOP_RETRY_SECONDS
+
+    def guarded(*call_args):
+        try:
+            result = func(*call_args)
+        except Exception:
+            failed()
+            raise
+        if not result:
+            failed()
+        return result
 
     def done(future):
         if not future.cancelled() and future.exception() is not None:
@@ -86,13 +101,13 @@ def build_off_loop(key, func, *args) -> None:
         # раньше это падало RuntimeError, и экран открывался только со второго раза. Запускаем фоновым потоком.
         def run():
             try:
-                func(*args)
+                guarded(*args)
             except Exception:
                 _log.warning("off-loop build %s failed", key, exc_info=True)
 
         threading.Thread(target=run, name=f"off-loop-{key}", daemon=True).start()
         return
-    loop.run_in_executor(None, func, *args).add_done_callback(done)
+    loop.run_in_executor(None, guarded, *args).add_done_callback(done)
 
 
 class StatusManager:

@@ -62,3 +62,38 @@ def test_night_warm_is_only_for_recently_active_users(monkeypatch):
     now = 1_800_000_000
     monkeypatch.setattr(tracking, "_all", lambda: {"1": {"last_ts": now - 3600}, "2": {"last_ts": now - 5 * 86400}})
     assert REAL_RECENTLY_ACTIVE(["1", "2", "3"], 3, now=now) == ["1"]
+
+
+def test_failed_or_empty_background_build_waits_an_hour(monkeypatch):
+    import util
+    clock = [1000.0]
+    monkeypatch.setattr(util.time, "monotonic", lambda: clock[0])
+    runs = []
+
+    class SyncThread:
+        def __init__(self, target, **_k):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(util.threading, "Thread", SyncThread)
+    util._OFF_LOOP_STARTED.pop("k", None)
+    util.build_off_loop("k", lambda: runs.append(1) or {})  # пусто — ИИ не ответил
+    clock[0] += util.OFF_LOOP_RETRY_SECONDS + 1
+    util.build_off_loop("k", lambda: runs.append(2) or {})
+    assert runs == [1]  # через 10 минут — ещё рано
+    clock[0] += util.OFF_LOOP_FAIL_SECONDS
+    util.build_off_loop("k", lambda: runs.append(3) or {"ok": 1})
+    assert runs == [1, 3]
+
+
+def test_city_event_pages_go_to_ai_only_around_dates_of_the_window():
+    from datetime import date
+    import local_events
+    pattern = local_events._date_pattern(date(2026, 11, 5), date(2026, 11, 19))
+    page = "Welkom in Alkmaar. " + "x" * 2000 + " Sinterklaasintocht op zaterdag 14 november 2026 bij de Kaasmarkt. " + "y" * 2000
+    focused = local_events._focus(page, pattern)
+    assert "14 november 2026" in focused and len(focused) < 600 and "Welkom" not in focused
+    assert local_events._focus("Openingstijden van het museum en contact.", pattern) == ""
+    assert local_events._focus("Markt op 21-11 en 2026-11-28.", pattern)

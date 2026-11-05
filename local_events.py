@@ -73,14 +73,51 @@ def _search(city, country, today, horizon=_HORIZON_DAYS, words=_CITY_WORDS):
                                search_priority="tavily")
 
 
+_MONTHS = (("january", "jan", "januari"), ("february", "feb", "februari"), ("march", "mar", "maart", "mrt"),
+           ("april", "apr"), ("may", "mei"), ("june", "jun", "juni"), ("july", "jul", "juli"),
+           ("august", "aug", "augustus"), ("september", "sep", "sept"), ("october", "oct", "oktober", "okt"),
+           ("november", "nov"), ("december", "dec"))
+_SNIPPET_BEFORE, _SNIPPET_AFTER, _SNIPPETS_MAX = 150, 350, 4
+
+
+def _date_pattern(today, end):
+    """Упоминание даты в окне [today, end]: название месяца (англ. и нидерл.) или числом — «14.11», «2026-11-14»."""
+    months, day = [], today.replace(day=1)
+    while day <= end:
+        months.append(day.month)
+        day = (day + timedelta(days=32)).replace(day=1)
+    words = "|".join(word for month in months for word in _MONTHS[month - 1])
+    numbers = "|".join(f"0?{month}" for month in months)
+    return re.compile(rf"\b(?:{words})\b|\b\d{{1,2}}[./-](?:{numbers})\b|\b20\d\d-(?:{numbers})-\d{{1,2}}\b",
+                      re.IGNORECASE)
+
+
+def _focus(text, pattern) -> str:
+    """Только куски страницы вокруг дат нужных месяцев (до 4 кусков по ~500 знаков); дат нет — "" (страница не идёт
+    в AI: событие без даты всё равно отбрасывается)."""
+    spans = []
+    for match in pattern.finditer(text):
+        start, finish = max(0, match.start() - _SNIPPET_BEFORE), match.end() + _SNIPPET_AFTER
+        if spans and start <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], finish)
+        else:
+            spans.append((start, finish))
+        if len(spans) > _SNIPPETS_MAX:
+            spans = spans[:_SNIPPETS_MAX]
+            break
+    return " … ".join(text[start:finish] for start, finish in spans)[:_PAGE_CHARS]
+
+
 def _extract(city, rows, today, horizon=_HORIZON_DAYS, kinds=_CITY_KINDS):
-    """[{name, about, start, end, url}] — только события с датой, найденной в тексте страниц."""
-    pages = [{"url": str(row.get("url") or ""), "text": " ".join(
-        str(row.get(key) or "") for key in ("title", "content"))[:_PAGE_CHARS]} for row in rows]
+    """[{name, about, start, end, url}] — только события с датой, найденной в тексте страниц. В AI идут только куски
+    страниц вокруг дат нужных месяцев; страницы без таких дат не идут вовсе."""
+    end = today + timedelta(days=horizon)
+    pattern = _date_pattern(today, end)
+    pages = [{"url": str(row.get("url") or ""), "text": _focus(" ".join(
+        str(row.get(key) or "") for key in ("title", "content")), pattern)} for row in rows]
     pages = [page for page in pages if page["url"] and page["text"].strip()]
     if not pages:
         return []
-    end = today + timedelta(days=horizon)
     prompt = (
         f"Найди в текстах ниже местные события в городе {city} между {today.isoformat()} и {end.isoformat()}: "
         f"{kinds} Бери ТОЛЬКО события, дата которых прямо написана в тексте; "

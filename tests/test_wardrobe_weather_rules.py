@@ -351,3 +351,52 @@ def test_card_closing_is_italic_and_rotates_between_colors_fit_and_style(monkeyp
     italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
               for e in msg.entities if e.type == "italic"]
     assert msg.text.endswith("Оливковый и бежевый — спокойное сочетание.") and italic[-1] == msg.text.splitlines()[-1]
+
+
+def test_new_look_button_does_not_ask_the_ai_stylist(monkeypatch):
+    import asyncio
+    from datetime import timedelta
+
+    import config
+    import settings
+    import wardrobe
+    import weather
+
+    today = datetime.now(config.TZ).date()
+    days = [today, today + timedelta(days=1)]
+    hourly = {key: [] for key in _hourly(18, 15)["hourly"]}
+    for day in days:
+        for key, values in _hourly(18, 15, rain_from=0, gust=12, day=day.isoformat())["hourly"].items():
+            hourly[key] += values
+    wdata = {"hourly": hourly, "daily": {
+        "time": [d.isoformat() for d in days], "temperature_2m_min": [16, 16], "temperature_2m_max": [18, 18],
+        "windspeed_10m_max": [6, 6], "precipitation_probability_max": [80, 80],
+        "precipitation_sum": [3, 3], "weathercode": [61, 61],
+    }}
+    w = _wardrobe(TEE, SHORTS, JEANS, SANDALS, SNEAKERS, RAIN_JACKET)
+    saved = {}
+
+    async def same(_cid, wardrobe_data):
+        return wardrobe_data
+
+    monkeypatch.setattr(wardrobe, "_get_cached_look", lambda _cid: None)
+    monkeypatch.setattr(store, "load_wardrobe", lambda _cid: w)
+    monkeypatch.setattr(store, "wardrobe_to_text", lambda _w: "шкаф")
+    monkeypatch.setattr(store, "get_settings", lambda _cid: {"lat": 52.6, "lon": 4.7})
+    monkeypatch.setattr(store, "get_wardrobe_history", lambda _cid: [])
+    monkeypatch.setattr(weather, "fetch_weather", lambda *_a: wdata)
+    monkeypatch.setattr(wardrobe, "_build_weather_rules", lambda *_a: ([], ""))
+    monkeypatch.setattr(wardrobe, "migrate_item_attrs", same)
+    monkeypatch.setattr(settings, "wardrobe_prefs_context", lambda _cid: "")
+    monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Городской"])
+    monkeypatch.setattr(wardrobe, "save_outfit_feedback", lambda *_a: None)
+    monkeypatch.setattr(wardrobe, "_save_cached_look", lambda _cid, ids, look_data: saved.update(ids=ids, look=look_data))
+    monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles: list(wardrobe_stylist.BASE_TRENDS))
+    monkeypatch.setattr(ai, "llm_json", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("AI down")))
+
+    asked = []
+    monkeypatch.setattr(wardrobe_stylist, "choose", lambda *_a, **_k: asked.append(1) or None)
+    asyncio.run(wardrobe.send_looks(None, 1, silent=True))
+    assert asked == [1]  # образ дня — стилист выбирает
+    asyncio.run(wardrobe.send_looks(None, 1, silent=True, previous_item_ids=["tee"]))
+    assert asked == [1] and saved["ids"]  # «Новый образ» — по оценке кода, без запроса к ИИ

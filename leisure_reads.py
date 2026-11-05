@@ -149,7 +149,7 @@ def _about_ru(items) -> dict:
         'JSON: {"items": [{"id": 0, "about": ""}]}'
     )
     try:
-        data = ai.llm_json(prompt, 1400, tier="cheap", module="leisure", fallback_allowed=True,
+        data = ai.llm_json(prompt, 1400, tier="light", module="leisure", fallback_allowed=True,
                            privacy_level="public")
     except Exception:
         _log.warning("reads: about AI failed", exc_info=True)

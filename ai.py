@@ -1359,7 +1359,12 @@ PROVIDER_ORDER = {
 # cheap  → utility-маршрут для грамматики, переводов и строгого JSON
 # smart  → utility-маршрут по умолчанию
 # leisure → premium-маршрут для финальных рекомендаций
+# Короткие простые тексты по готовым данным (перевод сбоя NS, анонс статьи, шутка о погоде): сначала маленькие
+# модели — Groq gpt-oss-20b и Cloudflare, большие — резервом. Знаний о мире от них не ждём.
+LIGHT_ORDER = (GROQ_SIMPLE, "cf", "cerebras", "groq", "gemini", "github", "openrouter")
+
 TIERS = {
+    "light":   (LIGHT_ORDER, None),
     "cheap":   (GRAMMAR_ORDER, None),
     "smart":   (DEFAULT_ORDER, None),
     "leisure": (LEISURE_ORDER, None),
@@ -1406,6 +1411,8 @@ def _resolve(tier, order, route=None, module=""):
             or n in {GROQ_SIMPLE, GROQ_STANDARD, GROQ_COMPLEX,
                      "groq", "gemini", "cf"}
         )
+    if tier == "light":  # явная просьба о маленькой модели сильнее политики раздела
+        return LIGHT_ORDER
     if module and module in MODULE_POLICY:
         return MODULE_POLICY[module]
     if route:

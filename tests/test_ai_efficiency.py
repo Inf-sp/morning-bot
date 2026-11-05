@@ -211,7 +211,11 @@ def test_every_central_text_ai_route_has_a_reserve_provider():
     ]
 
     for order, _unused in routes:
+        if order is ai.LIGHT_ORDER:  # маленькие модели первыми, все основные провайдеры — резервом
+            assert order[:2] == (ai.GROQ_SIMPLE, "cf") and set(ai.AI_ORDER) <= set(order)
+            continue
         assert order == ai.AI_ORDER
+    assert ai._resolve("light", None, module="leisure") == ai.LIGHT_ORDER  # сильнее политики раздела
 
 
 def test_all_premium_recommendations_have_a_cache_ttl():

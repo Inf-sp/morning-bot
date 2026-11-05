@@ -644,9 +644,13 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     # ИИ-стилист выбирает из уже проверенных кодом комплектов; без ИИ — лучший по коду.
     if not anchor_id:
         outfits = fresh_outfits(outfits, wardrobe_history)
-    trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles))
-    pick = await asyncio.to_thread(
-        wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends)
+    # «Новый образ» (есть прежний образ) — лучший свежий комплект по оценке кода, без ИИ: стилист выбирает только
+    # образ дня (утренний прогрев, смена погоды, первое открытие, «Собрать образ»).
+    pick = None
+    if not previous_item_ids:
+        trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles))
+        pick = await asyncio.to_thread(
+            wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends)
     best = outfits[pick["index"]] if pick else outfits[0]
     best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
