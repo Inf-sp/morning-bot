@@ -61,7 +61,7 @@ def test_every_question_gets_an_ai_answer(monkeypatch, question):
     monkeypatch.setattr(assistant.util.StatusManager, "start", start)
     monkeypatch.setattr(assistant.ai, "achat_chain", chain)
     asyncio.run(assistant.chat_reply(Bot(), "42", question))
-    assert len(calls) == 1 and calls[0].startswith(question) and "Сегодня " in calls[0]  # дата — в запросе
+    assert len(calls) == 1 and calls[0].startswith(question) and "Справка: сегодня " in calls[0]  # дата — в запросе
     assert len(sent) == 1 and sent[0].startswith("Ответ по делу")
     assert assistant.store.chat_history["42"][0]["content"] == question  # в истории — только вопрос
 
@@ -181,3 +181,12 @@ def test_short_direct_answer_on_the_first_line_is_bold():
     bold = [msg.text[e.offset:e.offset + e.length] for e in msg.entities if e.type == "bold"]
     assert msg.text == "25 декабря 2026 г.\n\nПремьера первого сезона запланирована на этот день." and bold == [
         "25 декабря 2026 г."]
+
+
+def test_user_city_is_marked_as_his_own_not_of_people_he_asks_about(monkeypatch):
+    import ai
+    monkeypatch.setattr(assistant.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    line = assistant._today_line("42")
+    assert line.startswith("Справка: сегодня ") and "сам пользователь живёт в Alkmaar" in line
+    system = ai._chat_system()
+    assert "не переноси на них его город" in system and "держись его во всех следующих ответах" in system

@@ -340,7 +340,8 @@ def _english_query(text) -> str:
 
 
 def _today_line(cid) -> str:
-    """«Сегодня 5 ноября 2026. Пользователь живёт: Alkmaar, Нидерланды.» — модель не знает сегодняшнюю дату и страну."""
+    """«Справка: сегодня 5 ноября 2026; сам пользователь живёт в Alkmaar, Нидерланды.» — модель не знает сегодняшнюю
+    дату и страну; что место — только самого пользователя, а не тех, о ком он спрашивает, говорит системная инструкция."""
     import config
     from datetime import datetime
     import countries
@@ -348,7 +349,8 @@ def _today_line(cid) -> str:
     place = store.get_settings(cid) or {}
     country = countries.name_ru(place.get("cc")) or str(place.get("country") or "")
     where = ", ".join(part for part in (str(place.get("city") or ""), country) if part)
-    return f"Сегодня {now.day} {util._MONTHS[now.month - 1]} {now.year}." + (f" Пользователь живёт: {where}." if where else "")
+    return (f"Справка: сегодня {now.day} {util._MONTHS[now.month - 1]} {now.year}"
+            + (f"; сам пользователь живёт в {where}." if where else "."))
 
 
 async def chat_reply(bot, cid, text):
