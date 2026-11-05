@@ -173,3 +173,11 @@ def test_answer_cut_mid_phrase_ends_at_the_last_full_sentence():
     assert assistant._with_final_period(cut) == "25 декабря 2026 года – премьера первого сезона."
     assert assistant._with_final_period("Да, это так") == "Да, это так."  # просто без точки — дописать
     assert assistant._with_final_period("Первый сезон — 8 серий и") == "Первый сезон — 8 серий и…"
+
+
+def test_short_direct_answer_on_the_first_line_is_bold():
+    from ui.assistant import assistant_answer
+    msg = assistant_answer("25 декабря 2026 г.\nПремьера первого сезона запланирована на этот день.")
+    bold = [msg.text[e.offset:e.offset + e.length] for e in msg.entities if e.type == "bold"]
+    assert msg.text == "25 декабря 2026 г.\n\nПремьера первого сезона запланирована на этот день." and bold == [
+        "25 декабря 2026 г."]

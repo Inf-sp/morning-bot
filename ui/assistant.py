@@ -117,10 +117,10 @@ def assistant_answer(answer: str):
     if not lines:
         lines = ["Пусто", "Попробуй ещё раз."]
 
-    # Заголовок — только короткая первая строка над текстом («Подтверждено 25 декабря 2026 года!»). Ответ одной
-    # строкой или длинное первое предложение — обычный текст со своей точкой, а не жирный заголовок без неё.
+    # Прямой ответ — короткая первая строка над пояснением («25 декабря 2026 г.») — жирным, со своей точкой. Ответ
+    # одной строкой или длинное первое предложение — обычный текст.
     first = _strip_title_emoji(lines[0])
-    is_title = len(lines) > 1 and len(first) <= _TITLE_MAX and not first.endswith(".")
+    is_title = len(lines) > 1 and len(first) <= _TITLE_MAX
     title = first.rstrip(":") if is_title else ""
     body = lines[1:] if is_title else lines
     b = MessageBuilder()
