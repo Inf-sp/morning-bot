@@ -38,6 +38,74 @@ BACKGROUND_RETRY_PAUSE_SECONDS = 2.0
 _AI_MODE = contextvars.ContextVar("ai_mode", default="live")
 # Раздел текущего AI-вызова — для счётчика «ИИ по разделам» (api_usage.record_ai_module); пусто — служебный запрос.
 _AI_MODULE = contextvars.ContextVar("ai_module", default="")
+# JSON-схема ответа текущего llm_json: провайдеру — как структурный вывод, ответу — как проверка.
+_AI_SCHEMA = contextvars.ContextVar("ai_schema", default=None)
+_SCHEMA_UNSUPPORTED = set()  # провайдеры, отклонившие схему (400): до перезапуска им — обычный JSON-режим
+
+_SCHEMA_TYPES = {"object": dict, "array": list, "string": str, "integer": int, "number": (int, float),
+                 "boolean": bool, "null": type(None)}
+
+
+def schema_errors(value, schema, path="$") -> list:
+    """Расхождения значения со схемой (подмножество JSON Schema: type, properties, required, items, enum);
+    пусто — подходит. Лишние поля не ошибка."""
+    if not isinstance(schema, dict):
+        return []
+    errors = []
+    kinds = schema.get("type")
+    kinds = [kinds] if isinstance(kinds, str) else list(kinds or [])
+    if kinds:
+        python_types = tuple(t for kind in kinds for t in (_SCHEMA_TYPES.get(kind),) if t is not None)
+        flat = tuple(item for t in python_types for item in (t if isinstance(t, tuple) else (t,)))
+        wrong_bool = isinstance(value, bool) and not any(kind == "boolean" for kind in kinds)
+        # Число строкой («7») принимаем: разделы и так приводят его через int(), а провайдер без схемы так пишет.
+        numeric_text = isinstance(value, str) and {"integer", "number"} & set(kinds) and re.fullmatch(
+            r"\s*-?\d+(?:[.,]\d+)?\s*", value)
+        if flat and (not isinstance(value, flat) or wrong_bool) and not numeric_text:
+            return [f"{path}: ожидался {'/'.join(kinds)}"]
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path}: не из списка")
+    if isinstance(value, dict):
+        for key in schema.get("required") or []:
+            if key not in value:
+                errors.append(f"{path}.{key}: нет поля")
+        for key, sub in (schema.get("properties") or {}).items():
+            if key in value:
+                errors += schema_errors(value[key], sub, f"{path}.{key}")
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for index, item in enumerate(value):
+            errors += schema_errors(item, schema["items"], f"{path}[{index}]")
+    return errors
+
+
+def schema_object(properties: dict, required=()) -> dict:
+    """Схема объекта: {"name": "string", "fame": "integer", "facts": schema_strings()} → JSON Schema."""
+    return {"type": "object",
+            "properties": {key: ({"type": kind} if isinstance(kind, str) else kind) for key, kind in properties.items()},
+            "required": list(required)}
+
+
+def schema_list(key: str, item: dict, required=(), extra=None) -> dict:
+    """{key: [объект item]} — частый вид ответа («items», «phrases», «events»); extra — другие поля верхнего уровня."""
+    return schema_object({key: {"type": "array", "items": schema_object(item, required)}, **(extra or {})}, (key,))
+
+
+def schema_strings(key: str) -> dict:
+    """{key: ["…", "…"]}."""
+    return schema_object({key: {"type": "array", "items": {"type": "string"}}}, (key,))
+
+
+def _schema_for(provider):
+    """Схема для провайдера: есть в вызове и он её не отклонял."""
+    schema = _AI_SCHEMA.get()
+    return schema if schema and _monitor_name(provider) not in _SCHEMA_UNSUPPORTED else None
+
+
+def _openai_json_format(provider):
+    schema = _schema_for(provider)
+    if schema:
+        return {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema, "strict": False}}
+    return {"type": "json_object"}
 
 
 def _record_module(provider, ok, payload=None):
@@ -580,8 +648,31 @@ def _gemini_thinking(model):
     return {"thinkingBudget": 0} if str(model).startswith("gemini-2") else {"thinkingLevel": "low"}
 
 
+def _without_schema(service, status, body, payload):
+    """Провайдер отклонил JSON-схему (400 со словом schema, не сбой генерации) — тот же запрос в обычном JSON-режиме,
+    а провайдер до перезапуска получает запросы без схемы."""
+    if status != 400 or not isinstance(payload, dict) or "schema" not in str(body or "").casefold():
+        return None
+    if _is_json_validation_error(status, body):
+        return None
+    config_ = payload.get("generationConfig")
+    if isinstance(config_, dict) and "responseJsonSchema" in config_:
+        payload = {**payload, "generationConfig": {k: v for k, v in config_.items() if k != "responseJsonSchema"}}
+    elif (payload.get("response_format") or {}).get("type") == "json_schema":
+        payload = {**payload, "response_format": {"type": "json_object"}}
+    else:
+        return None
+    _SCHEMA_UNSUPPORTED.add(_monitor_name(service))
+    _log.warning("%s rejected JSON schema (400); plain JSON mode from now on", service)
+    return payload
+
+
 def _fallback_request(service, status, body, url, payload):
-    """(url, payload) на запасной модели, если провайдер снял модель (404); иначе None."""
+    """(url, payload) без JSON-схемы, если провайдер её не принял (400); на запасной модели, если провайдер снял
+    модель (404); иначе None."""
+    plain = _without_schema(service, status, body, payload)
+    if plain is not None:
+        return url, plain
     if status != 404 or not isinstance(payload, dict):
         return None
     if service == "gemini":
@@ -939,6 +1030,8 @@ def _gen_gemini(prompt, max_tokens, temperature, response_mode: ResponseMode = "
     }
     if response_mode == "json":
         generation_config["responseMimeType"] = "application/json"
+        if _schema_for(provider):
+            generation_config["responseJsonSchema"] = _schema_for(provider)
     payload = {"contents": [{"parts": [{"text": prompt}]}],
                "generationConfig": generation_config}
     # A background request may hold the lock for up to a minute; a live call
@@ -1138,7 +1231,7 @@ def _gen_groq(prompt, max_tokens, temperature, response_mode: ResponseMode = "pl
         "temperature": temperature,
     }
     if response_mode == "json":
-        payload["response_format"] = {"type": "json_object"}
+        payload["response_format"] = _openai_json_format(provider)
     headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"}
     usage_service = api_usage.groq_model_service(model or _provider_model_name(provider))
     try:
@@ -1178,7 +1271,7 @@ def _gen_compat(provider, prompt, max_tokens, temperature, response_mode: Respon
     url, headers, payload = _compat_request(
         provider, [{"role": "user", "content": prompt}], max_tokens, temperature)
     if response_mode == "json":
-        payload["response_format"] = {"type": "json_object"}
+        payload["response_format"] = _openai_json_format(provider)
     r = _post(url, headers, payload, 40, provider,
               suppress_json_validation_failure=response_mode == "json")
     return r.json()["choices"][0]["message"]["content"]
@@ -1719,16 +1812,31 @@ def _parse_json_response(raw):
 def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
                    fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
                    allow_personal_openrouter=False, fallback_policy=None, cache_context=None,
-                   result_validator=None):
+                   result_validator=None, schema=None):
     if not module:
         module = _caller_module()
     def validate_json_result(raw):
         parsed = _parse_json_response(raw)
+        problems = schema_errors(parsed, schema) if schema else []
+        if problems:  # не та структура — следующий провайдер, а не разбор вслепую в разделе
+            _log.info("AI JSON does not match schema module=%s: %s", module, "; ".join(problems[:3]))
+            raise ValueError("json_schema_validation_failed")
         if result_validator is not None and not result_validator(parsed):
             raise ValueError("json_result_validation_failed")
         return parsed
 
-    raw = _llm_impl(
+    token = _AI_SCHEMA.set(schema)
+    try:
+        raw = _llm_json_call(prompt, max_tokens, order, tier, module, route, fallback_allowed, privacy_level,
+                             fallback_policy, allow_personal_openrouter, cache_context, validate_json_result)
+    finally:
+        _AI_SCHEMA.reset(token)
+    return _parse_json_response(raw)
+
+
+def _llm_json_call(prompt, max_tokens, order, tier, module, route, fallback_allowed, privacy_level, fallback_policy,
+                   allow_personal_openrouter, cache_context, validate_json_result):
+    return _llm_impl(
         prompt + "\n\nВерни ТОЛЬКО валидный JSON, без markdown. "
         "Внутри строковых значений НЕ используй двойные кавычки - "
         "вместо них используй « » или одинарные.",
@@ -1737,13 +1845,14 @@ def _llm_json_impl(prompt, max_tokens=1200, order=None, tier=None, module="", ro
         allow_personal_openrouter, cache_context,
         response_validator=validate_json_result,
     )
-    return _parse_json_response(raw)
 
 
 def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=None,
              fallback_allowed=False, privacy_level: PrivacyLevel = "personal",
              allow_personal_openrouter=False, fallback_policy=None, budget_seconds=None,
-             cache_context=None, result_validator=None):
+             cache_context=None, result_validator=None, schema=None):
+    """JSON-ответ ИИ. schema — JSON Schema ответа: провайдеры получают её как структурный вывод (кто не принял —
+    обычный JSON-режим), а ответ не по схеме идёт к следующему провайдеру."""
     resolved_module = module or _caller_module()
     return _run_with_deadline(
         resolved_module,
@@ -1751,7 +1860,7 @@ def llm_json(prompt, max_tokens=1200, order=None, tier=None, module="", route=No
         lambda: _llm_json_impl(
             prompt, max_tokens, order, tier, resolved_module, route,
             fallback_allowed, privacy_level, allow_personal_openrouter,
-            fallback_policy, cache_context, result_validator,
+            fallback_policy, cache_context, result_validator, schema,
         ),
     )
 

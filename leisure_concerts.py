@@ -1285,6 +1285,8 @@ JSON: {{"items":[{{"name":"","fame":1,"about_ru":""}}]}}
         try:
             payload = await ai.allm_json(
                 prompt, 700, tier="cheap", module="leisure_concerts",
+                schema=ai.schema_list("items", {"name": "string", "fame": "integer", "about_ru": "string"},
+                                      ("name", "fame")),
                 fallback_allowed=True, privacy_level="public", budget_seconds=12,
             )
         except Exception:

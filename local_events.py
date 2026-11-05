@@ -108,6 +108,10 @@ def _focus(text, pattern) -> str:
     return " … ".join(text[start:finish] for start, finish in spans)[:_PAGE_CHARS]
 
 
+_EVENTS_SCHEMA = ai.schema_list("events", {key: "string" for key in ("name", "about", "start", "end", "url", "evidence")},
+                                ("name", "start"))
+
+
 def _extract(city, rows, today, horizon=_HORIZON_DAYS, kinds=_CITY_KINDS):
     """[{name, about, start, end, url}] — только события с датой, найденной в тексте страниц. В AI идут только куски
     страниц вокруг дат нужных месяцев; страницы без таких дат не идут вовсе."""
@@ -131,7 +135,7 @@ def _extract(city, rows, today, horizon=_HORIZON_DAYS, kinds=_CITY_KINDS):
     )
     # Сбой AI — исключение: вызывающий не запоминает пустую афишу на неделю (как и сбой поиска).
     data = ai.llm_json(prompt, 900, tier="cheap", module="local_events",
-                       fallback_allowed=True, privacy_level="public")
+                       fallback_allowed=True, privacy_level="public", schema=_EVENTS_SCHEMA)
     texts = {page["url"]: _norm(page["text"]) for page in pages}
     events, seen = [], set()
     for item in (data.get("events") if isinstance(data, dict) else None) or []:

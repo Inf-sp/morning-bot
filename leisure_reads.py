@@ -150,6 +150,7 @@ def _about_ru(items) -> dict:
     )
     try:
         data = ai.llm_json(prompt, 1400, tier="light", module="leisure", fallback_allowed=True,
+                           schema=ai.schema_list("items", {"id": "integer", "about": "string"}, ("id", "about")),
                            privacy_level="public")
     except Exception:
         _log.warning("reads: about AI failed", exc_info=True)

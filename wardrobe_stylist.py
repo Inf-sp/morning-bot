@@ -154,7 +154,7 @@ def choose(outfits, ctx, styles, prefs_text, trends):
     try:
         data = ai.llm_json(
             _prompt(outfits, ctx, styles, prefs_text, trends), 200, tier="smart", module="wardrobe",
-            budget_seconds=20,
+            budget_seconds=20, schema=ai.schema_object({"choice": "integer"}, ("choice",)),
             cache_context={
                 "scenario": "wardrobe_stylist", "outfits": [[it.get("id") for it in o] for o in outfits],
                 "weather": _weather_line(ctx), "styles": list(styles), "preferences": prefs_text,

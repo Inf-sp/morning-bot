@@ -1189,7 +1189,11 @@ def trip_activities(cid, fetch=True) -> dict:
         )
         try:
             data = ai.llm_json(prompt, 3000, tier="cheap", module="vacation", fallback_allowed=True,
-                               privacy_level="public")
+                               privacy_level="public",
+                               schema=ai.schema_list(
+                                   "items", {key: "string" for key in ("category", "name", "name_en", "about", "city",
+                                                                       "tip")},
+                                   ("name", "about"), extra={"rule": "string"}))
         except Exception:
             _log.warning("vacation: trip activities AI failed cid=%s", cid, exc_info=True)
             break
@@ -1594,7 +1598,9 @@ def travel_phrases(cid) -> list:
         )
         try:
             data = ai.llm_json(prompt, 3000, tier="cheap", module="vacation", fallback_allowed=True,
-                               privacy_level="public")
+                               privacy_level="public",
+                               schema=ai.schema_list("phrases", {"text": "string", "ru": "string", "say": "string"},
+                                                     ("text", "ru")))
         except Exception:
             _log.warning("vacation: travel phrases AI failed cid=%s", cid, exc_info=True)
             break
@@ -1638,7 +1644,8 @@ def travel_words(cid) -> list:
     )
     try:
         data = ai.llm_json(prompt, 2400, tier="cheap", module="vacation", fallback_allowed=True,
-                           privacy_level="public")
+                           privacy_level="public",
+                           schema=ai.schema_list("words", {"text": "string", "ru": "string"}, ("text", "ru")))
     except Exception:
         _log.warning("vacation: travel words AI failed cid=%s", cid, exc_info=True)
         return []
@@ -1872,7 +1879,8 @@ def trip_facts(cid, topic) -> list:
     )
     try:
         data = ai.llm_json(prompt, 2400, tier="cheap", module="vacation", fallback_allowed=True,
-                           privacy_level="public")
+                           privacy_level="public",
+                           schema=ai.schema_strings("facts"))
     except Exception:
         _log.warning("vacation: %s facts AI failed cid=%s", topic, cid, exc_info=True)
         return []
@@ -1918,7 +1926,9 @@ def trip_dishes(cid) -> list:
     )
     try:
         data = ai.llm_json(prompt, 3000, tier="cheap", module="vacation", fallback_allowed=True,
-                           privacy_level="public")
+                           privacy_level="public",
+                           schema=ai.schema_list("dishes", {key: "string" for key in ("name", "original", "emoji",
+                                                                                      "note")}, ("name",)))
     except Exception:
         _log.warning("vacation: trip dishes AI failed cid=%s", cid, exc_info=True)
         return []

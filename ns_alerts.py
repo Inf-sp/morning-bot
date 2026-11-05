@@ -87,6 +87,7 @@ def _translate(disruption):
             f"Данные: {secure.wrap_untrusted(str(fields), 'сообщение NS')}. "
             "Верни JSON без markdown с теми же ключами и переводом значений.",
             300, tier="light", module="ns",
+            schema=ai.schema_object({key: "string" for key in fields}, tuple(fields)),
             cache_context={"scenario": "ns_disruption_ru", "fields": fields, "schema_version": 3},
             # Ответ без кириллицы (модель вернула нидерландский) — брак: пробуем следующий
             # провайдер и не кэшируем.
