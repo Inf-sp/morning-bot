@@ -67,6 +67,28 @@ async def send_dict(bot, cid, back="m_learn", q=None):
     ]
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
 
+_LEARNED_LEVEL = 4  # уровень SRS, с которого слово считается выученным (как на экране прогресса)
+
+
+def _review_order(entries) -> list:
+    """Слова на повторение сегодня — первыми, выученные — в конце; внутри — прежний порядок."""
+    import srs
+
+    def key(pair):
+        state = srs.normalize_state(pair[1])
+        return (not srs.is_due(state), state["srs_level"] >= _LEARNED_LEVEL, pair[0])
+
+    return [item for _index, item in sorted(enumerate(entries), key=key)]
+
+
+def _review_counts(entries) -> tuple:
+    """(на повторение сегодня, выучено)."""
+    import srs
+    states = [srs.normalize_state(item) for item in entries]
+    return (sum(1 for state in states if srs.is_due(state)),
+            sum(1 for state in states if state["srs_level"] >= _LEARNED_LEVEL))
+
+
 async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     """Главный экран языкового словаря: категории вместо плоской сетки."""
     # Открытие словаря — быстрый UI-маршрут. Тяжёлые одноразовые AI-миграции
@@ -90,9 +112,14 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     from ui.builder import MessageBuilder
     b = MessageBuilder()
     if entries:
-        b.line(f"{flag} Мой словарь · {len(entries)} слов")
+        from ui.text import ru_plural
+        total = len(entries)
+        due, learned = _review_counts(entries)
+        b.line(f"{flag} Мой словарь · {total} {ru_plural(total, 'слово', 'слова', 'слов')}")
         b.spacer()
-        b.italic("Слова разложены по темам; все они участвуют в тренировках.")
+        b.line(f"Повторить сегодня: {due} {ru_plural(due, 'слово', 'слова', 'слов')} · выучено {learned}")
+        b.spacer()
+        b.italic("Слова разложены по темам; в теме сначала те, что пора повторить.")
     else:
         b.line(f"{flag} Мой словарь")
         b.spacer()
@@ -109,10 +136,10 @@ async def send_dict_category(bot, cid, lang, category_index, page=0, q=None):
     if not category:
         await send_dict_lang(bot, cid, lang, q=q)
         return
-    entries = [
+    entries = _review_order([
         item for item in _dict_lang_entries(cid, lang)
         if _dictionary_category(item) == category
-    ]
+    ])
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
     if not entries:
         rows = [nav_row(f"a_dictlang_{lang}")]
@@ -156,10 +183,10 @@ async def send_dict_category_list(bot, cid, lang, category_index, page=0, q=None
         await send_dict_lang(bot, cid, lang, q=q)
         return
     category = _DICT_CATEGORY_ORDER[category_index]
-    entries = [
+    entries = _review_order([
         item for item in _dict_lang_entries(cid, lang)
         if _dictionary_category(item) == category
-    ]
+    ])
     page_size = 12
     pages = max(1, (len(entries) + page_size - 1) // page_size)
     page = max(0, min(int(page), pages - 1))

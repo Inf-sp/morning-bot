@@ -505,3 +505,14 @@ def test_dictionary_category_list_uses_two_columns(monkeypatch):
     rows = bot.message["reply_markup"].inline_keyboard
 
     assert [len(row) for row in rows[:-1]] == [2, 1]
+
+
+def test_dictionary_shows_review_count_and_due_words_first():
+    import dictionary_views
+    entries = [
+        {"term": "huis", "srs_level": 5, "srs_due_at": "2999-01-01"},   # выучено, не сегодня
+        {"term": "fiets", "srs_level": 1, "srs_due_at": "2999-01-01"},  # не сегодня
+        {"term": "kiezen", "srs_level": 2, "srs_due_at": "2000-01-01"},  # пора повторить
+    ]
+    assert [item["term"] for item in dictionary_views._review_order(entries)] == ["kiezen", "fiets", "huis"]
+    assert dictionary_views._review_counts(entries) == (1, 1)

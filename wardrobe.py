@@ -680,6 +680,8 @@ async def send_wardrobe_zones(bot, cid, q=None):
             [InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="set_pref_style")]]
     for zone in CLOSET_ZONE_ORDER:
         count = counts.get(zone, 0)
+        if not count:  # пустая категория не показывается: добавить вещь — кнопкой сверху
+            continue
         rows.append([InlineKeyboardButton(
             f"{public_zone_name(zone)} · {count}",
             callback_data=f"w_cat_{ZONE_SLUG[zone]}",
@@ -700,6 +702,13 @@ async def send_category(bot, cid, zone_slug, page=0, q=None):
         return
     items = [item for item_zone, _subcat, item in _flat_wardrobe_items(store.load_wardrobe(cid))
              if item_zone == zone]
+    # Что давно не было в образах — первым: не было за последние образы истории, затем самые давние.
+    last_look = {}
+    for entry in store.get_wardrobe_history(cid):
+        for item_id in entry.get("item_ids") or []:
+            last_look[item_id] = max(last_look.get(item_id, ""), str(entry.get("date") or ""))
+    items = [item for _index, item in sorted(enumerate(items), key=lambda pair: (
+        last_look.get(pair[1].get("id"), ""), pair[0]))]
     total = len(items)
     pages = max(1, (total + WARDROBE_CATEGORY_PAGE_SIZE - 1) // WARDROBE_CATEGORY_PAGE_SIZE)
     page = max(0, min(int(page), pages - 1))

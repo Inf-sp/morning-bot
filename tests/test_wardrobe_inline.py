@@ -475,7 +475,7 @@ def test_closet_screen_uses_one_column_without_edit_button(monkeypatch):
 
     labels = _labels(bot.message["reply_markup"])
     assert bot.message["text"] == "🎚️ Мой шкаф · 1 вещь\n\nНажми на категорию, чтобы посмотреть вещи или удалить лишнее."
-    assert ["Футболки и рубашки · 1"] in labels and ["Обувь · 0"] in labels
+    assert ["Футболки и рубашки · 1"] in labels and not any("· 0" in row[0] for row in labels)  # пустых нет
     assert "Выбери категорию" not in bot.message["text"]
     assert labels[0] == ["✅ Добавить вещь"]
     assert labels[1] == ["📝 Выбрать предпочтения"]  # зелёная, сразу под «Добавить вещь»
@@ -691,3 +691,22 @@ def test_oversized_tee_is_worn_alone_and_toggles_in_item_card(monkeypatch):
     assert ["□ Оверсайз"] in _labels(bot.message["reply_markup"])
     asyncio.run(wardrobe.send_item_card(bot, "42", "shirt"))
     assert not any("Оверсайз" in label for row in _labels(bot.message["reply_markup"]) for label in row)
+
+
+def test_closet_category_shows_items_long_absent_from_looks_first(monkeypatch):
+    import wardrobe
+    monkeypatch.setattr(wardrobe.store, "load_wardrobe", lambda _cid: {"zones": {"Верх": {"Футболки": [
+        {"id": "a", "name": "Белая футболка"}, {"id": "b", "name": "Серая футболка"},
+        {"id": "c", "name": "Чёрная футболка"}]}}})
+    monkeypatch.setattr(wardrobe.store, "get_wardrobe_history", lambda _cid: [
+        {"date": "2026-11-01", "item_ids": ["a"]}, {"date": "2026-11-05", "item_ids": ["b"]},
+        {"date": "2026-11-03", "item_ids": ["a"]}])
+    shown = {}
+
+    async def show(_bot, _cid, _msg, reply_markup=None, query=None):
+        shown["rows"] = _labels(reply_markup)
+
+    monkeypatch.setattr(wardrobe.rich_delivery, "show", show)
+    asyncio.run(wardrobe.send_category(None, "42", wardrobe.ZONE_SLUG["Верх"]))
+    # Чёрной не было в образах — первой; белая была 3 ноября — раньше серой (5 ноября).
+    assert shown["rows"][1:4] == [["Чёрная футболка"], ["Белая футболка"], ["Серая футболка"]]

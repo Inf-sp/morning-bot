@@ -80,6 +80,8 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
     rows = [[InlineKeyboardButton("✅ Добавить продукт", callback_data="as_fridge_add")]]
     for ci, cat in enumerate(_CAT_ORDER):
         cat_items = by_cat[cat]
+        if not cat_items:  # пустая категория не показывается: добавить продукт — кнопкой сверху
+            continue
         on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
         label = _CAT_BTN_LABEL[cat]
         rows.append([InlineKeyboardButton(
