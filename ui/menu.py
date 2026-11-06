@@ -166,8 +166,8 @@ def _grammar_explanation(phrase) -> str:
 
 
 def _grammar_lesson(phrase) -> dict:
-    """Тема дня → {header, intro, usage, example, translation, remember}. Есть карточка темы (phrase["card"]) — из
-    неё; нет — из краткого разбора: первое предложение — суть, остальные — «Как использовать», без «Запомни»."""
+    """Тема дня → {header, intro, usage, example}. Есть карточка темы (phrase["card"]) — из неё; нет — из краткого
+    разбора: первое предложение — суть, остальные — «Как использовать»."""
     card = phrase.get("card") or {}
     if phrase.get("topic") and card.get("intro") and card.get("usage"):
         header = _grammar_title({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")})
@@ -186,10 +186,10 @@ def _grammar_lesson(phrase) -> dict:
             header, points = f"{header} — {short[:1].lower()}{short[1:]}", points[1:]
         intro, usage = (points[0] if points else ""), points[1:3]
     example, translation = phrase.get("more"), phrase.get("more_translation")
+    if example and translation:
+        example = f"{_without_period(example)} → {_with_period(translation)}"
     return {"header": _without_period(header), "intro": intro, "usage": usage,
-            "example": _with_period(example) if example else "",
-            "translation": _with_period(translation) if example and translation else "",
-            "remember": _with_period(card.get("remember")) if card.get("intro") else ""}
+            "example": _with_period(example) if example else ""}
 
 
 def learning_menu(home: dict):
@@ -230,7 +230,7 @@ def learning_menu(home: dict):
     b.newline()
 
     # Грамматика (фраза дня — в «Моём дне», строка «Фраза дня»): тема — значение, суть одной строкой,
-    # «Как использовать:» (ситуация — форма: пример), «Пример:» и ниже «→ перевод», «Запомни:».
+    # «Как использовать:» (ситуация — форма: пример), «Пример: фраза → перевод.».
     lesson = _grammar_lesson(home.get("live_language") or {})
     if lesson["header"] or lesson["intro"]:
         b.spacer()
@@ -249,13 +249,6 @@ def learning_menu(home: dict):
         b.spacer()
         b.bold("Пример:")
         b.text_line(f" {lesson['example']}")
-        b.newline()
-        if lesson["translation"]:
-            b.line(f"→ {lesson['translation']}")
-    if lesson["remember"]:
-        b.spacer()
-        b.bold("Запомни:")
-        b.text_line(f" {lesson['remember']}")
         b.newline()
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
