@@ -19,7 +19,9 @@ from fridge_model import (
     _fridge_rejected_lines,
     _fridge_split_input,
     BASE_VERSION,
+    NOT_FOR_COOKING,
     with_base_products,
+    without_old_base,
 )
 from ui import food as food_ui
 from ui.navigation import nav_row
@@ -63,7 +65,8 @@ def _load_products(cid) -> list:
     raw = store.get_list(config.FRIDGE_KEY, cid_s)
     items = _fridge_migrate(raw)
     if (store.get_profile(cid_s) or {}).get("fridge_base_v") != BASE_VERSION:
-        items = _fridge_migrate(with_base_products(items))
+        # Новая версия набора: невыбранное из прежнего набора уходит, недостающее — добавляется невыбранным.
+        items = _fridge_migrate(with_base_products(without_old_base(items)))
         store.mutate_profile(cid_s, lambda profile: ({**profile, "fridge_base_v": BASE_VERSION}, None))
     if items != raw:
         store.set_list(config.FRIDGE_KEY, cid_s, items)
@@ -74,7 +77,7 @@ def _load_products(cid) -> list:
 async def send_fridge(bot, cid, q=None, back="m_food"):
     """«Любимые продукты»: категории базового набора; на кнопке — сколько в ней любимых."""
     items = _load_products(cid)
-    available = sum(1 for it in items if it.get("on", True))
+    available = len(_fridge_available(items))
     by_cat = _fridge_by_cat_display(items)
     msg = food_ui.fridge_home(available)
     rows = [[InlineKeyboardButton("✅ Добавить продукт", callback_data="as_fridge_add")]]
@@ -167,8 +170,12 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     duplicates = []
     needs_category = []
     selected_category = _CAT_ORDER[cat_idx] if 0 <= cat_idx < len(_CAT_ORDER) else None
+    rejected = []
     for name in items_new:
         key = name.lower()
+        if name and _fridge_detect_cat(name) == NOT_FOR_COOKING:  # батончики, напитки — из этого не готовят
+            rejected.append((name, "из этого не готовят"))
+            continue
         if name and key not in existing:
             detected = _fridge_detect_cat(name)
             category = detected or selected_category
@@ -193,7 +200,7 @@ async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
     for item in items:
         if item["name"] in added:
             added_by_cat.setdefault(item["cat"], []).append(item["name"])
-    rejected = _fridge_rejected_lines(text)
+    rejected = [*rejected, *_fridge_rejected_lines(text)]
     if (added or duplicates or rejected) and not first_fill:
         msg = food_ui.fridge_updated(
             added_by_cat, added, duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)

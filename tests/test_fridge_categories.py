@@ -42,7 +42,7 @@ def _memory_store(monkeypatch, initial, profile=None):
     return state
 
 
-def test_fridge_uses_nine_product_type_categories_and_detects_examples():
+def test_fridge_uses_eight_cooking_categories_and_detects_examples():
     assert _CAT_ORDER == [
         "мясо и птица",
         "рыба и морепродукты",
@@ -52,8 +52,7 @@ def test_fridge_uses_nine_product_type_categories_and_detects_examples():
         "молочное и яйца",
         "крупы, макароны и хлеб",
         "соусы и специи",
-        "сладкое и напитки",
-    ]
+    ]  # «Сладкое и напитки» — скрытая: из этого не готовят
     assert _fridge_detect_cat("куриная грудка") == "мясо и птица"
     assert _fridge_detect_cat("крабовые палочки") == "рыба и морепродукты"
     assert _fridge_detect_cat("куриные сосиски") == "колбасы и полуфабрикаты"  # не мясо
@@ -142,7 +141,7 @@ def test_fridge_category_uses_status_dots_without_delete(monkeypatch):
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_unknown_product_requires_one_of_nine_categories(monkeypatch):
+def test_unknown_product_requires_one_of_eight_categories(monkeypatch):
     state = _memory_store(monkeypatch, [])
     fridge._pending_category_choices.clear()
     bot = _Bot()
@@ -159,7 +158,6 @@ def test_unknown_product_requires_one_of_nine_categories(monkeypatch):
         ["Молочное и яйца"],
         ["Крупы, макароны и хлеб"],
         ["Соусы и специи"],
-        ["Сладкое и напитки"],
     ]
 
     asyncio.run(fridge.fridge_assign_category(bot, "fridge-unknown", 4))
@@ -199,3 +197,29 @@ def test_base_products_are_added_once_and_favorites_go_first(monkeypatch):
 
     asyncio.run(fridge.fridge_add_done(bot, "fridge-base", "курица, дуриан"))  # «добавь» — отметить любимым
     assert next(item for item in state if item["name"] == "курица")["on"] is True
+
+
+def test_base_set_is_compact_and_only_for_cooking(monkeypatch):
+    from fridge_model import BASE_PRODUCTS, NOT_FOR_COOKING, _fridge_available
+    assert all(len(names) <= 10 for names in BASE_PRODUCTS.values())  # до десяти на категорию
+    profile = {"fridge_base_v": 2}  # прежний большой набор
+    state = _memory_store(monkeypatch, [
+        {"name": "куриные бёдра", "cat": "мясо и птица", "on": False, "base": True, "cat_manual": True},
+        {"name": "утка", "cat": "мясо и птица", "on": True, "base": True, "cat_manual": True},
+        {"name": "батончики", "cat": "бакалея", "on": True},
+        {"name": "куриные ножки", "cat": "мясо и рыба", "on": False},
+    ], profile=profile)
+    bot = _Bot()
+
+    asyncio.run(fridge.send_fridge(bot, "fridge-compact"))
+    names = {item["name"] for item in state}
+    assert "куриные бёдра" not in names  # невыбранное из прежнего набора убрано
+    assert {"утка", "куриные ножки", "батончики"} <= names  # любимое и своё — на месте
+    assert next(item for item in state if item["name"] == "батончики")["cat"] == NOT_FOR_COOKING
+    assert "батончики" not in _fridge_available(state)  # в рецепт не идёт и в категориях не показывается
+    assert "Сладкое" not in str(_labels(bot.messages[-1]["reply_markup"]))
+
+    asyncio.run(fridge.send_fridge(bot, "fridge-compact"))  # уже на новой версии
+    asyncio.run(fridge.fridge_add_done(bot, "fridge-compact", "чипсы, кабачок"))
+    assert "чипсы" not in {item["name"] for item in state}
+    assert any("Не добавил:\n• чипсы — из этого не готовят" in message["text"] for message in bot.messages)

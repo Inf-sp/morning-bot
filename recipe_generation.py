@@ -13,7 +13,7 @@ import spoonacular
 import store
 import themealdb
 from recipe_state import _leftover_recent
-from fridge_model import _fridge_cat, _fridge_clean_name, _fridge_migrate
+from fridge_model import _fridge_available, _fridge_cat, _fridge_clean_name, _fridge_migrate
 from ui.constants import CUISINE_EMOJI
 
 TZ = config.TZ
@@ -1019,7 +1019,7 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     now = now or datetime.now(TZ)
     raw_fridge = store.get_list(config.FRIDGE_KEY, str(cid))
     fridge = _fridge_migrate(raw_fridge)
-    available = [item["name"] for item in fridge if item.get("on", True)]  # любимые продукты
+    available = _fridge_available(fridge)  # любимые продукты, без того, из чего не готовят
     unavailable = []  # невыбранное в базовом наборе — не «закончилось», а просто не любимое
     profile = store.get_profile(cid)
     diet_prefs = " ".join(str(profile.get("diet_prefs") or "").split())
