@@ -77,7 +77,7 @@ def _day_menu_message(menu, cid=None):
     import vacation
     from fridge_model import _fridge_available
     stats = None
-    if cid is not None and not vacation.active(cid):  # в отпуске холодильник остался дома
+    if cid is not None and not vacation.active(cid):  # в отпуске строки о любимых продуктах нет
         available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
         stats = {"products": len(available)}
     trip = cid is not None and vacation.active(cid)
@@ -149,7 +149,7 @@ async def _with_food_status(bot, cid, status, q, build):
 
 
 async def send_mine_recipe(bot, cid, status=None, refresh=False, cuisine=None):
-    """«Из моих продуктов»: рецепт только из отмеченных продуктов, приём пищи — по времени суток.
+    """«Из любимых продуктов»: рецепт из отмеченных любимых продуктов, приём пищи — по времени суток.
     cuisine — кухня из «Другого рецепта»; без неё — кухня меню дня."""
     import recipe_generation
     from datetime import datetime

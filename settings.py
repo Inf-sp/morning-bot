@@ -421,7 +421,7 @@ async def send_my_data(bot, cid, q=None):
     code = learning_dictionary._active_language_code(cid)
     rows = [
         [InlineKeyboardButton("👔 Мой шкаф", callback_data="w_closet")],
-        [InlineKeyboardButton("🧊 Мой холодильник", callback_data="as_fridge_home")],
+        [InlineKeyboardButton("🥕 Любимые продукты", callback_data="as_fridge_home")],
         [InlineKeyboardButton("📖 Мой словарь", callback_data=f"a_dictlang_{code}")],
         [InlineKeyboardButton("🎬 Моя библиотека", callback_data="set_mylib")],
         nav_row("set_home"),

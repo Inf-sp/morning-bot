@@ -20,9 +20,15 @@ def _labels(markup):
     return [[button.text for button in row] for row in markup.inline_keyboard]
 
 
-def _memory_store(monkeypatch, initial):
+def _memory_store(monkeypatch, initial, profile=None):
+    """profile=None — базовый набор уже добавлен (как у существующих пользователей); {} — первое открытие."""
     async def no_cooking_home(*_args, **_kwargs):
         return None
+
+    saved_profile = {"fridge_base_v": fridge.BASE_VERSION} if profile is None else profile
+    monkeypatch.setattr(fridge.store, "get_profile", lambda _cid: dict(saved_profile))
+    monkeypatch.setattr(fridge.store, "mutate_profile",
+                        lambda _cid, change: saved_profile.update(change(dict(saved_profile))[0]))
 
     # Переход в «Готовку» собирает настоящий рецепт — здесь он не нужен.
     monkeypatch.setattr(fridge, "_send_cooking_home", no_cooking_home)
@@ -86,7 +92,8 @@ def test_fridge_home_has_available_counts_and_delete_before_navigation(monkeypat
     asyncio.run(fridge.send_fridge(bot, "fridge-home"))
 
     message = bot.messages[-1]
-    assert message["text"] == "🎚️ Мой холодильник · 2 продукта в наличии\n\nОтмечай, что есть дома: меню и рецепты учитывают продукты в наличии."
+    assert message["text"] == ("🎚️ Любимые продукты · 2\n\nОтмечай в категориях, что любишь и обычно покупаешь, — "
+                               "рецепт «Из любимых продуктов» соберу из них.")
     assert _labels(message["reply_markup"]) == [
         ["✅ Добавить продукт"],
         ["Мясо и рыба · 1"],
@@ -106,8 +113,7 @@ def test_fridge_category_uses_status_dots_without_delete(monkeypatch):
     asyncio.run(fridge.send_fridge_cat(bot, "fridge-category", 0, 0))
 
     message = bot.messages[-1]
-    assert message["text"].startswith("Мясо и рыба · 2 продукта · 1 в наличии")
-    assert message["text"] == "Мясо и рыба · 2 продукта · 1 в наличии"
+    assert message["text"] == "Мясо и рыба · 1 из 2"  # любимых из всех в категории
     rows = _labels(message["reply_markup"])
     assert rows[:2] == [["✅ курица"], ["□ лосось"]]
     assert rows[-2] == ["✏️ Изменить"]
@@ -133,45 +139,34 @@ def test_unknown_product_requires_one_of_six_categories(monkeypatch):
 
     asyncio.run(fridge.fridge_assign_category(bot, "fridge-unknown", 1))
 
-    import util
     assert state == [{
         "name": "дуриан",
         "cat": "овощи и фрукты",
         "cat_manual": True,
         "on": True,
-        "since": util.local_today().isoformat(),  # с какого дня лежит — для «Пора использовать»
     }]
 
 
-def test_perishables_show_days_and_oldest_first(monkeypatch):
-    from datetime import date
-    import util
-    monkeypatch.setattr(util, "local_today", lambda: date(2026, 11, 6))
-    state = _memory_store(monkeypatch, [
-        {"name": "курица", "cat": "мясо и рыба", "on": True, "since": "2026-11-05"},
-        {"name": "фарш", "cat": "мясо и рыба", "on": True, "since": "2026-11-01"},
-        {"name": "лосось", "cat": "мясо и рыба", "on": False},
-        {"name": "бекон", "cat": "мясо и рыба", "on": True},  # старый продукт без даты
-        {"name": "молоко", "cat": "молочное и напитки", "on": True, "since": "2026-10-29"},
-        {"name": "рис", "cat": "бакалея", "on": True, "since": "2026-09-01"},  # не портится — без дней
-    ])
+def test_base_products_are_added_once_and_favorites_go_first(monkeypatch):
+    from fridge_model import BASE_PRODUCTS
+    profile = {}
+    state = _memory_store(monkeypatch, [{"name": "креветки", "cat": "мясо и рыба", "on": True}], profile=profile)
     bot = _Bot()
 
-    asyncio.run(fridge.send_fridge(bot, "fridge-days"))
-    home = bot.messages[-1]["text"]
-    assert "Пора использовать:\n• молоко · лежит 8 дней\n• фарш · лежит 5 дней\n\n" in home  # курица — 1 день, рис — нет
-    asyncio.run(fridge.send_fridge_cat(bot, "fridge-days", 0, 0))
-    assert _labels(bot.messages[-1]["reply_markup"])[:4] == [
-        ["✅ фарш · 5 дн."], ["✅ курица · 1 дн."], ["✅ бекон"], ["□ лосось"]]
+    asyncio.run(fridge.send_fridge(bot, "fridge-base"))  # первое открытие — базовый набор невыбранным
+    total = sum(len(names) for names in BASE_PRODUCTS.values())
+    assert len(state) == total and profile["fridge_base_v"] == fridge.BASE_VERSION  # креветки уже были в наборе
+    assert sum(item["on"] for item in state) == 1
+    assert bot.messages[-1]["text"].startswith("🎚️ Любимые продукты · 1\n")
+    assert _labels(bot.messages[-1]["reply_markup"])[1] == ["Мясо и рыба · 1"]
 
-    lososs = next(index for index, item in enumerate(state) if item["name"] == "лосось")
-    asyncio.run(fridge.fridge_toggle(bot, "fridge-days", lososs, 0, 0))  # снова есть — отсчёт с сегодня
-    assert next(item for item in state if item["name"] == "лосось")["since"] == "2026-11-06"
-    farsh = next(index for index, item in enumerate(state) if item["name"] == "фарш")
-    asyncio.run(fridge.fridge_toggle(bot, "fridge-days", farsh, 0, 0))  # закончился — без даты
-    assert "since" not in next(item for item in state if item["name"] == "фарш")
+    asyncio.run(fridge.send_fridge_cat(bot, "fridge-base", 0, 0))
+    assert bot.messages[-1]["text"] == f"Мясо и рыба · 1 из {len(BASE_PRODUCTS['мясо и рыба'])}"
+    assert _labels(bot.messages[-1]["reply_markup"])[:2] == [["✅ креветки"], ["□ бекон"]]  # любимые — первыми
 
-    asyncio.run(fridge.fridge_add_done(bot, "fridge-days", "молоко, творог"))  # молоко купил снова
-    milk = next(item for item in state if item["name"] == "молоко")
-    assert milk["since"] == "2026-11-06" and milk["on"] is True
-    assert next(item for item in state if item["name"] == "творог")["since"] == "2026-11-06"
+    state[:] = [item for item in state if item["name"] != "бекон"]  # удалённое из набора не возвращается
+    asyncio.run(fridge.send_fridge(bot, "fridge-base"))
+    assert "бекон" not in {item["name"] for item in state}
+
+    asyncio.run(fridge.fridge_add_done(bot, "fridge-base", "курица, дуриан"))  # «добавь» — отметить любимым
+    assert next(item for item in state if item["name"] == "курица")["on"] is True

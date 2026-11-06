@@ -302,7 +302,7 @@ def _ctx_items(cid, ctx):
     if ctx == "fridge":
         raw = store.get_list(config.FRIDGE_KEY, cid)
         items = [(i, it["name"] if isinstance(it, dict) else it) for i, it in enumerate(raw)]
-        return "Чистка: холодильник", items, "as_fridge"
+        return "Чистка: любимые продукты", items, "as_fridge"
     return "Чистка", [], "m_learn"
 
 
@@ -522,7 +522,7 @@ def _view_items(ctx, cid):
     if ctx == "fridge":
         records = store.ensure_list_ids(config.FRIDGE_KEY, cid)
         items = [(r["id"], _view_label(r)) for r in records]
-        return "Чистка: холодильник", items, "as_fridge"
+        return "Чистка: любимые продукты", items, "as_fridge"
     return "Чистка", [], "m_learn"
 
 

@@ -61,7 +61,7 @@ def _unique_items(values):
 
 
 _EXPORT_LABELS = {
-    "all": "Все данные", "wardrobe": "Мой шкаф", "fridge": "Мой холодильник",
+    "all": "Все данные", "wardrobe": "Мой шкаф", "fridge": "Любимые продукты",
     "dictionary": "Мой словарь", "favorites": "Любимое",
 }
 
@@ -161,7 +161,7 @@ def _export_text(cid, kind="all"):
     parts = ["МОИ ДАННЫЕ", f"Создано: {datetime.now(config.TZ):%d.%m.%Y}", ""]
     sections = {
         "wardrobe": ("Мой шкаф", _wardrobe_lines(cid)),
-        "fridge": ("Мой холодильник", _fridge_lines(cid)),
+        "fridge": ("Любимые продукты", _fridge_lines(cid)),
         "dictionary": ("Мой словарь", _dictionary_lines(cid)),
         "favorites": ("Любимое", _favorite_sections(cid)),
     }

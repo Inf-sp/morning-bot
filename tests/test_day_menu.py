@@ -108,16 +108,16 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "• Завтрак — Crostata, песочный пирог с джемом\n"
         "• Обед — Pasta al pomodoro, паста с томатами\n"
         "• Ужин — Lasagna\n\n"
-        "Твой холодильник · 77 продуктов"  # без «3 приёма пищи»
+        "Любимые продукты · 77"  # без «3 приёма пищи»
     )
-    assert menu_ui.fridge_stats_line(1) == "Твой холодильник · 1 продукт"
+    assert menu_ui.fridge_stats_line(1) == "Любимые продукты · 1"
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("🧊 Из моих продуктов", "food_mine")],
-        [("🎚️ Настроить холодильник", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
+        [("🥕 Из любимых продуктов", "food_mine")],
+        [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
-    # В отпуске холодильник остался дома — кнопки «Из моих продуктов» нет.
+    # В отпуске дома не готовишь — кнопки «Из любимых продуктов» нет.
     away = menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
     assert "food_mine" not in [b.callback_data for row in away for b in row]
 
@@ -325,8 +325,8 @@ def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
             sent.append((text, kwargs["reply_markup"]))
 
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status()))
-    assert sent[0][0].startswith("🧊 Из моих продуктов")
-    assert sent[0][1].inline_keyboard[0][0].callback_data == "as_fridge_add"
+    assert sent[0][0].startswith("🥕 Из любимых продуктов")  # любимых нет — отметить их в базовом наборе
+    assert sent[0][1].inline_keyboard[0][0].callback_data == "as_fridge_home"
 
 
 def test_other_menu_keeps_screen_cuisine_and_skips_near_repeats(monkeypatch):
@@ -394,8 +394,8 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
 
 def test_footer_is_fridge_size_not_matching_products():
     day = {"cuisine": "french", "dishes": {"lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"}}}
-    # Старый вызов со списком «есть дома» — внизу всё равно только размер холодильника.
+    # Старый вызов со списком «есть дома» — внизу всё равно только число любимых продуктов.
     msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Картофель"]})
-    assert msg.text.endswith("\n\nТвой холодильник · 75 продуктов") and "Есть дома" not in msg.text
+    assert msg.text.endswith("\n\nЛюбимые продукты · 75") and "Есть дома" not in msg.text
 
 

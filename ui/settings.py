@@ -38,7 +38,7 @@ def personalization():
 def cuisines():
     b = MessageBuilder()
     b.section(PREFERENCES_LABEL)
-    b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника с их учётом.")
+    b.line("Выбери кухни, которые нравятся — подберу рецепт дня и блюда из любимых продуктов с их учётом.")
     b.line("Ниже — какие приёмы пищи готовишь и ограничения в еде.")
     return b.build_stripped()
 
@@ -89,7 +89,7 @@ def settings_home(city="", language="", summary="", hint=True):
         b.labeled_line("Уведомления", summary)
     if hint:
         b.spacer()
-        b.italic("Здесь общие параметры бота. Свои данные разделов (шкаф, холодильник, словарь, "
+        b.italic("Здесь общие параметры бота. Свои данные разделов (шкаф, продукты, словарь, "
                  "библиотека) — кнопкой «Настроить» внутри раздела.")
         b.newline()
     return b.build_stripped()
@@ -143,5 +143,5 @@ def my_data():
     b = MessageBuilder()
     b.section("🗂 Мои данные")
     b.spacer()
-    b.italic("Шкаф, холодильник, словарь и библиотека — поправь, не выходя из отпуска.")
+    b.italic("Шкаф, продукты, словарь и библиотека — поправь, не выходя из отпуска.")
     return b.build_stripped()

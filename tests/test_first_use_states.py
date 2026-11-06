@@ -394,7 +394,7 @@ def test_legacy_group_cuisines_expand_to_concrete_ones(monkeypatch):
 def test_cuisine_settings_screen_has_no_descriptions_or_current_line():
     text = settings.settings_ui.cuisines().text
 
-    assert text == ("📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из холодильника "
+    assert text == ("📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из любимых продуктов "
                     "с их учётом.\nНиже — какие приёмы пищи готовишь и ограничения в еде.")
 
 

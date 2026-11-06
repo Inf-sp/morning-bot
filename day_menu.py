@@ -331,7 +331,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     # В «Не повторяй» для AI — сначала блюда этой кухни, затем недавние остальные.
     avoided_names = list(dict.fromkeys([*_history(profile, now), *shown[-40:], *avoid]))
     avoided = {name.casefold() for name in avoided_names}
-    available = []  # меню дня — популярные блюда из любых продуктов; из холодильника — «Из моих продуктов»
+    available = []  # меню дня — популярные блюда из любых продуктов; из любимых — «Из любимых продуктов»
     meals = _settings().food_meals(cid)
     restrictions = _settings().food_restrictions(cid)
     import vacation

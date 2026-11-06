@@ -2,7 +2,6 @@ import re
 
 from .builder import MessageBuilder
 from .constants import CUISINE_FLAG, ui_label
-from .text import ru_plural
 
 DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
@@ -181,38 +180,22 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
     return b.build_stripped()
 
 
-def _products_label(count):
-    count = abs(int(count))
-    if count % 10 == 1 and count % 100 != 11:
-        return "продукт"
-    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
-        return "продукта"
-    return "продуктов"
-
-
-def fridge_home(available, use_soon=()):
-    """use_soon — [(название, дней)]: скоропортящееся, что давно лежит, — блоком «Пора использовать:»."""
+def fridge_home(favorites):
+    """«🎚️ Любимые продукты · 24» и подсказка курсивом."""
     b = MessageBuilder()
-    title = ui_label("products", "Мой холодильник").removeprefix("🧊 ").removeprefix("🎚️ ")
-    b.bold("🎚️ " + title)
-    b.text_line(f" · {available} {_products_label(available)} в наличии")
+    b.bold(f"🎚️ Любимые продукты · {favorites}")
     b.newline()
-    if use_soon:
-        b.spacer()
-        b.bold("Пора использовать:")
-        b.newline()
-        for name, days in use_soon:
-            b.line(f"• {name} · лежит {days} {ru_plural(days, 'день', 'дня', 'дней')}")
     b.spacer()
-    b.italic("Отмечай, что есть дома: меню и рецепты учитывают продукты в наличии.")
+    b.italic("Отмечай в категориях, что любишь и обычно покупаешь, — рецепт «Из любимых продуктов» соберу из них.")
     b.newline()
     return b.build_stripped()
 
 
-def fridge_category(label, total, available):
+def fridge_category(label, total, favorites):
+    """«Мясо и рыба · 5 из 15» — любимых из всех продуктов категории."""
     b = MessageBuilder()
     b.bold(label)
-    b.text_line(f" · {total} {_products_label(total)} · {available} в наличии")
+    b.text_line(f" · {favorites} из {total}")
     return b.build_stripped()
 
 
@@ -226,7 +209,7 @@ def fridge_category_choice(name):
 
 def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emoji, cat_labels):
     b = MessageBuilder()
-    b.section("🧊 Холодильник обновлён")
+    b.section("Любимые продукты обновлены")
     if added:
         b.spacer()
         b.bold("Добавил:")
@@ -245,7 +228,7 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
         b.text_line("Новых продуктов не нашёл.")
     if duplicates:
         b.spacer()
-        b.bold("Уже было:")
+        b.bold("Отметил любимыми:")
         b.newline()
         b.text_line(", ".join(sorted(set(duplicates))[:20]))
     if rejected:
@@ -259,6 +242,6 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
 
 def fridge_empty_for_recipe():
     return MessageBuilder().text_line(
-        "🧊 Холодильник пуст или все продукты отмечены как отсутствующие.\n\n"
-        "Отметь продукты, которые есть сейчас, и попробуй снова."
+        "Любимых продуктов пока нет.\n\n"
+        "Отметь в «Любимых продуктах», что любишь и обычно покупаешь, и попробуй снова."
     ).build()

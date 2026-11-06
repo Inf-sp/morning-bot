@@ -19,7 +19,7 @@ def export_choice_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📤 Всё", callback_data="as_export_all")],
         [InlineKeyboardButton("📤 Мой шкаф", callback_data="as_export_wardrobe")],
-        [InlineKeyboardButton("📤 Мой холодильник", callback_data="as_export_fridge")],
+        [InlineKeyboardButton("📤 Любимые продукты", callback_data="as_export_fridge")],
         [InlineKeyboardButton("📤 Мой словарь", callback_data="as_export_dictionary")],
         [InlineKeyboardButton("📤 Любимое", callback_data="as_export_favorites")],
         nav_row("m_settings"),

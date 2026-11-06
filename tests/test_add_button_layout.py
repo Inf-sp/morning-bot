@@ -37,7 +37,7 @@ def test_fridge_has_categories_and_a_separate_add_action(monkeypatch):
 
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить продукт"]
-    assert rows[1] == ["📝 Выбрать предпочтения"]  # пустых категорий нет — сразу под «Добавить»
+    assert rows[1] == ["Мясо и рыба · 0"]  # базовый набор: категории есть сразу, любимых пока 0
     assert rows[0] == ["✅ Добавить продукт"]
     assert ["📝 Выбрать предпочтения"] in rows
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]

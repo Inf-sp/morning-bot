@@ -304,7 +304,7 @@ def _count_edit(endpoint, data):
             _content_edits[key] = _content_edits.get(key, 0) + 1
 
 
-# «Настроить холодильник / шкаф / библиотеку» — свои данные дома; в отпуске эти кнопки не показываются.
+# «Настроить продукты / шкаф / библиотеку» — свои данные дома; в отпуске эти кнопки не показываются.
 _HOME_DATA_CALLBACKS = {"as_fridge_home", "w_closet", "lz_lib"}
 
 

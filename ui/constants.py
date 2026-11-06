@@ -9,7 +9,7 @@ UI_EMOJI = {
     "food": "🥣",
     "recipes": "🍽",
     "version": "🚀",
-    "products": "🧊",
+    "products": "🥕",
     "cook_from": "🥕",
     "learning": "🧠",
     "dictionary": "🗂️",
