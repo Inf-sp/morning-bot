@@ -171,6 +171,43 @@ def _clean(value, limit) -> str:
     return text if 0 < len(text) <= limit else ""
 
 
+def _stems(text) -> list:
+    return [word[:5] for word in re.findall(r"[а-яёa-z]{4,}", str(text or "").casefold())]
+
+
+def note_repeats_name(name, note) -> bool:
+    """«Блины с творогом» + «тонкие блины с твороговой начинкой» — описание пересказывает название: половина и больше
+    значимых слов описания (от 4 букв, по началу слова) уже есть в названии."""
+    name_stems, note_stems = set(_stems(name)), _stems(note)
+    return bool(note_stems) and sum(stem in name_stems for stem in note_stems) * 2 >= len(note_stems)
+
+
+def _proofread_notes(dishes, meals) -> dict:
+    """Опечатки ИИ в описаниях блюд («твороговой»): LanguageTool (ru-RU) — очевидную опечатку исправляем, другую
+    ошибку в русском слове — описание убираем, название остаётся. Сервис недоступен — как есть."""
+    import language_tool
+    notes = [(meal, dish["note"]) for meal, dish in dishes.items() if meal in meals and dish.get("note")]
+    if not notes:
+        return dishes
+    text = "\n".join(note for _meal, note in notes)
+    report = language_tool.check_text(text, "ru-RU")
+    if not report.get("available"):
+        return dishes
+    fixed, start = dict(dishes), 0
+    for meal, note in notes:
+        end = start + len(note)
+        issues = [{**issue, "offset": int(issue.get("offset") or 0) - start}
+                  for issue in language_tool.meaningful_issues(report)
+                  if start <= int(issue.get("offset") or 0) < end
+                  and str(issue.get("issue_type") or "").lower() in ("misspelling", "typographical", "grammar")
+                  and re.search(r"[а-яё]", str(issue.get("original") or ""), re.I)]
+        if issues:
+            safe = all(language_tool.is_safe_issue(issue) for issue in issues)
+            fixed[meal] = {**dishes[meal], "note": language_tool.apply_safe_replacements(note, issues) if safe else ""}
+        start = end + 1
+    return fixed
+
+
 def _dish_key(name) -> str:
     return re.sub(r"[^\w]+", " ", str(name or "").casefold()).strip()
 
@@ -227,10 +264,11 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
            "традиционные блюда не из примеров.\n" if avoided_names else "") +
         f"{limits}{fridge}{avoid}"
         + (_TRIP_DISH_RULES + _TRIP_EXTRA_RULE if trip else
-           "name — общепринятое название блюда (для итальянской, французской и мексиканской кухни — "
-           "оригинальное латиницей, для остальных — по-русски); note — что это за блюдо на самом деле, по-русски, "
-           "до 10 слов, без точки: верно по сути (способ готовки, основа), не выдумывай (брай — мясо на открытом "
-           "огне, а не тушёное).\n")
+           "name — настоящее общепринятое название блюда, как в кулинарной книге, без выдуманных добавок (для "
+           "итальянской, французской и мексиканской кухни — оригинальное латиницей, для остальных — по-русски); "
+           "note — что это за блюдо на самом деле, по-русски, 3–8 слов, без точки: основа и способ готовки, которых "
+           "нет в названии, — не повторяй слова из name («Сырники» → «жареные лепёшки из творога», а не «сырники из "
+           "творога»); грамотно и верно по сути, не выдумывай (брай — мясо на открытом огне, а не тушёное).\n")
         + f"JSON без markdown: {{{json_shape}}}"
     )
 
@@ -275,7 +313,7 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 4, "trip": trip,
+                "language": "ru", "schema_version": 5, "trip": trip,
             },
         )
     except Exception as error:
@@ -311,7 +349,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
                           label, trip)
     if label and not has_dishes(data):
         data = _guide_dishes(cid, meals, avoided, restrictions)  # запас без AI: знаковые блюда страны на поездку
-    dishes, used = {}, set()
+    dishes, used, from_ai = {}, set(), set()
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
         name, note = _clean(raw.get("name"), _NAME_MAX), _clean(raw.get("note"), _TRIP_NOTE_MAX if trip else _NOTE_MAX)
@@ -330,10 +368,13 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
             dish = {"name": name, "note": note,
                     "original": original if original.casefold() != name.casefold() else "",
                     "emoji": emoji if 0 < len(emoji) <= 4 and not re.search(r"\w", emoji) else ""}
-        else:
-            dish = {"name": name, "note": note}
+        else:  # описание без пересказа названия: «Блины с творогом, тонкие блины с творогом» → только название
+            dish = {"name": name, "note": "" if note_repeats_name(name, note) else note}
         used.add(dish["name"].casefold())
         dishes[meal] = dish
+        from_ai.add(meal)
+    # Описания от ИИ — без опечаток; запасные блюда из списка уже выверены.
+    dishes = _proofread_notes(dishes, from_ai)
     menu = {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
     if trip:  # блюдо «попробовать сегодня» для «Моего дня»: отметка AI, без неё — ужин или последнее
         top = str(data.get("top") or "").strip().casefold()

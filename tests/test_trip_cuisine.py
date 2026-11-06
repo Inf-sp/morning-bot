@@ -618,3 +618,38 @@ def test_week_icon_ignores_night_rain_with_local_hourly():
     assert not found["rain_real"]  # ночная гроза — не дождь дня
     assert weather._week_icon(found["code"], found["tmax"], found["rain"], found["wind"], found["rain_mm"],
                               found["clouds"]) not in ("🌧️", "🌩️")
+
+
+def test_home_menu_drops_notes_that_repeat_the_name_and_fixes_typos(monkeypatch):
+    import language_tool
+    _setup(monkeypatch, {
+        "breakfast": {"name": "Блины с творогом", "note": "тонкие блины с твороговой начинкой"},
+        "lunch": {"name": "Щи", "note": "суп из квашенной капусты"},
+        "dinner": {"name": "Голубцы", "note": "капустные листья с фаршем и рисом"},
+    })
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+    text = "суп из квашенной капусты\nкапустные листья с фаршем и рисом"
+
+    def check(value, language):
+        assert value == text and language == "ru-RU"  # только оставшиеся описания, одним запросом
+        offset = value.index("квашенной")
+        return {"available": True, "issues": [
+            {"offset": offset, "length": 9, "original": "квашенной", "replacements": ["квашеной"],
+             "issue_type": "misspelling", "rule_id": "MORFOLOGIK_RULE_RU_RU", "category": "Typos"}]}
+
+    monkeypatch.setattr(language_tool, "check_text", check)
+    dishes = day_menu.build_day_menu("42", cuisine="russian")["dishes"]
+    assert dishes["breakfast"] == {"name": "Блины с творогом", "note": ""}  # пересказ названия — только название
+    assert dishes["lunch"]["note"] == "суп из квашеной капусты"  # очевидная опечатка исправлена
+    assert dishes["dinner"]["note"] == "капустные листья с фаршем и рисом"
+
+
+def test_home_menu_drops_a_note_with_an_unclear_mistake(monkeypatch):
+    import language_tool
+    _setup(monkeypatch, {"lunch": {"name": "Уха", "note": "суп из сважей рыбы"}})
+    monkeypatch.setattr(vacation, "active", lambda _cid: False)
+    monkeypatch.setattr(language_tool, "check_text", lambda value, _lang: {"available": True, "issues": [
+        {"offset": value.index("сважей"), "length": 6, "original": "сважей", "replacements": ["свежей", "важней"],
+         "issue_type": "misspelling", "rule_id": "MORFOLOGIK_RULE_RU_RU", "category": "Typos"}]})
+    dishes = day_menu.build_day_menu("42", cuisine="russian")["dishes"]
+    assert dishes["lunch"] == {"name": "Уха", "note": ""}  # не уверены в исправлении — без описания

@@ -2,6 +2,7 @@ import re
 
 from .builder import MessageBuilder
 from .constants import CUISINE_FLAG, ui_label
+from .text import ru_plural
 
 DEFAULT_CUISINE_EMOJI = ui_label("recipes", "").strip()
 
@@ -189,12 +190,19 @@ def _products_label(count):
     return "продуктов"
 
 
-def fridge_home(available):
+def fridge_home(available, use_soon=()):
+    """use_soon — [(название, дней)]: скоропортящееся, что давно лежит, — блоком «Пора использовать:»."""
     b = MessageBuilder()
     title = ui_label("products", "Мой холодильник").removeprefix("🧊 ").removeprefix("🎚️ ")
     b.bold("🎚️ " + title)
     b.text_line(f" · {available} {_products_label(available)} в наличии")
     b.newline()
+    if use_soon:
+        b.spacer()
+        b.bold("Пора использовать:")
+        b.newline()
+        for name, days in use_soon:
+            b.line(f"• {name} · лежит {days} {ru_plural(days, 'день', 'дня', 'дней')}")
     b.spacer()
     b.italic("Отмечай, что есть дома: меню и рецепты учитывают продукты в наличии.")
     b.newline()

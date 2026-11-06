@@ -98,6 +98,38 @@ _CAT_ORDER = [
     "бакалея", "специи и соусы", "заморозка",
 ]
 
+# Скоропортящееся: через сколько дней в холодильнике продукт пора использовать. Срока годности в данных нет —
+# считаем дни с добавления или отметки «есть» (поле since, дата по Амстердаму).
+FRESH_DAYS = {"мясо и рыба": 3, "молочное и напитки": 5, "овощи и фрукты": 5}
+_USE_SOON_MAX = 5
+
+
+def mark_fresh(item: dict, today=None) -> dict:
+    """Продукт только что купили или снова отметили «есть»: в наличии, отсчёт дней — с сегодня."""
+    import util
+    return {**item, "on": True, "since": (today or util.local_today()).isoformat()}
+
+
+def days_in_fridge(item: dict, today=None):
+    """Сколько дней скоропортящийся продукт в наличии; не скоропортящийся, не в наличии или без даты — None."""
+    from datetime import date
+    import util
+    if item.get("cat") not in FRESH_DAYS or not item.get("on", True):
+        return None
+    try:
+        since = date.fromisoformat(str(item.get("since") or ""))
+    except ValueError:
+        return None
+    return max(0, ((today or util.local_today()) - since).days)
+
+
+def use_soon(items: list, today=None) -> list:
+    """[(название, дней)] — скоропортящееся, что лежит дольше FRESH_DAYS, самое давнее первым (до пяти)."""
+    old = [(item["name"], days) for item in items
+           if (days := days_in_fridge(item, today)) is not None and days >= FRESH_DAYS[item["cat"]]]
+    return sorted(old, key=lambda pair: -pair[1])[:_USE_SOON_MAX]
+
+
 # Устаревшие категории → новые (для миграции существующих записей)
 _CAT_REMAP = {
     "мясо":     "мясо и рыба",

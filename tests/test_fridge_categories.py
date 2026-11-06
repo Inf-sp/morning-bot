@@ -137,9 +137,45 @@ def test_unknown_product_requires_one_of_six_categories(monkeypatch):
 
     asyncio.run(fridge.fridge_assign_category(bot, "fridge-unknown", 1))
 
+    import util
     assert state == [{
         "name": "дуриан",
         "cat": "овощи и фрукты",
         "cat_manual": True,
         "on": True,
+        "since": util.local_today().isoformat(),  # с какого дня лежит — для «Пора использовать»
     }]
+
+
+def test_perishables_show_days_and_oldest_first(monkeypatch):
+    from datetime import date
+    import util
+    monkeypatch.setattr(util, "local_today", lambda: date(2026, 11, 6))
+    state = _memory_store(monkeypatch, [
+        {"name": "курица", "cat": "мясо и рыба", "on": True, "since": "2026-11-05"},
+        {"name": "фарш", "cat": "мясо и рыба", "on": True, "since": "2026-11-01"},
+        {"name": "лосось", "cat": "мясо и рыба", "on": False},
+        {"name": "бекон", "cat": "мясо и рыба", "on": True},  # старый продукт без даты
+        {"name": "молоко", "cat": "молочное и напитки", "on": True, "since": "2026-10-29"},
+        {"name": "рис", "cat": "бакалея", "on": True, "since": "2026-09-01"},  # не портится — без дней
+    ])
+    bot = _Bot()
+
+    asyncio.run(fridge.send_fridge(bot, "fridge-days"))
+    home = bot.messages[-1]["text"]
+    assert "Пора использовать:\n• молоко · лежит 8 дней\n• фарш · лежит 5 дней\n\n" in home  # курица — 1 день, рис — нет
+    asyncio.run(fridge.send_fridge_cat(bot, "fridge-days", 0, 0))
+    assert _labels(bot.messages[-1]["reply_markup"])[:4] == [
+        ["✅ фарш · 5 дн."], ["✅ курица · 1 дн."], ["✅ бекон"], ["□ лосось"]]
+
+    lososs = next(index for index, item in enumerate(state) if item["name"] == "лосось")
+    asyncio.run(fridge.fridge_toggle(bot, "fridge-days", lososs, 0, 0))  # снова есть — отсчёт с сегодня
+    assert next(item for item in state if item["name"] == "лосось")["since"] == "2026-11-06"
+    farsh = next(index for index, item in enumerate(state) if item["name"] == "фарш")
+    asyncio.run(fridge.fridge_toggle(bot, "fridge-days", farsh, 0, 0))  # закончился — без даты
+    assert "since" not in next(item for item in state if item["name"] == "фарш")
+
+    asyncio.run(fridge.fridge_add_done(bot, "fridge-days", "молоко, творог"))  # молоко купил снова
+    milk = next(item for item in state if item["name"] == "молоко")
+    assert milk["since"] == "2026-11-06" and milk["on"] is True
+    assert next(item for item in state if item["name"] == "творог")["since"] == "2026-11-06"

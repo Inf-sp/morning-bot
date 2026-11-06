@@ -738,3 +738,18 @@ def test_grammar_lesson_card_is_built_once_and_rejects_bad_answers(monkeypatch):
     assert live_language.lesson_card("nl-179") == card == saved["nl-179"]
     assert live_language.build_lesson_card(_WACHTEN) == card and len(calls) == 2  # второй раз — из хранилища
     assert calls[-1]["tier"] == "cheap" and calls[-1]["result_validator"](_WACHTEN_CARD)
+
+
+def test_grammar_card_keeps_situations_short_and_does_not_say_always_with_an_exception():
+    import live_language
+    card = live_language._clean_card({
+        "intro": "Глагол wachten всегда требует предлога op.",
+        "usage": [{"when": "Когда ждут кого-то или что-то", "form": "wachten op", "example": "Ik wacht op de bus."},
+                  {"when": "когда дополнения нет", "form": "wachten без op", "example": "Ik wacht."},
+                  {"when": "когда говорят о том, что ждут очень долго", "form": "lang wachten", "example": "Ik wacht."}],
+    })
+    assert [item["when"] for item in card["usage"]] == ["ждут кого-то или что-то", "дополнения нет"]  # длинная — прочь
+    assert card["intro"] == "Глагол wachten обычно требует предлога op."  # есть случай «без op» — не «всегда»
+    no_exception = live_language._clean_card({
+        "intro": "Hoeven всегда с te.", "usage": [{"when": "не нужно", "form": "niet hoeven te", "example": "Je hoeft niet te komen."}]})
+    assert no_exception["intro"] == "Hoeven всегда с te."
