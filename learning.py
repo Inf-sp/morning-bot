@@ -133,6 +133,14 @@ def build_learning_home(cid):
     entry = select_daily_material(cid)
     lang_code = _active_language_code(cid)
     phrase = live_language.grammar_of_day(cid, lang_code)  # грамматика дня — без повторов, по уровню
+    card = live_language.lesson_card(phrase.get("id")) if phrase else None
+    if phrase and not card:  # карточки темы ещё нет — экран из полного разбора, карточка соберётся фоном
+        import util
+        topic = next((item for item in live_language.grammar_topics(lang_code) if item["id"] == phrase.get("id")), None)
+        if topic:
+            util.build_off_loop(("grammar_card", topic["id"]), live_language.build_lesson_card, topic)
+    if card:
+        phrase = {**phrase, "card": card}
     if not entry:
         return {
             "has_material": False,
@@ -176,8 +184,14 @@ def refresh_learning_home(cid):
 
 
 def warm_home_cache(cid):
-    """Фиксирует материал дня; AI и сеть для этого не используются."""
+    """Фиксирует материал дня и заранее собирает карточки темы дня и двух следующих («Новая тема»): один запрос к
+    ИИ на тему, общий для всех пользователей и навсегда."""
     select_daily_material(cid)
+    if store.learning_is_enabled(cid):
+        lang_code = _active_language_code(cid)
+        live_language.grammar_of_day(cid, lang_code)
+        for topic in live_language.upcoming_topics(cid, lang_code):
+            live_language.build_lesson_card(topic)
     return True
 
 

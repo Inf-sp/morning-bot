@@ -165,6 +165,33 @@ def _grammar_explanation(phrase) -> str:
     return text
 
 
+def _grammar_lesson(phrase) -> dict:
+    """Тема дня → {header, intro, usage, example, translation, remember}. Есть карточка темы (phrase["card"]) — из
+    неё; нет — из краткого разбора: первое предложение — суть, остальные — «Как использовать», без «Запомни»."""
+    card = phrase.get("card") or {}
+    if phrase.get("topic") and card.get("intro") and card.get("usage"):
+        header = _grammar_title({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")})
+        intro = _with_period(card["intro"])
+        usage = [f"{item['when'][:1].upper()}{item['when'][1:]} — {item['form']}: {_with_period(item['example'])}"
+                 for item in card["usage"]]
+    else:
+        if phrase.get("topic") and phrase.get("explain"):
+            header, explanation = _grammar_title(phrase), _grammar_explanation(phrase)
+        else:  # прежний краткий формат правила: «_Zodra_ — как только. …»
+            header, explanation = _grammar_parts(phrase.get("rule"))
+        points = _grammar_points(str(explanation or "").split("\n\n")[0])
+        if header and " — " not in header and points and len(points[0].split()) <= 3 and ":" not in points[0]:
+            # «Zodra» + «Как только.» → заголовок «Zodra — как только», без отдельной строки из двух слов.
+            short = _without_period(points[0])
+            header, points = f"{header} — {short[:1].lower()}{short[1:]}", points[1:]
+        intro, usage = (points[0] if points else ""), points[1:3]
+    example, translation = phrase.get("more"), phrase.get("more_translation")
+    return {"header": _without_period(header), "intro": intro, "usage": usage,
+            "example": _with_period(example) if example else "",
+            "translation": _with_period(translation) if example and translation else "",
+            "remember": _with_period(card.get("remember")) if card.get("intro") else ""}
+
+
 def learning_menu(home: dict):
     """Главный экран обучения: материал дня, прогресс и следующий шаг."""
     if home.get("disabled"):
@@ -202,35 +229,34 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Грамматика: тема → значение, объяснение пунктами в цитате, пример → перевод
-    # (фраза дня — в «Моём дне», строка «Фраза дня»).
-    phrase = home.get("live_language") or {}
-    if phrase.get("topic") and phrase.get("explain"):
-        topic, explanation = _grammar_title(phrase), _grammar_explanation(phrase)
-    else:  # прежний краткий формат правила (уроки страны отпуска)
-        topic, explanation = _grammar_parts(phrase.get("rule"))
-    # Как погодное предупреждение: тема жирной подписью («Zijn — быть:»), объяснение пунктами по предложениям, ниже
-    # отдельным блоком «Пример:» — фраза → перевод. Без повтора слов заголовка в объяснении.
-    example = (f"{_without_period(phrase['more'])} → {_with_period(phrase['more_translation'])}"
-               if phrase.get("more") and phrase.get("more_translation") else "")
-    points = _grammar_points(str(explanation or "").split("\n\n")[0])
-    if topic and " — " not in topic and points and len(points[0].split()) <= 3 and ":" not in points[0]:
-        # «Zodra» + «Как только.» → заголовок «Zodra — как только:», без пункта из двух слов.
-        topic = f"{topic} — {_without_period(points[0])[:1].lower()}{_without_period(points[0])[1:]}"
-        points = points[1:]
-    points = points[:2]
-    if topic or points:
+    # Грамматика (фраза дня — в «Моём дне», строка «Фраза дня»): тема — значение, суть одной строкой,
+    # «Как использовать:» (ситуация — форма: пример), «Пример:» и ниже «→ перевод», «Запомни:».
+    lesson = _grammar_lesson(home.get("live_language") or {})
+    if lesson["header"] or lesson["intro"]:
         b.spacer()
-        if topic:
-            b.bold(f"{topic}:")
+        if lesson["header"]:
+            b.bold(_with_period(lesson["header"]))
             b.newline()
-        for point in points:
-            b.line(f"• {point}")
-    if example:
+        if lesson["intro"]:
+            b.line(lesson["intro"])
+    if lesson["usage"]:
+        b.spacer()
+        b.bold("Как использовать:")
+        b.newline()
+        for item in lesson["usage"]:
+            b.line(f"• {item}")
+    if lesson["example"]:
         b.spacer()
         b.bold("Пример:")
+        b.text_line(f" {lesson['example']}")
         b.newline()
-        b.line(f"• {example}")
+        if lesson["translation"]:
+            b.line(f"→ {lesson['translation']}")
+    if lesson["remember"]:
+        b.spacer()
+        b.bold("Запомни:")
+        b.text_line(f" {lesson['remember']}")
+        b.newline()
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
         b.spacer()

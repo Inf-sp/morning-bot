@@ -105,18 +105,18 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Zodra — как только:\n"  # короткое значение — в заголовок, не отдельным пунктом
-        "• В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-        "Пример:\n• Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
+        "Zodra — как только.\n"  # короткое значение — в заголовок, не отдельной строкой
+        "В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
+        "Пример: Ik bel je terug zodra ik klaar ben.\n→ Я перезвоню тебе, как только закончу.",
         "Твой нидерландский · 120 слов · 14 изученных тем",
-    ]  # как в погодном предупреждении: тема подписью, объяснение и пример пунктами «•», статистика курсивом
+    ]  # тема жирным, суть строкой, пример и ниже перевод через стрелку, статистика курсивом
 
     def marked(kind):
         raw = message.text.encode("utf-16-le")
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("bold")[1:] == ["Zodra — как только:", "Пример:"]
+    assert marked("bold")[1:] == ["Zodra — как только.", "Пример:"]
     assert marked("blockquote") == []  # без цитаты — пунктами
     assert marked("italic") == ["Твой нидерландский · 120 слов · 14 изученных тем"]  # пример — обычным текстом
     assert marked("spoiler") == []
@@ -138,8 +138,14 @@ def test_learning_refresh_changes_phrase_and_grammar_without_changing_dictionary
         return result
 
     monkeypatch.setattr(learning.store, "mutate_profile", mutate)
+    import util
+    monkeypatch.setattr(learning.live_language, "lesson_card", lambda _id: None)
+    queued = []
+    monkeypatch.setattr(util, "build_off_loop", lambda key, _func, topic: queued.append((key, topic["id"])))
     before = learning.build_learning_home("42")
     after = learning.refresh_learning_home("42")
+    # карточки темы ещё нет — экран из разбора, карточка собирается фоном
+    assert queued[0] == (("grammar_card", before["live_language"]["id"]), before["live_language"]["id"])
 
     assert before["term"] == after["term"] == "Morgen"
     # «Новая тема» — следующая тема грамматики; словарь не меняется.
@@ -637,10 +643,11 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
 
     assert text.split("\n\n")[1:] == [
-        "Hoeven … te — не нужно что-то делать:\n"
-        "• Обычно используется с niet (не нужно) или pas (только, не раньше чем).\n"
+        "Hoeven … te — не нужно что-то делать.\n"
+        "Обычно используется с niet (не нужно) или pas (только, не раньше чем).",
+        "Как использовать:\n"
         "• Глагол с te стоит в конце: We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
-        "Пример:\n• Je hoeft niet te koken, we eten buiten → Тебе не нужно готовить, мы едим вне дома.",
+        "Пример: Je hoeft niet te koken, we eten buiten.\n→ Тебе не нужно готовить, мы едим вне дома.",
     ]
     assert all(item.get("topic") and item.get("meaning") and item.get("explain")
                for language in ("nl", "en") for item in live_language.grammar_topics(language))
@@ -668,9 +675,67 @@ def test_grammar_is_topic_then_explanation_then_example_without_repeats():
         "more": "Daar heb ik geen tijd voor.", "more_translation": "На это у меня нет времени.",
     }
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
-    assert "\n\nDaar + предлог:\n" in text  # формула вместо «Daarom, daarvoor — daar + предлог»
-    points = [line for line in text.split("\n") if line.startswith("• ")]
-    assert points == [
-        "• Подчёркивает «именно это»: daarom — поэтому, daarvoor — для этого.",  # без повтора заголовка
-        "• Daar heb ik geen tijd voor → На это у меня нет времени.",
+    assert text.split("\n\n")[1:] == [
+        "Daar + предлог.\n"  # формула вместо «Daarom, daarvoor — daar + предлог»
+        "Подчёркивает «именно это»: daarom — поэтому, daarvoor — для этого.",  # без повтора заголовка
+        "Пример: Daar heb ik geen tijd voor.\n→ На это у меня нет времени.",
     ]
+
+
+_WACHTEN = {
+    "id": "nl-179", "level": "B1", "topic": "Wachten op", "meaning": "ждать кого-то",
+    "explain": "Wachten всегда с op: ik wacht op de bus. О чём-то — erop.",
+    "details": ["Wachten всегда требует op: ждать кого-то или чего-то."],
+    "example": "Ik wacht al een week op een antwoord.", "translation": "Я уже неделю жду ответа.",
+}
+_WACHTEN_CARD = {
+    "meaning": "ждать кого-то или чего-то",
+    "intro": "В нидерландском глагол wachten обычно используется с предлогом op.",
+    "usage": [{"when": "ждать человека", "form": "wachten op", "example": "Ik wacht op Sanne."},
+              {"when": "Вместо «это»", "form": "erop", "example": "Ik wacht erop"},
+              {"when": "ждать", "form": "wachten", "example": "Я жду."}],  # пример по-русски — отбрасывается
+    "remember": "wachten op, а не просто wachten",
+}
+
+
+def test_grammar_lesson_card_layout_with_usage_example_arrow_and_remember():
+    import live_language
+    from ui import menu as menu_ui
+    card = live_language._clean_card(_WACHTEN_CARD)
+    lesson = {**live_language._as_card(_WACHTEN), "card": card}
+    message = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson,
+                                     "stats": {"words": 120, "topics": 14}})
+    assert message.text.split("\n\n")[1:] == [
+        "Wachten op — ждать кого-то или чего-то.\n"
+        "В нидерландском глагол wachten обычно используется с предлогом op.",
+        "Как использовать:\n• Ждать человека — wachten op: Ik wacht op Sanne.\n• Вместо «это» — erop: Ik wacht erop.",
+        "Пример: Ik wacht al een week op een antwoord.\n→ Я уже неделю жду ответа.",
+        "Запомни: wachten op, а не просто wachten.",
+        "Твой нидерландский · 120 слов · 14 изученных тем",
+    ]
+    raw = message.text.encode("utf-16-le")
+    bold = [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+            for e in message.entities if e.type == "bold"]
+    assert bold[1:] == ["Wachten op — ждать кого-то или чего-то.", "Как использовать:", "Пример:", "Запомни:"]
+
+
+def test_grammar_lesson_card_is_built_once_and_rejects_bad_answers(monkeypatch):
+    import ai
+    import live_language
+    saved, calls = {}, []
+
+    def mutate(_key, change):
+        data, _ = change(dict(saved))
+        saved.clear()
+        saved.update(data)
+
+    monkeypatch.setattr(live_language.store, "_load", lambda _key: dict(saved))
+    monkeypatch.setattr(live_language.store, "mutate_kv", mutate)
+    monkeypatch.setattr(ai, "llm_json", lambda *a, **k: calls.append(k) or {"intro": "Only English", "usage": []})
+    assert live_language.build_lesson_card(_WACHTEN) is None and saved == {}  # без русского — не сохраняем
+    monkeypatch.setattr(ai, "llm_json", lambda *a, **k: calls.append(k) or _WACHTEN_CARD)
+    card = live_language.build_lesson_card(_WACHTEN)
+    assert [item["form"] for item in card["usage"]] == ["wachten op", "erop"]
+    assert live_language.lesson_card("nl-179") == card == saved["nl-179"]
+    assert live_language.build_lesson_card(_WACHTEN) == card and len(calls) == 2  # второй раз — из хранилища
+    assert calls[-1]["tier"] == "cheap" and calls[-1]["result_validator"](_WACHTEN_CARD)
