@@ -330,7 +330,7 @@ def test_admin_home_ui_has_status_dots_and_no_errors_block():
     )
 
     assert message.text == (
-        "🛠️ Админ\n\n"
+        "🛠️ Админ · ✅ всё работает\n\n"  # вердикт — в заголовке
         "AI\n"
         "🟢 Gemini · Основной · доступен\n\n"
         "Данные\n"
@@ -653,3 +653,9 @@ def test_attention_names_depleted_gemini_credits(monkeypatch):
     monkeypatch.setattr(service_monitor, "_configured", lambda service: service == "gemini")
     assert service_monitor.attention() == [
         "Gemini — закончились оплаченные кредиты: пополни счёт или замени GEMINI_API_KEY на ключ бесплатного проекта"]
+
+
+def test_admin_title_counts_problems():
+    message = admin_ui.home(system_rows=["AI", "🔴 Groq · Резерв · ключ не принимается"],
+                            attention=["Groq — ключ не принимается: обнови GROQ_API_KEY", "Gemini — кредиты"])
+    assert message.text.startswith("🛠️ Админ · ⚠️ 2 проблемы\n\n⚠️ Нужно внимание:")

@@ -76,8 +76,9 @@ def wardrobe_style(groups):
     return b.build_stripped()
 
 
-def settings_home(city="", language="", summary=""):
-    """Главный экран Настроек: жирные подписи «Город:», «Язык обучения:», «Уведомления:»."""
+def settings_home(city="", language="", summary="", hint=True):
+    """Главный экран Настроек: жирные подписи «Город:», «Язык обучения:», «Уведомления:»; hint — пояснение курсивом
+    (только при первом открытии)."""
     b = MessageBuilder()
     b.section(ui_label("settings", "Настройки"))
     b.spacer()
@@ -86,14 +87,15 @@ def settings_home(city="", language="", summary=""):
         b.labeled_line("Язык обучения", f"{language[:1].upper()}{language[1:]}", lowercase=False)
     if summary:
         b.labeled_line("Уведомления", summary)
-    b.spacer()
-    b.italic("Здесь общие параметры бота. Свои данные разделов (шкаф, холодильник, словарь, "
-             "библиотека) — кнопкой «Настроить» внутри раздела.")
-    b.newline()
+    if hint:
+        b.spacer()
+        b.italic("Здесь общие параметры бота. Свои данные разделов (шкаф, холодильник, словарь, "
+                 "библиотека) — кнопкой «Настроить» внутри раздела.")
+        b.newline()
     return b.build_stripped()
 
 
-def settings_trip(trip="", home="", language="", summary=""):
+def settings_trip(trip="", home="", language="", summary="", hint=True):
     """Настройки в отпуске — только то, что верно в поездке: «Отпуск:», «Дома:», «Язык в поездке:» (если
     «Обучение» на языке страны), «Уведомления:» без рассылок на паузе."""
     b = MessageBuilder()
@@ -106,10 +108,11 @@ def settings_trip(trip="", home="", language="", summary=""):
         b.labeled_line("Язык в поездке", language, lowercase=False)
     if summary:
         b.labeled_line("Уведомления", summary)
-    b.spacer()
-    b.italic("В отпуске здесь только то, что нужно в поездке. Предпочтения, город и данные разделов вернутся "
-             "после отпуска.")
-    b.newline()
+    if hint:
+        b.spacer()
+        b.italic("В отпуске здесь только то, что нужно в поездке. Предпочтения, город и данные разделов вернутся "
+                 "после отпуска.")
+        b.newline()
     return b.build_stripped()
 
 

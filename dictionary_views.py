@@ -117,7 +117,8 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
         due, learned = _review_counts(entries)
         b.line(f"{flag} Мой словарь · {total} {ru_plural(total, 'слово', 'слова', 'слов')}")
         b.spacer()
-        b.line(f"Повторить сегодня: {due} {ru_plural(due, 'слово', 'слова', 'слов')} · выучено {learned}")
+        b.labeled_line("Повторить сегодня", f"{due} {ru_plural(due, 'слово', 'слова', 'слов')} · выучено {learned}",
+                       lowercase=False)  # подпись жирным — двоеточие только после жирной подписи
         b.spacer()
         b.italic("Слова разложены по темам; в теме сначала те, что пора повторить.")
     else:

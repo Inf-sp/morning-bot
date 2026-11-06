@@ -224,8 +224,13 @@ def day_summary(
         _compact_line(b, weather_icon, "Погода", weather_line)
 
     # Праздники страны и события города — в день праздника и накануне.
-    for line in holidays or []:
-        b.line(f"🎉 {line}")
+    for line in holidays or []:  # «🎉 Сегодня: Koningsdag — День короля» — подпись жирной, как у остальных строк
+        label, sep, rest = str(line).partition(": ")
+        b.text_line("🎉 ")
+        if sep and len(label.split()) <= 2:
+            b.labeled_line(label, rest, lowercase=False)
+        else:
+            b.line(str(line))
         b.spacer()
 
     if vacation.get("country_lines"):

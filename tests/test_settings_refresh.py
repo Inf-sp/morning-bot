@@ -56,6 +56,10 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     monkeypatch.setattr(settings, "notif_on", lambda _cid, kind: kind == "evening_weather")
     monkeypatch.setattr(settings, "cuisines", lambda _cid: ["italian"])
     monkeypatch.setattr(settings.store, "load_wardrobe", lambda _cid: {"zones": {}})
+    profile = {}
+    monkeypatch.setattr(settings.store, "get_profile", lambda _cid: dict(profile))
+    monkeypatch.setattr(settings.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
 
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))
 
@@ -72,3 +76,5 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     callbacks = [b.callback_data for row in sent[0]["reply_markup"].inline_keyboard for b in row]
     assert "set_preferences" in callbacks
     assert "set_notif" in callbacks
+    asyncio.run(settings.send_home(RecordingBot(sent), "42"))  # пояснение — только при первом открытии
+    assert sent[1]["text"].endswith("следующая: Погода на завтра сегодня в 20:00")

@@ -9,6 +9,7 @@
 from .builder import MessageBuilder
 from . import rich
 from .constants import UI_EMOJI, ui_label
+from .text import ru_plural
 
 
 def deploy_report(version, title, release_notes):
@@ -46,7 +47,12 @@ def home(status_dot=None, status_text=None, updated_at=None, stale=False,
     status available.
     """
     b = MessageBuilder()
-    b.bold(ui_label("admin", "Админ"))
+    title = ui_label("admin", "Админ")
+    if system_rows is not None:  # вердикт сразу в заголовке: экран читается за секунду
+        problems = len(attention or [])
+        title += (f" · ⚠️ {problems} {ru_plural(problems, 'проблема', 'проблемы', 'проблем')}" if problems
+                  else " · ✅ всё работает")
+    b.bold(title)
     b.newline()
     b.spacer()
     head = [line for line in (version_line, server_line, night_line, activity_line) if line]

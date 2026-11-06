@@ -326,6 +326,14 @@ def learning_line(cid) -> str:
     return " · ".join(part for part in (study_lang(cid).capitalize(), level) if part)
 
 
+def _first_visit(cid, flag) -> bool:
+    """Пояснение экрана — только при первом открытии: дальше оно шум. Отметка — одно поле профиля."""
+    if (store.get_profile(cid) or {}).get(flag):
+        return False
+    store.mutate_profile(cid, lambda profile: ({**profile, flag: True}, None))
+    return True
+
+
 async def send_home(bot, cid, q=None):
     rows = [
         # Один столбец: Предпочтения, Город, отпуск, Уведомления, Экспорт; язык обучения — в «Предпочтения → Обучение».
@@ -345,9 +353,11 @@ async def send_home(bot, cid, q=None):
         rows = [[InlineKeyboardButton("🗂 Мои данные", callback_data="set_mydata")], rows[3],
                 [vacation_button(cid)], rows[-1]]  # «Вернуться из отпуска» — красная, над «Главной»
         msg = settings_ui.settings_trip(_trip_place_line(cid, data), (trip.get("home") or {}).get("city", ""),
-                                        _trip_language_line(cid), settings_summary(cid))
+                                        _trip_language_line(cid), settings_summary(cid),
+                                        hint=_first_visit(cid, "settings_trip_hint_seen"))
     else:
-        msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid))
+        msg = settings_ui.settings_home(city, learning_line(cid), settings_summary(cid),
+                                        hint=_first_visit(cid, "settings_hint_seen"))
     markup = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
