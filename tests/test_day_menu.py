@@ -392,14 +392,10 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
     assert asked == [True, True]  # «Из моих продуктов» читает только свою ячейку
 
 
-def test_footer_names_what_from_the_fridge_is_in_todays_menu():
-    import menu
-    day = {"cuisine": "french", "dishes": {
-        "breakfast": {"name": "Chausson aux pommes", "note": "слойка с яблоком"},
-        "lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"},
-        "dinner": {"name": "Cassoulet", "note": "фасоль с мясом и колбасками"},
-    }}
-    fridge = ["Яблоки", "Картофель", "Фасоль", "Соль", "Молоко", "Лук"]
-    assert menu.products_in_menu(fridge, day) == ["Яблоки", "Картофель", "Фасоль"]  # «соль» не в «фасоль»
-    msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Яблоки", "Картофель"]})
-    assert msg.text.endswith("Есть дома для меню: яблоки, картофель")
+def test_footer_is_fridge_size_not_matching_products():
+    day = {"cuisine": "french", "dishes": {"lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"}}}
+    # Старый вызов со списком «есть дома» — внизу всё равно только размер холодильника.
+    msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Картофель"]})
+    assert msg.text.endswith("\n\nТвой холодильник · 75 продуктов") and "Есть дома" not in msg.text
+
+

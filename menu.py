@@ -71,24 +71,6 @@ async def _deliver(bot, cid, msg, status=None, q=None, **extra):
         chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=msg.reply_markup, **extra)
 
 
-def products_in_menu(products, menu) -> list:
-    """Продукты холодильника, которые есть в блюдах меню дня (по названию и описанию блюда): «Картофель» — в
-    «стейк с картофелем фри». Сравнение по началу слова, без AI: «Соль» не находится в «фасоль»."""
-    import re
-    dishes = (menu or {}).get("dishes") or {}
-    text = " ".join(f"{dish.get('name') or ''} {dish.get('note') or ''}" for dish in dishes.values()
-                    if isinstance(dish, dict)).casefold()
-    found = []
-    for name in products:
-        word = (re.findall(r"[а-яёa-z]+", str(name).casefold()) or [""])[0]
-        if len(word) < 3:
-            continue
-        stem = word[:max(3, min(5, len(word) - 1))]
-        if re.search(rf"(?<![а-яёa-z]){re.escape(stem)}", text) and name not in found:
-            found.append(name)
-    return found
-
-
 def _day_menu_message(menu, cid=None):
     import config
     import day_menu
@@ -97,7 +79,7 @@ def _day_menu_message(menu, cid=None):
     stats = None
     if cid is not None and not vacation.active(cid):  # в отпуске холодильник остался дома
         available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
-        stats = {"products": len(available), "at_home": products_in_menu(available, menu)}
+        stats = {"products": len(available)}
     trip = cid is not None and vacation.active(cid)
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
