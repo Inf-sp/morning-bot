@@ -34,19 +34,19 @@ def test_cold_warning_formats_negative_temperature():
 
 def test_stale_fridge_button_does_not_toggle_product_of_another_category(monkeypatch):
     state = [
-        {"name": "курица", "cat": "мясо и рыба", "on": True},
-        {"name": "яблоки", "cat": "овощи и фрукты", "on": True},
+        {"name": "курица", "cat": "мясо и птица", "on": True},
+        {"name": "яблоки", "cat": "фрукты и ягоды", "on": True},
     ]
     monkeypatch.setattr(fridge.store, "get_list", lambda *_args: list(state))
     monkeypatch.setattr(fridge.store, "set_list", lambda _k, _c, value: state.__setitem__(slice(None), value))
     # Базовый набор уже добавлен раньше — индексы кнопок не сдвигаются.
     monkeypatch.setattr(fridge.store, "get_profile", lambda _cid: {"fridge_base_v": fridge.BASE_VERSION})
 
-    # Индекс 1 сейчас «яблоки», а кнопка пришла с экрана «Мясо и рыба» (cat 0).
+    # Индекс 1 сейчас «яблоки», а кнопка пришла с экрана «Мясо и птица» (cat 0).
     asyncio.run(fridge.fridge_toggle(_Bot(), "42", 1, 0, 0))
     assert all(item["on"] for item in state)
 
-    asyncio.run(fridge.fridge_toggle(_Bot(), "42", 1, 1, 0))
+    asyncio.run(fridge.fridge_toggle(_Bot(), "42", 1, 4, 0))  # «Фрукты и ягоды»
     assert next(item for item in state if item["name"] == "яблоки")["on"] is False
 
 

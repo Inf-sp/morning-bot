@@ -626,10 +626,13 @@ _HOME_SYNONYM_GROUPS = (
 )
 
 _HOME_CATEGORY_PAIRS = {
-    frozenset(("мясо и рыба", "бакалея")),
-    frozenset(("молочное и напитки", "бакалея")),
-    frozenset(("молочное и напитки", "специи и соусы")),
-    frozenset(("овощи и фрукты", "специи и соусы")),
+    frozenset(("мясо и птица", "крупы, макароны и хлеб")),
+    frozenset(("рыба и морепродукты", "крупы, макароны и хлеб")),
+    frozenset(("колбасы и полуфабрикаты", "крупы, макароны и хлеб")),
+    frozenset(("молочное и яйца", "крупы, макароны и хлеб")),
+    frozenset(("молочное и яйца", "соусы и специи")),
+    frozenset(("овощи и зелень", "соусы и специи")),
+    frozenset(("овощи и зелень", "фрукты и ягоды")),
 }
 
 _HOME_TECHNICAL_REASON_RE = re.compile(
@@ -1492,9 +1495,9 @@ def _leftovers_candidates(ingredients, meal=None):
     by_cat = {}
     for name in names:
         by_cat.setdefault(_fridge_cat(name), []).append(name)
-    produce = by_cat.get("овощи и фрукты", [])
-    grocery = by_cat.get("бакалея", [])
-    frozen = by_cat.get("заморозка", [])
+    produce = by_cat.get("овощи и зелень", []) + by_cat.get("фрукты и ягоды", [])
+    grocery = by_cat.get("крупы, макароны и хлеб", [])
+    frozen = by_cat.get("колбасы и полуфабрикаты", [])
     fruit = [
         name for name in produce
         if re.search(r"яблок|банан|апельсин|мандарин|груш|слив|персик|ягод|виноград|киви|манго|ананас|дын|арбуз", name, re.I)
@@ -1512,11 +1515,12 @@ def _leftovers_candidates(ingredients, meal=None):
         name for name in grocery
         if re.search(r"хлеб|батон|булоч|тост|лаваш|пита|багет|чиабат|леп[её]ш", name, re.I)
     ]
-    proteins = by_cat.get("мясо и рыба", []) + [
+    proteins = by_cat.get("мясо и птица", []) + by_cat.get("рыба и морепродукты", []) + [
         name for name in frozen
-        if re.search(r"мяс|кур|рыб|лосос|кревет|фарш|котлет|наггет|пельмен", name, re.I)
+        if re.search(r"мяс|кур|рыб|лосос|кревет|фарш|котлет|наггет|пельмен|ветчин|колбас|сосис|бекон|салями|"
+                     r"мортаделл|копч[ёе]н", name, re.I)
     ]
-    dairy = by_cat.get("молочное и напитки", [])
+    dairy = by_cat.get("молочное и яйца", [])
     eggs = [name for name in dairy if re.search(r"яйц|eieren", name, re.I)]
     cheese = [name for name in dairy if re.search(r"сыр|пармез|моцарел|фет|kaas", name, re.I)]
     cultured = [name for name in dairy if re.search(r"йогурт|творог|yoghurt", name, re.I)]
