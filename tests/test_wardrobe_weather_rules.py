@@ -67,7 +67,7 @@ def test_plus_18_rain_and_wind_never_gives_shorts():
         assert not _ids(outfit) & {"shorts", "sandals", "suede", "denim"}
         assert "rain" in _ids(outfit)
     reason = rules.weather_reason(ctx, outfits[0])
-    assert reason == ("Дождь с 13:00 и порывы ветра до 12 м/с, лучше выбрать непромокаемую верхнюю одежду "
+    assert reason == ("Дождь с 13:00 и порывы ветра до 12 м/с. Надень непромокаемую верхнюю одежду "
                       "и закрытую обувь.")
 
 
@@ -239,19 +239,26 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     asyncio.run(wardrobe.send_looks(None, 1, silent=True))
 
     assert set(saved["ids"]) == {"tee", "jeans", "sneakers", "rain"}
-    assert saved["look"]["weather_reason"].startswith("Дождь и порывы ветра до 12 м/с, лучше выбрать")
+    assert saved["look"]["weather_reason"].startswith("Дождь и порывы ветра до 12 м/с. Надень")
     assert "sock_recommendation" not in saved["look"] and "main_accent" not in saved["look"]
 
 
-def test_weather_suggests_accessories_instead_of_wardrobe_items():
+def test_weather_suggests_accessories_that_are_not_in_the_look():
     sunny = wear_window(_hourly(28, lambda h: 21 if h < 11 else 28), NOW)
     frost = wear_window(_hourly(-2, -6), NOW)
     chilly = wear_window(_hourly(6, 4), NOW)
 
     assert rules.weather_reason({**sunny, "sunny": True}, [TEE, SHORTS, SNEAKERS]).endswith(
-        ", лучше выбрать лёгкие вещи и солнечные очки.")
-    assert rules.weather_reason(frost, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается -6°, лучше выбрать шапку и перчатки."
-    assert rules.weather_reason(chilly, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается +4°, лучше выбрать шарф."
+        ". Надень лёгкие вещи и солнечные очки.")
+    assert rules.weather_reason(frost, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается -6°. Надень шапку и перчатки."
+    assert rules.weather_reason(chilly, [TEE, JEANS, SNEAKERS]) == "Холодно, ощущается +4°. Надень шарф."
+    # Шапка есть в шкафу — она в списке образа, в строке остаются только перчатки.
+    hat = _it("hat", "Аксессуары", "Чёрная шапка-бини", "чёрный")
+    assert rules.weather_accessories(frost, [hat, _it("belt", "Аксессуары", "Ремень", "чёрный")]) == [hat]
+    assert rules.weather_reason(frost, [TEE, JEANS, SNEAKERS, hat]) == "Холодно, ощущается -6°. Надень перчатки."
+    # Придаточное закрывается запятой: «слой, который можно снять, шапку и перчатки».
+    assert rules._and_list(["слой, который можно снять", "шапку", "перчатки"]) == "слой, который можно снять, шапку и перчатки"
+    assert rules._and_list(["слой, который можно снять", "шарф"]) == "слой, который можно снять, и шарф"
     # Спокойная погода — короткая сводка сверху, без советов; без прогноза — ничего.
     assert rules.weather_reason(wear_window(_hourly(18, 17), NOW), [TEE, JEANS, SNEAKERS]) == "Сухо, до +18°, ветер до 4 м/с."
     assert rules.weather_reason({"tmax": None}, [TEE, JEANS, SNEAKERS]) == ""

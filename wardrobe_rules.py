@@ -251,30 +251,63 @@ COLD_FEELS = 6     # °C: шарф
 WINDY_COLD_FEELS = 12
 
 
-def accessory_advice(ctx):
-    """Аксессуары по погоде — советом, а не вещами из шкафа (винительный падеж): очки, шарф, шапка."""
+# Аксессуар по погоде (винительный падеж) → как его узнать в шкафу.
+_ACCESSORY_KINDS = (
+    ("шапку", ("шапк", "бини", "beanie")),
+    ("перчатки", ("перчат", "варежк")),
+    ("шарф", ("шарф", "снуд")),
+    ("солнечные очки", ("солнцезащит", "солнечн", "очки от солнца", "sunglasses")),
+)
+
+
+def _accessory_kind(item):
+    if item.get("zone") != "Аксессуары":
+        return ""
+    name = str(item.get("name") or "").casefold()
+    return next((kind for kind, markers in _ACCESSORY_KINDS if any(marker in name for marker in markers)), "")
+
+
+def accessory_advice(ctx, items=()):
+    """Аксессуары по погоде (винительный падеж): шапка и перчатки, шарф, очки. Что уже есть в образе (items), —
+    не советуем: оно в списке вещей."""
     low, high = feels_low(ctx), feels_high(ctx)
     advice = []
     if low is not None and low <= FROST_FEELS:
-        advice.append("шапку и перчатки")
+        advice += ["шапку", "перчатки"]
     elif low is not None and (low <= COLD_FEELS or (ctx.get("strong_wind") and low < WINDY_COLD_FEELS)):
         advice.append("шарф")
     if not ctx.get("has_rain") and (ctx.get("sunny") or (summer_weather(ctx) and high is not None and high >= 24)):
         advice.append("солнечные очки")
-    return advice
+    worn = {_accessory_kind(item) for item in items}
+    return [kind for kind in advice if kind not in worn]
+
+
+def weather_accessories(ctx, accessories):
+    """Аксессуары из шкафа под погоду — в список образа: в мороз шапка и перчатки, в холод шарф, в солнце очки;
+    по одному каждого вида. Чего в шкафу нет — остаётся советом в строке о погоде."""
+    wanted = accessory_advice(ctx)
+    picked = {}
+    for item in accessories:
+        kind = _accessory_kind(item)
+        if kind in wanted and kind not in picked:
+            picked[kind] = item
+    return [picked[kind] for kind, _markers in _ACCESSORY_KINDS if kind in picked]
 
 
 def _and_list(values):
-    """«a», «a и b», «a, b и c»."""
+    """«a», «a и b», «a, b и c»; после придаточного — запятая: «слой, который можно снять, и шарф»."""
     values = list(dict.fromkeys(values))
-    return values[0] if len(values) == 1 else f"{', '.join(values[:-1])} и {values[-1]}"
+    if len(values) == 1:
+        return values[0]
+    head = ", ".join(values[:-1])
+    return f"{head}, и {values[-1]}" if len(values) == 2 and "," in values[0] else f"{head} и {values[-1]}"
 
 
 def weather_reason(ctx, items):
-    """«Дождь и порывы ветра до 16 м/с, лучше выбрать непромокаемую верхнюю одежду и закрытую обувь.»
+    """«Дождь и порывы ветра до 16 м/с. Надень непромокаемую верхнюю одежду и закрытую обувь.»
 
-    Одна фраза без тире. В спокойную погоду — сводка «Сухо, до +14°, ветер до 5 м/с.»;
-    без прогноза — "".
+    Погода, затем что надеть — отдельным предложением, без тире. В спокойную погоду — сводка «Сухо, до +14°,
+    ветер до 5 м/с.»; без прогноза — "". Аксессуар, который уже в образе (items), не советуется.
     """
     weather, consequences = [], []
     if ctx.get("has_rain"):
@@ -301,7 +334,7 @@ def weather_reason(ctx, items):
     low = feels_low(ctx)
     if not parts and low is not None and low <= COLD_FEELS:
         parts.append(f"холодно, ощущается {round(low):+d}°")
-    consequences.extend(accessory_advice(ctx))
+    consequences.extend(accessory_advice(ctx, items))
     if not parts and ctx.get("tmax") is not None:
         # Погода ни на что не повлияла — всё равно коротко говорим, какая она.
         parts.append(f"сухо, до {round(float(ctx['tmax'])):+d}°")
@@ -312,5 +345,5 @@ def weather_reason(ctx, items):
     text = ", ".join(parts)
     text = text[:1].upper() + text[1:]
     if consequences:
-        text += f", лучше выбрать {_and_list(consequences)}"
+        return f"{text}. Надень {_and_list(consequences)}."
     return text + "."

@@ -415,15 +415,21 @@ def _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previou
         weather_ctx,
         avoid_tips={previous_style_tip} if previous_style_tip else None,
     )
+    real = weather_ctx.get("real") or weather_ctx
+    # Шапка, перчатки, шарф или очки по погоде (с поправкой «Мёрзну / Жарко») — вещами из шкафа в списке, а не только
+    # советом в строке о погоде.
+    accessories = [{**item, "zone": zone} for zone, _sub, item in _flat_wardrobe_items(w) if zone == "Аксессуары"]
+    shown = [*best_sorted, *(item for item in wardrobe_rules.weather_accessories(weather_ctx, accessories)
+                             if not any(item.get("name") == it.get("name") for it in best_sorted))]
     look_data = {
         "primary_style": choose_outfit_style(best_sorted, selected_styles),
         "items": [
             {"name": public_item_name(it), "zone": it.get("zone")}
-            for it in best_sorted
+            for it in shown
         ],
         "style_tip": fallback_tip,
         "how_to_wear": build_how_to_wear(best_sorted, fallback_tip),
-        "weather_reason": wardrobe_rules.weather_reason(weather_ctx.get("real") or weather_ctx, best_sorted),
+        "weather_reason": wardrobe_rules.weather_reason(real, shown),
         "weather": weather_signature(weather_ctx, flags),
     }
     # Заголовок — группа стиля: нажатая кнопка, иначе стиль самого образа.
