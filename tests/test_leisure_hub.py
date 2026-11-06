@@ -502,7 +502,7 @@ def test_empty_hub_builds_day_cards_right_away(monkeypatch):
     assert built == ["cards-42", ["Дюна"]]
 
 
-def _today_picks(monkeypatch, *, rain=False, concert=True):
+def _today_picks(monkeypatch):
     import leisure_hub
     from datetime import date
     film = ({"title": "Восставший"}, {"id": 1, "kind": "movie", "name": "Восставший", "year": "2026", "countries": ["DE"],
@@ -517,11 +517,6 @@ def _today_picks(monkeypatch, *, rain=False, concert=True):
     monkeypatch.setattr(leisure_hub.leisure_music, "_cached_artist",
                         lambda _cid, stale=False: {"artist": "Focus Group", "genre": "indie", "country_label": "🇬🇧 UK",
                                                    "why": ["Как Bonobo, но теплее"]})
-    monkeypatch.setattr(leisure_hub, "_evening_rain", lambda *_a: rain)
-    events = [{"dates": {"start": {"localDate": "2026-10-13"}}, "name": "Muse", "url": "https://t.example/m",
-               "_embedded": {"venues": [{"name": "Ziggo Dome", "city": {"name": "Amsterdam"}}]}}] if concert else []
-    monkeypatch.setattr(leisure_hub.leisure_concerts, "_concerts_cache_get", lambda *_a: events)
-    monkeypatch.setattr(leisure_hub.leisure_concerts, "_not_a_concert", lambda _e: False)
     monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
     monkeypatch.setattr(leisure_hub.store, "get_list", lambda key, _cid: ["a"] * {
         leisure_hub.config.FAVORITE_MOVIES_KEY: 55}.get(key, 42))
@@ -529,36 +524,35 @@ def _today_picks(monkeypatch, *, rain=False, concert=True):
     return leisure_hub.today_data("42", day=date(2026, 10, 13))
 
 
-def test_today_screen_is_a_plan_with_main_film_alternatives_outing_and_stats(monkeypatch):
+def test_today_screen_is_main_film_one_alternative_and_stats(monkeypatch):
     data = _today_picks(monkeypatch)
-    msg = leisure_ui.leisure_today_screen(data["picks"], city=data["city"], outing=data["outing"],
-                                          library=data["library"])
+    msg = leisure_ui.leisure_today_screen(data["shown"], city=data["city"], library=data["library"])
 
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
         "Фильм дня:\n"  # как в погодном предупреждении: подпись, ниже пункты «•»
-        "• Восставший · 2026 · история · драма · DE · 1 ч 52 мин — Историческая драма о восстании. Второе.\n\n"
+        "• Восставший · 2026 · история · DE · 1 ч 52 мин — Историческая драма о восстании. Второе.\n\n"  # один жанр
         "Если не хочется кино:\n"
-        "• Нили · сериал · 2025 · Prime Video · драма · USA\n"  # страна кратко, без флага
-        "• Focus Group · музыкальный альбом · UK\n\n"
-        "Если захочется выйти:\n"
-        "• Muse — сегодня, Ziggo Dome\n\n"
+        "• Нили · сериал · 2025 · Prime Video · драма\n\n"  # один вариант в день; USA/UK — не пишем
         "Твоя библиотека · 55 фильмов · 42 артиста"
-    )
+    )  # концерта и статьи нет — они кнопками «Концерты» и «Статьи»
+    assert [pick["name"] for pick in data["picks"]] == ["Восставший", "Нили", "Focus Group"]
+    import leisure_hub
+    from datetime import date
+    assert [pick["name"] for pick in leisure_hub._shown_picks(data["picks"], date(2026, 10, 14))] == ["Восставший", "Focus Group"]
     raw = msg.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
     assert ("text_link", "Восставший") in marked and ("bold", "Нили") in marked
     assert [e.type for e in msg.entities][-1] == "italic"
 
 
-def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
-    data = _today_picks(monkeypatch, rain=True)
-    assert data["outing"] is None  # вечером дождь — прогулку не советуем
+def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
+    data = _today_picks(monkeypatch)
 
     # Без фильма главной становится первая карточка — без описания строка не ломается.
     msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
-    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video")
-    assert "Другие варианты:\n• Focus Group · музыкальный альбом · UK" in msg.text
+    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма\n")
+    assert "Другие варианты:\n• Focus Group · музыкальный альбом" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты", "📰 Статьи"]] and _callbacks(kb)[0] == "lz_prem"
@@ -568,7 +562,7 @@ def test_rain_hides_outing_and_premieres_button_is_first(monkeypatch):
 
 def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     import leisure_hub
-    _today_picks(monkeypatch, concert=False)
+    _today_picks(monkeypatch)
     monkeypatch.setattr(leisure_hub.ai, "allm_json", _boom)
     import local_events
     monkeypatch.setattr(local_events, "events", lambda _cid, fetch=True: [])
@@ -612,7 +606,7 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
     data = _today_picks(monkeypatch)
 
-    assert "• Focus Group · музыкальный альбом · UK · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
+    assert "• Focus Group · музыкальный альбом · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
     this_year = date.today().replace(month=1, day=9).isoformat()
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)
@@ -671,7 +665,7 @@ def test_today_screen_shows_country_without_flag_emoji(monkeypatch):
     data = _today_picks(monkeypatch)
     text = leisure_ui.leisure_today_screen(data["picks"], city=data["city"]).text
     assert "🇩🇪" not in text and "🇺🇸" not in text and "🇬🇧" not in text  # страна есть, флагов нет
-    assert "· DE ·" in text and "· USA\n" in text and "альбом · UK" in text
+    assert "· DE ·" in text and "USA" not in text and "UK" not in text  # страна — только неожиданная
 
 
 def test_artist_releases_keep_fresh_albums_eps_and_singles_of_the_week(monkeypatch):

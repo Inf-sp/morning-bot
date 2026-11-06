@@ -731,28 +731,14 @@ def _today_name(b: MessageBuilder, pick, meta=True) -> None:
         b.text_line(" · " + " · ".join(values))
 
 
-def _read_block(b: MessageBuilder, read) -> None:
-    """«Прочитать:» — заголовок статьи жирной ссылкой · источник · EN · N мин, ниже предложение."""
-    b.spacer()
-    b.bold("Прочитать:")
-    b.newline()
-    b.bold_link(" ".join(str(read.get("title") or "").split()), str(read.get("link") or ""))
-    minutes = int(read.get("minutes") or 0)
-    meta = [read.get("source"), read.get("lang"), f"{minutes} мин" if minutes else ""]
-    b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
-    b.newline()
-    if str(read.get("about") or "").strip():
-        b.line(_finish_sentence(str(read["about"]).strip()))
-
-
 def _finish_sentence(text) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
-def leisure_today_screen(picks, *, city="", outing=None, library=None, read=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: главная карточка (первая, обычно фильм) без подписи — имя, метаданные,
-    длительность и описание одним абзацем через «•»; остальные — «- Имя · сериал · …», событие рядом (если есть),
-    статистика библиотеки курсивом. picks — готовые данные (leisure_hub.today_data)."""
+def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> MessageSpec:
+    """«🍿 Досуг на сегодня · Alkmaar»: «Фильм дня:» — имя, 3–4 пункта метаданных и описание; ниже один вариант
+    «Если не хочется кино:» — «• Имя · сериал · …»; статистика библиотеки курсивом. Концерты и статьи — кнопками.
+    picks — что показать (leisure_hub.today_data, поле shown)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
@@ -777,18 +763,6 @@ def leisure_today_screen(picks, *, city="", outing=None, library=None, read=None
                 b.text_line("• ")
                 _today_name(b, {**pick, "meta": [_TODAY_KIND.get(pick["kind"], ""), *pick.get("meta", ())]})
                 b.newline()
-    if outing:
-        b.spacer()
-        b.bold("Если захочется выйти:")
-        b.newline()
-        b.text_line("• ")
-        _today_name(b, {"name": outing.get("name"), "url": outing.get("url")}, meta=False)
-        tail = ", ".join(part for part in (outing.get("when"), outing.get("place")) if str(part or "").strip())
-        if tail:
-            b.text_line(f" — {tail}")
-        b.newline()
-    if read and str(read.get("title") or "").strip() and str(read.get("link") or "").startswith("http"):
-        _read_block(b, read)
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))
@@ -920,9 +894,8 @@ def reads_screen(items) -> MessageSpec:
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
 
 
-def leisure_hub_kb(read=False):
-    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже Концерты | Статьи.
-    read — прежний параметр (статья на экране), на кнопки больше не влияет."""
+def leisure_hub_kb():
+    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже Концерты | Статьи."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),

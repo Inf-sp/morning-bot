@@ -62,17 +62,11 @@ def test_reading_time_counts_paragraph_words():
     assert leisure_reads.minutes_of("<p>short</p>") is None
 
 
-def test_hub_shows_one_read_with_source_language_minutes_and_a_change_button():
-    read = {"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "source": "Quanta", "lang": "EN",
-            "minutes": 6, "about": "Как сверхмассивные чёрные дыры набирают массу так быстро"}
-    msg = leisure_ui.leisure_today_screen([], read=read, library={"movies": 2, "artists": 1})
-    assert ("Прочитать:\nHow Black Holes Grow Up · Quanta · EN · 6 мин\n"
-            "Как сверхмассивные чёрные дыры набирают массу так быстро.\n\nТвоя библиотека") in msg.text
-    links = [entity.url for entity in msg.entities if entity.type == "text_link"]
-    assert links == ["https://q.example/bh"]
-    rows = [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb(read=True).inline_keyboard]
-    assert rows[2] == ["lz_concerts", "lz_reads"]  # Концерты | Статьи — в два столбца, статья на экране или нет
-    assert rows == [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb().inline_keyboard]
+def test_hub_has_no_article_block_and_reads_are_a_button():
+    msg = leisure_ui.leisure_today_screen([], library={"movies": 2, "artists": 1})
+    assert "Прочитать" not in msg.text  # статьи — экраном «Статьи»
+    rows = [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb().inline_keyboard]
+    assert rows[2] == ["lz_concerts", "lz_reads"]  # Концерты | Статьи — в два столбца
 
 
 def test_reads_screen_shows_three_most_interesting_articles_as_bullets(monkeypatch):
