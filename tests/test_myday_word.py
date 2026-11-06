@@ -197,3 +197,16 @@ def test_quote_comes_from_author_of_selected_country_without_repeats(monkeypatch
     # Все цитаты страны показаны — круг начинается заново.
     again, history = myday._country_quote("ZA", ["ZA:0", "ZA:1"])
     assert again["id"] in ("ZA:0", "ZA:1") and history == []
+
+
+def test_day_summary_drops_the_quote_on_a_busy_day():
+    from ui import myday as myday_ui
+    calm = myday_ui.day_summary("Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись",
+                                outfit_items=["Худи"], quote_text="Цитата", quote_author="Автор")
+    assert calm.text.endswith("💭 «Цитата» © Автор")
+    busy = myday_ui.day_summary(
+        "Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись", outfit_items=["Худи"],
+        holidays=["Сегодня: Sint Maarten — день святого Мартина", "Сегодня: Lichtjesavond — вечер огней"],
+        rail_works=[{"title": "Alkmaar – Uitgeest"}],
+        premiere={"kind": "series", "name": "Медведь", "season_number": 5}, quote_text="Цитата")
+    assert "Цитата" not in busy.text and busy.text.count("\n\n") == 7  # семь строк — без цитаты

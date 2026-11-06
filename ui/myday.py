@@ -157,6 +157,9 @@ def _short_fact(text) -> str:
     return head.rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
 
 
+_MAX_BLOCKS = 7  # строк-блоков в сводке вместе с цитатой; больше — цитата не показывается
+
+
 def day_summary(
     header,
     city,
@@ -196,13 +199,14 @@ def day_summary(
     b.newline()
     b.spacer()
 
-    if weather_line:
-        _compact_line(b, weather_icon, "Погода", weather_line)
-
-    # Праздники страны — в день праздника и накануне.
-    for line in holidays or []:
-        b.line(f"🎉 {line}")
-        b.spacer()
+    # Порядок — по срочности: что меняет планы (работы на ЖД), погода, праздники и события, затем фраза, образ,
+    # цитата. Цитата — только если сводка не длиннее _MAX_BLOCKS строк: в насыщенный день она лишняя.
+    blocks = sum((
+        len(rail_works or []), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
+        bool(word_line or movie_rebus), bool([item for item in outfit_items or [] if str(item).strip()]),
+        bool(str((vacation.get("try_dish") or {}).get("name") or "").strip()),
+        bool(str(vacation.get("country_fact") or "").strip()), bool(premiere),
+    ))
 
     # Плановые работы NS на станциях города — только в дни работ.
     for works in rail_works or []:
@@ -215,6 +219,14 @@ def day_summary(
             b.text_line("🚧 ")
             b.labeled_line("Работы на ЖД", text, lowercase=False)
             b.spacer()
+
+    if weather_line:
+        _compact_line(b, weather_icon, "Погода", weather_line)
+
+    # Праздники страны и события города — в день праздника и накануне.
+    for line in holidays or []:
+        b.line(f"🎉 {line}")
+        b.spacer()
 
     if vacation.get("country_lines"):
         b.bold("🌍 Страна:")
@@ -277,7 +289,7 @@ def day_summary(
 
     quote_text = str(quote_text or "").strip().strip("«»\"")
     quote_author = str(quote_author or "").strip()
-    if quote_text:
+    if quote_text and blocks < _MAX_BLOCKS:
         b.text_line("💭 ")
         b.add(f"«{quote_text}»", MessageEntity.ITALIC)
         if quote_author:
