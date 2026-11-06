@@ -105,7 +105,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     ]
     assert "Прогресс:" not in message.text
     assert message.text.split("\n\n")[1:] == [
-        "Zodra — как только.\n"  # короткое значение — в заголовок, не отдельной строкой
+        "Zodra → как только.\n"  # короткое значение — в заголовок, не отдельной строкой
         "В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
         "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
         "Твой нидерландский · 120 слов · 14 изученных тем",
@@ -116,7 +116,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         return [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
                 for e in message.entities if e.type == kind]
 
-    assert marked("bold")[1:] == ["Zodra — как только.", "Пример:"]
+    assert marked("bold")[1:] == ["Zodra → как только.", "Пример:"]
     assert marked("blockquote") == []  # без цитаты — пунктами
     assert marked("italic") == ["Твой нидерландский · 120 слов · 14 изученных тем"]  # пример — обычным текстом
     assert marked("spoiler") == []
@@ -643,7 +643,7 @@ def test_grammar_card_shows_topic_meaning_example_and_italic_explanation():
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson}).text
 
     assert text.split("\n\n")[1:] == [
-        "Hoeven … te — не нужно что-то делать.\n"
+        "Hoeven … te → не нужно что-то делать.\n"
         "Обычно используется с niet (не нужно) или pas (только, не раньше чем).",
         "Как использовать:\n"
         "• Глагол с te стоит в конце: We hoeven pas om acht uur te vertrekken → Нам нужно выходить только в восемь.",
@@ -705,16 +705,16 @@ def test_grammar_lesson_card_layout_with_usage_and_example_arrow():
     message = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": lesson,
                                      "stats": {"words": 120, "topics": 14}})
     assert message.text.split("\n\n")[1:] == [
-        "Wachten op — ждать кого-то или чего-то.\n"
+        "Wachten op → ждать кого-то или чего-то.\n"
         "В нидерландском глагол wachten обычно используется с предлогом op.",
-        "Как использовать:\n• Ждать человека — wachten op: Ik wacht op Sanne.\n• Вместо «это» — erop: Ik wacht erop.",
+        "Как использовать:\n• Ждать человека — wachten op → Ik wacht op Sanne.\n• Вместо «это» — erop → Ik wacht erop.",
         "Пример: Ik wacht al een week op een antwoord → Я уже неделю жду ответа.",
         "Твой нидерландский · 120 слов · 14 изученных тем",
     ]
     raw = message.text.encode("utf-16-le")
     bold = [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
             for e in message.entities if e.type == "bold"]
-    assert bold[1:] == ["Wachten op — ждать кого-то или чего-то.", "Как использовать:", "Пример:"]
+    assert bold[1:] == ["Wachten op → ждать кого-то или чего-то.", "Как использовать:", "Пример:"]
     assert "Запомни" not in message.text
 
 

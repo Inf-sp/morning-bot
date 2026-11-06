@@ -135,12 +135,12 @@ def _grammar_parts(rule) -> tuple:
 
 
 def _grammar_title(phrase) -> str:
-    """Заголовок — что изучаем: «Zijn → быть»; если «значение» — формула, а не перевод («daar + предлог»), то она
-    сама («Daar + предлог»), без «Daarom, daarvoor → daar + предлог»."""
+    """Заголовок — что изучаем: «Wachten op → ждать кого-то»; если «значение» — формула, а не перевод
+    («daar + предлог»), то она сама («Daar + предлог»), без «Daarom, daarvoor → daar + предлог»."""
     topic, meaning = str(phrase.get("topic") or "").strip(), str(phrase.get("meaning") or "").strip()
     if "+" in meaning and re.search(r"[a-z]", meaning.split("+")[0], re.I):
         return meaning[:1].upper() + meaning[1:]
-    return f"{topic} — {meaning}" if meaning else topic
+    return f"{topic} → {meaning}" if meaning else topic
 
 
 def _grammar_points(explanation) -> list:
@@ -172,7 +172,7 @@ def _grammar_lesson(phrase) -> dict:
     if phrase.get("topic") and card.get("intro") and card.get("usage"):
         header = _grammar_title({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")})
         intro = _with_period(card["intro"])
-        usage = [f"{item['when'][:1].upper()}{item['when'][1:]} — {item['form']}: {_with_period(item['example'])}"
+        usage = [f"{item['when'][:1].upper()}{item['when'][1:]} — {item['form']} → {_with_period(item['example'])}"
                  for item in card["usage"]]
     else:
         if phrase.get("topic") and phrase.get("explain"):
@@ -180,10 +180,10 @@ def _grammar_lesson(phrase) -> dict:
         else:  # прежний краткий формат правила: «_Zodra_ — как только. …»
             header, explanation = _grammar_parts(phrase.get("rule"))
         points = _grammar_points(str(explanation or "").split("\n\n")[0])
-        if header and " — " not in header and points and len(points[0].split()) <= 3 and ":" not in points[0]:
-            # «Zodra» + «Как только.» → заголовок «Zodra — как только», без отдельной строки из двух слов.
+        if header and " → " not in header and points and len(points[0].split()) <= 3 and ":" not in points[0]:
+            # «Zodra» + «Как только.» → заголовок «Zodra → как только», без отдельной строки из двух слов.
             short = _without_period(points[0])
-            header, points = f"{header} — {short[:1].lower()}{short[1:]}", points[1:]
+            header, points = f"{header} → {short[:1].lower()}{short[1:]}", points[1:]
         intro, usage = (points[0] if points else ""), points[1:3]
     example, translation = phrase.get("more"), phrase.get("more_translation")
     if example and translation:
@@ -230,7 +230,7 @@ def learning_menu(home: dict):
     b.newline()
 
     # Грамматика (фраза дня — в «Моём дне», строка «Фраза дня»): тема — значение, суть одной строкой,
-    # «Как использовать:» (ситуация — форма: пример), «Пример: фраза → перевод.».
+    # «Как использовать:» (ситуация — форма → пример), «Пример: фраза → перевод.».
     lesson = _grammar_lesson(home.get("live_language") or {})
     if lesson["header"] or lesson["intro"]:
         b.spacer()
