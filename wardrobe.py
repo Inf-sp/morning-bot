@@ -148,36 +148,9 @@ def weather_signature(weather_ctx, flags):
     }
 
 
-_ADJECTIVE_ENDINGS = ("ый", "ий", "ой")
-
-
-def _closing_line(items, primary_style, style_tip):
-    """Финальная фраза карточки: по кругу сочетание цветов, силуэт и стиль.
-
-    Тип выбирается по дню и составу образа, поэтому «Новый образ» и новый день дают другую
-    фразу; тип без данных (все вещи одного цвета, нет стиля) пропускается.
-    """
-    import hashlib
-    colors = []
-    for item in items:
-        color = str((item.get("colors") or [""])[0] or "").strip().casefold()
-        if color.endswith(_ADJECTIVE_ENDINGS) and color not in colors and item.get("zone") != "Обувь":
-            colors.append(color)
-    seed = int(hashlib.md5("|".join(str(it.get("id") or "") for it in items).encode()).hexdigest(), 16)
-    seed += datetime.now(config.TZ).date().toordinal()
-    options = [
-        wardrobe_ui.color_pair_line(colors[0], colors[1], seed) if len(colors) >= 2 else "",
-        str(style_tip or "").strip(),
-        wardrobe_ui.style_about(primary_style),
-    ]
-    options = [option for option in options if option]
-    return options[seed % len(options)] if options else ""
-
-
 def wardrobe_counts(w) -> dict:
-    """«Твой шкаф · 37 вещей · 528 образов» — для нижней строки карточки образа."""
-    from wardrobe_outfit import count_outfits
-    return {"items": wardrobe_stats(w)[0], "outfits": count_outfits(w)}
+    """«Твой шкаф · 36 вещей» — для нижней строки карточки образа."""
+    return {"items": wardrobe_stats(w)[0]}
 
 
 def _build_look_message(look_data):
@@ -457,8 +430,7 @@ def _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previou
     groups = _settings.style_groups_of(selected_styles)
     look_data["style_group"] = (_settings.style_group_labels(groups)[0] if len(groups) == 1
                                 else wardrobe_ui.outfit_group(look_data))
-    look_data["closing"] = _closing_line(best_sorted, look_data["primary_style"], fallback_tip)
-    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: шкаф помнит, сколько в нём вещей и образов
+    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: «Твой шкаф · 36 вещей»
     return _with_trip_flag(cid, look_data)
 
 

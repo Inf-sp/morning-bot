@@ -31,38 +31,6 @@ def _finish_dot(value):
 # Эмодзи заголовка — по группе стиля (`outfit_group`), тонкие стили его не меняют.
 _STYLE_EMOJI = {"Повседневный": "🧢", "Классический": "🧥"}
 
-# Финальная строка образа о стиле — запасная, когда нет статистики шкафа.
-_STYLE_ABOUT = {
-    "Минимализм": "Минимализм — это нейтральные цвета, чистые линии и минимум деталей.",
-    "Городской": "Городской стиль — это свободный крой, удобные кеды и утилитарные детали.",
-    "Повседневный": "Повседневный стиль — это собранная базовая одежда без лишней спортивности.",
-    "Скандинавский": "Скандинавский стиль — это спокойные оттенки, натуральные ткани и удобные слои.",
-    "Классический": "Классический стиль — это строгие силуэты, рубашки и аккуратная обувь.",
-    "Спортивный": "Спортивный стиль — это функциональные вещи и свобода движения.",
-}
-
-
-def style_about(primary_style="") -> str:
-    """«Городской стиль — это …» или ""."""
-    return _STYLE_ABOUT.get(_clean_text(primary_style), "")
-
-
-_COLOR_PAIR_ENDINGS = (
-    "спокойное сочетание, которое работает в любую погоду.",
-    "сочетание, которое выглядит собранно без усилий.",
-    "пара, которая не спорит между собой и легко носится весь день.",
-)
-
-
-def color_pair_line(first, second, variant=0) -> str:
-    """«Оливковый и бежевый — спокойное сочетание, которое работает в любую погоду.»"""
-    first, second = _clean_text(first), _clean_text(second)
-    if not first or not second:
-        return ""
-    ending = _COLOR_PAIR_ENDINGS[variant % len(_COLOR_PAIR_ENDINGS)]
-    return f"{first[:1].upper()}{first[1:]} и {second} — {ending}"
-
-
 def outfit_header(primary_style="", trip_flag=""):
     """Единый заголовок образа: эмодзи отражает выбранный стиль; в отпуске — флаг страны и «в отпуске»."""
     style = _clean_text(primary_style)
@@ -103,7 +71,6 @@ def render_wardrobe_message(look_data):
     """
     look_data = look_data or {}
     b = MessageBuilder()
-    primary_style = _clean_text(look_data.get("primary_style"))
     b.section(outfit_header(outfit_group(look_data), look_data.get("trip_flag") or ""))
 
     # Носки бот не советует — это решение пользователя (сохранённые раньше рекомендации не показываются).
@@ -125,11 +92,9 @@ def render_wardrobe_message(look_data):
         for item in items:
             b.line(f"• {item}")
 
-    # Нижняя строка курсивом — совет к этому образу (как носить, сочетание цветов, стиль; меняется по дням и
-    # образам); без него — «Твой шкаф · 36 вещей».
+    # Нижняя строка курсивом — «Твой шкаф · 36 вещей»: без числа образов и без советов о сочетании цветов.
     stats = look_data.get("stats") or {}
-    closing = (_clean_text(look_data.get("closing")) or _STYLE_ABOUT.get(primary_style, "")
-               or (wardrobe_stats_line(stats.get("items")) if stats.get("items") else ""))
+    closing = wardrobe_stats_line(stats.get("items")) if stats.get("items") else ""
     if closing:
         b.spacer()
         b.italic(closing)
@@ -192,11 +157,10 @@ def _pluralize_items(n):
     return "вещей"
 
 
-def wardrobe_stats_line(items, outfits=None) -> str:
-    """«Твой шкаф · 36 вещей»; с outfits — ещё «· 466 образов» (прежний вид, для старых вызовов)."""
+def wardrobe_stats_line(items) -> str:
+    """«Твой шкаф · 36 вещей»."""
     items = int(items or 0)
-    line = f"Твой шкаф · {items} {_pluralize_items(items)}"
-    return line if outfits is None else f"{line} · {int(outfits or 0)} {_outfits_word(int(outfits or 0))}"
+    return f"Твой шкаф · {items} {_pluralize_items(items)}"
 
 
 def _outfits_word(n):

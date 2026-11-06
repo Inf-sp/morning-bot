@@ -182,7 +182,7 @@ def test_trends_are_searched_once_a_week(monkeypatch):
 def test_card_shows_weather_then_items_then_style_like_cooking():
     msg = render_wardrobe_message({
         "primary_style": "Городской", "items": [{"name": "Белая футболка", "zone": "Верх"}],
-        "sock_recommendation": "Серые носки",
+        "sock_recommendation": "Серые носки", "stats": {"items": 36},
         "weather_reason": "☂️ Дождь с 13:00, лучше выбрать непромокаемую верхнюю одежду.",
     })
 
@@ -190,7 +190,7 @@ def test_card_shows_weather_then_items_then_style_like_cooking():
         "🧢 Надень сегодня · Повседневный", "",
         "Дождь с 13:00, лучше выбрать непромокаемую верхнюю одежду.", "",
         "• Белая футболка", "",  # носков нет: их выбирает пользователь
-        "Городской стиль — это свободный крой, удобные кеды и утилитарные детали.",
+        "Твой шкаф · 36 вещей",
     ]
     assert "☂️" not in render_wardrobe_message({"items": [{"name": "Футболка", "zone": "Верх"}]}).text
 
@@ -333,26 +333,6 @@ def test_hoodie_never_goes_over_a_shirt():
                        anchor_id="hoodie") == []
 
 
-def test_card_closing_is_italic_and_rotates_between_colors_fit_and_style(monkeypatch):
-    import wardrobe
-    items = [{"id": "a", "zone": "Верх", "colors": ["оливковый"]}, {"id": "b", "zone": "Низ", "colors": ["бежевый"]}]
-
-    lines = set()
-    for day in range(6):
-        monkeypatch.setattr(wardrobe, "datetime", type("D", (), {"now": staticmethod(
-            lambda tz=None, day=day: datetime(2026, 10, 10 + day))}))
-        lines.add(wardrobe._closing_line(items, "Городской", "Подверни рукава, чтобы образ выглядел легче."))
-    assert any(line.startswith("Оливковый и бежевый — ") for line in lines)
-    assert "Подверни рукава, чтобы образ выглядел легче." in lines
-    assert "Городской стиль — это свободный крой, удобные кеды и утилитарные детали." in lines
-
-    msg = render_wardrobe_message({"items": [{"name": "Белая футболка", "zone": "Верх"}],
-                                   "closing": "Оливковый и бежевый — спокойное сочетание."})
-    italic = [msg.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
-              for e in msg.entities if e.type == "italic"]
-    assert msg.text.endswith("Оливковый и бежевый — спокойное сочетание.") and italic[-1] == msg.text.splitlines()[-1]
-
-
 def test_new_look_button_does_not_ask_the_ai_stylist(monkeypatch):
     import asyncio
     from datetime import timedelta
@@ -422,10 +402,12 @@ def test_cold_morning_gets_a_warm_layer_and_not_a_windbreaker():
     assert not rules.colder_than(mild, rules.WARM_LAYER_FEELS_MAX)
 
 
-def test_look_card_ends_with_a_tip_not_outfit_count():
+def test_look_card_ends_with_wardrobe_size_not_tips_or_outfit_count():
+    # Старый кэш с советом о сочетании и числом образов — внизу всё равно только «Твой шкаф · 36 вещей».
     look = {"items": [{"name": "Белая футболка", "zone": "Верх"}], "stats": {"items": 36, "outfits": 466},
-            "closing": "Подверни рукава до середины предплечья, чтобы образ выглядел легче."}
-    text = render_wardrobe_message(look).text
-    assert text.endswith("Подверни рукава до середины предплечья, чтобы образ выглядел легче.") and "образов" not in text
-    no_tip = render_wardrobe_message({"items": look["items"], "stats": look["stats"]}).text
-    assert "образов" not in no_tip
+            "closing": "Черный и оливковый — спокойное сочетание, которое работает в любую погоду."}
+    message = render_wardrobe_message(look)
+    italic = [message.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
+              for e in message.entities if e.type == "italic"]
+    assert message.text.endswith("\n\nТвой шкаф · 36 вещей") and italic[-1] == "Твой шкаф · 36 вещей"
+    assert "сочетание" not in message.text and "образов" not in message.text
