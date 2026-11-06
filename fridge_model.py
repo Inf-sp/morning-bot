@@ -116,7 +116,7 @@ BASE_PRODUCTS = {
     "соусы и специи": ("Оливковое масло", "Подсолнечное масло", "Соевый соус", "Томатная паста", "Паприка", "Карри",
                        "Чили", "Песто", "Горчица", "Мёд"),
 }
-BASE_VERSION = 3  # 3 — до десяти универсальных продуктов на категорию; новая версия — набор обновляется
+BASE_VERSION = 4  # 4 — единый список для всех: свои продукты не показываются, любимые свои → продукт списка
 _BASE_CATEGORY: dict = {}  # имя продукта набора, как его хранит список («котлета»), → категория; см. _base_category
 
 
@@ -130,22 +130,54 @@ def _base_category() -> dict:
     return _BASE_CATEGORY
 
 
-def with_base_products(items: list) -> list:
-    """Список + продукты базового набора, которых в нём нет, — невыбранными (□); свои и выбранные не трогает."""
-    known = {str(item.get("name") or "").casefold() for item in items}
-    extra = [{"name": name, "cat": cat, "on": False, "cat_manual": True, "base": True}
-             for cat, names in BASE_PRODUCTS.items() for name in names
-             if not {name.casefold(), *(stored.casefold() for stored in _fridge_split_input(name))} & known]
-    return [*items, *extra]
+_BASE_SYNONYMS = {"кинза": "Зелень", "укроп": "Зелень", "петрушка": "Зелень", "базилик": "Зелень",
+                  "черри": "Помидоры", "томаты": "Помидоры", "шампиньоны": "Грибы", "картошка": "Картофель"}
+_STEM_STOP = {"масл", "соус", "свеж", "копч", "замо", "моро", "сушё", "суше", "конс", "тёрт", "терт", "мелк", "круп"}
 
 
-def without_old_base(items: list) -> list:
-    """Убирает невыбранные продукты прежних версий набора, которых нет в текущем: список остаётся компактным.
-    Любимые (✅) и свои продукты не трогает."""
-    current = set(_base_category())
-    return [item for item in items
-            if not (item.get("base") and not item.get("on", True)
-                    and str(item.get("name") or "").casefold() not in current)]
+def base_key(name) -> str:
+    """Имя продукта списка так, как его хранит список: «Котлеты» → «котлета»."""
+    parts = _fridge_split_input(name)
+    return (parts[0] if parts else str(name or "")).casefold()
+
+
+def _stems(text) -> set:
+    return {word[:4] for word in re.findall(r"[а-яё]{4,}", str(text or "").casefold())} - _STEM_STOP
+
+
+def match_base(name, cat=None):
+    """Продукт единого списка для названия: (категория, «Курица») или None. Сначала точное совпадение, затем общий
+    корень в той же категории: «куриные ножки» → «Курица», «филе лосося» → «Лосось»."""
+    key = base_key(name)
+    for category, names in BASE_PRODUCTS.items():
+        for base in names:
+            if key in (base.casefold(), base_key(base)):
+                return category, base
+    words = set(re.findall(r"[а-яё]+", key))
+    for word, base in _BASE_SYNONYMS.items():
+        if word in words:
+            return match_base(base)
+    category = cat if cat in BASE_PRODUCTS else _fridge_detect_cat(key)
+    stems = _stems(key)
+    for base in BASE_PRODUCTS.get(category, ()):
+        if base.casefold() in words or stems & _stems(base):  # «сыр гауда» → «Сыр»
+            return category, base
+    return None
+
+
+def favorite_keys(items: list) -> set:
+    """Ключи любимых продуктов единого списка."""
+    keys = {base_key(base) for names in BASE_PRODUCTS.values() for base in names}
+    return {str(item.get("name") or "").casefold() for item in items if item.get("on", True)} & keys
+
+
+def set_favorite(items: list, cat: str, base: str, on: bool) -> list:
+    """Отметить продукт единого списка любимым (или снять); записи нет — добавить."""
+    key = base_key(base)
+    for index, item in enumerate(items):
+        if str(item.get("name") or "").casefold() == key:
+            return [*items[:index], {**item, "on": on}, *items[index + 1:]]
+    return [*items, {"name": key, "cat": cat, "on": on, "base": True, "cat_manual": True}]
 
 
 # Прежние категории → новые: продукт без уверенно определённой категории (свой, выбранный вручную) остаётся рядом.
@@ -592,5 +624,7 @@ def _fridge_migrate(items: list) -> list:
 
 
 def _fridge_available(items: list) -> list:
-    """Любимые продукты — имена с on=True (для рецепта «Из любимых продуктов»); из чего не готовят — не идёт."""
-    return [it["name"] for it in _fridge_migrate(items) if it.get("on", True) and it.get("cat") != NOT_FOR_COOKING]
+    """Любимые продукты — отмеченные продукты единого списка (для рецепта «Из любимых продуктов»); свои продукты
+    прежних версий и то, из чего не готовят, не идут."""
+    favorites = favorite_keys(_fridge_migrate(items))
+    return [it["name"] for it in _fridge_migrate(items) if it["name"].casefold() in favorites]

@@ -13,10 +13,7 @@ from ui import text as text_ui
 from ui import food as food_ui
 from ui.navigation import back_menu_keyboard, nav_row
 import menu
-from response_delivery import (
-    back_keyboard as _back_kb,
-    keyboard as _kb,
-)
+from response_delivery import keyboard as _kb
 from recipe_state import (
     _leftover_remember,
     _persist_current_queue_recipe,
@@ -401,13 +398,15 @@ async def handle_callback(bot, cid, q, data, status=None):
     if data in ("as_fridge", "as_fridge_home"):
         await fridge_flow.send_fridge(bot, cid, q)
         return True
-    if data.startswith("as_fridge_pick_"):
+    if data.startswith("as_fridge_pick_"):  # старый выбор категории своего продукта — своих продуктов больше нет
+        await fridge_flow.send_fridge(bot, cid, q)
+        return True
+    if data.startswith("as_fridge_fav_"):  # продукт единого списка: ✅ любимый ↔ □
+        parts = data.split("_")
         try:
-            category = int(data.rsplit("_", 1)[-1])
+            await fridge_flow.fridge_fav(bot, cid, int(parts[3]), int(parts[4]), q)
         except (ValueError, IndexError):
             await fridge_flow.send_fridge(bot, cid, q)
-        else:
-            await fridge_flow.fridge_assign_category(bot, cid, category, q)
         return True
     if data.startswith("as_fridge_cat_"):
         parts = data.split("_")
@@ -416,25 +415,8 @@ async def handle_callback(bot, cid, q, data, status=None):
         except (ValueError, IndexError):
             await fridge_flow.send_fridge(bot, cid, q)
         return True
-    if data == "as_fridge_add":
-        store.pending_input[str(cid)] = "fridge_add_-1"
-        await bot.send_message(
-            chat_id=cid,
-            text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
-            reply_markup=_back_kb(),
-        )
-        return True
-    if data.startswith("as_fridge_add_"):
-        try:
-            category = int(data.split("_")[-1])
-        except (ValueError, IndexError):
-            category = -1
-        store.pending_input[str(cid)] = f"fridge_add_{category}"
-        await bot.send_message(
-            chat_id=cid,
-            text="✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
-            reply_markup=_back_kb(),
-        )
+    if data.startswith("as_fridge_add"):  # старая «Добавить продукт» (и с категорией) — единый список
+        await fridge_flow.send_fridge(bot, cid, q)
         return True
     if data == "as_fridge_cook":
         owns_status = status is None
@@ -464,27 +446,16 @@ async def handle_callback(bot, cid, q, data, status=None):
             if owns_status:
                 await status.stop(delete=True)
         return True
-    if data.startswith("as_fridge_clean_"):
-        import cleanup
-        if data == "as_fridge_clean_all":
-            await cleanup.open_view(bot, cid, "fridge")
-            return True
-        try:
-            category = int(data.rsplit("_", 1)[-1])
-        except (ValueError, IndexError):
-            await fridge_flow.send_fridge(bot, cid, q)
-        else:
-            if 0 <= category < len(fridge_flow._CAT_ORDER):
-                await cleanup.open_view(bot, cid, f"fridge_cat_{category}")
-            else:
-                await fridge_flow.send_fridge(bot, cid, q)
-        return True
-    if data.startswith(("as_fridge_tgl_", "as_fridge_del_")):
+    if data.startswith(("as_fridge_clean_", "as_fridge_tgl_", "as_fridge_del_")):
+        # Старые «Изменить» и переключатели своих продуктов по номеру — теперь единый список категории.
         parts = data.split("_")
         try:
-            function = fridge_flow.fridge_toggle if data.startswith("as_fridge_tgl_") else fridge_flow.fridge_del
-            await function(bot, cid, int(parts[3]), int(parts[4]), int(parts[5]), q)
+            category = int(parts[4] if not data.startswith("as_fridge_clean_") else parts[3])
         except (ValueError, IndexError):
+            category = -1
+        if 0 <= category < len(fridge_flow._CAT_ORDER):
+            await fridge_flow.send_fridge_cat(bot, cid, category, 0, q)
+        else:
             await fridge_flow.send_fridge(bot, cid, q)
         return True
     return False

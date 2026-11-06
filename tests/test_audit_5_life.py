@@ -32,22 +32,22 @@ def test_cold_warning_formats_negative_temperature():
     assert "🥶 Мороз, днём около -3°C." in events
 
 
-def test_stale_fridge_button_does_not_toggle_product_of_another_category(monkeypatch):
-    state = [
-        {"name": "курица", "cat": "мясо и птица", "on": True},
-        {"name": "яблоки", "cat": "фрукты и ягоды", "on": True},
-    ]
+def test_stale_fridge_buttons_open_the_shared_category_list(monkeypatch):
+    state = [{"name": "курица", "cat": "мясо и птица", "on": True}]
     monkeypatch.setattr(fridge.store, "get_list", lambda *_args: list(state))
     monkeypatch.setattr(fridge.store, "set_list", lambda _k, _c, value: state.__setitem__(slice(None), value))
-    # Базовый набор уже добавлен раньше — индексы кнопок не сдвигаются.
     monkeypatch.setattr(fridge.store, "get_profile", lambda _cid: {"fridge_base_v": fridge.BASE_VERSION})
+    shown = []
 
-    # Индекс 1 сейчас «яблоки», а кнопка пришла с экрана «Мясо и птица» (cat 0).
-    asyncio.run(fridge.fridge_toggle(_Bot(), "42", 1, 0, 0))
-    assert all(item["on"] for item in state)
+    async def show_category(_bot, _cid, cat_idx, _page=0, _q=None):
+        shown.append(cat_idx)
 
-    asyncio.run(fridge.fridge_toggle(_Bot(), "42", 1, 4, 0))  # «Фрукты и ягоды»
-    assert next(item for item in state if item["name"] == "яблоки")["on"] is False
+    monkeypatch.setattr(fridge, "send_fridge_cat", show_category)
+    import cooking
+    # Старые кнопки: переключатель по номеру и «Изменить» — не меняют данные, открывают список категории.
+    asyncio.run(cooking.handle_callback(_Bot(), "42", None, "as_fridge_tgl_0_4_0"))
+    asyncio.run(cooking.handle_callback(_Bot(), "42", None, "as_fridge_clean_1"))
+    assert shown == [4, 1] and state == [{"name": "курица", "cat": "мясо и птица", "on": True}]
 
 
 def test_fridge_batch_without_ai_uses_only_fridge_products(monkeypatch):

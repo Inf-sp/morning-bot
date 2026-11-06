@@ -545,10 +545,9 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
     _prepare_pending_text_router(monkeypatch)
 
     bot = RecordingBot(sent)
-    asyncio.run(cooking.handle_callback(bot, cid, None, "as_fridge_add"))
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=cid),
-        message=SimpleNamespace(text="курица, рис"),
+        message=SimpleNamespace(text="добавь в продукты: курица, рис"),
     )
     asyncio.run(bot_text.handle(
         update,
@@ -556,39 +555,28 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
         lambda *_args: asyncio.sleep(0),
     ))
 
-    assert opened == [(cid, False)]
+    assert opened == [(cid, False)]  # первые любимые продукты — сразу рецепт дня
     assert cid not in store.pending_input
-    assert [message["text"] for message in sent] == [
-        "✏️ Напиши продукты через запятую или с новой строки — добавлю в список.",
-    ]
+    assert sent == []
 
 
-def test_first_fridge_fill_opens_cooking_after_category_choice(monkeypatch):
-    cid = "first-fridge-category"
+def test_product_outside_the_shared_list_is_not_added(monkeypatch):
+    cid = "first-fridge-unknown"
     saved = []
     opened = []
-
-    class Bot:
-        async def send_message(self, **_kwargs):
-            return None
+    sent = []
 
     monkeypatch.setattr(fridge.store, "get_list", lambda _key, _cid: list(saved))
-    monkeypatch.setattr(
-        fridge.store,
-        "set_list",
-        lambda _key, _cid, values: saved.__setitem__(slice(None), values),
-    )
+    monkeypatch.setattr(fridge.store, "set_list", lambda _key, _cid, values: saved.__setitem__(slice(None), values))
 
     async def send_food_home(_bot, routed_cid, *, refresh=False, **_kwargs):
         opened.append((str(routed_cid), refresh))
 
     monkeypatch.setattr(menu, "send_food_menu", send_food_home)
-    fridge._pending_category_choices.clear()
 
-    asyncio.run(fridge.fridge_add_done(Bot(), cid, "дуриан"))
-    asyncio.run(fridge.fridge_assign_category(Bot(), cid, 1))
+    asyncio.run(fridge.fridge_add_done(RecordingBot(sent), cid, "дуриан"))
 
-    assert opened == [(cid, False)]
+    assert opened == [] and not fridge._fridge_available(saved)  # своих продуктов нет — единый список
 
 
 def test_daily_phrase_pool_has_300_unique_conversational_phrases_per_language():

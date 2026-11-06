@@ -29,17 +29,16 @@ def test_wardrobe_add_action_is_above_navigation_and_separate():
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 
-def test_fridge_has_categories_and_a_separate_add_action(monkeypatch):
+def test_fridge_is_a_shared_list_without_add_action(monkeypatch):
     monkeypatch.setattr(fridge.store, "get_list", lambda *_args: [])
     bot = RecordingBot()
 
     asyncio.run(fridge.send_fridge(bot, "pytest-add-layout"))
 
     rows = _labels(bot.message["reply_markup"])
-    assert rows[0] == ["✅ Добавить продукт"]
-    assert rows[1] == ["Мясо и птица · 0"]  # базовый набор: категории есть сразу, любимых пока 0
-    assert rows[0] == ["✅ Добавить продукт"]
-    assert ["📝 Выбрать предпочтения"] in rows
+    assert rows[0] == ["Мясо и птица · 0"]  # единый список: категории сразу, своих продуктов не добавить
+    assert ["✅ Добавить продукт"] not in rows
+    assert rows[-2] == ["📝 Выбрать предпочтения"]
     assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
 
 def test_dictionary_batch_keeps_add_action_on_own_first_row():

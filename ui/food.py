@@ -199,20 +199,12 @@ def fridge_category(label, total, favorites):
     return b.build_stripped()
 
 
-def fridge_category_choice(name):
-    b = MessageBuilder()
-    b.section("Выбери категорию")
-    b.line(f"Не удалось уверенно определить категорию для «{name}».")
-    b.line("Куда добавить продукт?")
-    return b.build_stripped()
-
-
 def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emoji, cat_labels):
     b = MessageBuilder()
     b.section("Любимые продукты обновлены")
     if added:
         b.spacer()
-        b.bold("Добавил:")
+        b.bold("Отметил любимыми:")
         for cat in cat_order:
             names = sorted(set(added_by_cat.get(cat, [])))
             if names:
@@ -225,10 +217,10 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
                 b.text_line(f" {', '.join(names)}")
     else:
         b.spacer()
-        b.text_line("Новых продуктов не нашёл.")
+        b.text_line("Новых любимых не отметил.")
     if duplicates:
         b.spacer()
-        b.bold("Отметил любимыми:")
+        b.bold("Уже любимые:")
         b.newline()
         b.text_line(", ".join(sorted(set(duplicates))[:20]))
     if rejected:

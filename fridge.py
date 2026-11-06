@@ -13,15 +13,16 @@ from fridge_model import (
     _CAT_EMOJI,
     _CAT_ORDER,
     _fridge_available,
-    _fridge_detect_cat,
     _fridge_migrate,
     _fridge_normalize_input,
     _fridge_rejected_lines,
     _fridge_split_input,
+    BASE_PRODUCTS,
     BASE_VERSION,
-    NOT_FOR_COOKING,
-    with_base_products,
-    without_old_base,
+    favorite_keys,
+    base_key,
+    match_base,
+    set_favorite,
 )
 from ui import food as food_ui
 from ui.navigation import nav_row
@@ -30,9 +31,6 @@ _log = logging.getLogger(__name__)
 
 send_leftovers = cooking.send_leftovers
 
-_FRIDGE_PAGE = 8  # продуктов на страницу в категории
-_pending_category_choices: dict[str, dict] = {}
-
 
 def _mark_transient_edit(bot, cid, message):
     marker = getattr(bot, "mark_transient_message", None)
@@ -40,62 +38,28 @@ def _mark_transient_edit(bot, cid, message):
         marker(cid, getattr(message, "message_id", None))
 
 
-def _fridge_by_cat(items: list) -> dict:
-    """Словарь cat → [(global_idx, item)] для отображения."""
-    by_cat: dict = {category: [] for category in _CAT_ORDER}
-    for i, it in enumerate(items):
-        cat = it.get("cat")
-        if cat in by_cat:
-            by_cat[cat].append((i, it))
-    return by_cat
-
-
-def _fridge_by_cat_display(items: list) -> dict:
-    """Все шесть категорий в стабильном порядке, включая пустые; в категории — сначала любимые, затем остальные,
-    по алфавиту."""
-    by_cat = _fridge_by_cat(items)
-    return {category: sorted(values, key=lambda value: (not value[1].get("on", True), value[1]["name"].casefold()))
-            for category, values in by_cat.items()}
-
-
 def _load_products(cid) -> list:
-    """Продукты пользователя: один раз (на версию набора) добавляется базовый набор невыбранными — дальше удалённое
-    из него не возвращается."""
+    """Продукты пользователя. Переход на единый список (BASE_VERSION): свои любимые продукты прежних версий
+    отмечают похожий продукт списка («куриные ножки» → «Курица»); сами свои продукты остаются в данных скрытыми."""
     cid_s = str(cid)
     raw = store.get_list(config.FRIDGE_KEY, cid_s)
     items = _fridge_migrate(raw)
     if (store.get_profile(cid_s) or {}).get("fridge_base_v") != BASE_VERSION:
-        # Новая версия набора: невыбранное из прежнего набора уходит, недостающее — добавляется невыбранным.
-        items = _fridge_migrate(with_base_products(without_old_base(items)))
+        favorites = favorite_keys(items)
+        for item in list(items):
+            if item.get("on", True) and item["name"].casefold() not in favorites:
+                found = match_base(item["name"], item.get("cat"))
+                if found and base_key(found[1]) not in favorites:
+                    items = set_favorite(items, found[0], found[1], True)
+                    favorites.add(base_key(found[1]))
+        items = _fridge_migrate(items)
         store.mutate_profile(cid_s, lambda profile: ({**profile, "fridge_base_v": BASE_VERSION}, None))
     if items != raw:
         store.set_list(config.FRIDGE_KEY, cid_s, items)
     return items
 
 
-# ---------- Любимые продукты: главный экран (категории) ----------
-async def send_fridge(bot, cid, q=None, back="m_food"):
-    """«Любимые продукты»: категории базового набора; на кнопке — сколько в ней любимых."""
-    items = _load_products(cid)
-    available = len(_fridge_available(items))
-    by_cat = _fridge_by_cat_display(items)
-    msg = food_ui.fridge_home(available)
-    rows = [[InlineKeyboardButton("✅ Добавить продукт", callback_data="as_fridge_add")]]
-    for ci, cat in enumerate(_CAT_ORDER):
-        cat_items = by_cat[cat]
-        if not cat_items:  # пустая категория не показывается: добавить продукт — кнопкой сверху
-            continue
-        on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-        label = _CAT_BTN_LABEL[cat]
-        rows.append([InlineKeyboardButton(
-            f"{label} · {on_cnt}",
-            callback_data=f"as_fridge_cat_{ci}_0",
-        )])
-    rows.append([InlineKeyboardButton(
-        "📝 Выбрать предпочтения", callback_data="set_pref_cuisines",
-    )])
-    rows.append(nav_row(back))
-
+async def _show(bot, cid, msg, rows, q=None):
     kb = InlineKeyboardMarkup(rows)
     if q is not None:
         try:
@@ -103,188 +67,91 @@ async def send_fridge(bot, cid, q=None, back="m_food"):
             _mark_transient_edit(bot, cid, q.message)
             return
         except Exception:
-            _log.debug("send_fridge: ignored error", exc_info=True)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=kb, transient=True)
+            _log.debug("fridge screen: ignored error", exc_info=True)
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
 
 
-# ---------- Экран категории (пагинация + переключение наличия) ----------
-async def send_fridge_cat(bot, cid, cat_idx: int, page: int, q=None):
+# ---------- Любимые продукты: главный экран (категории) ----------
+async def send_fridge(bot, cid, q=None, back="m_food"):
+    """«Любимые продукты»: категории единого списка; на кнопке — сколько в ней любимых. Своих продуктов,
+    добавления и удаления нет — только отметка."""
     items = _load_products(cid)
-    by_cat = _fridge_by_cat_display(items)
+    favorites = favorite_keys(items)
+    msg = food_ui.fridge_home(len(favorites))
+    rows = [[InlineKeyboardButton(
+        f"{_CAT_BTN_LABEL[cat]} · {sum(base_key(name) in favorites for name in BASE_PRODUCTS[cat])}",
+        callback_data=f"as_fridge_cat_{ci}_0")] for ci, cat in enumerate(_CAT_ORDER)]
+    rows.append([InlineKeyboardButton("📝 Выбрать предпочтения", callback_data="set_pref_cuisines")])
+    rows.append(nav_row(back))
+    await _show(bot, cid, msg, rows, q)
 
+
+# ---------- Категория: единый список, ✅ любимый / □ ----------
+async def send_fridge_cat(bot, cid, cat_idx: int, page: int = 0, q=None):
     if not 0 <= cat_idx < len(_CAT_ORDER):
         await send_fridge(bot, cid, q)
         return
     cat = _CAT_ORDER[cat_idx]
-    cat_items = by_cat[cat]  # [(global_idx, item)]
-
-    total = len(cat_items)
-    pages = max(1, (total + _FRIDGE_PAGE - 1) // _FRIDGE_PAGE)
-    page = max(0, min(page, pages - 1))
-    chunk = cat_items[page * _FRIDGE_PAGE:(page + 1) * _FRIDGE_PAGE]
-
-    on_cnt = sum(1 for _, it in cat_items if it.get("on", True))
-    msg = food_ui.fridge_category(_CAT_BTN_LABEL[cat], total, on_cnt)
-
-    # Один продукт в строку: названия должны читаться полностью.
-    rows = []
-    for gi, it in chunk:
-        mark = "✅" if it.get("on", True) else "□"  # ✅ — любимый
-        rows.append([InlineKeyboardButton(
-            f"{mark} {it['name'][:40]}", callback_data=f"as_fridge_tgl_{gi}_{cat_idx}_{page}")])
-
-    if pages > 1:
-        rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"as_fridge_cat_{cat_idx}_{(page-1) % pages}"),
-            InlineKeyboardButton(f"{page + 1} / {pages}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"as_fridge_cat_{cat_idx}_{(page+1) % pages}"),
-        ])
-    if cat_items:
-        rows.append([InlineKeyboardButton(
-            "✏️ Изменить",
-            callback_data=f"as_fridge_clean_{cat_idx}",
-        )])
+    favorites = favorite_keys(_load_products(cid))
+    names = BASE_PRODUCTS[cat]
+    chosen = sum(base_key(name) in favorites for name in names)
+    msg = food_ui.fridge_category(_CAT_BTN_LABEL[cat], len(names), chosen)
+    rows = [[InlineKeyboardButton(f"{'✅' if base_key(name) in favorites else '□'} {name}",
+                                  callback_data=f"as_fridge_fav_{cat_idx}_{index}")]
+            for index, name in enumerate(names)]
     rows.append(nav_row("as_fridge_home"))
+    await _show(bot, cid, msg, rows, q)
 
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            _log.debug("send_fridge_cat: ignored error", exc_info=True)
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities,
-                           reply_markup=kb, transient=True)
+
+async def fridge_fav(bot, cid, cat_idx: int, index: int, q=None):
+    """Нажатие на продукт списка: ✅ любимый ↔ □."""
+    if 0 <= cat_idx < len(_CAT_ORDER) and 0 <= index < len(BASE_PRODUCTS[_CAT_ORDER[cat_idx]]):
+        cat = _CAT_ORDER[cat_idx]
+        name = BASE_PRODUCTS[cat][index]
+        items = _load_products(cid)
+        on = base_key(name) not in favorite_keys(items)
+        store.set_list(config.FRIDGE_KEY, str(cid), _fridge_migrate(set_favorite(items, cat, name, on)))
+    await send_fridge_cat(bot, cid, cat_idx, 0, q)
 
 
 async def fridge_add_done(bot, cid, text, cat_idx: int = -1):
+    """«Добавь в продукты: курица, креветки» — отмечает продукты единого списка любимыми; чего в списке нет —
+    «Не добавил: … — нет в списке»."""
     cid_s = str(cid)
-    items_new = _fridge_split_input(text)
-    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
+    items = _load_products(cid)
     first_fill = not _fridge_available(items)
-    existing = {it["name"].lower() for it in items}
-    by_name = {it["name"].lower(): index for index, it in enumerate(items)}
-    added = []
-    duplicates = []
-    needs_category = []
-    selected_category = _CAT_ORDER[cat_idx] if 0 <= cat_idx < len(_CAT_ORDER) else None
-    rejected = []
-    for name in items_new:
-        key = name.lower()
-        if name and _fridge_detect_cat(name) == NOT_FOR_COOKING:  # батончики, напитки — из этого не готовят
-            rejected.append((name, "из этого не готовят"))
-            continue
-        if name and key not in existing:
-            detected = _fridge_detect_cat(name)
-            category = detected or selected_category
-            if category is None:
-                needs_category.append(name)
-            else:
-                items.append({
-                    "name": name,
-                    "cat": category,
-                    "on": True,
-                    **({"cat_manual": True} if detected is None else {}),
-                })
-                existing.add(key)
-                added.append(name)
-        elif name:
-            if key in by_name:  # уже в списке (например, из базового набора) — становится любимым
-                items[by_name[key]] = {**items[by_name[key]], "on": True}
-            duplicates.append(name)
-    items = _fridge_migrate(items)
-    store.set_list(config.FRIDGE_KEY, cid_s, items)
+    favorites = favorite_keys(items)
+    added, duplicates, rejected = [], [], []
+    for name in _fridge_split_input(text):
+        found = match_base(name)
+        if not found:
+            rejected.append((name, "нет в списке продуктов"))
+        elif base_key(found[1]) in favorites:
+            duplicates.append(found[1])
+        else:
+            items = set_favorite(items, found[0], found[1], True)
+            favorites.add(base_key(found[1]))
+            added.append(found)
+    store.set_list(config.FRIDGE_KEY, cid_s, _fridge_migrate(items))
     added_by_cat = {}
-    for item in items:
-        if item["name"] in added:
-            added_by_cat.setdefault(item["cat"], []).append(item["name"])
+    for cat, name in added:
+        added_by_cat.setdefault(cat, []).append(name)
     rejected = [*rejected, *_fridge_rejected_lines(text)]
     if (added or duplicates or rejected) and not first_fill:
         msg = food_ui.fridge_updated(
-            added_by_cat, added, duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)
+            added_by_cat, [name for _cat, name in added], duplicates, rejected, _CAT_ORDER, _CAT_EMOJI, _CAT_BTN_LABEL)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
-    if needs_category:
-        _pending_category_choices[cid_s] = {
-            "names": needs_category,
-            "return_cat": cat_idx,
-            "return_to_food": first_fill,
-        }
-        await send_fridge_category_choice(bot, cid)
-        return
     if first_fill and _fridge_available(items):
         await _send_cooking_home(bot, cid)
         return
-    if cat_idx >= 0:
-        await send_fridge_cat(bot, cid, cat_idx, 0)
-    else:
-        await send_fridge(bot, cid)
+    await send_fridge(bot, cid)
 
 
 async def _send_cooking_home(bot, cid, q=None):
-    """После первого заполнения холодильника сразу показываем рецепт дня."""
+    """После первых любимых продуктов сразу показываем рецепт дня."""
     import menu
 
     await menu.send_food_menu(bot, cid, q=q)
-
-
-async def send_fridge_category_choice(bot, cid, q=None):
-    """Просит выбрать одну из шести категорий для нераспознанного продукта."""
-    pending = _pending_category_choices.get(str(cid)) or {}
-    names = pending.get("names") or []
-    if not names:
-        await send_fridge(bot, cid, q)
-        return
-    msg = food_ui.fridge_category_choice(names[0])
-    rows = [
-        [InlineKeyboardButton(_CAT_BTN_LABEL[cat], callback_data=f"as_fridge_pick_{index}")]
-        for index, cat in enumerate(_CAT_ORDER)
-    ]
-    rows.append(nav_row("as_fridge_home"))
-    kb = InlineKeyboardMarkup(rows)
-    if q is not None:
-        try:
-            await q.message.edit_text(msg.text, entities=msg.entities, reply_markup=kb)
-            _mark_transient_edit(bot, cid, q.message)
-            return
-        except Exception:
-            _log.debug("send_fridge_category_choice: ignored error", exc_info=True)
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=kb, transient=True)
-
-
-async def fridge_assign_category(bot, cid, cat_idx: int, q=None):
-    """Сохраняет выбранную категорию и продолжает очередь уточнений."""
-    cid_s = str(cid)
-    pending = _pending_category_choices.get(cid_s) or {}
-    names = pending.get("names") or []
-    if not names or not 0 <= cat_idx < len(_CAT_ORDER):
-        await send_fridge(bot, cid, q)
-        return
-    name = names.pop(0)
-    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if name.casefold() not in {item["name"].casefold() for item in items}:
-        items.append({
-            "name": name,
-            "cat": _CAT_ORDER[cat_idx],
-            "cat_manual": True,
-            "on": True,
-        })
-        store.set_list(config.FRIDGE_KEY, cid_s, _fridge_migrate(items))
-    if names:
-        pending["names"] = names
-        await send_fridge_category_choice(bot, cid, q)
-        return
-    _pending_category_choices.pop(cid_s, None)
-    return_cat = pending.get("return_cat", -1)
-    if pending.get("return_to_food"):
-        await _send_cooking_home(bot, cid, q)
-        return
-    if isinstance(return_cat, int) and 0 <= return_cat < len(_CAT_ORDER):
-        await send_fridge_cat(bot, cid, return_cat, 0, q)
-    else:
-        await send_fridge(bot, cid, q)
 
 
 def _fridge_payload_from_chat(text: str) -> str:
@@ -317,32 +184,6 @@ async def try_add_fridge_from_chat(bot, cid, text) -> bool:
         return False
     await fridge_add_done(bot, cid, payload)
     return True
-
-
-def _index_in_category(items, idx, cat_idx):
-    """Индекс из старой кнопки мог сдвинуться: не трогаем продукт чужой категории."""
-    # ponytail: индексный callback_data; полностью защитит только стабильный id продукта.
-    return (0 <= idx < len(items) and 0 <= cat_idx < len(_CAT_ORDER)
-            and items[idx].get("cat") == _CAT_ORDER[cat_idx])
-
-
-async def fridge_toggle(bot, cid, idx: int, cat_idx: int, page: int, q=None):
-    cid_s = str(cid)
-    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if _index_in_category(items, idx, cat_idx):  # ✅ любимый ↔ □
-        items[idx] = {**{key: value for key, value in items[idx].items() if key != "since"},
-                      "on": not items[idx].get("on", True)}
-        store.set_list(config.FRIDGE_KEY, cid_s, items)
-    await send_fridge_cat(bot, cid, cat_idx, page, q)
-
-
-async def fridge_del(bot, cid, idx: int, cat_idx: int, page: int, q=None):
-    cid_s = str(cid)
-    items = _fridge_migrate(store.get_list(config.FRIDGE_KEY, cid_s))
-    if _index_in_category(items, idx, cat_idx):
-        items.pop(idx)
-        store.set_list(config.FRIDGE_KEY, cid_s, items)
-    await send_fridge_cat(bot, cid, cat_idx, page, q)
 
 
 async def send_fridge_recipe(bot, cid):
