@@ -55,10 +55,11 @@ _ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 _POPULAR_EVENTS_CACHE_TTL = 31 * 86400
-_POPULAR_EVENTS_CACHE_VERSION = 3
-_POPULAR_EVENTS_LIMIT = 12
+_POPULAR_EVENTS_CACHE_VERSION = 4  # 4 — 200 событий на 4 месяца
+_POPULAR_EVENTS_LIMIT = 40
 _WEEKLY_CONCERT_LIMIT = 6
 _WEEKLY_CONCERT_HORIZON_DAYS = 62
+_POPULAR_HORIZON_DAYS = 120  # крупные концерты звёзд — на 4 месяца вперёд: их объявляют заранее
 _WEEKLY_POPULAR_LIMIT = 3
 
 
@@ -249,7 +250,7 @@ def _ticketmaster_popular_music_events(cc, start_dt, end_dt):
         "classificationName": "music",
         "startDateTime": start_dt,
         "endDateTime": end_dt,
-        "size": 80,
+        "size": 200,
         "sort": "relevance,desc",
     }
     try:
@@ -667,12 +668,32 @@ def _weekly_concert_title(event):
     artist = " ".join(str(event.get("_artist") or "").split()).strip()
     if artist:
         return artist
-    attractions = event.get("_embedded", {}).get("attractions") or []
-    if len(attractions) == 1:
-        name = " ".join(str(attractions[0].get("name") or "").split()).strip()
-        if name:
-            return name
-    return _clean_event_label(event.get("name"))
+    label = _clean_event_label(event.get("name"))
+    names = [" ".join(str(att.get("name") or "").split()).strip()
+             for att in event.get("_embedded", {}).get("attractions") or [] if isinstance(att, dict)]
+    names = [name for name in names if name]
+    if len(names) == 1:
+        return names[0]
+    # Хедлайнер — тот, чьё имя есть в названии события («THE KEHLANI WORLD TOUR» → «Kehlani»);
+    # фестиваль с несколькими артистами остаётся фестивалем.
+    festival = any(marker in f" {label.casefold()} " for marker in _FESTIVAL_MARKERS)
+    headliner = "" if festival else next((name for name in names if re.search(
+        rf"(?<!\w){re.escape(name.casefold())}(?!\w)", label.casefold())), "")
+    return headliner or label
+
+
+_TOUR_WORDS_RE = re.compile(r"^\s*the\s+|\s+(?:(?:world|europe(?:an)?|arena|stadium)\s+)?tour\b.*$|\s+20\d\d\b.*$",
+                            re.IGNORECASE)
+
+
+def _tour_artist(label) -> str:
+    """Без данных об артисте: «THE KEHLANI WORLD TOUR» → «Kehlani»; фестиваль и обычное имя — как есть."""
+    if any(marker in f" {label.casefold()} " for marker in _FESTIVAL_MARKERS):
+        return label
+    name = _TOUR_WORDS_RE.sub("", label).strip() if re.search(r"\btour\b", label, re.IGNORECASE) else label
+    if name and name == name.upper() and re.search(r"[A-Z]{2}", name):
+        name = " ".join(word.capitalize() for word in name.split())
+    return name or label
 
 
 def _concert_context(e):
@@ -908,7 +929,7 @@ async def refresh_concerts_cache(cid):
     from datetime import datetime, timedelta
     period_start = datetime.now(config.TZ).date()
     popular_events = await get_popular_music_events(
-        cc, period_start, period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS))
+        cc, period_start, period_start + timedelta(days=_POPULAR_HORIZON_DAYS))
     artists = _ensure_artists(cid)
     if not artists:
         invalidate_user_concerts_cache(cid)
@@ -1139,11 +1160,7 @@ def concert_items_between(events, start, end, limit):
         venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
         city = str((venue.get("city") or {}).get("name") or "").strip()
         title = _weekly_concert_title(event)
-        artist = concert_artist(title)
-        attractions = [str(att.get("name") or "").strip()
-                       for att in (event.get("_embedded", {}).get("attractions") or []) if isinstance(att, dict)]
-        if len(attractions) == 1 and attractions[0] and attractions[0].casefold() in title.casefold():
-            artist = attractions[0]  # «THE KEHLANI WORLD TOUR» → «Kehlani»
+        artist = _tour_artist(concert_artist(title))
         key = _concert_identity_text(artist)
         if not title or key in existing:
             continue
@@ -1222,16 +1239,22 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
             max(min_mine, len(mine)),
         )
     taken = {_concert_identity_text(item["artist"]) for item in mine}
+    popular_events = _popular_events_cache_get(cc, period_start)
+    if popular_events is None and min_popular and not trip:
+        # Экран «Концерты»: кэша крупных концертов нет (новый месяц, новая версия) — один запрос сейчас.
+        await get_popular_music_events(cc, period_start, period_start + timedelta(days=_POPULAR_HORIZON_DAYS))
+        popular_events = _popular_events_cache_get(cc, period_start)
+
     def popular_until(end):
         return [
             item for item in concert_items_between(
-                _popular_events_cache_get(cc, period_start) or [], period_start, end, _NOTES_BATCH,
+                popular_events or [], period_start, end, _POPULAR_EVENTS_LIMIT,
             )
             if _concert_identity_text(item["artist"]) not in taken
         ]
 
     nearby = popular_until(period_end)
-    wide = popular_until(period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)) if min_popular and not trip else []
+    wide = popular_until(period_start + timedelta(days=_POPULAR_HORIZON_DAYS)) if min_popular and not trip else []
     if not mine and not nearby and not wide:
         return None
     notes = await artist_notes([item["artist"] for item in mine + nearby + wide])
@@ -1261,7 +1284,7 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
     return leisure_ui.weekly_concerts_card(mine, popular, title=title)
 
 
-_NOTES_BATCH = 20
+_NOTES_BATCH = 40
 _NOTES_TTL = 90 * 86400
 _WORLD_FAME = 8  # «Популярное рядом» — звёзды, известные на весь мир
 _BIG_VENUES = ("johan cruijff", "gelredome", "philips stadion", "stadion", "stadium", "arena",
@@ -1312,7 +1335,7 @@ JSON: {{"items":[{{"name":"","fame":1,"about_ru":""}}]}}
 """
         try:
             payload = await ai.allm_json(
-                prompt, 700, tier="cheap", module="leisure_concerts",
+                prompt, 1400, tier="cheap", module="leisure_concerts",
                 schema=ai.schema_list("items", {"name": "string", "fame": "integer", "about_ru": "string"},
                                       ("name", "fame")),
                 fallback_allowed=True, privacy_level="public", budget_seconds=12,

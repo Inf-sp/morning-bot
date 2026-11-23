@@ -676,8 +676,9 @@ def _weekly_concert_rows(b: MessageBuilder, title, items):
         else:
             b.text_line(name)
         line = " — " + ", ".join(part for part in (_event_date_label(item.get("date")), place) if part) + "."
-        about = str(item.get("about") or "").strip()
-        b.text_line(line + (f" {about}" if about else ""))
+        about = str(item.get("about") or "").strip().strip("«»\"“”„'")  # фраза AI в кавычках — без них
+        about = re.sub(r"[«»\"“”„]\.$", ".", about).strip()
+        b.text_line(line + (f" {_finish_sentence(about)}" if about else ""))
         b.newline()
 
 

@@ -467,6 +467,27 @@ def test_web_search_fallback_does_not_always_cut_the_same_first_five_artists(mon
 def test_tour_title_in_capitals_shows_the_artist_name():
     from datetime import datetime, timedelta
     today = datetime.now(leisure_concerts.config.TZ).date()
-    items = leisure_concerts.concert_items_between(
-        [_tm_event("THE KEHLANI WORLD TOUR", 13, attractions=("Kehlani",))], today, today + timedelta(days=30), 3)
-    assert items[0]["artist"] == "Kehlani"
+    end = today + timedelta(days=30)
+    for attractions in ((), ("Kehlani",), ("Kehlani", "Support Act")):
+        items = leisure_concerts.concert_items_between(
+            [_tm_event("THE KEHLANI WORLD TOUR", 13, attractions=attractions)], today, end, 3)
+        assert items[0]["artist"] == "Kehlani", attractions
+    festival = leisure_concerts.concert_items_between(
+        [_tm_event("Lowlands 2026", 13, attractions=("A", "B"))], today, end, 3)
+    assert festival[0]["artist"] == "Lowlands 2026"
+
+
+def test_month_concerts_fetch_popular_when_cache_is_missing(monkeypatch):
+    calls, cache = [], {}
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [])
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: cache.get("events"))
+
+    async def fetch(_cc, start, end):
+        calls.append((end - start).days)
+        cache["events"] = [_tm_event("Coldplay", 100, attractions=("Coldplay",))]
+        return cache["events"]
+
+    monkeypatch.setattr(leisure_concerts, "get_popular_music_events", fetch)
+    text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
+    assert calls == [leisure_concerts._POPULAR_HORIZON_DAYS] and "Coldplay" in text  # 4 месяца вперёд
