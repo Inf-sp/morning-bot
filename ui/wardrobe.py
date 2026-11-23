@@ -278,7 +278,7 @@ def _success_item_metadata(builder, item):
 def add_success(item):
     """Подтверждение после фактического сохранения одной вещи в шкаф."""
     b = MessageBuilder()
-    b.line("✅ Вещь добавлена в «🎚️ Мой шкаф»")
+    b.line("✅ Вещь добавлена в «Мой шкаф»")
     b.spacer()
     b.bold(_success_item_title(item))
     details = _success_item_details(item)
@@ -290,7 +290,7 @@ def add_success(item):
 
 def add_batch_success(items):
     b = MessageBuilder()
-    b.line("✅ Вещи добавлены в «🎚️ Мой шкаф»")
+    b.line("✅ Вещи добавлены в «Мой шкаф»")
     for item in items or []:
         b.spacer()
         b.bold(_success_item_title(item))

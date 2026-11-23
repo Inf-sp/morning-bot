@@ -31,7 +31,7 @@ def test_success_confirmation_shows_category_and_style():
     })
 
     assert message.text == (
-        "✅ Вещь добавлена в «🎚️ Мой шкаф»\n\n"
+        "✅ Вещь добавлена в «Мой шкаф»\n\n"
         "Светло-серая рубашка GU · короткий рукав · лёгкая ткань\n"
         "Категория: Футболки и рубашки\n"
         "Стиль: Скандинавский"
@@ -56,7 +56,7 @@ def test_success_confirmation_keeps_known_details_without_empty_values():
     })
 
     assert message.text == (
-        "✅ Вещь добавлена в «🎚️ Мой шкаф»\n\n"
+        "✅ Вещь добавлена в «Мой шкаф»\n\n"
         "Чёрные широкие брюки · лёгкие\n"
         "Категория: Брюки и шорты\n"
         "Стиль: Повседневный"
@@ -77,7 +77,7 @@ def test_success_confirmation_is_sent_only_after_store_returns_saved_item(monkey
 
     asyncio.run(wardrobe.add_item(bot, "wardrobe-save", "Белая футболка"))
 
-    assert bot.messages[0]["text"].startswith("✅ Вещь добавлена в «🎚️ Мой шкаф»")
+    assert bot.messages[0]["text"].startswith("✅ Вещь добавлена в «Мой шкаф»")
 
 
 def test_no_success_confirmation_when_store_did_not_save_item(monkeypatch):

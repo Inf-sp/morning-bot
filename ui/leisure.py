@@ -345,9 +345,8 @@ def favorite_artist_added_card(artist, style_labels, data=None):
     artist = str(artist or "Артист").strip() or "Артист"
     data = data if isinstance(data, dict) else {}
     b = MessageBuilder()
-    b.line("✅ Добавлен в «🎚️ Мои артисты»")
+    b.line("✅ Добавлен в «Мои артисты»")
     b.spacer()
-    b.text_line("🎸 ")
     b.bold(artist)
     description = clip(str(data.get("desc") or ""), limit=170)
     if description:
@@ -367,10 +366,9 @@ def favorite_artists_added_card(artists, style_labels):
     """Одна компактная карточка, когда пользователь добавил несколько артистов."""
     artists = [str(artist or "").strip() for artist in artists or [] if str(artist or "").strip()]
     b = MessageBuilder()
-    b.line("✅ Добавлены в «🎚️ Мои артисты»")
+    b.line("✅ Добавлены в «Мои артисты»")
     for artist in artists[:8]:
         b.newline()
-        b.text_line("🎸 ")
         b.bold(artist)
     labels = [str(label).strip() for label in style_labels or [] if str(label).strip()]
     if labels:
@@ -389,9 +387,8 @@ def favorite_movie_added_card(title, tm=None):
     kind = str(tm.get("kind") or "").strip()
     type_label = "Сериал" if kind == "tv" else ("Фильм" if kind == "movie" else "")
     b = MessageBuilder()
-    b.line("✅ Добавлен в «🎚️ Моё кино»")
+    b.line("✅ Добавлен в «Моё кино»")
     b.spacer()
-    b.text_line("🎬 ")
     b.bold(shown_title)
     details = [part for part in (year, type_label, genres) if part]
     if details:
@@ -405,10 +402,9 @@ def favorite_movies_added_card(titles):
     """Подтверждение пакетного добавления без серии лишних запросов к TMDb."""
     titles = [str(title or "").strip() for title in titles or [] if str(title or "").strip()]
     b = MessageBuilder()
-    b.line("✅ Добавлены в «🎚️ Моё кино»")
+    b.line("✅ Добавлены в «Моё кино»")
     for title in titles[:8]:
         b.newline()
-        b.text_line("🎬 ")
         b.bold(title)
     b.spacer()
     b.line("Учту в следующих подборках.")

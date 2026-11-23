@@ -361,6 +361,7 @@ def _favorite_artist_style_labels(cid):
 
 def _favorite_artist_added_kb():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Добавить ещё", callback_data="as_loveadd_artists")],
         [InlineKeyboardButton("🎚️ Мои артисты", callback_data="artist_favorites")],
         nav_row("lz_lib"),
     ])

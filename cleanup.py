@@ -769,7 +769,7 @@ async def handle_view_callback(bot, cid, data, q=None):
         await _send_view_stale_message(bot, cid, q)
         return
     if op == "clt":
-        if not view.get("editing"):
+        if not view.get("editing") and ctx != "music_favorite_artists":
             return
         short_id = rest[0]
         _, items = _ordered_view_items(ctx, cid)
@@ -778,6 +778,19 @@ async def handle_view_callback(bot, cid, data, q=None):
         short_of = _short_ids(page_ids)
         matches = [i for i in page_ids if short_of[i] == short_id] or [
             i for i, _ in items if i.startswith(short_id)]
+        if matches and not view.get("editing"):
+            # «Мои артисты»: нажатие на артиста — его карточка с «❌ Удалить» (удаление сразу, как у кино).
+            view["selected_ids"] = {matches[0]}
+            label = dict(items).get(matches[0], "")
+            import leisure_music
+            genre = leisure_music.favorite_artist_genre(cid, label)
+            text = f"<b>{esc(str(label).strip())}</b>" + ("" if genre == "Другие артисты" else f"\n\n{esc(genre)}")
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"clact:{view_id}:remove")],
+                nav_row("artist_favorites"),
+            ])
+            await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
+            return
         if matches:
             view["selected_ids"].symmetric_difference_update({matches[0]})
         await _render_view(bot, cid, view_id, q=q)

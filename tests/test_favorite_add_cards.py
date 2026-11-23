@@ -102,12 +102,12 @@ def test_manual_artist_add_shows_a_card_and_collection_link(monkeypatch):
 
     message = bot.messages[0]
     assert message["text"] == (
-        "✅ Добавлен в «🎚️ Мои артисты»\n\n"
-        "🎸 The National\n\n"
+        "✅ Добавлен в «Мои артисты»\n\n"
+        "The National\n\n"
         "Учту в подборках: Инди · Рок"
     )
     assert _labels(message["reply_markup"]) == [
-        ["🎚️ Мои артисты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["✅ Добавить ещё"], ["🎚️ Мои артисты"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
 
 
@@ -121,8 +121,8 @@ def test_manual_movie_add_uses_verified_metadata_when_available(monkeypatch):
     asyncio.run(leisure_movies.send_favorite_movies_added_card(bot, "42", ["Arrival"]))
 
     message = bot.messages[0]
-    assert "✅ Добавлен в «🎚️ Моё кино»" in message["text"]
-    assert "🎬 Прибытие · 2016 · Фильм · фантастика, драма" in message["text"]
+    assert "✅ Добавлен в «Моё кино»" in message["text"]
+    assert "Прибытие · 2016 · Фильм · фантастика, драма" in message["text"]
     labels = _labels(message["reply_markup"])
     assert ["🎚️ Моё кино"] not in labels
     assert labels[-1] == ["⬅️ Назад", "#️⃣ Главная"]
@@ -211,3 +211,34 @@ def test_collection_migration_updates_saved_movie_list(monkeypatch):
     assert saved[config.FAVORITE_MOVIES_KEY]["42"] == ["Укрытие (сериал, 2023)"]
 
 
+
+
+def test_tapping_a_favorite_artist_opens_card_with_delete():
+    import asyncio
+    import cleanup
+    import config
+    import store
+    cid = "art-del"
+    store.set_list(config.FAVORITE_ARTISTS_KEY, cid, ["Good Charlotte", "Placebo"])
+    shown = []
+
+    class Bot:
+        async def send_message(self, chat_id=None, text="", reply_markup=None, **_k):
+            shown.append((text, reply_markup))
+
+    async def show(_bot, _cid, text, reply_markup=None, query=None):
+        shown.append((text, reply_markup))
+
+    import rich_delivery
+    original = rich_delivery.show
+    rich_delivery.show = show
+    try:
+        asyncio.run(cleanup.open_view(Bot(), cid, "music_favorite_artists", back="lz_lib"))
+        row = next(row for row in shown[-1][1].inline_keyboard if "Good Charlotte" in row[0].text)
+        asyncio.run(cleanup.handle_view_callback(Bot(), cid, row[0].callback_data))
+        text, markup = shown[-1]
+        assert "Good Charlotte" in text and markup.inline_keyboard[0][0].text == "❌ Удалить"
+        asyncio.run(cleanup.handle_view_callback(Bot(), cid, markup.inline_keyboard[0][0].callback_data))
+        assert "Good Charlotte" not in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid)) and "Placebo" in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid))
+    finally:
+        rich_delivery.show = original
