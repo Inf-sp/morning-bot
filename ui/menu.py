@@ -427,7 +427,7 @@ _HINT_WORDS_MAX = 7
 
 
 def _dish_hint(name, note) -> str:
-    """Короткое «что это» после названия: «Као пад, тайский жареный рис». Без него, если пояснение — список
+    """Короткое «что это» после названия: «Као пад (тайский жареный рис)». Без него, если пояснение — список
     ингредиентов («сыр, зелень, хлеб»), пересказ названия («Блины с творогом, тонкие блины с творогом») или длиннее
     семи слов."""
     note = _cooking_text(note)
@@ -463,13 +463,13 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
-    if rows:  # «Меню на день — рецепт по кнопке ниже:», ниже «• Обед — Као пад, тайский жареный рис»
+    if rows:  # «Меню на день — рецепт по кнопке ниже:», ниже «• Обед — Као пад (тайский жареный рис)»
         b.spacer()
         b.bold("Меню на день — рецепт по кнопке ниже:")
         b.newline()
     for label, dish in rows:
         note = _dish_hint(dish["name"], dish.get("note"))
-        b.line(f"• {label} — {dish['name']}" + (f", {note[:1].lower()}{note[1:]}" if note else ""))
+        b.line(f"• {label} — {dish['name']}" + (f" ({note[:1].lower()}{note[1:]})" if note else ""))
     if stats:
         b.spacer()
         b.italic(fridge_stats_line(stats.get("products")))
