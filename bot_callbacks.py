@@ -604,9 +604,10 @@ ROUTES = (
     R("nov_*", _picked(lambda c: c.status(lambda status: leisure_novelty.send_novelty(
         c.bot, c.cid, c.data[len("nov_"):], status=status)))),
     R("listen_love", lambda c: leisure_music.listen_love(c.bot, c.cid, c.q)),
-    # «Не интересно» заменяет карточку артиста на месте: статус правит то же сообщение.
-    R("listen_no", lambda c: c.status(
-        lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False)),
+    # «Не интересно» заменяет карточку артиста: текстовую статус правит на месте, новая карточка с фото приходит
+    # отдельным сообщением — прежняя удаляется (_replaced).
+    R("listen_no", _replaced(lambda c: c.status(
+        lambda status: leisure_music.listen_dislike(c.bot, c.cid, status=status), preserve_message=False))),
     R("movie_no_*", _replaced(lambda c: c.status(
         lambda _s: leisure_movies.movie_dislike(c.bot, c.cid, _tail_int(c))))),
     # «Продолжить / ещё раз» и «Короче / Глубже» для последнего ответа.

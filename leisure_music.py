@@ -865,20 +865,48 @@ async def favorite_artist_card(cid, artist):
     return leisure_ui.artist_card(data), data.get("photo") or ""
 
 
-def _photo_preview(photo) -> dict:
-    """Фото артиста — крупным превью над текстом карточки (текст остаётся сообщением, без лимита подписи к фото);
-    без фото — без превью ссылок."""
-    if str(photo or "").startswith("https://"):
-        from telegram import LinkPreviewOptions
-        return {"link_preview_options": LinkPreviewOptions(url=photo, prefer_large_media=True, show_above_text=True),
-                "photo_preview": True}
-    return {"disable_web_page_preview": True}
+_CAPTION_MAX = 1024  # лимит подписи к фото в Telegram
+
+
+async def send_photo_card(bot, cid, msg, reply_markup, photo, *, status=None, q=None) -> bool:
+    """Карточка артиста обычным фото с подписью (не превью ссылки). Подпись длиннее лимита — фото, под ним текст
+    с кнопками. Прежний экран (статус ожидания или нажатое сообщение q) убирается — в чате одна карточка. Фото не
+    отправилось — False (вызывающий показывает текстом)."""
+    if not str(photo or "").startswith("https://"):
+        return False
+    try:
+        if len(msg.text) <= _CAPTION_MAX:
+            await bot.send_photo(chat_id=cid, photo=photo, caption=msg.text, caption_entities=msg.entities,
+                                 reply_markup=reply_markup)
+        else:
+            await bot.send_photo(chat_id=cid, photo=photo)
+            await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup,
+                                   disable_web_page_preview=True)
+    except Exception:
+        _log.info("artist card: photo not sent cid=%s", cid, exc_info=True)
+        return False
+    if status is not None:
+        try:
+            await status.stop(delete=True)
+        except Exception:
+            _log.debug("artist card: status not stopped", exc_info=True)
+    message = getattr(q, "message", None)
+    if message is not None:
+        try:
+            await message.delete()
+        except Exception:
+            _log.debug("artist card: old message not deleted", exc_info=True)
+    return True
 
 
 async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None, photo=""):
-    """Передаёт карточку через статусный сценарий либо отправляет новый экран; photo — фото артиста сверху."""
-    preview = _photo_preview(photo)
-    if status is not None:
-        await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup, **preview)
+    """Карточка артиста: с фото — обычным фото с подписью (send_photo_card); без фото или сбой — текстом через
+    статусный сценарий либо новым сообщением."""
+    if await send_photo_card(bot, cid, msg, reply_markup, photo, status=status):
         return
-    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup, **preview)
+    if status is not None:
+        await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup,
+                             disable_web_page_preview=True)
+        return
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup,
+                           disable_web_page_preview=True)

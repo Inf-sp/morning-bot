@@ -425,14 +425,29 @@ def test_most_popular_ai_candidate_wins_and_only_unknown_names_are_dropped(monke
     assert asyncio.run(leisure_music._most_popular(candidates))["artist"] == "Barry Can't Swim"  # порядок AI
 
 
-def test_artist_card_shows_photo_as_large_preview_above_text():
+def test_artist_card_photo_is_a_normal_photo_with_caption_not_a_link_preview():
+    import asyncio
     import leisure_music
     import telegram_runtime
-    preview = leisure_music._photo_preview("https://e-cdns-images.dzcdn.net/images/artist/abc/1000x1000.jpg")
-    options = preview["link_preview_options"]
-    assert options.url.endswith("1000x1000.jpg") and options.show_above_text and options.prefer_large_media
-    kept = telegram_runtime.MenuCleanupBot._without_link_preview(preview)  # исключение из «без превью»
-    assert kept["link_preview_options"] is options and "disable_web_page_preview" not in kept
-    stripped = telegram_runtime.MenuCleanupBot._without_link_preview({"link_preview_options": options})
-    assert stripped == {"disable_web_page_preview": True}  # без пометки — превью по-прежнему нет
-    assert leisure_music._photo_preview("") == {"disable_web_page_preview": True}
+    from ui.builder import MessageSpec
+    sent = []
+
+    class Bot:
+        async def send_photo(self, **kwargs):
+            sent.append(("photo", kwargs))
+
+        async def send_message(self, **kwargs):
+            sent.append(("text", kwargs))
+
+    photo = "https://e-cdns-images.dzcdn.net/images/artist/abc/1000x1000.jpg"
+    asyncio.run(leisure_music._deliver_artist_card(Bot(), "42", MessageSpec("Placebo"), None, photo=photo))
+    assert sent == [("photo", {"chat_id": "42", "photo": photo, "caption": "Placebo", "caption_entities": None,
+                               "reply_markup": None})]
+    sent.clear()  # подпись длиннее лимита Telegram — фото, под ним текст карточки с кнопками
+    asyncio.run(leisure_music._deliver_artist_card(Bot(), "42", MessageSpec("x" * 1100), None, photo=photo))
+    assert [kind for kind, _ in sent] == ["photo", "text"] and "caption" not in sent[0][1]
+    sent.clear()  # без фото — текстом, без превью ссылок
+    asyncio.run(leisure_music._deliver_artist_card(Bot(), "42", MessageSpec("Placebo"), None, photo=""))
+    assert sent[0][0] == "text" and sent[0][1]["disable_web_page_preview"] is True
+    assert telegram_runtime.MenuCleanupBot._without_link_preview({"link_preview_options": object()}) == {
+        "disable_web_page_preview": True}  # превью ссылок не прикрепляются никогда

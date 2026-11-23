@@ -737,16 +737,19 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
 
 
 async def _show_artist_card(bot, cid, card, kb, photo, q=None):
-    """Карточка артиста из «Моих артистов» на месте списка; фото — крупным превью сверху, как в «Музыке»."""
+    """Карточка артиста из «Моих артистов» вместо списка: с фото — обычным фото с подписью, как в «Музыке»."""
     import leisure_music
-    preview = leisure_music._photo_preview(photo)
+    if await leisure_music.send_photo_card(bot, cid, card, kb, photo, q=q):
+        return
     if q is not None and getattr(q, "message", None) is not None:
         try:
-            await q.edit_message_text(card.text, entities=card.entities, reply_markup=kb, **preview)
+            await q.edit_message_text(card.text, entities=card.entities, reply_markup=kb,
+                                      disable_web_page_preview=True)
             return
         except Exception:
             _log.debug("artist card edit failed; sending new", exc_info=True)
-    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb, **preview)
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb,
+                           disable_web_page_preview=True)
 
 
 async def _send_view_stale_message(bot, cid, q=None):

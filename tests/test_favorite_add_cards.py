@@ -220,12 +220,15 @@ def test_tapping_a_favorite_artist_opens_card_with_delete():
     import store
     cid = "art-del"
     store.set_list(config.FAVORITE_ARTISTS_KEY, cid, ["Good Charlotte", "Placebo"])
-    shown, previews = [], []
+    shown, photos = [], []
 
     class Bot:
-        async def send_message(self, chat_id=None, text="", reply_markup=None, **kwargs):
+        async def send_message(self, chat_id=None, text="", reply_markup=None, **_k):
             shown.append((text, reply_markup))
-            previews.append(kwargs.get("link_preview_options"))
+
+        async def send_photo(self, chat_id=None, photo="", caption="", reply_markup=None, **_k):
+            shown.append((caption, reply_markup))
+            photos.append(photo)
 
     async def show(_bot, _cid, text, reply_markup=None, query=None):
         shown.append((text, reply_markup))
@@ -244,7 +247,7 @@ def test_tapping_a_favorite_artist_opens_card_with_delete():
         text, markup = shown[-1]
         assert "Good Charlotte" in text and markup.inline_keyboard[0][0].text == "❌ Удалить"
         assert "<b>" not in text and "Поп-панк из Мэриленда." in text
-        assert previews[-1].url == "https://img.example/gc.jpg"
+        assert photos == ["https://img.example/gc.jpg"]  # обычным фото с подписью, не превью ссылки
         asyncio.run(cleanup.handle_view_callback(Bot(), cid, markup.inline_keyboard[0][0].callback_data))
         assert "Good Charlotte" not in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid)) and "Placebo" in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid))
     finally:
