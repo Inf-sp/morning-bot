@@ -266,7 +266,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
         + (_TRIP_DISH_RULES + _TRIP_EXTRA_RULE if trip else
            "name — настоящее общепринятое название блюда, как в кулинарной книге, без выдуманных добавок (для "
            "итальянской, французской и мексиканской кухни — оригинальное латиницей, для остальных — по-русски); "
-           "note — что это за блюдо на самом деле, по-русски, 3–8 слов, без точки: основа и способ готовки, которых "
+           "note — что это за блюдо, по-русски, 2–6 слов, без точки и не списком ингредиентов: основа и способ готовки, которых "
            "нет в названии, — не повторяй слова из name («Сырники» → «жареные лепёшки из творога», а не «сырники из "
            "творога»); грамотно и верно по сути, не выдумывай (брай — мясо на открытом огне, а не тушёное).\n")
         + f"JSON без markdown: {{{json_shape}}}"
@@ -313,7 +313,7 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 5, "trip": trip,
+                "language": "ru", "schema_version": 6, "trip": trip,
             },
         )
     except Exception as error:

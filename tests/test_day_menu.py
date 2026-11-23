@@ -104,7 +104,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
         "Свежие продукты и простые сочетания.\n\n"
-        "Меню на день:\n"
+        "Меню на день — рецепт по кнопке ниже:\n"
         "• Завтрак — Crostata, песочный пирог с джемом\n"
         "• Обед — Pasta al pomodoro, паста с томатами\n"
         "• Ужин — Lasagna\n\n"

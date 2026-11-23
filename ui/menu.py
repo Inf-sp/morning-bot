@@ -423,6 +423,26 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
     ]))
 
 
+_HINT_WORDS_MAX = 7
+
+
+def _dish_hint(name, note) -> str:
+    """Короткое «что это» после названия: «Као пад, тайский жареный рис». Без него, если пояснение — список
+    ингредиентов («сыр, зелень, хлеб»), пересказ названия («Блины с творогом, тонкие блины с творогом») или длиннее
+    семи слов."""
+    note = _cooking_text(note)
+    parts = [part.strip() for part in note.split(",") if part.strip()]
+    if not note or (len(parts) >= 2 and all(len(part.split()) <= 2 for part in parts)):
+        return ""
+    if len(note.split()) > _HINT_WORDS_MAX:
+        return ""
+    stems = lambda text: [word[:5] for word in re.findall(r"[а-яёa-z]{4,}", str(text).casefold())]  # noqa: E731
+    name_stems, note_stems = set(stems(name)), stems(note)
+    if note_stems and sum(stem in name_stems for stem in note_stems) * 2 >= len(note_stems):
+        return ""
+    return note
+
+
 def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None, trip=False, trip_dish=None,
              fact="", trip_stats=None, eating_out="", trip_extra=None):
     """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
@@ -443,14 +463,12 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
-    if rows:  # как в погодном предупреждении: «Меню на день:», ниже «• Завтрак — Crostata, песочный пирог с джемом»
+    if rows:  # «Меню на день — рецепт по кнопке ниже:», ниже «• Обед — Као пад, тайский жареный рис»
         b.spacer()
-        b.bold("Меню на день:")
+        b.bold("Меню на день — рецепт по кнопке ниже:")
         b.newline()
     for label, dish in rows:
-        # Русское название — само по себе («Лобиани», «Сыр сулугуни с зеленью»); пояснение — только к названию
-        # латиницей, где без него непонятно: «Crostata, песочный пирог с джемом».
-        note = "" if re.search(r"[а-яё]", dish["name"], re.I) else _cooking_text(dish.get("note"))
+        note = _dish_hint(dish["name"], dish.get("note"))
         b.line(f"• {label} — {dish['name']}" + (f", {note[:1].lower()}{note[1:]}" if note else ""))
     if stats:
         b.spacer()
