@@ -731,10 +731,27 @@ def _finish_sentence(text) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
-def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> MessageSpec:
+def _read_line(b: MessageBuilder, item) -> bool:
+    """«• Заголовок · источник · EN · N мин — анонс.» (заголовок в оригинале жирной ссылкой); нет ссылки — False."""
+    title, link = " ".join(str((item or {}).get("title") or "").split()), str((item or {}).get("link") or "")
+    if not title or not link.startswith("http"):
+        return False
+    b.text_line("• ")
+    b.bold_link(title, link)
+    minutes = int(item.get("minutes") or 0)
+    meta = [item.get("source"), item.get("lang"), f"{minutes} мин" if minutes else ""]
+    b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
+    about = str(item.get("about") or "").strip()
+    if about:
+        b.text_line(f" — {_finish_sentence(about)}")
+    b.newline()
+    return True
+
+
+def leisure_today_screen(picks, *, city="", library=None, read=None, reply_markup=None) -> MessageSpec:
     """«🍿 Досуг на сегодня · Alkmaar»: «Фильм дня:» — имя, 3–4 пункта метаданных и описание; ниже один вариант
-    «Если не хочется кино:» — «• Имя · сериал · …»; статистика библиотеки курсивом. Концерты и статьи — кнопками.
-    picks — что показать (leisure_hub.today_data, поле shown)."""
+    «Если не хочется кино:» — «• Имя · сериал · …»; «Статья дня:» — первая из «Статей»; статистика библиотеки
+    курсивом. Концерты и остальные статьи — кнопками. picks — что показать (leisure_hub.today_data, поле shown)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
@@ -759,6 +776,11 @@ def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> 
                 b.text_line("• ")
                 _today_name(b, {**pick, "meta": [_TODAY_KIND.get(pick["kind"], ""), *pick.get("meta", ())]})
                 b.newline()
+    if read and str(read.get("link") or "").startswith("http") and str(read.get("title") or "").strip():
+        b.spacer()
+        b.bold("Статья дня:")
+        b.newline()
+        _read_line(b, read)
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))
@@ -878,15 +900,7 @@ def reads_screen(items) -> MessageSpec:
         b.bold("Самое интересное:")
         b.newline()
         for item in items:
-            b.text_line("• ")
-            b.bold_link(" ".join(str(item["title"]).split()), str(item["link"]))
-            minutes = int(item.get("minutes") or 0)
-            meta = [item.get("source"), item.get("lang"), f"{minutes} мин" if minutes else ""]
-            b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
-            about = str(item.get("about") or "").strip()
-            if about:
-                b.text_line(f" — {_finish_sentence(about)}")
-            b.newline()
+            _read_line(b, item)
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
 
 

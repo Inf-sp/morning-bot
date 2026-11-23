@@ -508,7 +508,8 @@ def today_data(cid, day=None) -> dict:
     import leisure_reads
     return {
         "picks": picks, "shown": _shown_picks(picks, today), "city": store.get_settings(cid).get("city") or "",
-        "read": leisure_reads.current(cid, today),
+        # Статья дня — первая из «Статей» (самая интересная набора дня); набора нет — None.
+        "read": next(iter(leisure_reads.top(cid, today)), None),
         "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
                     "artists": len(store.get_list(config.FAVORITE_ARTISTS_KEY, cid) or [])},
     }
@@ -562,7 +563,7 @@ async def send_hub(bot, cid, q=None):
         import leisure_reads  # (не чаще раза в 10 минут: build_off_loop)
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     msg = leisure_ui.leisure_today_screen(
-        data.get("shown") or data["picks"], city=data["city"], library=data["library"],
+        data.get("shown") or data["picks"], city=data["city"], library=data["library"], read=data.get("read"),
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
     await _show(bot, cid, msg, q)

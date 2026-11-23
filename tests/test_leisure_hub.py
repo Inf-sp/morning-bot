@@ -535,7 +535,7 @@ def test_today_screen_is_main_film_one_alternative_and_stats(monkeypatch):
         "Если не хочется кино:\n"
         "• Нили · сериал · 2025 · Prime Video · драма\n\n"  # один вариант в день; USA/UK — не пишем
         "Твоя библиотека · 55 фильмов · 42 артиста"
-    )  # концерта и статьи нет — они кнопками «Концерты» и «Статьи»
+    )  # концерта нет — он кнопкой «Концерты»; статьи дня нет, пока набор не собран
     assert [pick["name"] for pick in data["picks"]] == ["Восставший", "Нили", "Focus Group"]
     import leisure_hub
     from datetime import date
@@ -544,6 +544,11 @@ def test_today_screen_is_main_film_one_alternative_and_stats(monkeypatch):
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
     assert ("text_link", "Восставший") in marked and ("bold", "Нили") in marked
     assert [e.type for e in msg.entities][-1] == "italic"
+    read = {"title": "Why we still love cassettes", "link": "https://g.co/a", "source": "The Guardian", "lang": "EN",
+            "minutes": 6, "about": "Почему кассеты снова в моде"}
+    msg = leisure_ui.leisure_today_screen(data["shown"], city=data["city"], library=data["library"], read=read)
+    assert ("Статья дня:\n• Why we still love cassettes · The Guardian · EN · 6 мин — Почему кассеты снова в моде.\n\n"
+            "Твоя библиотека") in msg.text
 
 
 def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
