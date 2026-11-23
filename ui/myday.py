@@ -83,6 +83,14 @@ def week_holidays(city, period, holidays, events) -> MessageSpec:
     return b.build_stripped()
 
 
+def no_holidays(city, period) -> MessageSpec:
+    """«Праздники» в Досуге, когда на месяц вперёд ничего нет."""
+    b = MessageBuilder()
+    b.title(" · ".join(part for part in ("🎉 Праздники и мероприятия", city, period) if part))
+    b.line("Праздников и событий в городе на ближайший месяц пока нет.")
+    return b.build_stripped()
+
+
 def holidays_eve(city, lines):
     """Рассылка накануне: «🎉 Завтра · Алкмар» и по строке на праздник или событие."""
     b = MessageBuilder()

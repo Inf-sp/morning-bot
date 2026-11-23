@@ -898,7 +898,8 @@ def leisure_hub_kb():
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
         [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts"),
-         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
+         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads"),
+         InlineKeyboardButton("🎉 Праздники", callback_data="lz_holidays")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])

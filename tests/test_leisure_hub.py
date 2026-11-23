@@ -555,7 +555,7 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert "Другие варианты:\n• Focus Group · музыкальный альбом" in msg.text
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты", "📰 Статьи"]] and _callbacks(kb)[0] == "lz_prem"
+    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты", "📰 Статьи", "🎉 Праздники"]] and _callbacks(kb)[0] == "lz_prem"
     assert "✨ Другой вариант" not in sum(_labels(kb), [])
     assert routing.resolve_callback_handler("lz_today_2")["handled"]  # старая кнопка из истории — хаб
 
@@ -794,3 +794,22 @@ def test_not_interested_hides_the_premiere_for_good(monkeypatch):
 def test_single_premiere_says_it_is_a_single():
     card = leisure_ui.premiere_card([("music", {"title": "Hit", "artist": "A", "genre_label": "сингл"})])
     assert card.text.split("\n")[2] == "Сингл"
+
+
+def test_holidays_tab_shows_month_of_holidays_and_events(monkeypatch):
+    import leisure_hub
+    import local_events
+    import public_holidays
+    from datetime import date
+    monkeypatch.setattr(leisure_hub, "_today_and_cc", lambda _cid: (date(2026, 11, 3), "NL"))
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
+    monkeypatch.setattr(public_holidays, "week_holidays", lambda _cc, start, end: [
+        {"date": "2026-11-11", "name": "Sint-Maarten", "about": "дети с фонариками"}])
+    seen = []
+    monkeypatch.setattr(local_events, "week_events", lambda _cid, start, end, fetch=True: seen.append(fetch) or [])
+    bot = RecordingBot()
+    asyncio.run(leisure_hub.send_holidays(bot, "42"))
+    text = bot.sent[0]["text"]
+    assert text.startswith("🎉 Праздники и мероприятия · Alkmaar · 3 ноября – 2 декабря")
+    assert "• 11 ноября — Sint-Maarten: дети с фонариками." in text and seen == [False]  # без поиска в сети
+    assert routing.resolve_callback_handler("lz_holidays")["handled"]

@@ -665,6 +665,32 @@ async def send_concerts(bot, cid, q=None):
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
 
+_HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на месяц вперёд
+
+
+async def send_holidays(bot, cid, q=None):
+    """«🎉 Праздники» в Досуге: праздники страны и события города на месяц вперёд — как недельная рассылка, без
+    поиска в сети (события — из кэша прогрева)."""
+    from dataclasses import replace
+    from datetime import timedelta
+    from telegram import InlineKeyboardMarkup
+    import local_events
+    import public_holidays
+    from ui import myday as myday_ui
+    from ui.navigation import nav_row
+    from util import _MONTHS
+    place = store.get_settings(cid) or {}
+    start = _today_and_cc(cid)[0]
+    end = start + timedelta(days=_HOLIDAYS_DAYS - 1)
+    holidays = await asyncio.to_thread(public_holidays.week_holidays, place.get("cc"), start, end)
+    events = await asyncio.to_thread(local_events.week_events, cid, start, end, False)
+    period = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if start.month == end.month
+              else f"{start.day} {_MONTHS[start.month - 1]} – {end.day} {_MONTHS[end.month - 1]}")
+    msg = (myday_ui.week_holidays(place.get("city", ""), period, holidays, events) if holidays or events
+           else myday_ui.no_holidays(place.get("city", ""), period))
+    await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
+
+
 _PREMIERE_NOTES_WAIT = 10  # описания ленты при открытии ждём не дольше; не успели — дописываются в фоне
 _NOTES_TASKS = {}  # запрос описаний чата уже идёт: листание не плодит запросы к AI
 

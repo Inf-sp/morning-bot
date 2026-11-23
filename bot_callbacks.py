@@ -517,6 +517,7 @@ ROUTES = (
     R("lz_reads", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # «Статьи» в хабе
     R("lz_read_next", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # старая «Другая статья»
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
+    R("lz_holidays", lambda c: leisure_hub.send_holidays(c.bot, c.cid, q=c.q)),  # «Праздники» в хабе
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
     # «Другой рецепт» из моих продуктов: кухня → новый рецепт из тех же продуктов на месте прежнего.

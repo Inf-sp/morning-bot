@@ -66,7 +66,7 @@ def test_hub_has_no_article_block_and_reads_are_a_button():
     msg = leisure_ui.leisure_today_screen([], library={"movies": 2, "artists": 1})
     assert "Прочитать" not in msg.text  # статьи — экраном «Статьи»
     rows = [[b.callback_data for b in row] for row in leisure_ui.leisure_hub_kb().inline_keyboard]
-    assert rows[2] == ["lz_concerts", "lz_reads"]  # Концерты | Статьи — в два столбца
+    assert rows[2] == ["lz_concerts", "lz_reads", "lz_holidays"]  # Концерты | Статьи — в два столбца
 
 
 def test_reads_screen_shows_three_most_interesting_articles_as_bullets(monkeypatch):
