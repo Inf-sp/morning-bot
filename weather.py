@@ -528,9 +528,11 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             {
                 "title": f"{p['icon']} {p['label']}",
                 "lines": [
-                    f"Температура до {p['tmax']:+.0f}°C",
+                    # Минус хотя бы в часть периода — 🧊, с дождём ещё «гололёд» (как в прогнозе на завтра).
+                    f"{'🧊 ' if p.get('tmin', p['tmax']) <= 0 else ''}Температура до {p['tmax']:+.0f}°C"
+                    + (" · гололёд" if p.get("tmin", p["tmax"]) <= 0 and _rain_real(p["rain"], p["rain_mm"]) else ""),
                     f"Ветер {_speed_range(p['winds'])} м/с",
-                    f"Дождь {p['rain']:.0f}%",
+                    f"{'🌧️ ' if _rain_real(p['rain'], p['rain_mm']) else ''}Дождь {p['rain']:.0f}%",
                 ],
             }
             for p in forecast_periods(data, dt)
