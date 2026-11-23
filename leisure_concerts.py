@@ -55,11 +55,12 @@ _ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 _POPULAR_EVENTS_CACHE_TTL = 31 * 86400
-_POPULAR_EVENTS_CACHE_VERSION = 4  # 4 — 200 событий на 4 месяца
+_POPULAR_EVENTS_CACHE_VERSION = 5  # 5 — 200 событий на полгода
 _POPULAR_EVENTS_LIMIT = 40
 _WEEKLY_CONCERT_LIMIT = 6
 _WEEKLY_CONCERT_HORIZON_DAYS = 62
-_POPULAR_HORIZON_DAYS = 120  # крупные концерты звёзд — на 4 месяца вперёд: их объявляют заранее
+_POPULAR_HORIZON_DAYS = 183  # крупные концерты звёзд — на полгода вперёд: туры объявляют заранее
+_POPULAR_SCREEN_MAX = 5  # экран «Концерты»: до 5 звёзд мировой величины, минимум 3
 _WEEKLY_POPULAR_LIMIT = 3
 
 
@@ -1266,19 +1267,25 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
         return int(note(item).get("fame") or 0)
 
     # «Популярное рядом» — очень крупные концерты звёзд мировой величины (fame ≥ _WORLD_FAME): сперва
-    # ближайшие, затем — до 62 дней; не набралось min_popular (или их нет вовсе) — самые известные из
-    # остальных, без оценки AI — по размеру площадки.
+    # ближайшие, затем — до полугода (экран «Концерты» — до _POPULAR_SCREEN_MAX звёзд); не набралось
+    # min_popular (или их нет вовсе) — самые известные из остальных, без оценки AI — по размеру площадки.
     by_fame = lambda items: sorted(items, key=lambda item: (-fame(item), -_venue_size(item), item["date"]))  # noqa: E731
-    ordered = [*(item for item in nearby if fame(item) >= _WORLD_FAME),
-               *(item for item in wide if fame(item) >= _WORLD_FAME),
-               *by_fame(nearby), *by_fame(wide)]
-    popular, seen = [], set()
-    for item in ordered:
-        key = _concert_identity_text(item["artist"])
-        if key not in seen:
-            seen.add(key)
-            popular.append(item)
-    popular = sorted(popular[:max(_WEEKLY_POPULAR_LIMIT, min_popular)], key=lambda item: item["date"])
+
+    def unique(items):
+        found, seen = [], set()
+        for item in items:
+            key = _concert_identity_text(item["artist"])
+            if key not in seen:
+                seen.add(key)
+                found.append(item)
+        return found
+
+    stars_max = _POPULAR_SCREEN_MAX if min_popular else _WEEKLY_POPULAR_LIMIT
+    stars = unique([*(item for item in nearby if fame(item) >= _WORLD_FAME),
+                    *(item for item in wide if fame(item) >= _WORLD_FAME)])[:stars_max]
+    popular = unique([*stars, *by_fame(nearby), *by_fame(wide)])[:max(len(stars), _WEEKLY_POPULAR_LIMIT,
+                                                                      min_popular)]
+    popular = sorted(popular, key=lambda item: item["date"])
     mine = [{**item, "about": note(item).get("about", "")} for item in mine]
     popular = [{**item, "about": note(item).get("about", "")} for item in popular]
     return leisure_ui.weekly_concerts_card(mine, popular, title=title)

@@ -491,3 +491,23 @@ def test_month_concerts_fetch_popular_when_cache_is_missing(monkeypatch):
     monkeypatch.setattr(leisure_concerts, "get_popular_music_events", fetch)
     text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
     assert calls == [leisure_concerts._POPULAR_HORIZON_DAYS] and "Coldplay" in text  # 4 месяца вперёд
+
+
+def test_month_concerts_show_world_stars_up_to_half_a_year_ahead(monkeypatch):
+    popular = [_tm_event("THE KEHLANI WORLD TOUR", 13),
+               _tm_event("Thirty Seconds To Mars", 153, "AFAS Live", attractions=("Thirty Seconds To Mars",)),
+               _tm_event("Local Band", 20, "AFAS Live", attractions=("Local Band",))]
+
+    async def notes(names):
+        fame = {"kehlani": 8, "thirtysecondstomars": 9, "localband": 2}
+        return {leisure_concerts._concert_identity_text(name): {"fame": fame[leisure_concerts._concert_identity_text(name)],
+                                                                "about": ""} for name in names}
+
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [])
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: popular)
+    monkeypatch.setattr(leisure_concerts, "artist_notes", notes)
+
+    text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
+    line = text.split("Популярное рядом:\n", 1)[1]
+    assert line.startswith("Kehlani (") and "Thirty Seconds To Mars (" in line
