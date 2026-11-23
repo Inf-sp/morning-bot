@@ -1,6 +1,8 @@
 from datetime import datetime
+import functools
 import hashlib
 import json
+import os
 import logging
 import re
 
@@ -1078,20 +1080,58 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     }
 
 
+@functools.lru_cache(maxsize=1)
+def _cookbook() -> tuple:
+    """Кулинарная книга владельца (data/home_recipes.json, из Notion «Cooking / Recipes»): {name, meals, ingredients}."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "home_recipes.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return tuple(item for item in json.load(fh) if isinstance(item, dict) and item.get("name"))
+    except (OSError, ValueError):
+        return ()
+
+
+def cookbook_matches(available, meal, avoid=(), limit=5) -> list:
+    """Блюда книги для этого приёма пищи, где главный продукт (первый) — из отмеченных групп; больше совпадений —
+    выше; недавно показанные (avoid) — в конец."""
+    from fridge_model import match_group
+    marked = {match_group(re.sub(r"\s*\(.*?\)", "", str(name))) for name in available or ()} - {None}
+    if not marked:
+        return []
+    avoided = {str(name).casefold() for name in avoid}
+    scored = []
+    for item in _cookbook():
+        if meal and meal not in (item.get("meals") or ()):
+            continue
+        groups = [match_group(name) for name in item.get("ingredients") or ()]
+        if not groups or groups[0] not in marked:
+            continue
+        score = len({group for group in groups if group in marked})
+        scored.append((item["name"].casefold() in avoided, -score, item))
+    scored.sort(key=lambda entry: entry[:2])
+    return [item for _seen, _score, item in scored[:limit]]
+
+
 def _home_idea_prompt(context: dict, sources=None) -> str:
     meal = _HOME_MEAL_LABELS[context["meal"]]
     available = context.get("available") or []
     unavailable = context.get("unavailable") or []
     if context.get("has_fridge"):
+        cookbook = cookbook_matches(available, context.get("meal"), context.get("avoid_names") or ())
         fridge_context = (
             "Блюдо собирается из продуктов, которые пользователь любит и обычно покупает (группы, в скобках — примеры).\n"
             f"Продукты пользователя: {secure.wrap_untrusted('; '.join(available) or 'нет', 'продукты пользователя')}.\n"
             + (f"Не используй: {secure.wrap_untrusted(', '.join(unavailable), 'исключённые продукты')}.\n"
                if unavailable else "")
+            + (("Блюда, которые пользователь сам готовит (его кулинарная книга) и которые подходят к его продуктам: "
+                + "; ".join(f"{item['name']} ({', '.join(item['ingredients'])})" for item in cookbook)
+                + ". В приоритете — одно из них (назови так же, как в книге) или очень похожее домашнее блюдо в том же "
+                "духе. Для блюда из книги можно 1–3 продукта сверх списка — перечисли их в missing_ingredients.\n")
+               if cookbook else "")
         )
     else:
         fridge_context = (
-            "Моих продуктов нет. Не утверждай, что продукты уже есть дома, "
+            "Продуктов пользователя нет. Не утверждай, что продукты уже есть дома, "
             "не заполняй use_first, missing и substitution.\n"
         )
     restrictions = context.get("diet_prefs") or "не указаны"
@@ -1148,7 +1188,7 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
 
 def _home_local_idea(context: dict, avoid=()) -> dict:
     local = _fallback_leftovers_recipe(
-        ", ".join(context.get("available") or []),
+        ", ".join(re.sub(r"\s*\(.*?\)", "", name) for name in context.get("available") or []),
         meal=context.get("meal"),
         avoid=avoid,
     ) or _fallback_recipe()
@@ -1265,7 +1305,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
         avoid=avoided_names,
         **({"cuisine": cuisine} if cuisine else {}),
     )
-    prompt = _home_idea_prompt(context, sources=sources)
+    prompt = _home_idea_prompt({**context, "avoid_names": avoided_names}, sources=sources)
     if dish:
         prompt += (
             f"\nНужен рецепт именно этого блюда: «{dish['name']}» — {dish.get('note') or 'классический вариант'}. "
@@ -1440,6 +1480,7 @@ def _fallback_recipe():
             "Обжарь овощи 3-4 минуты",
             "Влей взбитые яйца и готовь под крышкой 5-6 минут",
         ],
+        "chef_tip": "Сними сковороду с огня, когда центр ещё слегка влажный: омлет дойдёт под крышкой",
         "full": (
             "Быстрый омлет с овощами\n\n"
             "<b>Ингредиенты</b>\n"
@@ -1612,6 +1653,21 @@ def _leftovers_candidates(ingredients, meal=None):
             "Нарежь овощи одинаковыми кусочками и туши под крышкой с третью стакана воды 8–10 минут",
             "Смешай крупу с овощами и прогрей 2 минуты",
         ], "Дай крупе постоять под крышкой 3 минуты, чтобы она впитала овощной сок")
+
+    side = grain_base or pasta
+    if proteins and side and meal != "breakfast":
+        # «Курица с рисом», «Белая рыба с гречкой»: белок и гарнир из своих продуктов — частый домашний ужин.
+        protein = re.sub(r"\s+и\s+.*$", "", proteins[0]).strip()
+        side_word = next((label for pattern, label in (
+            (r"рис", "рисом"), (r"греч", "гречкой"), (r"булгур", "булгуром"), (r"кускус", "кускусом"),
+            (r"макар|спагет|паст|лапш", "пастой"),
+        ) if re.search(pattern, side, re.I)), "гарниром")
+        used = [proteins[0], side] + cookable_vegetables[:2]
+        yield build(f"{protein} с {side_word}", 30, used, [
+            f"Приготовь {side.lower()} по инструкции на упаковке",
+            "Посоли основной продукт и обжарь на масле небольшими кусочками до золотистой корочки и готовности",
+            "Добавь лук и морковь, прогрей вместе 5 минут и подай с гарниром",
+        ], "Не переворачивай кусочки первые 3 минуты: корочка схватится, и сок останется внутри")
 
     if bread and (cheese or sandwich_proteins or sandwich_vegetables):
         used = bread[:1] + cheese[:1] + sandwich_proteins[:1] + sandwich_vegetables[:1]

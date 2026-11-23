@@ -163,13 +163,11 @@ async def send_mine_recipe(bot, cid, status=None, refresh=False, cuisine=None):
         return
 
     async def build(status):
-        import day_menu
         meal = recipe_generation._home_meal_for_hour(datetime.now(config.TZ).hour)
-        # Кухня — как у меню дня на главном экране Готовки (кухня страны отпуска — без строгого выбора).
+        # Без выбора кухни — любая: в приоритете блюда своей кулинарной книги (борщ, плов, болоньезе) под продукты;
+        # «Другой рецепт» → кухня — строго эта кухня.
         known = cuisine in dict(settings.CUISINE_OPTIONS)  # кухня из callback — только из списка
-        menu_cuisine = (cuisine if known else None) or (day_menu.get_cached_day_menu(cid) or {}).get("cuisine") or \
-            day_menu.day_cuisine(cid, day_menu._today())
-        picked = None if str(menu_cuisine).startswith(day_menu.LOCAL_PREFIX) else menu_cuisine
+        picked = cuisine if known else None
         idea = await asyncio.to_thread(recipe_generation.get_cooking_home_idea, cid, None, refresh, picked)
         msg = menu_ui.food_menu(idea, meal=meal, from_fridge=True)
         await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)

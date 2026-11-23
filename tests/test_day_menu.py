@@ -300,8 +300,8 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True))
 
     text, markup = shown[0]
-    # Кухня — как у меню дня на главном экране.
-    assert calls == [(True, "french")] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
+    # Без выбора кухни — любая (в приоритете своя кулинарная книга); заголовок — по кухне рецепта.
+    assert calls == [(True, None)] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
     assert "Не хватает:\nзелень" in text
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_pick"], ["m_food", "m_menu"]]
 
@@ -313,7 +313,7 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
     calls.clear()
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True, cuisine="italian"))
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status(), refresh=True, cuisine="<bad>"))
-    assert calls == [(True, "italian"), (True, "french")]
+    assert calls == [(True, "italian"), (True, None)]
 
 
 def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
@@ -430,3 +430,27 @@ def test_menu_dish_recipe_failure_is_an_honest_message(monkeypatch):
     text, markup = sent[0]
     assert "Рецепт «Менемен» сейчас не собрать" in text and "пошло не так" not in text
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["a_recipe_breakfast"], ["m_food", "m_menu"]]
+
+
+def test_mine_recipe_prefers_own_cookbook_and_works_without_ai(monkeypatch):
+    import config
+    import store
+    cid = "cookbook-1"
+    store.set_settings(cid, 52.6, 4.75, "Alkmaar", "Нидерланды", "NL")
+    store.set_list(config.FRIDGE_KEY, cid, [
+        {"name": "говядина", "cat": "мясо и птица", "on": True, "group": "beef"},
+        {"name": "картофель и батат", "cat": "овощи и зелень", "on": True, "group": "potato"}])
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_a, **_k: [])
+    prompts = []
+
+    def no_ai(prompt, *_a, **_k):
+        prompts.append(prompt)
+        raise RuntimeError("all providers down")
+
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", no_ai)
+    monkeypatch.setattr(recipe_generation, "_home_meal_for_hour", lambda _hour: "dinner")
+    idea = recipe_generation.get_cooking_home_idea(cid, refresh=True)
+    # Кулинарная книга из Notion — в запросе, с говядиной первой; без ИИ — простой рецепт из своих продуктов.
+    assert "Тушёная говядина (говядина, картофель" in prompts[0] and "кулинарная книга" in prompts[0]
+    assert idea["name"] and idea["ingredients"]
+    assert [item["name"] for item in recipe_generation.cookbook_matches(["Курица"], "breakfast")] == []
