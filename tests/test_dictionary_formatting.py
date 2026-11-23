@@ -435,7 +435,7 @@ def test_morning_word_offers_delete_with_confirmation(monkeypatch):
     _msg, rows = dictionary_morning._build_morning_word("42", "nl")
 
     assert [(b.text, b.callback_data) for row in rows for b in row] == [
-        ("❌ Удалить из словаря", "a_dictdelid_w1"),
+        ("❌ Удалить из словаря", "a_dictdelid_w1"), ("🔊 Прослушать", "tts_word:w1"),
     ]
 
 

@@ -242,7 +242,7 @@ def day_summary(
 
     if word_line:
         term, translation = _split_word_translation(word_line)
-        b.text_line("💬 ")
+        b.text_line("🧠 ")  # как у «Обучения» в главном меню
         b.label(word_title or "Фраза дня")
         if term:
             b.text_line(f" {term}")

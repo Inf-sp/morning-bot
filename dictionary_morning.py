@@ -119,9 +119,14 @@ def _build_morning_word(cid, language):
         practice["flag"], entries=practice["entries"], empty_hint=not practice["entries"],
     )
     word_id = str(practice["entries"][0].get("id") or "")
-    # Удаление идёт через общее подтверждение словаря.
-    return msg, ([[InlineKeyboardButton(
-        delete_label("Удалить из словаря"), callback_data=f"a_dictdelid_{word_id}")]] if word_id else [])
+    if not word_id:
+        return msg, []
+    from learning_dictionary import entry_language
+    # Как в словаре: «Удалить» сверху, под ним «Прослушать» (озвучка есть у нидерландского).
+    listen = ([[InlineKeyboardButton("🔊 Прослушать", callback_data=f"tts_word:{word_id}")]]
+              if entry_language(practice["entries"][0]) == "nl" else [])
+    return msg, [[InlineKeyboardButton(
+        delete_label("Удалить из словаря"), callback_data=f"a_dictdelid_{word_id}")], *listen]
 
 
 async def send_daily_practice(bot, cid):

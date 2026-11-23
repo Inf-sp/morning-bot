@@ -199,7 +199,7 @@ def test_country_block_and_summary_lines():
     text = myday_ui.day_summary("Пн, 12 окт", "Кейптаун", word_line="Dankie → Спасибо", vacation={
         "country_lines": [("Столица", "Pretoria")]}).text
     assert "В отпуске" not in text and "дома" not in text  # строку «✈️ В отпуске … · дома …» не пишем
-    assert "🌍 Страна:\nСтолица: Pretoria" in text and "💬 Фраза дня: Dankie → Спасибо" in text  # в отпуске — фраза страны
+    assert "🌍 Страна:\nСтолица: Pretoria" in text and "🧠 Фраза дня: Dankie → Спасибо" in text  # в отпуске — фраза страны
     assert "Разговорник" not in text
 
 
