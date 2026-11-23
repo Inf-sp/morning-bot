@@ -178,7 +178,7 @@ def test_tomorrow_forecast_is_split_into_morning_day_and_evening():
 
     assert [block[0].split(" ", 1)[1] for block in blocks] == ["Утром", "Днём", "Вечером"]  # весь день
     assert blocks[0][1:] == ["· Температура до +14°C", "· Без дождя", "· Ветер 3–5 м/с"]
-    assert blocks[1][1:] == ["· Температура до +18°C", "· Дождь 70%", "· Сильный ветер 11 м/с"]
+    assert blocks[1][1:] == ["· Температура до +18°C", "· 🌧️ Дождь 70%", "· Сильный ветер 11 м/с"]
     assert blocks[2][1:] == ["· Температура до +15°C", "· Без дождя", "· Ветер 4 м/с"]
     assert weather.forecast_periods(data, late_evening, day=2) == []  # нет данных на этот день
 
@@ -553,3 +553,13 @@ def test_tomorrow_warning_uses_tomorrow_and_only_important_hazards(monkeypatch):
     calm = {**data, "daily": {**data["daily"], "windgusts_10m_max": [9, 9], "precipitation_probability_max": [10, 10],
                               "weathercode": [3, 3], "uv_index_max": [1, 8]}}
     assert weather_warn.build_warning(calm, "42", tomorrow=True) is None  # UV завтра — не повод писать накануне
+
+
+def test_tomorrow_period_marks_frost_and_ice():
+    import weather
+    cold = {"label": "Утром", "icon": "🌤️", "tmax": -1, "tmin": -3, "rain": 0, "rain_mm": 0, "winds": [2, 3]}
+    assert weather._period_lines(cold)[1] == "· 🧊 Температура до -1°C"
+    wet = {**cold, "tmax": 1, "rain": 80, "rain_mm": 2.0}
+    assert weather._period_lines(wet)[1:3] == ["· 🧊 Температура до +1°C · гололёд", "· 🌧️ Дождь 80%"]
+    warm = {**cold, "tmax": 5, "tmin": 2}
+    assert weather._period_lines(warm)[1] == "· Температура до +5°C"

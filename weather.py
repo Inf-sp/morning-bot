@@ -427,7 +427,7 @@ def forecast_periods(data, now, day=0):
         code = (d.get("weathercode") or [None] * (index + 1))[index]
         tmax = max(temps)
         periods.append({
-            "label": label, "tmax": tmax, "rain": rain, "rain_mm": rain_mm,
+            "label": label, "tmax": tmax, "tmin": min(temps), "rain": rain, "rain_mm": rain_mm,
             "winds": winds, "clouds": clouds, "code": code,
             "icon": _period_weather_icon(label, code, tmax, rain, max(winds, default=0), rain_mm, clouds),
         })
@@ -437,10 +437,12 @@ def forecast_periods(data, now, day=0):
 def _period_lines(period) -> list[str]:
     """Блок части суток в прогнозе на завтра: «🌧️ Днём», ниже «· Температура до +18°C», «· Дождь 70%»,
     «· Ветер 3–5 м/с» — каждое с новой строки."""
-    rain = f"Дождь {period['rain']:.0f}%" if _rain_real(period["rain"], period["rain_mm"]) else "Без дождя"
+    wet = _rain_real(period["rain"], period["rain_mm"])
+    rain = f"🌧️ Дождь {period['rain']:.0f}%" if wet else "Без дождя"  # дождь — заметно, значком
     wind = "Сильный ветер" if max(period["winds"], default=0) > 10 else "Ветер"
-    return [f"{period['icon']} {period['label']}", f"· Температура до {period['tmax']:+.0f}°C", f"· {rain}",
-            f"· {wind} {_speed_range(period['winds'])} м/с"]
+    frost = period.get("tmin", period["tmax"]) <= 0  # минус хотя бы в часть периода — лёд на дорогах
+    temp = f"· {'🧊 ' if frost else ''}Температура до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
+    return [f"{period['icon']} {period['label']}", temp, f"· {rain}", f"· {wind} {_speed_range(period['winds'])} м/с"]
 
 
 def today_conditions(data, now):
