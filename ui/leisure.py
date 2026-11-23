@@ -681,12 +681,31 @@ def _weekly_concert_rows(b: MessageBuilder, title, items):
         b.newline()
 
 
+def _popular_concerts_line(b: MessageBuilder, items):
+    """«Популярное рядом:» одной строкой через запятую: «Kehlani (6 декабря), Coldplay (12 января)»; имя — ссылка
+    на билеты."""
+    if not items:
+        return
+    b.spacer()
+    b.bold("Популярное рядом:")
+    b.newline()
+    for index, item in enumerate(items):
+        if index:
+            b.text_line(", ")
+        name = item.get("artist") or item.get("title")
+        b.link(name, item["url"]) if item.get("url") else b.text_line(name)
+        date = _event_date_label(item.get("date"))
+        if date:
+            b.text_line(f" ({date})")
+    b.newline()
+
+
 def weekly_concerts_card(mine, popular, title="🎫 Концерты недели") -> MessageSpec:
     """Рассылка «Концерты недели» и экран «Концерты» Досуга: любимые артисты, затем популярное рядом."""
     b = MessageBuilder()
     b.title(title)
     _weekly_concert_rows(b, "Твои артисты:", mine)
-    _weekly_concert_rows(b, "Популярное рядом:", popular)
+    _popular_concerts_line(b, popular)
     return b.build_stripped()
 
 

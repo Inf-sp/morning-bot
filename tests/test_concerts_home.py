@@ -228,7 +228,7 @@ def test_weekly_events_add_large_confirmed_music_events(monkeypatch):
 
     assert msg.text.startswith("🎫 Концерты недели\n\nТвои артисты:\n• Romy — ")
     assert "• Romy — " in msg.text and ", Paradiso." in msg.text
-    assert "Популярное рядом:\n• Lowlands 2026 — " in msg.text
+    assert "Популярное рядом:\nLowlands 2026 (" in msg.text
 
 
 def test_weekly_concerts_are_skipped_when_there_are_none(monkeypatch):
@@ -271,7 +271,8 @@ def test_weekly_events_keep_six_unique_concerts_for_the_next_two_months(monkeypa
     msg = asyncio.run(leisure_concerts._build_weekly_events_msg("42"))
 
     assert msg.text.count("The Black Keys") == 1  # варианты одного пакета билетов схлопнуты
-    assert msg.text.count("• ") == 1 + leisure_concerts._WEEKLY_POPULAR_LIMIT
+    assert msg.text.count("• ") == 1  # популярное — одной строкой через запятую
+    assert msg.text.split("Популярное рядом:\n", 1)[1].count("), ") == leisure_concerts._WEEKLY_POPULAR_LIMIT - 1
     # Без оценки известности — по площадке, затем по дате: три ближайших популярных артиста.
     assert "Artist 3" in msg.text and "Artist 4" not in msg.text
 
@@ -331,7 +332,7 @@ def _tm_event(name, days, venue="Ziggo Dome", attractions=(), segment="Music", g
     }
 
 
-def test_popular_shows_one_line_per_artist_and_most_famous_first(monkeypatch):
+def test_popular_is_one_comma_line_of_world_famous_artists(monkeypatch):
     popular = [
         _tm_event("Niall Horan: Dinner Party Live On Tour", 4),
         _tm_event("Niall Horan | Venue Premium Packages", 4, "Ziggo Dome Club", genre="Community/Civic"),
@@ -359,10 +360,11 @@ def test_popular_shows_one_line_per_artist_and_most_famous_first(monkeypatch):
     popular_block = text.split("Популярное рядом:\n", 1)[1]
 
     assert text.count("Niall Horan") == 1 and "Premium" not in text and "Dinner Party" not in text
-    assert popular_block.splitlines()[0].startswith("• Stevie Wonder — ")
-    assert popular_block.splitlines()[0].endswith(", Ziggo Dome. Икона соула, пропускать нельзя.")
-    assert [line.split(" — ")[0] for line in popular_block.splitlines()] == [
-        "• Stevie Wonder", "• The Strokes", "• Niall Horan"]  # Placebo уже в «Твоих артистах»
+    # Только звёзды мировой величины (Local Band — нет), по дате, одной строкой через запятую;
+    # Placebo уже в «Твоих артистах».
+    assert [part.split(" (")[0] for part in popular_block.strip().split(", ")] == [
+        "The Strokes", "Niall Horan", "Stevie Wonder"]
+    assert "Local Band" not in text
 
 
 def test_artist_notes_ask_ai_once_and_keep_failures_out(monkeypatch):
@@ -460,3 +462,11 @@ def test_web_search_fallback_does_not_always_cut_the_same_first_five_artists(mon
     asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды"))
 
     assert set(artists[5:]) <= set(searched)
+
+
+def test_tour_title_in_capitals_shows_the_artist_name():
+    from datetime import datetime, timedelta
+    today = datetime.now(leisure_concerts.config.TZ).date()
+    items = leisure_concerts.concert_items_between(
+        [_tm_event("THE KEHLANI WORLD TOUR", 13, attractions=("Kehlani",))], today, today + timedelta(days=30), 3)
+    assert items[0]["artist"] == "Kehlani"

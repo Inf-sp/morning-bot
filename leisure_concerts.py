@@ -1140,6 +1140,10 @@ def concert_items_between(events, start, end, limit):
         city = str((venue.get("city") or {}).get("name") or "").strip()
         title = _weekly_concert_title(event)
         artist = concert_artist(title)
+        attractions = [str(att.get("name") or "").strip()
+                       for att in (event.get("_embedded", {}).get("attractions") or []) if isinstance(att, dict)]
+        if len(attractions) == 1 and attractions[0] and attractions[0].casefold() in title.casefold():
+            artist = attractions[0]  # «THE KEHLANI WORLD TOUR» → «Kehlani»
         key = _concert_identity_text(artist)
         if not title or key in existing:
             continue
@@ -1227,19 +1231,31 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
         ]
 
     nearby = popular_until(period_end)
-    if len(nearby) < min_popular and not trip:
-        # «Популярное рядом» — минимум min_popular: за 30 днями — всё окно кэша крупных концертов (62 дня).
-        nearby = popular_until(period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS))
-    if not mine and not nearby:
+    wide = popular_until(period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS)) if min_popular and not trip else []
+    if not mine and not nearby and not wide:
         return None
-    notes = await artist_notes([item["artist"] for item in mine + nearby])
+    notes = await artist_notes([item["artist"] for item in mine + nearby + wide])
 
     def note(item):
         return notes.get(_concert_identity_text(item["artist"])) or {}
 
-    # «Популярное рядом» — самые известные артисты; без оценки AI — по размеру площадки.
-    popular = sorted(nearby, key=lambda item: (-int(note(item).get("fame") or 0),
-                                               -_venue_size(item), item["date"]))[:_WEEKLY_POPULAR_LIMIT]
+    def fame(item):
+        return int(note(item).get("fame") or 0)
+
+    # «Популярное рядом» — очень крупные концерты звёзд мировой величины (fame ≥ _WORLD_FAME): сперва
+    # ближайшие, затем — до 62 дней; не набралось min_popular (или их нет вовсе) — самые известные из
+    # остальных, без оценки AI — по размеру площадки.
+    by_fame = lambda items: sorted(items, key=lambda item: (-fame(item), -_venue_size(item), item["date"]))  # noqa: E731
+    ordered = [*(item for item in nearby if fame(item) >= _WORLD_FAME),
+               *(item for item in wide if fame(item) >= _WORLD_FAME),
+               *by_fame(nearby), *by_fame(wide)]
+    popular, seen = [], set()
+    for item in ordered:
+        key = _concert_identity_text(item["artist"])
+        if key not in seen:
+            seen.add(key)
+            popular.append(item)
+    popular = sorted(popular[:max(_WEEKLY_POPULAR_LIMIT, min_popular)], key=lambda item: item["date"])
     mine = [{**item, "about": note(item).get("about", "")} for item in mine]
     popular = [{**item, "about": note(item).get("about", "")} for item in popular]
     return leisure_ui.weekly_concerts_card(mine, popular, title=title)
@@ -1247,6 +1263,7 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
 
 _NOTES_BATCH = 20
 _NOTES_TTL = 90 * 86400
+_WORLD_FAME = 8  # «Популярное рядом» — звёзды, известные на весь мир
 _BIG_VENUES = ("johan cruijff", "gelredome", "philips stadion", "stadion", "stadium", "arena",
                "ziggo dome", "ahoy", "afas live")
 
