@@ -279,9 +279,12 @@ def test_menu_dish_never_falls_back_to_an_unrelated_recipe(monkeypatch):
     monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("AI down")))
     monkeypatch.setattr(recipe_generation, "_home_local_idea", lambda *_a, **_k: pytest.fail("омлет вместо блюда меню"))
 
-    with pytest.raises(ValueError):
-        recipe_generation.get_cooking_home_idea(
-            "42", cuisine="italian", dish={"name": "Ciambellone", "note": "домашний кекс к кофе"})
+    # ИИ не ответил — простой рецепт этого же блюда по его типу (кекс), не чужой омлет и не ошибка.
+    idea = recipe_generation.get_cooking_home_idea(
+        "42", cuisine="italian", dish={"name": "Ciambellone", "note": "домашний кекс к кофе"})
+    assert idea["name"] == "Ciambellone" and any("мука" in item for item in idea["ingredients"])
+    omelette = recipe_generation._dish_local_idea({"name": "Кай джиао", "note": "тайский омлет"}, {}, "thai")
+    assert omelette["name"] == "Кай джиао" and "яйца 3 шт." in omelette["ingredients"]
 
 
 def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):

@@ -466,10 +466,17 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
 def warm_day_menu(cid, now=None) -> bool:
     """Ночная подготовка меню дня без сообщений пользователю."""
     try:
-        return bool(get_day_menu(cid, now=now))
+        menu = get_day_menu(cid, now=now)
     except Exception as error:
         _log.warning("day menu warm failed cid=%s: %r", cid, error)
         return False
+    if menu and not menu.get("trip_v"):  # рецепты блюд — заранее: нажатие «Завтрак» отвечает сразу из кэша
+        for meal in menu.get("dishes") or {}:
+            try:
+                dish_recipe(cid, meal, now=now)
+            except Exception as error:
+                _log.warning("dish recipe warm failed cid=%s meal=%s: %r", cid, meal, error)
+    return bool(menu)
 
 
 def dish_recipe(cid, meal, now=None) -> dict:
