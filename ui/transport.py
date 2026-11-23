@@ -87,10 +87,10 @@ def _sentence(text) -> str:
 
 
 def ns_alert(city, disruption, titles=None) -> MessageSpec:
-    """Сбой NS коротко: «🔴 Сбой NS · Alkmaar», участки к городу, причина, ожидаемое восстановление."""
+    """Сбой NS коротко: «🔴 Сбой NS», участки к городу, причина, ожидаемое восстановление."""
     title = "Авария NS" if disruption.get("type") == "CALAMITY" else "Сбой NS"
     b = MessageBuilder()
-    b.section(f"🔴 {title} · {city}")
+    b.section(f"🔴 {title}")  # город — в строке участка, как у восстановления
     b.spacer()
     route = route_label(titles or [disruption.get("title") or ""], city)
     if route:

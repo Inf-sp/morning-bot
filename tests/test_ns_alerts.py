@@ -53,13 +53,13 @@ def test_alert_card_is_short_route_cause_and_restoration_time():
     text = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption(RAW), "cause": "человек на путях",
                                              "situation": "меньше поездов"},
                                  ["Amsterdam Centraal - Alkmaar", "Haarlem - Alkmaar"]).text
-    assert text == ("🔴 Сбой NS · Alkmaar\n\nAmsterdam / Haarlem → Alkmaar\nПричина: человек на путях.\n"
+    assert text == ("🔴 Сбой NS\n\nAmsterdam / Haarlem → Alkmaar\nПричина: человек на путях.\n"
                     "Ожидаемое восстановление: 18:30.")
 
 
 def test_alert_without_cause_and_time_says_what_ns_writes():
     text = transport_ui.ns_alert("Alkmaar", {"title": "Alkmaar - Hoorn", "situation": "меньше поездов"}).text
-    assert text == "🔴 Сбой NS · Alkmaar\n\nHoorn → Alkmaar\nМеньше поездов."
+    assert text == "🔴 Сбой NS\n\nHoorn → Alkmaar\nМеньше поездов."
 
 
 def _user(monkeypatch, cc="NL"):
@@ -86,7 +86,7 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
 
     asyncio.run(ns_alerts.check_user(bot, "42"))
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🔴 Сбой NS · Alkmaar")
+    assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🔴 Сбой NS")
     assert [b.text for b in bot.sent[0]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
 
     feed["items"] = []
