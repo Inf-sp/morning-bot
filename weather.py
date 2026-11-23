@@ -441,8 +441,9 @@ def _period_lines(period) -> list[str]:
     rain = f"🌧️ Дождь {period['rain']:.0f}%" if wet else "Без дождя"  # дождь — заметно, значком
     wind = "Сильный ветер" if max(period["winds"], default=0) > 10 else "Ветер"
     frost = period.get("tmin", period["tmax"]) <= 0  # минус хотя бы в часть периода — лёд на дорогах
-    temp = f"· {'🧊 ' if frost else ''}Температура до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
-    return [f"{period['icon']} {period['label']}", temp, f"· {rain}", f"· {wind} {_speed_range(period['winds'])} м/с"]
+    temp = f"· Температура до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
+    title = f"{period['icon']} {'🧊 ' if frost else ''}{period['label']}"  # мороз — значком в заголовке: «🌑 🧊 Ночью»
+    return [title, temp, f"· {rain}", f"· {wind} {_speed_range(period['winds'])} м/с"]
 
 
 def today_conditions(data, now):
@@ -526,10 +527,10 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
         periods = [
             {
-                "title": f"{p['icon']} {p['label']}",
+                # Минус хотя бы в часть периода — 🧊 в заголовке («🌑 🧊 Ночью»), с дождём ещё «гололёд».
+                "title": f"{p['icon']} {'🧊 ' if p.get('tmin', p['tmax']) <= 0 else ''}{p['label']}",
                 "lines": [
-                    # Минус хотя бы в часть периода — 🧊, с дождём ещё «гололёд» (как в прогнозе на завтра).
-                    f"{'🧊 ' if p.get('tmin', p['tmax']) <= 0 else ''}Температура до {p['tmax']:+.0f}°C"
+                    f"Температура до {p['tmax']:+.0f}°C"
                     + (" · гололёд" if p.get("tmin", p["tmax"]) <= 0 and _rain_real(p["rain"], p["rain_mm"]) else ""),
                     f"Ветер {_speed_range(p['winds'])} м/с",
                     f"{'🌧️ ' if _rain_real(p['rain'], p['rain_mm']) else ''}Дождь {p['rain']:.0f}%",
