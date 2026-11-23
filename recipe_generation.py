@@ -1046,7 +1046,7 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 12,
+        "home_copy_version": 13,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -1120,7 +1120,12 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         cookbook = cookbook_matches(available, context.get("meal"), context.get("avoid_names") or ())
         fridge_context = (
             "Блюдо собирается из продуктов, которые пользователь любит и обычно покупает (группы, в скобках — примеры).\n"
-            f"Продукты пользователя: {secure.wrap_untrusted('; '.join(available) or 'нет', 'продукты пользователя')}.\n"
+            + ("Нужно популярное и по-настоящему вкусное блюдо — такое, что не стыдно подать, если придут гости: паста "
+               "с креветками, плов, курица в духовке, болоньезе, тушёная говядина. Полноценное основное блюдо, а не "
+               "перекус и не «что-нибудь из остатков»; известное, проверенное сочетание вкусов.\n"
+               if context.get("meal") != "breakfast" else
+               "Нужен популярный вкусный завтрак (сырники, омлет, блины, шакшука), а не случайное сочетание.\n")
+            + f"Продукты пользователя: {secure.wrap_untrusted('; '.join(available) or 'нет', 'продукты пользователя')}.\n"
             + (f"Не используй: {secure.wrap_untrusted(', '.join(unavailable), 'исключённые продукты')}.\n"
                if unavailable else "")
             + (("Блюда, которые пользователь сам готовит (его кулинарная книга) и которые подходят к его продуктам: "
