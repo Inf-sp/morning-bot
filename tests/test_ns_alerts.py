@@ -91,7 +91,7 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert bot.sent[-1]["text"].startswith("🟢 Движение восстановлено · Alkmaar\n\nAmsterdam → Alkmaar")
+    assert bot.sent[-1]["text"].startswith("🟢 Движение восстановлено\n\nAmsterdam → Alkmaar")
     assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
 
@@ -215,7 +215,7 @@ def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 2 and bot.sent[-1]["text"].startswith("🟢 Движение восстановлено · Alkmaar")
+    assert len(bot.sent) == 2 and bot.sent[-1]["text"].startswith("🟢 Движение восстановлено")
 
 
 def test_translation_without_cyrillic_is_rejected(monkeypatch):
@@ -236,7 +236,7 @@ def test_restored_card_is_short_with_route_and_duration():
     message = transport_ui.ns_restored("Alkmaar - Den Helder", since="2026-10-14T08:29", until="2026-10-14T11:47",
                                        cause="неисправный мост", city="Alkmaar",
                                        titles=["Amsterdam Centraal - Alkmaar", "Haarlem - Alkmaar"])
-    assert message.text == ("🟢 Движение восстановлено · Alkmaar\n\nAmsterdam / Haarlem → Alkmaar\n"
+    assert message.text == ("🟢 Движение восстановлено\n\nAmsterdam / Haarlem → Alkmaar\n"
                             "Сбой длился с 08:29 до 11:47.")
 
 

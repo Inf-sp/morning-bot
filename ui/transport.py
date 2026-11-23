@@ -107,9 +107,9 @@ def ns_alert(city, disruption, titles=None) -> MessageSpec:
 
 
 def ns_restored(title, *, since="", until="", cause="", city="", titles=None) -> MessageSpec:
-    """«🟢 Движение восстановлено · Alkmaar», участки и сколько длился сбой."""
+    """«🟢 Движение восстановлено» (без города — он в строке участка), участки и сколько длился сбой."""
     b = MessageBuilder()
-    b.section("🟢 Движение восстановлено" + (f" · {city}" if city else ""))
+    b.section("🟢 Движение восстановлено")  # город — уже в строке участка
     b.spacer()
     route = route_label(titles or ([title] if title else []), city)
     b.line(route or "Поезда снова ходят.")
