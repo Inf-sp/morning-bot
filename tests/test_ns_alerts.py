@@ -49,23 +49,17 @@ def test_all_city_stations_are_watched(monkeypatch):
     assert ns_api.station_codes("Alkmaar") == ["AMR", "AMRN"]
 
 
-def test_alert_card_is_russian_with_section_cause_and_time():
-    text = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption(RAW),
-                                             "cause": "неисправный поезд", "situation": "меньше поездов",
-                                             "extra": "до 30 минут дольше в пути"}).text
+def test_alert_card_is_short_route_cause_and_restoration_time():
+    text = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption(RAW), "cause": "человек на путях",
+                                             "situation": "меньше поездов"},
+                                 ["Amsterdam Centraal - Alkmaar", "Haarlem - Alkmaar"]).text
+    assert text == ("🔴 Сбой NS · Alkmaar\n\nAmsterdam / Haarlem → Alkmaar\nПричина: человек на путях.\n"
+                    "Ожидаемое восстановление: 18:30.")
 
-    assert text == ("🚆 Сбой NS · Alkmaar\n\nAlkmaar – Amsterdam Centraal\n\nМеньше поездов\n\n"
-                    "Причина: Неисправный поезд.\n\nОжидается до 18:30 · до 30 минут дольше в пути")
 
-
-def test_alert_card_skips_section_and_cause_already_in_the_text():
-    text = transport_ui.ns_alert("Alkmaar", {
-        "title": "Alkmaar - Hoorn", "until": "2026-10-12T16:00:00+0200",
-        "situation": "Из-за повреждённого железнодорожного моста между Alkmaar и Heerhugowaard возникло нарушение.",
-        "cause": "повреждённый железнодорожный мост"}).text
-
-    assert text == ("🚆 Сбой NS · Alkmaar\n\nИз-за повреждённого железнодорожного моста между Alkmaar и "
-                    "Heerhugowaard возникло нарушение.\n\nОжидается до 16:00")
+def test_alert_without_cause_and_time_says_what_ns_writes():
+    text = transport_ui.ns_alert("Alkmaar", {"title": "Alkmaar - Hoorn", "situation": "меньше поездов"}).text
+    assert text == "🔴 Сбой NS · Alkmaar\n\nHoorn → Alkmaar\nМеньше поездов."
 
 
 def _user(monkeypatch, cc="NL"):
@@ -92,14 +86,12 @@ def test_each_disruption_is_sent_once_then_restoration(monkeypatch):
 
     asyncio.run(ns_alerts.check_user(bot, "42"))
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🚆 Сбой NS · Alkmaar")
+    assert len(bot.sent) == 1 and bot.sent[0]["text"].startswith("🔴 Сбой NS · Alkmaar")
     assert [b.text for b in bot.sent[0]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert bot.sent[-1]["text"].startswith(
-        "✅ Движение восстановлено\n\nAlkmaar – Amsterdam Centraal\n\nПоезда снова ходят.")
-    assert "\n\nПричина: Defecte trein." in bot.sent[-1]["text"]
+    assert bot.sent[-1]["text"].startswith("🟢 Движение восстановлено · Alkmaar\n\nAmsterdam → Alkmaar")
     assert [b.text for b in bot.sent[-1]["reply_markup"].inline_keyboard[0]] == ["🎚️ Настроить уведомления", "#️⃣ Главная"]
     assert profile["ns_alerts"] == {"active": {}}
 
@@ -214,8 +206,8 @@ def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
 
     asyncio.run(ns_alerts.check_user(bot, "42"))
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    # Станция уже есть в тексте NS («tussen Zaandam en Alkmaar») — участок в начале не повторяется.
-    assert len(bot.sent) == 1 and bot.sent[0]["text"].split("\n")[2].startswith("tussen Zaandam")
+    # Два маршрута одного инцидента — одно сообщение, участки к городу одной строкой.
+    assert len(bot.sent) == 1 and bot.sent[0]["text"].split("\n")[2] == "Amsterdam / Haarlem → Alkmaar"
 
     feed["items"] = [second]  # один маршрут уже восстановлен, инцидент ещё идёт
     asyncio.run(ns_alerts.check_user(bot, "42"))
@@ -223,7 +215,7 @@ def test_one_incident_on_two_routes_is_sent_and_restored_once(monkeypatch):
 
     feed["items"] = []
     asyncio.run(ns_alerts.check_user(bot, "42"))
-    assert len(bot.sent) == 2 and bot.sent[-1]["text"].startswith("✅ Движение восстановлено")
+    assert len(bot.sent) == 2 and bot.sent[-1]["text"].startswith("🟢 Движение восстановлено · Alkmaar")
 
 
 def test_translation_without_cyrillic_is_rejected(monkeypatch):
@@ -240,15 +232,12 @@ def test_translation_without_cyrillic_is_rejected(monkeypatch):
     assert not captured["validator"]({"cause": "defecte trein"})
 
 
-def test_restored_card_has_blocks_with_bold_route_and_cause():
+def test_restored_card_is_short_with_route_and_duration():
     message = transport_ui.ns_restored("Alkmaar - Den Helder", since="2026-10-14T08:29", until="2026-10-14T11:47",
-                                       cause="неисправный железнодорожный мост")
-    bold = [message.text.encode("utf-16-le")[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")
-            for e in message.entities if e.type == "bold"]
-
-    assert message.text == ("✅ Движение восстановлено\n\nAlkmaar - Den Helder\n\nПоезда снова ходят.\n\n"
-                            "Причина: Неисправный железнодорожный мост.\n\nСбой длился с 08:29 до 11:47")
-    assert bold == ["✅ Движение восстановлено", "Alkmaar - Den Helder", "Причина:"]
+                                       cause="неисправный мост", city="Alkmaar",
+                                       titles=["Amsterdam Centraal - Alkmaar", "Haarlem - Alkmaar"])
+    assert message.text == ("🟢 Движение восстановлено · Alkmaar\n\nAmsterdam / Haarlem → Alkmaar\n"
+                            "Сбой длился с 08:29 до 11:47.")
 
 
 PRACTICAL = {
@@ -278,7 +267,7 @@ def test_practical_info_sections_level_alternative_extra_and_advice():
     alert = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption({**RAW, **{
         k: PRACTICAL[k] for k in ("publicationSections",)}}), "situation": "меньше поездов",
         "cause": "неисправный поезд", "alternative": "автобусы", "advice": "езжай через Zaandam"}).text
-    assert "• Затронуты: Alkmaar – Hoorn.\n• Вместо поездов: автобусы.\n• Совет: езжай через Zaandam." in alert
+    assert "Причина: неисправный поезд." in alert and "•" not in alert  # сбой — коротко, без пунктов
 
 
 def test_foreign_or_ending_disruption_is_not_sent_and_dutch_is_never_shown(monkeypatch):

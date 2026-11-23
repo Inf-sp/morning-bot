@@ -62,59 +62,60 @@ def _lower(text) -> str:
     return text[:1].lower() + text[1:] if text[:2] != text[:2].upper() else text
 
 
-def ns_alert(city, disruption) -> MessageSpec:
-    """Предупреждение о сбое NS: что случилось, причина, «Ожидается до …» — блоками через пустую строку.
+def route_label(titles, city) -> str:
+    """Участки сбоя одной строкой к своему городу: «Amsterdam Centraal - Alkmaar», «Haarlem - Alkmaar» →
+    «Amsterdam / Haarlem → Alkmaar». Город не найден в участке — участки как есть через « / »."""
+    city_key = str(city or "").casefold()
+    others, own = [], False
+    for title in titles or ():
+        for station in re.split(r"\s+[-–—]\s+", str(title or "")):
+            station = re.sub(r"\s+(Centraal|CS)$", "", station.strip(), flags=re.I)
+            if not station:
+                continue
+            if city_key and city_key in station.casefold():
+                own = True
+            elif station not in others:
+                others.append(station)
+    if own and others:
+        return f"{' / '.join(others)} → {city}"
+    return " / ".join(str(title).strip() for title in titles or () if str(title or "").strip())
 
-    Участок («Alkmaar - Hoorn:») и «Причина:» не повторяются, если текст NS их уже называет.
-    """
+
+def _sentence(text) -> str:
+    text = str(text or "").strip().rstrip(".")
+    return f"{text[:1].upper()}{text[1:]}." if text else ""
+
+
+def ns_alert(city, disruption, titles=None) -> MessageSpec:
+    """Сбой NS коротко: «🔴 Сбой NS · Alkmaar», участки к городу, причина, ожидаемое восстановление."""
     title = "Авария NS" if disruption.get("type") == "CALAMITY" else "Сбой NS"
     b = MessageBuilder()
-    b.section(f"🚆 {title} · {city}")
+    b.section(f"🔴 {title} · {city}")
     b.spacer()
-    title_line, situation = disruption.get("title") or "", disruption.get("situation") or ""
-    stations = [part.strip() for part in re.split(r"\s+[-–—]\s+", title_line) if part.strip()]
-    if situation and title_line and not any(station.casefold() in situation.casefold() for station in stations):
-        _route_line(b, title_line, situation)
-    else:
-        b.line(situation or title_line)
-    cause = disruption.get("cause") or ""
-    if cause and not _mentions(situation, cause, min_len=5):
-        _cause_line(b, cause)
-    # Практическое: другие участки, чем заменили поезда, сколько закладывать, совет NS. «Что с поездами» уже
-    # сказано ситуацией; участок из заголовка не повторяется.
-    other = [section for section in disruption.get("sections") or []
-             if section.replace("–", "-").casefold() != title_line.replace("–", "-").casefold()]
-    lines = practical_lines({**disruption, "sections": other}, with_level=False)
-    if lines:
-        b.spacer()
-        for line in lines:
-            b.line(f"• {line}")
-    tail = [part for part in (
-        f"ожидается до {_time_label(disruption.get('until'))}" if _time_label(disruption.get("until")) else "",
-        "" if disruption.get("extra_min") else disruption.get("extra") or "",
-    ) if part]
-    if tail:
-        b.spacer()
-        joined = " · ".join(tail)
-        b.line(joined[:1].upper() + joined[1:])
+    route = route_label(titles or [disruption.get("title") or ""], city)
+    if route:
+        b.line(route)
+    cause = _sentence(disruption.get("cause"))
+    if cause:
+        b.labeled_line("Причина", cause[:1].lower() + cause[1:], lowercase=False)
+    until = _time_label(disruption.get("until"))
+    if until:
+        b.labeled_line("Ожидаемое восстановление", f"{until}.", lowercase=False)
+    if not cause and not until and disruption.get("situation"):  # причины и срока нет — что пишет NS
+        b.line(_sentence(disruption["situation"]))
     return b.build_stripped()
 
 
-def ns_restored(title, *, since="", until="", cause="") -> MessageSpec:
-    """«✅ Движение восстановлено», участок, причина и сколько длился сбой — блоками через пустую строку."""
+def ns_restored(title, *, since="", until="", cause="", city="", titles=None) -> MessageSpec:
+    """«🟢 Движение восстановлено · Alkmaar», участки и сколько длился сбой."""
     b = MessageBuilder()
-    b.section("✅ Движение восстановлено")
+    b.section("🟢 Движение восстановлено" + (f" · {city}" if city else ""))
     b.spacer()
-    if title:
-        _route_line(b, title, "поезда снова ходят.")
-    else:
-        b.line("Поезда снова ходят.")
-    if str(cause or "").strip():
-        _cause_line(b, cause)
+    route = route_label(titles or ([title] if title else []), city)
+    b.line(route or "Поезда снова ходят.")
     start, end = _time_label(since), _time_label(until)
     if start and end and start != end:
-        b.spacer()
-        b.line(f"Сбой длился с {start} до {end}")
+        b.line(f"Сбой длился с {start} до {end}.")
     return b.build_stripped()
 
 

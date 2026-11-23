@@ -145,6 +145,7 @@ async def check_user(bot, cid):
     # Для сообщения «восстановлено»: с какого времени шёл сбой и его причина (по-русски — из предупреждения).
     active = {item["id"]: {"title": item["title"], "sig": incident_signature(item),
                            "cause": (previous.get(item["id"]) or {}).get("cause") or item.get("cause") or "",
+                           "titles": (previous.get(item["id"]) or {}).get("titles") or [item["title"]],
                            "since": (previous.get(item["id"]) or {}).get("since") or item.get("start") or now}
               for item in current}
     # NS заводит одну неисправность отдельной записью на каждый маршрут (Amsterdam - Alkmaar,
@@ -157,7 +158,9 @@ async def check_user(bot, cid):
         known.add(sig)
         translated = await asyncio.to_thread(_translate, item)
         active[item["id"]]["cause"] = translated.get("cause") or active[item["id"]]["cause"]
-        msg = transport_ui.ns_alert(city, translated)
+        titles = [other["title"] for other in current if active[other["id"]]["sig"] == sig]
+        active[item["id"]]["titles"] = titles
+        msg = transport_ui.ns_alert(city, translated, titles)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
     still_active = {value["sig"] for value in active.values()}
     restored = {}
@@ -166,7 +169,7 @@ async def check_user(bot, cid):
             restored.setdefault(value["sig"], value)
     for value in restored.values():
         msg = transport_ui.ns_restored(value.get("title"), since=value.get("since"), until=now,
-                                       cause=value.get("cause"))
+                                       cause=value.get("cause"), city=city, titles=value.get("titles"))
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
 
     if active != previous:
