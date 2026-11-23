@@ -90,6 +90,7 @@ def _no_rss_reads(monkeypatch):
     monkeypatch.setattr(leisure_reads, "_feed", lambda _source, _url: [])
     monkeypatch.setattr(leisure_reads, "_minutes", lambda _link: None)
     monkeypatch.setattr(leisure_reads, "_image", lambda _link, _summary="": "")
+    monkeypatch.setattr(leisure_reads, "_excerpt", lambda _link: "")
     yield
 
 

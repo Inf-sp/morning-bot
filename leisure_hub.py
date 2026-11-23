@@ -569,6 +569,7 @@ async def send_hub(bot, cid, q=None):
     await _show(bot, cid, msg, q)
 
 
+_READS_ABOUT_WAIT = 12  # краткого содержания у карточки нет — ждём AI не дольше; не успел — карточка без него
 _READS_WAIT = 25  # набора статей ещё нет — ждём его сборку не дольше; не успел — честное «ещё собираются»
 
 
@@ -585,6 +586,12 @@ async def send_reads(bot, cid, arg="", q=None):
             _log.warning("reads screen: build failed cid=%s", cid, exc_info=True)
         items = await asyncio.to_thread(leisure_reads.ranked, cid)
     index = int(arg) % len(items) if items and str(arg).isdigit() else 0
+    if items and not items[index].get("about"):  # краткого содержания нет (AI не ответил ночью) — дописываем сейчас
+        try:
+            await asyncio.wait_for(asyncio.to_thread(leisure_reads.build, cid), _READS_ABOUT_WAIT)
+            items = await asyncio.to_thread(leisure_reads.ranked, cid) or items
+        except Exception:
+            _log.info("reads screen: summaries not ready cid=%s", cid)
     image = str(items[index].get("image") or "") if items else ""
     await _show_card(bot, cid, leisure_ui.reads_card(items, index), image if image.startswith("https://") else "", q)
 

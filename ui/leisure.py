@@ -914,7 +914,8 @@ def trip_country_screen(place, about=(), useful="", flag="") -> MessageSpec:
 
 
 def reads_card(items, index=0) -> MessageSpec:
-    """«📰 Статьи» лентой, как «Премьеры»: «📰 **Заголовок**» ссылкой на статью, «Источник · EN · 11 мин», анонс;
+    """«📰 Статьи» лентой, как «Премьеры»: «📰 **Заголовок**» ссылкой на статью, «Quanta · 21 ноября · EN · 8 мин»
+    (дата публикации, год — если не текущий), краткое содержание по-русски;
     ← n/N → по кругу по набору дня (lz_reads_<n>), «Назад» — в хаб. Картинку-превью прикладывает обработчик."""
     b = MessageBuilder()
     items = [item for item in items or () if str(item.get("title") or "").strip()
@@ -929,8 +930,8 @@ def reads_card(items, index=0) -> MessageSpec:
     b.bold_link(" ".join(str(item["title"]).split()), str(item["link"]))
     b.newline()
     minutes = int(item.get("minutes") or 0)
-    meta = [str(item.get("source") or "").strip(), str(item.get("lang") or "").strip(),
-            f"{minutes} мин" if minutes else ""]
+    meta = [str(item.get("source") or "").strip(), _event_date_label(item.get("published")),
+            str(item.get("lang") or "").strip(), f"{minutes} мин" if minutes else ""]
     if any(meta):
         b.line(" · ".join(value for value in meta if value))
     about = str(item.get("about") or "").strip()

@@ -108,7 +108,7 @@ def test_old_day_set_is_rebuilt_with_a_teaser_and_the_same_articles(monkeypatch)
     assert leisure_reads.current("42", now.date()) is None  # старый вид не показывается — хаб пересоберёт фоном
     entry = leisure_reads.build("42", now)
 
-    assert "одно-два коротких предложения" in prompts[0] and "захотелось" in prompts[0]
+    assert "краткое содержание" in prompts[0] and "два-три коротких предложения" in prompts[0]
     assert entry["v"] == leisure_reads._VERSION and entry["items"][0]["link"] == "https://q.example/bh"  # та же статья, не «показанная»
     assert entry["items"][0]["about"] == teaser
     assert leisure_reads.build("42", now) is not None and len(prompts) == 1  # новый вид — без повторной сборки
@@ -118,14 +118,15 @@ def test_long_or_list_shaped_teaser_is_kept_not_dropped(monkeypatch):
     long_teaser = ("Платформа Ondesign показывает, как команды On — от архитекторов до стилистов — придумывают вещи "
                    "для спорта и города. Внутри — эскизы, споры и прототипы, которые обычно остаются за кадром. "
                    "Третье предложение уже лишнее и только растягивает анонс до неприличной длины, его не будет, "
-                   "потому что два предложения — это всё, что помещается в блок «Прочитать».")
+                   "потому что два предложения — это всё, что помещается в блок «Прочитать». Четвёртое "
+                   "предложение тоже лишнее, оно добавлено только для того, чтобы текст был заметно длиннее.")
     items = [{"title": "On’s new editorial platform", "link": "https://n.example/on", "summary": "Ondesign goes…"}]
     monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda *_a, **_k: [{"id": "0", "about": long_teaser}])
 
     about = leisure_reads._about_ru(items)["https://n.example/on"]
 
     assert len(long_teaser) > leisure_reads._ABOUT_MAX and len(about) <= leisure_reads._ABOUT_MAX
-    assert about.endswith("за кадром.") and "Третье" not in about  # по границе предложения, не обрыв
+    assert about.endswith("«Прочитать».") and "Четвёртое" not in about  # до трёх предложений, не обрыв
 
 
 def test_missing_teaser_is_filled_later_with_one_request(monkeypatch):
@@ -169,3 +170,17 @@ def test_reads_card_is_sent_as_photo_and_flips_in_place(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_show_card", show_card)
     asyncio.run(leisure_hub.send_reads(None, "42", "4"))
     assert shown == [("📰 Story 1\n\nColossal · EN\n\nИстория.", "https://img.example/1.jpg")]  # 4 % 3
+
+
+def test_reads_card_shows_publication_date_and_summary_from_article_text(monkeypatch):
+    item = {"title": "The Incredible, Elegant DNA Repair System", "link": "https://q.example/dna", "source": "Quanta",
+            "lang": "EN", "minutes": 8, "published": "2026-11-21",
+            "about": "Клетки чинят разрывы ДНК сами. На этом и держится редактирование генов"}
+    monkeypatch.setattr(leisure_ui, "local_today", lambda: date(2026, 11, 23))
+    text = leisure_ui.reads_card([item]).text
+    assert "Quanta · 21 ноября · EN · 8 мин" in text and text.endswith("редактирование генов.")
+    assert "клетки" in leisure_reads.excerpt_of("<p>Cells repair broken DNA.</p><p>клетки</p>")
+    prompts = []
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {})
+    leisure_reads._about_ru([{"title": "T", "link": "https://x", "summary": "", "text": "Cells repair broken DNA."}])
+    assert "Cells repair broken DNA." in prompts[0]
