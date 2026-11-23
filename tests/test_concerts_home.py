@@ -422,3 +422,41 @@ def test_trip_country_cache_does_not_erase_home_concerts(monkeypatch):
     # Домашняя афиша на месте; прошедший концерт просто не показывается, а не обнуляет кэш.
     assert leisure_concerts._concerts_cache_get("42", "NL") == [future]
     assert leisure_concerts._concerts_cache_get("42", "ES") == []
+
+
+def test_month_concerts_popular_takes_at_least_three_from_the_62_day_window(monkeypatch):
+    popular = [_tm_event("Kehlani", 13, attractions=("Kehlani",)),
+               _tm_event("Coldplay", 45, attractions=("Coldplay",)),
+               _tm_event("Muse", 55, attractions=("Muse",)),
+               _tm_event("Far Away", 90, attractions=("Far Away",))]
+    monkeypatch.setattr(leisure_concerts.store, "get_settings", lambda _cid: {"cc": "NL", "country": "Нидерланды"})
+    monkeypatch.setattr(leisure_concerts, "_concerts_cache_get", lambda *_a: [])
+    monkeypatch.setattr(leisure_concerts, "_popular_events_cache_get", lambda *_a: popular)
+
+    text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
+
+    # За 30 дней только Kehlani — добираются крупные концерты до 62 дней, дальше — нет.
+    assert all(name in text for name in ("Kehlani", "Coldplay", "Muse")) and "Far Away" not in text
+
+
+def test_web_search_fallback_does_not_always_cut_the_same_first_five_artists(monkeypatch):
+    artists = [f"Artist {index}" for index in range(8)]
+    searched = []
+
+    async def tm_many(batch, *_a, **_k):
+        return [], list(batch)
+
+    async def external(artist, _cc, _cname="", force=False):
+        searched.append(artist)
+        return []
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", tm_many)
+    monkeypatch.setattr(leisure_concerts, "get_external_events_for_artist", external)
+    # У первых пяти поиск уже сохранён — их берём из кэша, а новые поиски достаются следующим.
+    monkeypatch.setattr(leisure_concerts, "_external_events_cache_get",
+                        lambda artist, _cc: [] if artist in artists[:5] else None)
+    monkeypatch.setattr(leisure_concerts, "filter_concert_events", lambda events, _cc: list(events))
+
+    asyncio.run(leisure_concerts._fetch_concerts(artists, "NL", "Нидерланды"))
+
+    assert set(artists[5:]) <= set(searched)

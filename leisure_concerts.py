@@ -875,8 +875,13 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
         async with _EXTERNAL_CONCURRENCY:
             return await get_external_events_for_artist(artist, cc, cname)
 
+    # Сохранённый веб-поиск (75 дней) берётся у всех ненайденных бесплатно; новый — не больше
+    # _EXTERNAL_ARTIST_LIMIT за обновление. Раньше лимит резал всегда одних и тех же первых пятерых,
+    # и у остальных любимых артистов (тур не в Ticketmaster) концерты не находились никогда.
+    cached = [artist for artist in unresolved if _external_events_cache_get(artist, cc) is not None]
+    fresh = [artist for artist in unresolved if artist not in cached][:_EXTERNAL_ARTIST_LIMIT]
     external_batches = await asyncio.gather(
-        *(external_for_artist(artist) for artist in unresolved[:_EXTERNAL_ARTIST_LIMIT]),
+        *(external_for_artist(artist) for artist in [*cached, *fresh]),
         return_exceptions=True,
     )
     external_events = []
@@ -1190,7 +1195,7 @@ def trip_end(cid, cc):
 
 
 async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели",
-                                   min_mine=0):
+                                   min_mine=0, min_popular=0):
     """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
 
     Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
@@ -1213,12 +1218,18 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
             max(min_mine, len(mine)),
         )
     taken = {_concert_identity_text(item["artist"]) for item in mine}
-    nearby = [
-        item for item in concert_items_between(
-            _popular_events_cache_get(cc, period_start) or [], period_start, period_end, _NOTES_BATCH,
-        )
-        if _concert_identity_text(item["artist"]) not in taken
-    ]
+    def popular_until(end):
+        return [
+            item for item in concert_items_between(
+                _popular_events_cache_get(cc, period_start) or [], period_start, end, _NOTES_BATCH,
+            )
+            if _concert_identity_text(item["artist"]) not in taken
+        ]
+
+    nearby = popular_until(period_end)
+    if len(nearby) < min_popular and not trip:
+        # «Популярное рядом» — минимум min_popular: за 30 днями — всё окно кэша крупных концертов (62 дня).
+        nearby = popular_until(period_start + timedelta(days=_WEEKLY_CONCERT_HORIZON_DAYS))
     if not mine and not nearby:
         return None
     notes = await artist_notes([item["artist"] for item in mine + nearby])
@@ -1309,8 +1320,10 @@ JSON: {{"items":[{{"name":"","fame":1,"about_ru":""}}]}}
 
 async def build_month_concerts_msg(cid):
     """Экран «Концерты» из Досуга: «🎫 Ближайшие концерты · Нидерланды» — 30 дней, у своих артистов
-    минимум 5 ближайших; из кэша концертов, AI — только для новых артистов."""
-    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=5)
+    минимум 5 ближайших, у популярного рядом — минимум 3 (за 30 днями — до 62 дней); из кэша концертов,
+    AI — только для новых артистов."""
+    return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=5,
+                                          min_popular=_WEEKLY_POPULAR_LIMIT)
 
 
 def month_concerts_title(cid) -> str:
