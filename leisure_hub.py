@@ -666,6 +666,15 @@ async def send_concerts(bot, cid, q=None):
 
 
 _HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на месяц вперёд
+_AGENDA_WAIT = 25  # поиск афиши при открытии ждём не дольше; не успел — кэш, свежая афиша — к следующему открытию
+
+
+def _agenda(cid, fetch=True):
+    """Афиша города на окно «Праздников» (прогрев и экран)."""
+    from datetime import timedelta
+    import local_events
+    start = _today_and_cc(cid)[0]
+    return local_events.agenda(cid, start, start + timedelta(days=_HOLIDAYS_DAYS - 1), fetch)
 
 
 async def send_holidays(bot, cid, q=None):
@@ -683,10 +692,14 @@ async def send_holidays(bot, cid, q=None):
     start = _today_and_cc(cid)[0]
     end = start + timedelta(days=_HOLIDAYS_DAYS - 1)
     holidays = await asyncio.to_thread(public_holidays.week_holidays, place.get("cc"), start, end)
-    events = await asyncio.to_thread(local_events.week_events, cid, start, end, False)
+    try:  # кэш обычно готов с ночного прогрева; нет — ищем сейчас (плашка ожидания), не дольше _AGENDA_WAIT
+        events = await asyncio.wait_for(asyncio.to_thread(local_events.agenda, cid, start, end), _AGENDA_WAIT)
+    except Exception:
+        _log.info("holidays: agenda not ready cid=%s", cid)
+        events = await asyncio.to_thread(local_events.agenda, cid, start, end, False)
     period = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if start.month == end.month
               else f"{start.day} {_MONTHS[start.month - 1]} – {end.day} {_MONTHS[end.month - 1]}")
-    msg = (myday_ui.week_holidays(place.get("city", ""), period, holidays, events) if holidays or events
+    msg = (myday_ui.holidays_agenda(place.get("city", ""), period, holidays, events) if holidays or events
            else myday_ui.no_holidays(place.get("city", ""), period))
     await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
 
@@ -807,7 +820,7 @@ _WARM_STEP_LABELS = {
     "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
     "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
     "details": "страны", "trip_afisha": "афиша поездки", "premiere_notes": "описания премьер",
-    "reads": "статья дня",
+    "reads": "статья дня", "agenda": "праздники и афиша",
 }
 # Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
 failed_steps = {}
@@ -834,6 +847,7 @@ async def warm_hub_cache(cid):
         ("premiere_notes", lambda: _warm_premiere_notes(cid)),  # после стран и релизов: лента уже готова
         ("reads", lambda: asyncio.to_thread(_reads_build, cid)),
         ("trip_afisha", lambda: _warm_trip_afisha(cid)),
+        ("agenda", lambda: asyncio.to_thread(_agenda, cid, True)),
     )
     failed = []
     for name, call in steps:

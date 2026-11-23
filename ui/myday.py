@@ -83,6 +83,68 @@ def week_holidays(city, period, holidays, events) -> MessageSpec:
     return b.build_stripped()
 
 
+_AGENDA_SECTIONS = (("season", "Зима и праздники сезона:"), ("culture", "Концерты и культура:"),
+                    ("other", "Другие события:"))
+_AGENDA_PER_SECTION = 5
+
+
+def holidays_agenda(city, period, holidays, events) -> MessageSpec:
+    """«🎉 Праздники» в Досуге — городская афиша на месяц: «Праздники:», затем события по разделам (зима и праздники
+    сезона, концерты и культура, другое), в каждом до 5 ближайших по дате: «• 28 ноября — **Winterfair** — зимняя
+    ярмарка · Rekerdijk · бесплатно»."""
+    from util import _MONTHS
+
+    def day_label(value):
+        from datetime import date
+        day = date.fromisoformat(value)
+        return f"{day.day} {_MONTHS[day.month - 1]}"
+
+    def span(start, end):
+        if start == end:
+            return day_label(start)
+        if start[:7] == end[:7]:
+            return f"{int(start[8:])}–{day_label(end)}"
+        return f"{day_label(start)} – {day_label(end)}"
+
+    b = MessageBuilder()
+    b.title(" · ".join(part for part in ("🎉 Праздники и мероприятия", city, period) if part))
+    first, shown = True, []
+    if holidays:
+        b.bold("Праздники:")
+        b.newline()
+        for holiday in holidays:
+            b.line(f"• {day_label(holiday['date'])} — {holiday['name']}"
+                   + (f": {holiday['about']}." if holiday.get("about") else ""))
+        first = False
+    for key, heading in _AGENDA_SECTIONS:
+        group = sorted((event for event in events or [] if (event.get("section") or "other") == key),
+                       key=lambda event: event["start"])[:_AGENDA_PER_SECTION]
+        if not group:
+            continue
+        if not first:
+            b.spacer()
+        first = False
+        b.bold(heading)
+        b.newline()
+        shown += group
+        for event in group:
+            b.text_line(f"• {span(event['start'], event['end'])} — ")
+            url = str(event.get("url") or "")
+            b.bold_link(event["name"], url) if url.startswith("http") else b.text_line(event["name"])
+            if event.get("about"):
+                b.text_line(f" — {event['about']}")
+            meta = [str(event.get("place") or "").strip(), "бесплатно" if event.get("free") else ""]
+            if any(meta):
+                b.text_line(" · " + " · ".join(value for value in meta if value))
+            b.newline()
+    free = sum(1 for event in shown if event.get("free"))
+    if free:
+        b.spacer()
+        b.italic(f"Бесплатных событий · {free}")
+        b.newline()
+    return b.build_stripped()
+
+
 def no_holidays(city, period) -> MessageSpec:
     """«Праздники» в Досуге, когда на месяц вперёд ничего нет."""
     b = MessageBuilder()

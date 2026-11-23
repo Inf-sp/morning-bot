@@ -806,10 +806,35 @@ def test_holidays_tab_shows_month_of_holidays_and_events(monkeypatch):
     monkeypatch.setattr(public_holidays, "week_holidays", lambda _cc, start, end: [
         {"date": "2026-11-11", "name": "Sint-Maarten", "about": "дети с фонариками"}])
     seen = []
-    monkeypatch.setattr(local_events, "week_events", lambda _cid, start, end, fetch=True: seen.append(fetch) or [])
+    monkeypatch.setattr(local_events, "week_events", lambda _cid, start, end, fetch=True: [
+        {"name": "Alkmaars Ontzet", "about": "", "start": "2026-11-20", "end": "2026-11-20", "url": ""}])
+
+    def search(query, **_kwargs):
+        seen.append(query)
+        return [{"url": "https://alkmaar.nl/agenda", "title": "Agenda",
+                 "content": "Winterfair op 28 november Rekerdijk, gratis. Vespers 27 november in de Grote Kerk. "
+                            "IJsbaan Waagplein vanaf 27 november, vergunning aangevraagd."}]
+
+    monkeypatch.setattr(local_events.research, "web_search", search)
+    monkeypatch.setattr(local_events.ai, "llm_json", lambda *_a, **_k: {"events": [
+        {"name": "Winterfair", "about": "зимняя ярмарка", "start": "2026-11-28", "end": "2026-11-28",
+         "url": "https://alkmaar.nl/agenda", "evidence": "Winterfair op 28 november", "place": "Rekerdijk",
+         "section": "season", "free": "yes", "status": "confirmed"},
+        {"name": "Vespers van Rachmaninov", "about": "хоровой концерт", "start": "2026-11-27", "end": "2026-11-27",
+         "url": "https://alkmaar.nl/agenda", "evidence": "Vespers 27 november", "place": "Grote Kerk",
+         "section": "culture", "free": "no", "status": "confirmed"},
+        {"name": "IJsbaan Waagplein", "about": "каток", "start": "2026-11-27", "end": "2026-12-02",
+         "url": "https://alkmaar.nl/agenda", "evidence": "IJsbaan Waagplein vanaf 27 november",
+         "place": "Waagplein", "section": "season", "free": "no", "status": "pending"},
+    ]})
     bot = RecordingBot()
     asyncio.run(leisure_hub.send_holidays(bot, "42"))
     text = bot.sent[0]["text"]
     assert text.startswith("🎉 Праздники и мероприятия · Alkmaar · 3 ноября – 2 декабря")
-    assert "• 11 ноября — Sint-Maarten: дети с фонариками." in text and seen == [False]  # без поиска в сети
+    assert "• 11 ноября — Sint-Maarten: дети с фонариками." in text
+    assert "Зима и праздники сезона:\n• 28 ноября — Winterfair — зимняя ярмарка · Rekerdijk · бесплатно" in text
+    assert "Концерты и культура:\n• 27 ноября — Vespers van Rachmaninov — хоровой концерт · Grote Kerk" in text
+    assert "Другие события:\n• 20 ноября — Alkmaars Ontzet" in text
+    assert "IJsbaan" not in text  # только заявка на разрешение — не показываем как подтверждённое
+    assert "Бесплатных событий · 1" in text and len(seen) == 3  # поиск на английском: афиша, зима, культура
     assert routing.resolve_callback_handler("lz_holidays")["handled"]
