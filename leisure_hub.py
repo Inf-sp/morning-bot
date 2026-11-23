@@ -572,18 +572,21 @@ async def send_hub(bot, cid, q=None):
 _READS_WAIT = 25  # набора статей ещё нет — ждём его сборку не дольше; не успел — честное «ещё собираются»
 
 
-async def send_reads(bot, cid, q=None):
-    """«📰 Статьи» в Досуге: три самые интересные статьи набора дня; набора нет — собираем сейчас, а не ждём ночи.
-    Старая кнопка «Другая статья» (lz_read_next) из истории чата открывает этот же экран."""
+async def send_reads(bot, cid, arg="", q=None):
+    """«📰 Статьи» в Досуге: лента набора дня с картинкой-превью, самые интересные первыми, ← n/N → по кругу
+    (lz_reads_<n>), как «Премьеры»; набора нет — собираем сейчас, а не ждём ночи. Старая кнопка «Другая статья»
+    (lz_read_next) из истории чата открывает первую карточку."""
     import leisure_reads
-    items = await asyncio.to_thread(leisure_reads.top, cid)
+    items = await asyncio.to_thread(leisure_reads.ranked, cid)
     if not items:
         try:
             await asyncio.wait_for(asyncio.to_thread(leisure_reads.build, cid), _READS_WAIT)
         except Exception:
             _log.warning("reads screen: build failed cid=%s", cid, exc_info=True)
-        items = await asyncio.to_thread(leisure_reads.top, cid)
-    await _show(bot, cid, leisure_ui.reads_screen(items), q)
+        items = await asyncio.to_thread(leisure_reads.ranked, cid)
+    index = int(arg) % len(items) if items and str(arg).isdigit() else 0
+    image = str(items[index].get("image") or "") if items else ""
+    await _show_card(bot, cid, leisure_ui.reads_card(items, index), image if image.startswith("https://") else "", q)
 
 
 _CARDS_WAIT = 25  # пустой хаб ждёт карточки дня не дольше; остальное дособирается в фоне

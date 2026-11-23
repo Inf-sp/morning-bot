@@ -913,21 +913,39 @@ def trip_country_screen(place, about=(), useful="", flag="") -> MessageSpec:
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
 
 
-def reads_screen(items) -> MessageSpec:
-    """«📰 Статьи»: «Самое интересное:» и три статьи пунктами «• Заголовок · источник · EN · N мин — анонс»
-    (заголовок в оригинале жирной ссылкой); ниже «Назад» (в Досуг) | «Главная»."""
+def reads_card(items, index=0) -> MessageSpec:
+    """«📰 Статьи» лентой, как «Премьеры»: «📰 **Заголовок**» ссылкой на статью, «Источник · EN · 11 мин», анонс;
+    ← n/N → по кругу по набору дня (lz_reads_<n>), «Назад» — в хаб. Картинку-превью прикладывает обработчик."""
     b = MessageBuilder()
-    b.title("📰 Статьи")
     items = [item for item in items or () if str(item.get("title") or "").strip()
              and str(item.get("link") or "").startswith("http")]
     if not items:
+        b.title("📰 Статьи")
         b.line("Статьи на сегодня ещё собираются — загляни чуть позже.")
-    else:
-        b.bold("Самое интересное:")
-        b.newline()
-        for item in items:
-            _read_line(b, item)
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+    index %= len(items)
+    item = items[index]
+    b.text_line("📰 ")
+    b.bold_link(" ".join(str(item["title"]).split()), str(item["link"]))
+    b.newline()
+    minutes = int(item.get("minutes") or 0)
+    meta = [str(item.get("source") or "").strip(), str(item.get("lang") or "").strip(),
+            f"{minutes} мин" if minutes else ""]
+    if any(meta):
+        b.line(" · ".join(value for value in meta if value))
+    about = str(item.get("about") or "").strip()
+    if about:
+        b.spacer()
+        b.line(_finish_sentence(about))
+    rows = []
+    if len(items) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"lz_reads_{(index - 1) % len(items)}"),
+            InlineKeyboardButton(f"{index + 1}/{len(items)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"lz_reads_{(index + 1) % len(items)}"),
+        ])
+    rows.append(nav_row("m_leisure"))
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 
 def leisure_hub_kb():

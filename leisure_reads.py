@@ -40,13 +40,13 @@ _INTERESTS = {
     "design": ("typograph", "type", "font", "poster", "photograph", "photo", "illustrat", "graphic", "brand",
                "identity", "design", "architect", "print", "book", "cover", "animation", "sculpt"),
 }
-PROFILE_KEY = "hub_reads"  # {date, items[{title, link, source, lang, minutes, about}], index, seen{ссылка: дата}}
+PROFILE_KEY = "hub_reads"  # {date, items[{title, link, source, lang, minutes, about, image}], index, seen{ссылка: дата}}
 _FRESH_DAYS, _SEEN_DAYS = 7, 30
 _PER_THEME = 3  # статей каждой темы в наборе дня — тема дня первой
 _WORDS_PER_MINUTE = 230
 _MAX_MINUTES = 60
 _ABOUT_MAX = 300
-_VERSION = 2  # 2 — анонс в одно-два предложения, чтобы заинтересовать (набор дня старого вида собирается заново)
+_VERSION = 3  # 3 — с картинкой-превью статьи (набор дня старого вида собирается заново)
 _TIMEOUT = 15
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; morning-bot/1.0; personal reading)"}
 
@@ -114,13 +114,44 @@ def minutes_of(text) -> int | None:
     return min(_MAX_MINUTES, max(1, round(words / _WORDS_PER_MINUTE))) if words >= 80 else None
 
 
+_PAGES = {}  # ссылка → html страницы на время сборки набора: минуты и картинка — одним запросом
+
+
+def _page(link) -> str:
+    if link not in _PAGES:
+        try:
+            response = requests.get(link, headers=_HEADERS, timeout=_TIMEOUT)
+            response.raise_for_status()
+            _PAGES[link] = response.text
+        except requests.RequestException:
+            _PAGES[link] = ""
+    return _PAGES[link]
+
+
 def _minutes(link) -> int | None:
-    try:
-        response = requests.get(link, headers=_HEADERS, timeout=_TIMEOUT)
-        response.raise_for_status()
-    except requests.RequestException:
-        return None
-    return minutes_of(response.text)
+    return minutes_of(_page(link)) if _page(link) else None
+
+
+_OG_IMAGE_RE = re.compile(r"<meta\b[^>]*(?:property|name)=[\"'](?:og:image(?::secure_url)?|twitter:image)[\"'][^>]*>",
+                          re.IGNORECASE)
+_CONTENT_RE = re.compile(r"\bcontent=[\"']([^\"']+)[\"']", re.IGNORECASE)
+_IMG_RE = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.IGNORECASE)
+
+
+def image_of(page, summary="") -> str:
+    """Картинка-превью статьи: og:image / twitter:image страницы, иначе первая картинка анонса RSS; только https."""
+    for tag in _OG_IMAGE_RE.findall(str(page or "")):
+        found = _CONTENT_RE.search(tag)
+        url = html.unescape(found.group(1)).strip() if found else ""
+        if url.startswith("https://"):
+            return url
+    found = _IMG_RE.search(str(summary or ""))
+    url = html.unescape(found.group(1)).strip() if found else ""
+    return url if url.startswith("https://") else ""
+
+
+def _image(link, summary="") -> str:
+    return image_of(_page(link), summary)
 
 
 def _teaser(text) -> str:
@@ -185,7 +216,9 @@ def build(cid, now=None) -> dict:
     about = _about_ru(picked)
     items = [{"title": item["title"], "link": item["link"], "source": item["source"], "lang": "EN",
               "summary": _plain(item.get("summary"))[:500],  # анонс RSS — чтобы дописать русский, если AI не ответил
-              "minutes": _minutes(item["link"]), "about": about.get(item["link"], "")} for item in picked]
+              "minutes": _minutes(item["link"]), "image": _image(item["link"], item.get("summary")),
+              "about": about.get(item["link"], "")} for item in picked]
+    _PAGES.clear()
     entry = {"v": _VERSION, "date": now.date().isoformat(), "items": items, "index": 0,
              "seen": {**seen, **{item["link"]: now.date().isoformat() for item in items}}}
     store.mutate_profile(cid, lambda profile: ({**profile, PROFILE_KEY: entry}, None))
@@ -214,19 +247,24 @@ def current(cid, today=None) -> dict | None:
     return dict(items[int(saved.get("index") or 0) % len(items)])
 
 
-_TOP = 3  # «Статьи» в Досуге — три самые интересные статьи набора дня
+_TOP = 3  # «Статья дня» хаба — первая из трёх самых интересных
 
 
-def top(cid, today=None) -> list:
-    """«Статьи»: три самые интересные статьи набора дня (по ключевым словам интересов, при равенстве — порядок
-    набора), без сети; набора на сегодня нет — []."""
+def ranked(cid, today=None) -> list:
+    """«Статьи»: весь набор дня — самые интересные первыми (лента листается по кругу); без сети; нет набора — []."""
+    return top(cid, today, limit=None)
+
+
+def top(cid, today=None, limit=_TOP) -> list:
+    """Самые интересные статьи набора дня (по ключевым словам интересов, при равенстве — порядок набора), без
+    сети; набора на сегодня нет — []."""
     today = today or datetime.now(config.TZ).date()
     saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
     items = saved.get("items") or []
     if saved.get("date") != today.isoformat() or saved.get("v") != _VERSION:
         return []
     ranked = sorted(enumerate(items), key=lambda pair: (-max(_score(pair[1], theme) for theme in _THEMES), pair[0]))
-    return [dict(item) for _, item in ranked[:_TOP]]
+    return [dict(item) for _, item in ranked[:limit]]
 
 
 def advance(cid, today=None) -> dict | None:

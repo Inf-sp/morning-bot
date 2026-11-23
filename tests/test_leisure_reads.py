@@ -69,7 +69,7 @@ def test_hub_has_no_article_block_and_reads_are_a_button():
     assert rows[2] == ["lz_concerts", "lz_reads", "lz_holidays"]  # Концерты | Статьи — в два столбца
 
 
-def test_reads_screen_shows_three_most_interesting_articles_as_bullets(monkeypatch):
+def test_reads_are_a_circular_feed_most_interesting_first(monkeypatch):
     profile = _profile(monkeypatch)
     now = datetime(2026, 10, 18, 9, tzinfo=config.TZ)
     items = [{"title": f"Plain story {n}", "link": f"https://x.example/{n}", "source": "Colossal", "lang": "EN",
@@ -79,11 +79,15 @@ def test_reads_screen_shows_three_most_interesting_articles_as_bullets(monkeypat
     profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": "2026-10-18", "index": 0, "items": items}
     top = leisure_reads.top("42", now.date())
     assert [item["link"] for item in top] == ["https://q.example/bh", "https://x.example/0", "https://x.example/1"]
-    msg = leisure_ui.reads_screen(top)
-    assert msg.text.startswith("📰 Статьи\n\nСамое интересное:\n• A black hole near a quantum galaxy · Quanta · EN · "
-                               "6 мин — Чёрная дыра растёт быстрее моделей.\n• Plain story 0")
+    feed = leisure_reads.ranked("42", now.date())
+    assert len(feed) == 4 and feed[0]["link"] == "https://q.example/bh"  # лента — весь набор, интересные первыми
+    msg = leisure_ui.reads_card(feed, 0)
+    assert msg.text == ("📰 A black hole near a quantum galaxy\n\nQuanta · EN · 6 мин\n\n"
+                        "Чёрная дыра растёт быстрее моделей.")
     assert [e.url for e in msg.entities if e.type == "text_link"][0] == "https://q.example/bh"
-    assert [b.callback_data for b in msg.reply_markup.inline_keyboard[-1]] == ["m_leisure", "m_menu"]
+    rows = msg.reply_markup.inline_keyboard
+    assert [b.callback_data for b in rows[0]] == ["lz_reads_3", "noop", "lz_reads_1"]  # по кругу
+    assert rows[0][1].text == "1/4" and [b.callback_data for b in rows[-1]] == ["m_leisure", "m_menu"]
     assert leisure_reads.top("42", date(2026, 10, 19)) == []
 
 
@@ -105,7 +109,7 @@ def test_old_day_set_is_rebuilt_with_a_teaser_and_the_same_articles(monkeypatch)
     entry = leisure_reads.build("42", now)
 
     assert "одно-два коротких предложения" in prompts[0] and "захотелось" in prompts[0]
-    assert entry["v"] == 2 and entry["items"][0]["link"] == "https://q.example/bh"  # та же статья, не «показанная»
+    assert entry["v"] == leisure_reads._VERSION and entry["items"][0]["link"] == "https://q.example/bh"  # та же статья, не «показанная»
     assert entry["items"][0]["about"] == teaser
     assert leisure_reads.build("42", now) is not None and len(prompts) == 1  # новый вид — без повторной сборки
 
@@ -142,3 +146,26 @@ def test_missing_teaser_is_filled_later_with_one_request(monkeypatch):
     assert "On’s new editorial platform" in asked[0] and "Black Holes" not in asked[0]  # только статья без анонса
     leisure_reads.build("42", now)
     assert len(asked) == 1  # анонсы на месте — без повторного запроса
+
+
+def test_article_preview_image_comes_from_og_image_or_feed_picture():
+    page = '<html><head><meta property="og:image" content="https://img.example/a.jpg"></head></html>'
+    assert leisure_reads.image_of(page) == "https://img.example/a.jpg"
+    assert leisure_reads.image_of("", '<p><img src="https://img.example/b.png"></p>') == "https://img.example/b.png"
+    assert leisure_reads.image_of('<meta property="og:image" content="http://insecure/a.jpg">') == ""
+
+
+def test_reads_card_is_sent_as_photo_and_flips_in_place(monkeypatch):
+    import asyncio
+    import leisure_hub
+    items = [{"title": f"Story {n}", "link": f"https://x.example/{n}", "source": "Colossal", "lang": "EN",
+              "about": "История", "image": f"https://img.example/{n}.jpg"} for n in range(3)]
+    monkeypatch.setattr(leisure_reads, "ranked", lambda _cid: items)
+    shown = []
+
+    async def show_card(_bot, _cid, msg, image, q=None):
+        shown.append((msg.text, image))
+
+    monkeypatch.setattr(leisure_hub, "_show_card", show_card)
+    asyncio.run(leisure_hub.send_reads(None, "42", "4"))
+    assert shown == [("📰 Story 1\n\nColossal · EN\n\nИстория.", "https://img.example/1.jpg")]  # 4 % 3
