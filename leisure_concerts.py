@@ -55,11 +55,11 @@ _ticketmaster_next_request_at = 0.0
 _EXTERNAL_ARTIST_LIMIT = 5
 _EXTERNAL_CONCURRENCY = asyncio.Semaphore(2)
 _POPULAR_EVENTS_CACHE_TTL = 31 * 86400
-_POPULAR_EVENTS_CACHE_VERSION = 5  # 5 — 200 событий на полгода
+_POPULAR_EVENTS_CACHE_VERSION = 6  # 6 — 200 событий на год
 _POPULAR_EVENTS_LIMIT = 40
 _WEEKLY_CONCERT_LIMIT = 6
 _WEEKLY_CONCERT_HORIZON_DAYS = 62
-_POPULAR_HORIZON_DAYS = 183  # крупные концерты звёзд — на полгода вперёд: туры объявляют заранее
+_POPULAR_HORIZON_DAYS = 365  # крупные концерты звёзд — на год вперёд, как «Твои артисты»: туры объявляют заранее
 _POPULAR_SCREEN_MAX = 5  # экран «Концерты»: до 5 звёзд мировой величины, минимум 3
 _WEEKLY_POPULAR_LIMIT = 3
 
@@ -1267,7 +1267,7 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
         return int(note(item).get("fame") or 0)
 
     # «Популярное рядом» — очень крупные концерты звёзд мировой величины (fame ≥ _WORLD_FAME): сперва
-    # ближайшие, затем — до полугода (экран «Концерты» — до _POPULAR_SCREEN_MAX звёзд); не набралось
+    # ближайшие, затем — до года (экран «Концерты» — до _POPULAR_SCREEN_MAX звёзд); не набралось
     # min_popular (или их нет вовсе) — самые известные из остальных, без оценки AI — по размеру площадки.
     by_fame = lambda items: sorted(items, key=lambda item: (-fame(item), -_venue_size(item), item["date"]))  # noqa: E731
 

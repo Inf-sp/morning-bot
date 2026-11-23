@@ -511,8 +511,8 @@ def test_weekly_concerts_card_lists_my_artists_then_popular():
 
     assert message.text == (
         "🎫 Концерты недели\n\n"
-        "Твои артисты:\n• Placebo — 27 октября, Ziggo Dome. Культовый альтернативный рок.\n\n"
-        "Популярное рядом:\nMuse (12 ноября)"
+        "Твои артисты:\n• Placebo — 27 октября 2026, Ziggo Dome. Культовый альтернативный рок.\n\n"
+        "Популярное рядом:\nMuse (12 ноября 2026)"  # дата концерта — всегда с годом
     )
     assert [entity.url for entity in message.entities if entity.type == MessageEntity.TEXT_LINK] == [
         "https://t.example/placebo",

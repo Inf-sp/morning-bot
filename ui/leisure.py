@@ -651,6 +651,12 @@ def album_meta(album) -> list:
     return [f"«{title}»", _format_date_label(day) if current else released[:4]]
 
 
+def _concert_date_label(value) -> str:
+    """Дата концерта — всегда с годом («6 декабря 2026»): афиша на год вперёд, даты должны читаться одинаково."""
+    day = _parse_event_date(str(value or "")[:10])
+    return _format_date_label(day, include_year=True) if day else ""
+
+
 def _event_date_label(value) -> str:
     """Дата события в хабе — как у концертов: «16 октября», год только если не текущий."""
     day = _parse_event_date(str(value or "")[:10])
@@ -675,7 +681,7 @@ def _weekly_concert_rows(b: MessageBuilder, title, items):
             b.link(name, item["url"])
         else:
             b.text_line(name)
-        line = " — " + ", ".join(part for part in (_event_date_label(item.get("date")), place) if part) + "."
+        line = " — " + ", ".join(part for part in (_concert_date_label(item.get("date")), place) if part) + "."
         about = str(item.get("about") or "").strip().strip("«»\"“”„'")  # фраза AI в кавычках — без них
         about = re.sub(r"[«»\"“”„]\.$", ".", about).strip()
         b.text_line(line + (f" {_finish_sentence(about)}" if about else ""))
@@ -695,7 +701,7 @@ def _popular_concerts_line(b: MessageBuilder, items):
             b.text_line(", ")
         name = item.get("artist") or item.get("title")
         b.link(name, item["url"]) if item.get("url") else b.text_line(name)
-        date = _event_date_label(item.get("date"))
+        date = _concert_date_label(item.get("date"))
         if date:
             b.text_line(f" ({date})")
     b.newline()
