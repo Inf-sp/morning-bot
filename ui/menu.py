@@ -493,9 +493,9 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
     b = MessageBuilder()
     cuisine_code = str(idea.get("cuisine") or "").strip().lower()
     cuisine_name = CUISINE_RU.get(cuisine_code, CUISINE_RU["international"])
-    # Эмодзи кухни, как в заголовке меню дня: «🇮🇹 Что приготовить на завтрак · Итальянская кухня».
+    # Эмодзи кухни, как в заголовке меню дня: «🇹🇭 Ужин · Тайская кухня» (без приёма пищи — «Рецепт»).
     flag = CUISINE_FLAG.get(cuisine_code, "🍳")
-    title = " ".join(part for part in (f"{flag} Что приготовить", _MEAL_TITLES.get(meal, "")) if part)
+    title = f"{flag} {dict(_MEAL_NAMES).get(meal, 'Рецепт')}"
     b.section(f"{title} · {cuisine_name}")
 
     name = _cooking_text(idea.get("name"))
@@ -547,7 +547,7 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
 def dish_recipe_unavailable(name, meal=""):
     """Рецепт блюда меню не собрался (сервис рецептов не ответил): честно и с повтором, без общей ошибки."""
     b = MessageBuilder()
-    b.section(" ".join(part for part in ("🍳 Что приготовить", _MEAL_TITLES.get(meal, "")) if part))
+    b.section(f"🍳 {dict(_MEAL_NAMES).get(meal, 'Рецепт')}")
     b.spacer()
     dish = str(name or "").strip()
     b.line((f"Рецепт «{dish}» сейчас не собрать" if dish else "Рецепт сейчас не собрать")

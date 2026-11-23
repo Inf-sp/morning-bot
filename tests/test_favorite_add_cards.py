@@ -220,25 +220,33 @@ def test_tapping_a_favorite_artist_opens_card_with_delete():
     import store
     cid = "art-del"
     store.set_list(config.FAVORITE_ARTISTS_KEY, cid, ["Good Charlotte", "Placebo"])
-    shown = []
+    shown, previews = [], []
 
     class Bot:
-        async def send_message(self, chat_id=None, text="", reply_markup=None, **_k):
+        async def send_message(self, chat_id=None, text="", reply_markup=None, **kwargs):
             shown.append((text, reply_markup))
+            previews.append(kwargs.get("link_preview_options"))
 
     async def show(_bot, _cid, text, reply_markup=None, query=None):
         shown.append((text, reply_markup))
 
+    import countries
     import rich_delivery
     original = rich_delivery.show
+    original_photo, original_summary = countries.artist_photo, countries.artist_summary
     rich_delivery.show = show
+    countries.artist_photo = lambda *_a, **_k: "https://img.example/gc.jpg"
+    countries.artist_summary = lambda *_a, **_k: "Поп-панк из Мэриленда."
     try:
         asyncio.run(cleanup.open_view(Bot(), cid, "music_favorite_artists", back="lz_lib"))
         row = next(row for row in shown[-1][1].inline_keyboard if "Good Charlotte" in row[0].text)
         asyncio.run(cleanup.handle_view_callback(Bot(), cid, row[0].callback_data))
         text, markup = shown[-1]
         assert "Good Charlotte" in text and markup.inline_keyboard[0][0].text == "❌ Удалить"
+        assert "<b>" not in text and "Поп-панк из Мэриленда." in text
+        assert previews[-1].url == "https://img.example/gc.jpg"
         asyncio.run(cleanup.handle_view_callback(Bot(), cid, markup.inline_keyboard[0][0].callback_data))
         assert "Good Charlotte" not in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid)) and "Placebo" in str(store.get_list(config.FAVORITE_ARTISTS_KEY, cid))
     finally:
         rich_delivery.show = original
+        countries.artist_photo, countries.artist_summary = original_photo, original_summary

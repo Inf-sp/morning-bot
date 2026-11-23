@@ -49,10 +49,10 @@ def test_month_recipe_pool_only_uses_current_profile_and_month():
 
 
 def test_recipe_header_follows_time_of_day():
-    for meal, words in (("breakfast", "на завтрак"), ("lunch", "на обед"), ("dinner", "на ужин")):
+    for meal, words in (("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин")):
         text = menu.menu_ui.food_menu({"name": "Шакшука", "cuisine": "mediterranean", "ingredients": ["яйца", "томаты"],
             "steps": [{"text": "Обжарь томаты", "minutes": 5}], "tip": "Посоли в конце."}, meal=meal).text
-        assert text.startswith(f"🍳 Что приготовить {words} · ")
+        assert text.startswith(f"🍳 {words} · ")
 
 
 def test_old_what_to_cook_button_opens_the_recipe_home():

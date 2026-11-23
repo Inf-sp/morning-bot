@@ -846,6 +846,25 @@ async def _with_country(data):
     return {**data, "country_label": label, "years": years, "photo": photo}
 
 
+async def favorite_artist_card(cid, artist):
+    """Карточка артиста из «Моих артистов»: как в «Музыке» — флаг, имя, жанр · страна · годы, описание без AI
+    и фото сверху; сбой источников — без этих строк. Возвращает (MessageSpec, фото)."""
+    import countries
+    artist = str(artist or "").strip()
+    genre = favorite_artist_genre(cid, artist)
+
+    def lookup():
+        return countries.artist_summary(artist)
+
+    try:
+        desc = await asyncio.wait_for(asyncio.to_thread(lookup), 6)
+    except Exception:
+        desc = ""
+    data = await _with_country({"artist": artist, "genre_label": "" if genre == "Другие артисты" else genre,
+                                "desc": desc or ""})
+    return leisure_ui.artist_card(data), data.get("photo") or ""
+
+
 def _photo_preview(photo) -> dict:
     """Фото артиста — крупным превью над текстом карточки (текст остаётся сообщением, без лимита подписи к фото);
     без фото — без превью ссылок."""

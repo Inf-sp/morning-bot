@@ -736,6 +736,19 @@ async def _render_confirm(bot, cid, view_id, action_id="remove", q=None):
     await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
 
 
+async def _show_artist_card(bot, cid, card, kb, photo, q=None):
+    """Карточка артиста из «Моих артистов» на месте списка; фото — крупным превью сверху, как в «Музыке»."""
+    import leisure_music
+    preview = leisure_music._photo_preview(photo)
+    if q is not None and getattr(q, "message", None) is not None:
+        try:
+            await q.edit_message_text(card.text, entities=card.entities, reply_markup=kb, **preview)
+            return
+        except Exception:
+            _log.debug("artist card edit failed; sending new", exc_info=True)
+    await bot.send_message(chat_id=cid, text=card.text, entities=card.entities, reply_markup=kb, **preview)
+
+
 async def _send_view_stale_message(bot, cid, q=None):
     text = "Список уже изменился. Откройте его заново."
     await rich_delivery.show(bot, cid, text, query=q)
@@ -783,13 +796,12 @@ async def handle_view_callback(bot, cid, data, q=None):
             view["selected_ids"] = {matches[0]}
             label = dict(items).get(matches[0], "")
             import leisure_music
-            genre = leisure_music.favorite_artist_genre(cid, label)
-            text = f"<b>{esc(str(label).strip())}</b>" + ("" if genre == "Другие артисты" else f"\n\n{esc(genre)}")
+            card, photo = await leisure_music.favorite_artist_card(cid, label)
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton(delete_label("Удалить"), callback_data=f"clact:{view_id}:remove")],
                 nav_row("artist_favorites"),
             ])
-            await rich_delivery.show(bot, cid, text, reply_markup=kb, query=q)
+            await _show_artist_card(bot, cid, card, kb, photo, q)
             return
         if matches:
             view["selected_ids"].symmetric_difference_update({matches[0]})

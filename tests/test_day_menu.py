@@ -166,7 +166,7 @@ def test_meal_button_builds_recipe_of_that_menu_dish(monkeypatch):
 
     assert requested == [(13, "italian", "Pasta al pomodoro")]
     text, markup = shown[0]
-    assert text.startswith("🇮🇹 Что приготовить на обед · Итальянская кухня\n\nPasta al pomodoro")
+    assert text.startswith("🇮🇹 Обед · Итальянская кухня\n\nPasta al pomodoro")
     assert [b.callback_data for b in markup.inline_keyboard[0]] == ["m_food", "m_menu"]
 
 
@@ -304,7 +304,7 @@ def test_mine_recipe_uses_fridge_and_time_of_day(monkeypatch):
 
     text, markup = shown[0]
     # Без выбора кухни — любая (в приоритете своя кулинарная книга); заголовок — по кухне рецепта.
-    assert calls == [(True, None)] and text.startswith("🇫🇷 Что приготовить на ужин · Французская кухня")
+    assert calls == [(True, None)] and text.startswith("🇫🇷 Ужин · Французская кухня")
     assert "Не хватает:\nзелень" in text
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["food_mine_pick"], ["m_food", "m_menu"]]
 
