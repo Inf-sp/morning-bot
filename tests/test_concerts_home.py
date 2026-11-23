@@ -511,3 +511,27 @@ def test_month_concerts_show_world_stars_up_to_half_a_year_ahead(monkeypatch):
     text = asyncio.run(leisure_concerts.build_month_concerts_msg("42")).text
     line = text.split("Популярное рядом:\n", 1)[1]
     assert line.startswith("Kehlani (") and "Thirty Seconds To Mars (" in line
+
+
+def test_new_artist_is_web_searched_with_next_year_even_when_ticketmaster_pauses(monkeypatch):
+    queries, forced = [], []
+
+    async def tm_many(batch, *_a, **_k):
+        return [], []  # Ticketmaster на паузе (429): никто не проверен
+
+    async def external(artist, _cc, _cname="", force=False):
+        forced.append((artist, force))
+        return []
+
+    monkeypatch.setattr(leisure_concerts, "_ticketmaster_events_many", tm_many)
+    monkeypatch.setattr(leisure_concerts, "get_external_events_for_artist", external)
+    monkeypatch.setattr(leisure_concerts, "filter_concert_events", lambda events, _cc: list(events))
+    asyncio.run(leisure_concerts._fetch_concerts(["Thirty Seconds to Mars"], "NL", "Нидерланды",
+                                                 force_artists=["Thirty Seconds to Mars"]))
+    assert forced == [("Thirty Seconds to Mars", True)]
+
+    import research
+    monkeypatch.setattr(research, "web_search", lambda query, *_a, **_k: queries.append(query) or [])
+    year = leisure_concerts.util.local_today().year
+    asyncio.run(leisure_concerts._collect_external_events_for_artist("Thirty Seconds to Mars", "NL", "Netherlands"))
+    assert queries and f"{year} {year + 1}" in queries[0]

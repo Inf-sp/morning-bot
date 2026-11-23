@@ -804,10 +804,23 @@ async def send_library_menu(bot, cid, q=None):
     await _show(bot, cid, leisure_ui.leisure_library_menu(), q)
 
 
+_CONCERTS_REFRESH = {}  # cid → идущее обновление афиши: экран и прогрев не запускают второе
+
+
 async def _warm_concerts(cid):
+    """Обновляет афишу, если кэша нет или кому-то из артистов пора сверить концерты (новый артист, месяц
+    без проверки, новая версия проверки); сверяются только такие артисты."""
     _today, cc = _today_and_cc(cid)
-    if leisure_concerts._ensure_artists(cid) and leisure_concerts._concerts_cache_get(cid, cc) is None:
-        await leisure_concerts.refresh_concerts_cache(cid)
+    artists = leisure_concerts._ensure_artists(cid)
+    if not artists:
+        return
+    if leisure_concerts._concerts_cache_get(cid, cc) is not None and not any(
+            leisure_concerts._artist_is_due(cid, artist, cc) for artist in artists):
+        return
+    task = _CONCERTS_REFRESH.get(str(cid))
+    if task is None or task.done():
+        task = _CONCERTS_REFRESH[str(cid)] = asyncio.ensure_future(leisure_concerts.refresh_concerts_cache(cid))
+    await asyncio.shield(task)  # таймаут экрана не обрывает обновление — оно дойдёт до следующего открытия
 
 
 async def _warm_movie_premieres(cid):

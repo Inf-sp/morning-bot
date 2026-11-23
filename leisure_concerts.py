@@ -60,7 +60,7 @@ _POPULAR_EVENTS_LIMIT = 40
 _WEEKLY_CONCERT_LIMIT = 6
 _WEEKLY_CONCERT_HORIZON_DAYS = 62
 _POPULAR_HORIZON_DAYS = 365  # крупные концерты звёзд — на год вперёд, как «Твои артисты»: туры объявляют заранее
-_POPULAR_SCREEN_MAX = 5  # экран «Концерты»: до 5 звёзд мировой величины, минимум 3
+_POPULAR_SCREEN_MAX = 10  # экран «Концерты»: до 10 звёзд мировой величины, минимум 3
 _WEEKLY_POPULAR_LIMIT = 3
 
 
@@ -306,7 +306,7 @@ async def get_popular_music_events(cc, period_start, period_end):
 # объявляют заранее, а каждый поиск — до 4000 символов веб-текста в запросе к AI.
 _ARTIST_EXTERNAL_TTL = 75 * 86400
 _EXTERNAL_CONTEXT_CHARS = 4000
-_ARTIST_EXTERNAL_CACHE_VERSION = 2
+_ARTIST_EXTERNAL_CACHE_VERSION = 3  # 3 — поиск с текущим и следующим годом
 _EXTERNAL_SEARCH_INFLIGHT = {}
 
 _EXTERNAL_SOURCE_PRIORITY = {
@@ -400,8 +400,10 @@ async def _collect_external_events_for_artist(artist: str, cc: str, cname: str):
     import secure
     from datetime import datetime
     import research
-    year = str(util.local_today().year)
-    query = f'{artist} official tour dates {cname} {year}'
+    year = util.local_today().year
+    # Афиша — на год вперёд: туры объявляют заранее, поэтому в запросе и следующий год
+    # (Thirty Seconds to Mars в ноябре 2026 объявили концерт 25 апреля 2027).
+    query = f'{artist} official tour dates {cname} {year} {year + 1}'
     try:
         results_batches = [await asyncio.to_thread(
             research.web_search, query, 5, scenario="concert_specific",
@@ -721,7 +723,7 @@ def _concert_context(e):
 
 _CONCERTS_CACHE_TTL = 31 * 86400
 _CONCERTS_CACHE_VERSION = 7  # 7 — отдельный кэш на каждую страну (отпуск не стирает домашнюю афишу)
-_ARTIST_CONCERT_CHECKS_VERSION = 2
+_ARTIST_CONCERT_CHECKS_VERSION = 3  # 3 — сверить всех заново: веб-поиск с годом вперёд
 _ARTIST_CONCERT_CHECK_INTERVAL = 31 * 86400
 
 
@@ -890,12 +892,16 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
         for event in tm_events
         if isinstance(event, dict) and _item_text(event.get("_artist"))
     }
-    unresolved = [artist for artist in checked_artists
+    # Только что добавленный артист ищется в вебе, даже если Ticketmaster сейчас на паузе (429).
+    unresolved = [artist for artist in dict.fromkeys([*checked_artists,
+                                                       *(a for a in due_artists if _artist_check_key(a) in force)])
                   if _item_text(artist).casefold() not in found_artists]
 
     async def external_for_artist(artist):
         async with _EXTERNAL_CONCURRENCY:
-            return await get_external_events_for_artist(artist, cc, cname)
+            # Только что добавленный артист — свежий веб-поиск, без сохранённого «ничего не нашлось».
+            return await get_external_events_for_artist(artist, cc, cname,
+                                                        force=_artist_check_key(artist) in force)
 
     # Сохранённый веб-поиск (75 дней) берётся у всех ненайденных бесплатно; новый — не больше
     # _EXTERNAL_ARTIST_LIMIT за обновление. Раньше лимит резал всегда одних и тех же первых пятерых,
