@@ -355,8 +355,12 @@ class MenuCleanupBot(ExtBot):
 
     @staticmethod
     def _without_link_preview(kwargs):
-        """Глобальный UI-контракт: бот никогда не прикрепляет превью ссылок."""
+        """Глобальный UI-контракт: бот не прикрепляет превью ссылок. Исключение — фото артиста над карточкой
+        «Музыки» (photo_preview=True вместе с link_preview_options на картинку)."""
         kwargs = dict(kwargs)
+        if kwargs.pop("photo_preview", False) and kwargs.get("link_preview_options") is not None:
+            kwargs.pop("disable_web_page_preview", None)
+            return kwargs
         kwargs.pop("link_preview_options", None)
         kwargs["disable_web_page_preview"] = True
         return kwargs

@@ -615,7 +615,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
             store.last_source[str(cid)] = "Музыка"
             msg = leisure_ui.artist_card(cached)
             await _deliver_artist_card(
-                bot, cid, msg, _listen_kb(), status=status)
+                bot, cid, msg, _listen_kb(), status=status, photo=cached.get("photo"))
             return
     arts = _ensure_artists(cid)
     anchors = ", ".join(arts[:25])
@@ -745,7 +745,7 @@ async def send_listen(bot, cid, *, preview=False, category=None, force=False, st
     store.last_answer[str(cid)] = leisure_ui.plain_from_html(msg.text)
     _log.info("send_listen: sending card cid=%s artist=%r", cid, artist)
     await _deliver_artist_card(
-        bot, cid, msg, _listen_kb(), status=status)
+        bot, cid, msg, _listen_kb(), status=status, photo=data.get("photo"))
 
 
 # Совсем безвестных отсеиваем, остальных ранжируем: жёсткий порог в 30 тыс. отсекал Overmono, Kelela, Alvvays —
@@ -827,31 +827,38 @@ async def _with_country(data):
     labels = {key: label for key, label, _prompt in _MUSIC_GENRES}
     data = {**data, "genre_label": data.get("genre_label") or labels.get(str(data.get("genre") or "").casefold(), "")}
     need_country, need_years = data.get("country_label") is None, data.get("years") is None
-    if not (need_country or need_years):
+    need_photo = data.get("photo") is None
+    if not (need_country or need_years or need_photo):
         return data
     import countries
     artist = data.get("artist", "")
 
     def lookup():
         return (countries.artist_label(artist) if need_country else data["country_label"],
-                countries.artist_years(artist) if need_years else data["years"])
+                countries.artist_years(artist) if need_years else data["years"],
+                countries.artist_photo(artist) if need_photo else data["photo"])
 
     try:
-        label, years = await asyncio.wait_for(asyncio.to_thread(lookup), 6)
+        label, years, photo = await asyncio.wait_for(asyncio.to_thread(lookup), 6)
     except Exception:
-        label, years = data.get("country_label") or "", data.get("years") or ""
-    return {**data, "country_label": label, "years": years}
+        label, years, photo = data.get("country_label") or "", data.get("years") or "", data.get("photo") or ""
+    return {**data, "country_label": label, "years": years, "photo": photo}
 
 
-async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None):
-    """Передаёт карточку через статусный сценарий либо отправляет новый экран."""
+def _photo_preview(photo) -> dict:
+    """Фото артиста — крупным превью над текстом карточки (текст остаётся сообщением, без лимита подписи к фото);
+    без фото — без превью ссылок."""
+    if str(photo or "").startswith("https://"):
+        from telegram import LinkPreviewOptions
+        return {"link_preview_options": LinkPreviewOptions(url=photo, prefer_large_media=True, show_above_text=True),
+                "photo_preview": True}
+    return {"disable_web_page_preview": True}
+
+
+async def _deliver_artist_card(bot, cid, msg, reply_markup, *, status=None, photo=""):
+    """Передаёт карточку через статусный сценарий либо отправляет новый экран; photo — фото артиста сверху."""
+    preview = _photo_preview(photo)
     if status is not None:
-        await status.replace(
-            msg.text, entities=msg.entities, reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
+        await status.replace(msg.text, entities=msg.entities, reply_markup=reply_markup, **preview)
         return
-    await bot.send_message(
-        chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup,
-        disable_web_page_preview=True,
-    )
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=reply_markup, **preview)

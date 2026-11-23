@@ -307,7 +307,7 @@ def test_music_falls_back_to_a_popular_related_artist_with_full_card_when_ai_and
     monkeypatch.setattr(leisure_music, "_with_country", same)
     monkeypatch.setattr(leisure_music, "_attach_track_links", same)
     monkeypatch.setattr(leisure_music, "_deliver_artist_card",
-                        lambda _bot, _cid, msg, _kb, status: status.replace(msg.text))
+                        lambda _bot, _cid, msg, _kb, status, photo="": status.replace(msg.text))
     monkeypatch.setattr(apple_music, "new_releases", lambda *_a: pytest.fail("new releases are for Premieres only"))
     monkeypatch.setattr(apple_music, "related_artists", lambda _seed: [
         {"name": "Tiny Act", "fans": 900},  # без заметной аудитории — не «популярная группа»
@@ -423,3 +423,16 @@ def test_most_popular_ai_candidate_wins_and_only_unknown_names_are_dropped(monke
     assert asyncio.run(leisure_music._most_popular(candidates[2:])) is None  # совсем безвестный
     monkeypatch.setattr(countries, "artist_fans", lambda name, fetch=True: None)  # Deezer недоступен
     assert asyncio.run(leisure_music._most_popular(candidates))["artist"] == "Barry Can't Swim"  # порядок AI
+
+
+def test_artist_card_shows_photo_as_large_preview_above_text():
+    import leisure_music
+    import telegram_runtime
+    preview = leisure_music._photo_preview("https://e-cdns-images.dzcdn.net/images/artist/abc/1000x1000.jpg")
+    options = preview["link_preview_options"]
+    assert options.url.endswith("1000x1000.jpg") and options.show_above_text and options.prefer_large_media
+    kept = telegram_runtime.MenuCleanupBot._without_link_preview(preview)  # исключение из «без превью»
+    assert kept["link_preview_options"] is options and "disable_web_page_preview" not in kept
+    stripped = telegram_runtime.MenuCleanupBot._without_link_preview({"link_preview_options": options})
+    assert stripped == {"disable_web_page_preview": True}  # без пометки — превью по-прежнему нет
+    assert leisure_music._photo_preview("") == {"disable_web_page_preview": True}

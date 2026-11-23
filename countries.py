@@ -335,6 +335,26 @@ def _deezer_fans(name) -> dict:
     return {"fans": 0}
 
 
+def _deezer_photo(name) -> str:
+    """Фото артиста на Deezer (без ключа, точное совпадение имени); заглушки «нет фото» и нет артиста — ""."""
+    name = _full_name(name)
+    response = requests.get("https://api.deezer.com/search/artist", params={"q": name, "limit": 5}, timeout=_TIMEOUT)
+    response.raise_for_status()
+    data = response.json()
+    if "error" in data:
+        raise RuntimeError(f"deezer error: {data['error']}")
+    wanted = _artist_key(name)
+    row = next((row for row in data.get("data") or [] if _artist_key(row.get("name")) == wanted), None) or {}
+    url = str(row.get("picture_xl") or row.get("picture_big") or "")
+    return "" if "/artist//" in url or not url.startswith("https://") else url  # пустой md5 — заглушка Deezer
+
+
+def artist_photo(name, fetch=True) -> str:
+    """Фото артиста для карточки «Музыки»; fetch=False — только кэш."""
+    return _person_cache(config.ARTIST_PHOTO_KEY, _full_name(name), _deezer_photo, fetch, keep_empty=True,
+                         ttl=_FANS_TTL) or ""
+
+
 def artist_fans(name, fetch=True) -> int | None:
     """Число поклонников артиста на Deezer — мера известности; None — неизвестно (сбой, нет кэша при fetch=False)."""
     found = _person_cache(config.ARTIST_FANS_KEY, _full_name(name), _deezer_fans, fetch, keep_empty=True,
