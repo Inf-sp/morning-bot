@@ -3,7 +3,7 @@ import re
 
 NOT_FOR_COOKING = "сладкое и напитки"  # скрытая категория: батончики, чипсы, напитки — из них не готовят
 
-# ===== Любимые продукты: категории =====
+# ===== Мои продукты: категории =====
 # Девять категорий по типу продукта (не по месту хранения). Порядок dict — приоритет матчинга: сначала узкие группы
 # («куриные сосиски» — колбасы, «сок апельсиновый» и «конфеты» — сладкое и напитки), потом широкие.
 _FRIDGE_KEYWORDS: dict = {
@@ -100,84 +100,124 @@ _CAT_BTN_LABEL: dict = {
 }
 _CAT_ORDER = list(_CAT_BTN_LABEL)
 
-# Базовый набор: до десяти универсальных продуктов на категорию — только то, из чего готовят. Пользователь отмечает
-# любимые (✅) — из них собирается рецепт «Из любимых продуктов»; свои продукты добавляются текстом.
-BASE_PRODUCTS = {
-    "мясо и птица": ("Курица", "Куриное филе", "Индейка", "Говядина", "Свинина", "Фарш", "Баранина"),
-    "рыба и морепродукты": ("Лосось", "Треска", "Тунец", "Скумбрия", "Креветки", "Мидии", "Кальмары"),
-    "колбасы и полуфабрикаты": ("Бекон", "Ветчина", "Колбаса", "Сосиски", "Пельмени", "Котлеты"),
-    "овощи и зелень": ("Картофель", "Лук", "Чеснок", "Морковь", "Помидоры", "Огурцы", "Болгарский перец",
-                       "Кабачок", "Грибы", "Зелень"),
-    "фрукты и ягоды": ("Лимон", "Яблоки", "Бананы", "Апельсины", "Ягоды"),
-    "молочное и яйца": ("Яйца", "Молоко", "Сливочное масло", "Сыр", "Пармезан", "Моцарелла", "Творог", "Сметана",
-                        "Йогурт", "Сливки"),
-    "крупы, макароны и хлеб": ("Рис", "Макароны", "Гречка", "Овсянка", "Булгур", "Мука", "Хлеб", "Лаваш", "Фасоль",
-                               "Чечевица"),
-    "соусы и специи": ("Оливковое масло", "Подсолнечное масло", "Соевый соус", "Томатная паста", "Паприка", "Карри",
-                       "Чили", "Песто", "Горчица", "Мёд"),
+# Единый список «Мои продукты»: в каждой категории пять самостоятельных групп продуктов — у всех одинаковые.
+# (id, название, примеры в скобках, ключевые слова для «добавь в продукты: …» и переноса прежних отметок).
+GROUPS = {
+    "мясо и птица": (
+        ("beef", "Говядина", "", ("говяд", "телят", "стейк", "ростбиф", "rund")),
+        ("pork", "Свинина", "", ("свин", "карбонад", "шейк", "рёбр", "ребрыш", "лопатк", "varken")),
+        ("chicken", "Курица", "", ("кур", "chicken", "kip", "крылыш", "бедр", "голен", "цыпл")),
+        ("turkey", "Индейка", "", ("индейк", "kalkoen")),
+        ("mince", "Фарш и субпродукты", "печень, сердечки, желудки",
+         ("фарш", "печёнк", "печенк", "печень", "сердеч", "желуд", "субпрод", "язык", "gehakt")),
+    ),
+    "рыба и морепродукты": (
+        ("salmon", "Лосось", "", ("лосос", "сёмг", "семг", "форел", "красная рыба", "zalm")),
+        ("tuna", "Тунец", "", ("тунец", "тунц", "tonijn")),
+        ("whitefish", "Белая рыба", "треска, судак",
+         ("треск", "судак", "минтай", "хек", "пикш", "тиляп", "дорад", "сибас", "палтус", "белая рыба", "kabeljauw")),
+        ("oily_fish", "Скумбрия и сельдь", "", ("скумбр", "сельд", "селёд", "селед", "сёлд", "haring", "шпрот", "сардин",
+                                                "угор", "консервированная рыба")),
+        ("seafood", "Морепродукты", "креветки, кальмары, мидии",
+         ("кревет", "кальмар", "мидии", "мидий", "осьмин", "краб", "морепрод", "гребеш", "garnalen")),
+    ),
+    "колбасы и полуфабрикаты": (
+        ("ham", "Ветчина и варёная колбаса", "", ("ветчин", "варёная колбас", "вареная колбас", "докторск", "мортадел",
+                                                 "буженин", "колбаса", "ham")),
+        ("cured", "Сырокопчёная колбаса", "", ("сырокопч", "салями", "сервелат", "чоризо", "пепперони", "хамон",
+                                              "прошутто", "бекон", "копчён", "копчен")),
+        ("sausages", "Сосиски и колбаски", "", ("сосис", "сардел", "колбаск")),
+        ("dumplings", "Пельмени и вареники", "", ("пельмен", "варени", "равиол", "хинкал", "манты")),
+        ("cutlets", "Котлеты и наггетсы", "", ("котлет", "наггет", "nugget", "бургер")),
+    ),
+    "овощи и зелень": (
+        ("potato", "Картофель и батат", "", ("картоф", "картош", "батат", "aardappel")),
+        ("tomato", "Томаты и огурцы", "", ("томат", "помидор", "черри", "огур", "tomaat", "komkommer")),
+        ("pepper", "Перец и баклажаны", "", ("болгарск", "перец свеж", "красный перец", "сладкий перец", "баклаж",
+                                            "paprika")),
+        ("cabbage", "Капуста и брокколи", "", ("капуст", "брокк", "цветн", "брюссел", "kool")),
+        ("greens", "Зелень и салатные листья", "", ("зелен", "зелён", "укроп", "петруш", "кинз", "базилик", "салат",
+                                                   "рукол", "руккол", "шпинат", "айсберг", "сельдерей", "sla")),
+    ),
+    "фрукты и ягоды": (
+        ("apples", "Яблоки и груши", "", ("яблок", "груш", "appel", "peer")),
+        ("bananas", "Бананы", "", ("банан", "banaan")),
+        ("citrus", "Цитрусовые", "", ("лимон", "лайм", "апельсин", "мандарин", "грейпфрут", "цитрус", "sinaasappel")),
+        ("berries", "Ягоды", "клубника, малина, черника", ("ягод", "клубн", "малин", "черник", "голубик", "вишн",
+                                                            "смород", "ежевик", "брусник")),
+        ("tropical", "Тропические фрукты", "манго, ананас, киви", ("манго", "ананас", "киви", "папай", "маракуй")),
+    ),
+    "молочное и яйца": (
+        ("eggs", "Яйца", "", ("яйц", "яиц", "яйко", "желток", "eieren")),
+        ("milk", "Молоко и сливки", "", ("молок", "сливки", "сливок", "melk")),
+        ("cheese", "Сыр", "твёрдый, моцарелла, фета", ("сыр", "пармез", "моцарел", "фета", "гауд", "чеддер", "бри",
+                                                      "горгонз", "маскарпон", "kaas")),
+        ("curd", "Творог и сметана", "", ("творог", "сметан", "рикотт")),
+        ("yogurt", "Йогурт и кефир", "", ("йогурт", "кефир", "ряженк", "yoghurt")),
+    ),
+    "крупы, макароны и хлеб": (
+        ("rice", "Рис", "", ("рис", "rijst")),
+        ("pasta", "Макароны и лапша", "", ("макарон", "спагет", "паста", "лапш", "вермиш", "пенне", "лазань",
+                                          "noodle", "noedel")),
+        ("grains", "Гречка и другие крупы", "булгур, овсянка", ("греч", "булгур", "овсян", "овёс", "кускус", "киноа",
+                                                                "перлов", "пшен", "манн")),
+        ("bread", "Хлеб и лаваш", "", ("хлеб", "лаваш", "тортил", "лепёш", "лепеш", "пита", "багет", "булоч", "тост",
+                                      "brood")),
+        ("legumes", "Бобовые", "фасоль, нут, чечевица", ("фасол", "нут", "чечевиц", "горох", "боб")),
+    ),
+    "соусы и специи": (
+        ("tomato_sauce", "Томатная паста и соусы", "", ("томатн", "кетчуп", "passata", "соус томат")),
+        ("asian", "Соевый и азиатские соусы", "терияки, рыбный, устричный",
+         ("соев", "терияк", "рыбный соус", "устрич", "кокосов", "том ям", "пад тай", "шрирач", "унаги")),
+        ("spices", "Специи", "паприка, карри, орегано", ("паприк", "карри", "зир", "кумин", "куркум", "орегано",
+                                                        "тимьян", "лавров", "чили", "корица", "барбарис", "специ")),
+        ("mayo", "Майонез и горчица", "", ("майонез", "горчиц", "хрен", "васаби")),
+        ("dressings", "Песто и заправки", "бальзамик, лимонный сок", ("песто", "бальзам", "уксус", "заправк", "тахин",
+                                                                      "хумус")),
+    ),
 }
-BASE_VERSION = 4  # 4 — единый список для всех: свои продукты не показываются, любимые свои → продукт списка
-_BASE_CATEGORY: dict = {}  # имя продукта набора, как его хранит список («котлета»), → категория; см. _base_category
+BASE_VERSION = 5  # 5 — пять групп на категорию; прежние отметки переносятся в группы (fridge._load_products)
+_GROUP_ORDER = ("ham", "cured", "sausages", "dumplings", "cutlets", "mince", "asian", "tomato_sauce", "mayo",
+                "dressings", "spices")  # узкие группы раньше общих: «куриные сосиски», «копчёная курица», «соевый соус»
+GROUP_BY_ID = {gid: (cat, name, examples, keys) for cat, groups in GROUPS.items()
+               for gid, name, examples, keys in groups}
 
 
-def _base_category() -> dict:
-    if not _BASE_CATEGORY:
-        for cat, names in BASE_PRODUCTS.items():
-            for name in names:
-                _BASE_CATEGORY[name.casefold()] = cat
-                for stored in _fridge_split_input(name):
-                    _BASE_CATEGORY[stored.casefold()] = cat
-    return _BASE_CATEGORY
+def group_label(gid) -> str:
+    """«Белая рыба (треска, судак)»."""
+    _cat, name, examples, _keys = GROUP_BY_ID[gid]
+    return f"{name} ({examples})" if examples else name
 
 
-_BASE_SYNONYMS = {"кинза": "Зелень", "укроп": "Зелень", "петрушка": "Зелень", "базилик": "Зелень",
-                  "черри": "Помидоры", "томаты": "Помидоры", "шампиньоны": "Грибы", "картошка": "Картофель"}
-_STEM_STOP = {"масл", "соус", "свеж", "копч", "замо", "моро", "сушё", "суше", "конс", "тёрт", "терт", "мелк", "круп"}
-
-
-def base_key(name) -> str:
-    """Имя продукта списка так, как его хранит список: «Котлеты» → «котлета»."""
-    parts = _fridge_split_input(name)
-    return (parts[0] if parts else str(name or "")).casefold()
-
-
-def _stems(text) -> set:
-    return {word[:4] for word in re.findall(r"[а-яё]{4,}", str(text or "").casefold())} - _STEM_STOP
-
-
-def match_base(name, cat=None):
-    """Продукт единого списка для названия: (категория, «Курица») или None. Сначала точное совпадение, затем общий
-    корень в той же категории: «куриные ножки» → «Курица», «филе лосося» → «Лосось»."""
-    key = base_key(name)
-    for category, names in BASE_PRODUCTS.items():
-        for base in names:
-            if key in (base.casefold(), base_key(base)):
-                return category, base
-    words = set(re.findall(r"[а-яё]+", key))
-    for word, base in _BASE_SYNONYMS.items():
-        if word in words:
-            return match_base(base)
-    category = cat if cat in BASE_PRODUCTS else _fridge_detect_cat(key)
-    stems = _stems(key)
-    for base in BASE_PRODUCTS.get(category, ()):
-        if base.casefold() in words or stems & _stems(base):  # «сыр гауда» → «Сыр»
-            return category, base
+def match_group(name):
+    """Группа единого списка для названия продукта («куриные сердечки» → mince, «салями» → cured) или None."""
+    text = " ".join(str(name or "").casefold().replace("ё", "е").split())
+    if "лимонный сок" in text:  # заправка, а не напиток
+        return "dressings"
+    if not text or _fridge_detect_cat(text) == NOT_FOR_COOKING:
+        return None
+    ordered = [*_GROUP_ORDER, *(gid for gid in GROUP_BY_ID if gid not in _GROUP_ORDER)]
+    for gid in ordered:
+        _cat, title, examples, keys = GROUP_BY_ID[gid]
+        words = [title, *examples.split(", "), *keys] if examples else [title, *keys]
+        if any(word.casefold().replace("ё", "е") in text for word in words if word):
+            return gid
     return None
 
 
-def favorite_keys(items: list) -> set:
-    """Ключи любимых продуктов единого списка."""
-    keys = {base_key(base) for names in BASE_PRODUCTS.values() for base in names}
-    return {str(item.get("name") or "").casefold() for item in items if item.get("on", True)} & keys
+def favorite_ids(items: list) -> list:
+    """Отмеченные группы в порядке списка."""
+    marked = {item.get("group") for item in items if item.get("group") and item.get("on", True)}
+    return [gid for gid in GROUP_BY_ID if gid in marked]
 
 
-def set_favorite(items: list, cat: str, base: str, on: bool) -> list:
-    """Отметить продукт единого списка любимым (или снять); записи нет — добавить."""
-    key = base_key(base)
+def set_group(items: list, gid: str, on: bool) -> list:
+    """Отметить группу (или снять); записи нет — добавить."""
     for index, item in enumerate(items):
-        if str(item.get("name") or "").casefold() == key:
+        if item.get("group") == gid:
             return [*items[:index], {**item, "on": on}, *items[index + 1:]]
-    return [*items, {"name": key, "cat": cat, "on": on, "base": True, "cat_manual": True}]
+    cat, name, _examples, _keys = GROUP_BY_ID[gid]
+    return [*items, {"name": name.casefold(), "cat": cat, "on": on, "group": gid}]
 
 
 # Прежние категории → новые: продукт без уверенно определённой категории (свой, выбранный вручную) остаётся рядом.
@@ -410,8 +450,6 @@ def _fridge_detect_cat(name: str) -> str | None:
     n = str(name or "").lower()
     if n in _FRIDGE_CAT_EXACT:
         return _FRIDGE_CAT_EXACT[n]
-    if n in _base_category():
-        return _base_category()[n]
     if _FROZEN_RE.search(n) and "мороженое" not in n:
         rest = _FROZEN_RE.sub(" ", n).strip()
         return (_fridge_detect_cat(rest) if rest else None) or "колбасы и полуфабрикаты"
@@ -586,9 +624,14 @@ def _fridge_is_product(name: str) -> bool:
 
 
 def _fridge_migrate(items: list) -> list:
-    """Привести записи к шести категориям и стабильному порядку хранения."""
-    result = []
+    """Привести записи к категориям и стабильному порядку хранения. Отметки групп единого списка («group») —
+    без изменений, по одной на группу."""
+    result, groups = [], {}
     for it in items:
+        if isinstance(it, dict) and it.get("group"):
+            if it["group"] in GROUP_BY_ID:
+                groups[it["group"]] = {**it, "cat": GROUP_BY_ID[it["group"]][0]}
+            continue
         if isinstance(it, dict):
             names = _fridge_split_input(str(it.get("name", ""))) or [_fridge_clean_name(it.get("name", ""))]
             for name in names:
@@ -597,9 +640,7 @@ def _fridge_migrate(items: list) -> list:
                 detected = _fridge_detect_cat(name)
                 stored = str(it.get("cat", "")).strip().lower()
                 remapped = stored if stored in _CAT_VALID else _CAT_REMAP.get(stored)
-                if name.casefold() in _base_category():  # продукт базового набора — всегда в своей категории
-                    category = _base_category()[name.casefold()]
-                elif it.get("cat_manual") and stored in _CAT_VALID:  # выбранная вручную новая категория
+                if it.get("cat_manual") and stored in _CAT_VALID:  # выбранная вручную новая категория
                     category = stored
                 else:  # старая категория — по типу продукта, не вышло — ближайшая новая
                     category = detected or remapped or "крупы, макароны и хлеб"
@@ -609,7 +650,7 @@ def _fridge_migrate(items: list) -> list:
                 if not _fridge_is_product(s):
                     continue
                 result.append({"name": s, "cat": _fridge_cat(s), "on": True})
-    dedup = {}
+    dedup = {f"#{gid}": item for gid, item in groups.items()}
     for it in result:
         key = it["name"].casefold()
         if key in dedup:
@@ -624,7 +665,11 @@ def _fridge_migrate(items: list) -> list:
 
 
 def _fridge_available(items: list) -> list:
-    """Любимые продукты — отмеченные продукты единого списка (для рецепта «Из любимых продуктов»); свои продукты
-    прежних версий и то, из чего не готовят, не идут."""
-    favorites = favorite_keys(_fridge_migrate(items))
-    return [it["name"] for it in _fridge_migrate(items) if it["name"].casefold() in favorites]
+    """Мои продукты — отмеченные группы единого списка с примерами («Белая рыба (треска, судак)») для рецепта
+    «Из моих продуктов»; записи прежних версий и то, из чего не готовят, не идут."""
+    items = _fridge_migrate(items)
+    if any(item.get("group") for item in items):
+        return [group_label(gid) for gid in favorite_ids(items)]
+    # Список ещё не перенесён в группы (экран «Мои продукты» не открывали): прежние отметки → их группы.
+    marked = {match_group(item["name"]) for item in items if item.get("on", True)} - {None}
+    return [group_label(gid) for gid in GROUP_BY_ID if gid in marked]

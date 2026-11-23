@@ -149,7 +149,7 @@ async def _with_food_status(bot, cid, status, q, build):
 
 
 async def send_mine_recipe(bot, cid, status=None, refresh=False, cuisine=None):
-    """«Из любимых продуктов»: рецепт из отмеченных любимых продуктов, приём пищи — по времени суток.
+    """«Из моих продуктов»: рецепт из отмеченных моих продуктов, приём пищи — по времени суток.
     cuisine — кухня из «Другого рецепта»; без неё — кухня меню дня."""
     import recipe_generation
     from datetime import datetime
@@ -188,8 +188,15 @@ async def send_food_menu(bot, cid, status=None, refresh=False, q=None, meal=None
 
     if meal in day_menu.MEALS:
         async def build_recipe(status):
-            idea = await asyncio.to_thread(day_menu.dish_recipe, cid, meal)
-            msg = menu_ui.food_menu(idea, meal=meal)
+            try:
+                idea = await asyncio.to_thread(day_menu.dish_recipe, cid, meal)
+            except Exception:
+                # Рецепт другого блюда не подставляем — честно говорим, что сейчас не собрать, а не общую ошибку.
+                _log.warning("dish recipe not ready cid=%s meal=%s", cid, meal, exc_info=True)
+                dish = ((day_menu.get_cached_day_menu(cid) or {}).get("dishes") or {}).get(meal) or {}
+                msg = menu_ui.dish_recipe_unavailable(dish.get("name"), meal)
+            else:
+                msg = menu_ui.food_menu(idea, meal=meal)
             await status.replace(msg.text, entities=msg.entities, reply_markup=msg.reply_markup)
 
         await _with_food_status(bot, cid, status, q, build_recipe)

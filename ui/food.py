@@ -181,12 +181,12 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
 
 
 def fridge_home(favorites):
-    """«🎚️ Любимые продукты · 24» и подсказка курсивом."""
+    """«🎚️ Мои продукты · 24» и подсказка курсивом."""
     b = MessageBuilder()
-    b.bold(f"🎚️ Любимые продукты · {favorites}")
+    b.bold(f"🎚️ Мои продукты · {favorites}")
     b.newline()
     b.spacer()
-    b.italic("Отмечай в категориях, что любишь и обычно покупаешь, — рецепт «Из любимых продуктов» соберу из них.")
+    b.italic("Отмечай в категориях, что любишь и обычно покупаешь, — рецепт «Из моих продуктов» соберу из них.")
     b.newline()
     return b.build_stripped()
 
@@ -201,7 +201,7 @@ def fridge_category(label, total, favorites):
 
 def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emoji, cat_labels):
     b = MessageBuilder()
-    b.section("Любимые продукты обновлены")
+    b.section("Мои продукты обновлены")
     if added:
         b.spacer()
         b.bold("Отметил любимыми:")
@@ -234,6 +234,6 @@ def fridge_updated(added_by_cat, added, duplicates, rejected, cat_order, cat_emo
 
 def fridge_empty_for_recipe():
     return MessageBuilder().text_line(
-        "Любимых продуктов пока нет.\n\n"
+        "Моих продуктов пока нет.\n\n"
         "Отметь в «Любимых продуктах», что любишь и обычно покупаешь, и попробуй снова."
     ).build()

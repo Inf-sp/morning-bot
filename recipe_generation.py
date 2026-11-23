@@ -790,7 +790,7 @@ def _home_human_reason(value, context: dict) -> str:
         return reason
     meal = _HOME_MEAL_LABELS.get(context.get("meal"), "приём пищи")
     if context.get("available"):
-        return f"Быстрый {meal} из любимых продуктов"
+        return f"Быстрый {meal} из твоих продуктов"
     return f"Простой {meal} без лишних сложностей"
 
 
@@ -877,7 +877,7 @@ def _home_steps(value) -> list[dict]:
         text = " ".join(sentences[:2]) if sentences else text
         if not structured and not has_time:
             minutes = 2
-        if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text) or not (minutes or has_time):
+        if not text or _HOME_FORMAL_IMPERATIVE_RE.search(text):  # шаг без минут — тоже шаг: время необязательно
             continue
         result.append({"text": text, "minutes": minutes})
     # Главная карточка всегда показывает три шага. Соседние короткие действия
@@ -892,7 +892,7 @@ def _home_steps(value) -> list[dict]:
             "text": f"{first['text'].rstrip('.!?…')}. {second['text']}",
             "minutes": (first.get("minutes") or 0) + (second.get("minutes") or 0) or None,
         }]
-    return result if len(result) == 3 else []
+    return result if 2 <= len(result) <= 3 else []
 
 
 _EUROPEAN_CUISINE_ALIASES = {
@@ -998,6 +998,14 @@ def _normalize_home_idea(data, context: dict) -> dict:
     }
 
 
+def _dish_ready(idea) -> bool:
+    """Рецепт блюда меню годится: есть ингредиенты и шаги по-русски (название, кухня и совет — из меню/по желанию)."""
+    if not isinstance(idea, dict) or not idea.get("ingredients") or not idea.get("steps"):
+        return False
+    texts = [*idea.get("ingredients"), *(step.get("text") for step in idea.get("steps") if isinstance(step, dict))]
+    return all(re.search(r"[а-яё]", str(text or ""), re.I) for text in texts)
+
+
 def _home_idea_complete(idea) -> bool:
     if not isinstance(idea, dict):
         return False
@@ -1019,7 +1027,7 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     now = now or datetime.now(TZ)
     raw_fridge = store.get_list(config.FRIDGE_KEY, str(cid))
     fridge = _fridge_migrate(raw_fridge)
-    available = _fridge_available(fridge)  # любимые продукты, без того, из чего не готовят
+    available = _fridge_available(fridge)  # мои продукты, без того, из чего не готовят
     unavailable = []  # невыбранное в базовом наборе — не «закончилось», а просто не любимое
     profile = store.get_profile(cid)
     diet_prefs = " ".join(str(profile.get("diet_prefs") or "").split())
@@ -1036,7 +1044,7 @@ def _home_idea_context(cid, now=None, cuisine=None) -> dict:
     cuisine_codes = cooking_settings.cuisines(cid)
     signature_data = {
         "date": now.date().isoformat(),
-        "home_copy_version": 11,
+        "home_copy_version": 12,
         "meal": meal,
         "available": available,
         "unavailable": unavailable,
@@ -1076,14 +1084,14 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
     unavailable = context.get("unavailable") or []
     if context.get("has_fridge"):
         fridge_context = (
-            "Блюдо собирается из любимых продуктов пользователя — того, что он любит и обычно покупает.\n"
-            f"Любимые продукты: {secure.wrap_untrusted(', '.join(available) or 'нет', 'любимые продукты')}.\n"
+            "Блюдо собирается из продуктов, которые пользователь любит и обычно покупает (группы, в скобках — примеры).\n"
+            f"Продукты пользователя: {secure.wrap_untrusted('; '.join(available) or 'нет', 'продукты пользователя')}.\n"
             + (f"Не используй: {secure.wrap_untrusted(', '.join(unavailable), 'исключённые продукты')}.\n"
                if unavailable else "")
         )
     else:
         fridge_context = (
-            "Любимых продуктов нет. Не утверждай, что продукты уже есть дома, "
+            "Моих продуктов нет. Не утверждай, что продукты уже есть дома, "
             "не заполняй use_first, missing и substitution.\n"
         )
     restrictions = context.get("diet_prefs") or "не указаны"
@@ -1110,20 +1118,21 @@ def _home_idea_prompt(context: dict, sources=None) -> str:
         "кухню только из-за доступных продуктов.\n"
         "• Все названия ингредиентов должны звучать естественно по-русски: «соевый соус», а не «соус сои».\n"
         "• Никогда не используй и не предлагай заменой исключённые продукты или аллергены.\n"
-        "• Если список «Любимые продукты» не пуст, собери блюдо из них: бери те, что сочетаются в одном блюде (не "
-        "обязательно все), плюс вода и базовые масло, соль и перец. Не добавляй другие продукты.\n"
+        "• Если список «Продукты пользователя» не пуст, собери блюдо из них: бери группы, что сочетаются в одном блюде "
+        "(не обязательно все), и называй конкретный продукт группы («Белая рыба (треска, судак)» → «треска 300 г»); "
+        "плюс базовое — вода, масло, соль, перец, лук, морковь, чеснок, сахар, мука. Других покупок не добавляй.\n"
         "• ingredients — полный список всего, что используется в блюде, включая масло, соль и перец, если они нужны. "
-        "Для любимых продуктов сохраняй точное написание из входного списка. Количество пиши компактно после "
+        "Количество пиши компактно после "
         "названия продукта: «креветки 250 г», «лук 1 шт.».\n"
         "• steps — ровно 3 коротких шага. "
         "Объединяй логически связанные действия. Каждый шаг начинается с глагола на «ты», содержит не больше "
         "1–2 коротких предложений и не повторяет ингредиенты без необходимости. В text не пиши время шага; "
         "minutes оставь только отдельным техническим полем, сумма равна общему minutes.\n"
-        "• use_first — только точные названия из списка «Любимые продукты» и только если они входят в ingredients.\n"
+        "• use_first — только точные названия из списка «Продукты пользователя» и только если они входят в ingredients.\n"
         "• use_first, missing и substitution больше не показываются: верни пустые значения.\n"
-        "• reason — одна короткая человеческая рекомендация вроде «Быстрый ужин из любимых продуктов». "
+        "• reason — одна короткая человеческая рекомендация вроде «Быстрый ужин из твоих продуктов». "
         "Не пиши «поскольку в холодильнике есть», «на основе списка продуктов» и другие технические объяснения. "
-        "Без любимых продуктов формулировка нейтральная.\n"
+        "Без продуктов пользователя формулировка нейтральная.\n"
         "• tip — один конкретный приём именно для этого блюда с понятной техникой или результатом. "
         "Запрещены общие советы вроде «добавь чеснок и лук для аромата».\n"
         "• Во всём тексте обращайся только на «ты»: «приготовь», «обжарь», «добавь». "
@@ -1170,14 +1179,14 @@ def _home_month_pool(profile: dict, context: dict) -> list[dict]:
 
 
 def _idea_slot(meal, dish) -> str:
-    """Рецепт блюда меню и рецепт «Из любимых продуктов» хранятся отдельно: один не подменяет другой."""
+    """Рецепт блюда меню и рецепт «Из моих продуктов» хранятся отдельно: один не подменяет другой."""
     return meal if dish else f"fridge_{meal}"
 
 
 def get_cached_cooking_home_idea(cid, now=None, fridge=False) -> dict | None:
     """Возвращает готовый рецепт без AI и без побочных эффектов.
 
-    Кэш раздельный для завтрака, обеда и ужина (и отдельно — «Из любимых продуктов», fridge=True).
+    Кэш раздельный для завтрака, обеда и ужина (и отдельно — «Из моих продуктов», fridge=True).
     Подпись включает дату, холодильник и предпочтения, поэтому устаревший рецепт не показывается.
     """
     context = _home_idea_context(cid, now=now)
@@ -1197,6 +1206,8 @@ def get_cached_cooking_home_idea(cid, now=None, fridge=False) -> dict | None:
     if not isinstance(idea, dict):
         return None
     normalized = _normalize_home_idea(idea, context)
+    if not fridge and idea.get("dish"):  # рецепт блюда меню: совет и «почему» необязательны
+        return {**normalized, "dish": idea["dish"]} if _dish_ready(normalized) else None
     return normalized if _home_idea_complete(normalized) else None
 
 
@@ -1204,7 +1215,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
     """Одна стабильная идея для текущего приёма пищи и актуального холодильника.
 
     dish — {name, note} блюда из меню дня: тогда нужен рецепт именно этого блюда (из любых продуктов).
-    Без dish — «Из любимых продуктов»: cuisine — кухня меню дня; готовый рецепт другой кухни не
+    Без dish — «Из моих продуктов»: cuisine — кухня меню дня; готовый рецепт другой кухни не
     показывается, собирается новый.
     """
     context = _home_idea_context(cid, now=now, cuisine=cuisine)
@@ -1237,7 +1248,10 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
 
     def is_new(candidate):
         # «Новый рецепт» не повторяет ни текущий, ни уже показанные в этом месяце;
-        # при выбранной кухне рецепт другой кухни не принимается.
+        # при выбранной кухне рецепт другой кухни не принимается. Блюдо меню задано названием — кухню и пустые
+        # «почему / совет» модели не проверяем (_dish_ready), иначе «Завтрак» падал на мелочах.
+        if dish:
+            return _dish_ready(candidate)
         return (_home_idea_complete(candidate) and cuisine_matches(candidate.get("cuisine"), cuisine)
                 and (dish or fits_meal(candidate, context["meal"]))
                 and not (refresh and str(candidate.get("name") or "").casefold() in avoided))
@@ -1309,8 +1323,9 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
                 + (" Проверь кухню блюда — она должна совпадать с выбранной." if cuisine else "")
             )
     if dish and is_new(idea):
-        # Рецепт блюда из меню: то же название, что в меню, и метка для кэша дня.
-        idea = {**idea, "name": dish["name"], "dish": dish["name"]}
+        # Рецепт блюда из меню: то же название и кухня, что в меню, и метка для кэша дня.
+        idea = {**idea, "name": dish["name"], "dish": dish["name"], "cuisine": cuisine or idea.get("cuisine"),
+                "reason": idea.get("reason") or str(dish.get("note") or dish["name"])}
     if dish and not is_new(idea):
         # Рецепт другого блюда вместо выбранного в меню хуже честной ошибки с повтором.
         raise ValueError(f"recipe for menu dish {dish['name']!r} is not ready")
@@ -1325,7 +1340,7 @@ def get_cooking_home_idea(cid, now=None, refresh=False, cuisine=None, dish=None)
                 and str(item.get("name") or "").casefold() != previous_name.casefold()]
         pool.sort(key=lambda item: not cuisine_matches(item.get("cuisine"), cuisine))
         idea = next(iter(pool), idea)
-    if not _home_idea_complete(idea):
+    if not (_dish_ready(idea) if dish else _home_idea_complete(idea)):
         raise ValueError("Неполный рецепт для главного экрана Готовки")
     # За время AI-запроса профиль мог измениться в другом сценарии. Перечитываем его,
     # чтобы запись кэша не затёрла новые предпочтения или другие пользовательские данные.

@@ -108,16 +108,16 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "• Завтрак — Crostata, песочный пирог с джемом\n"
         "• Обед — Pasta al pomodoro, паста с томатами\n"
         "• Ужин — Lasagna\n\n"
-        "Любимые продукты · 77"  # без «3 приёма пищи»
+        "Мои продукты · 77"  # без «3 приёма пищи»
     )
-    assert menu_ui.fridge_stats_line(1) == "Любимые продукты · 1"
+    assert menu_ui.fridge_stats_line(1) == "Мои продукты · 1"
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
-        [("🥕 Из любимых продуктов", "food_mine")],
+        [("🥕 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
-    # В отпуске дома не готовишь — кнопки «Из любимых продуктов» нет.
+    # В отпуске дома не готовишь — кнопки «Из моих продуктов» нет.
     away = menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
     assert "food_mine" not in [b.callback_data for row in away for b in row]
 
@@ -325,7 +325,7 @@ def test_mine_recipe_with_empty_fridge_offers_to_add_products(monkeypatch):
             sent.append((text, kwargs["reply_markup"]))
 
     asyncio.run(menu.send_mine_recipe(object(), "42", status=Status()))
-    assert sent[0][0].startswith("🥕 Из любимых продуктов")  # любимых нет — отметить их в базовом наборе
+    assert sent[0][0].startswith("🥕 Из моих продуктов")  # любимых нет — отметить их в базовом наборе
     assert sent[0][1].inline_keyboard[0][0].callback_data == "as_fridge_home"
 
 
@@ -394,8 +394,39 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
 
 def test_footer_is_fridge_size_not_matching_products():
     day = {"cuisine": "french", "dishes": {"lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"}}}
-    # Старый вызов со списком «есть дома» — внизу всё равно только число любимых продуктов.
+    # Старый вызов со списком «есть дома» — внизу всё равно только число моих продуктов.
     msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Картофель"]})
-    assert msg.text.endswith("\n\nЛюбимые продукты · 75") and "Есть дома" not in msg.text
+    assert msg.text.endswith("\n\nМои продукты · 75") and "Есть дома" not in msg.text
 
 
+
+
+def test_menu_dish_recipe_survives_other_cuisine_and_missing_tip(monkeypatch):
+    import config
+    import store
+    cid = "dish-relaxed"
+    store.set_settings(cid, 52.6, 4.75, "Alkmaar", "Нидерланды", "NL")
+    monkeypatch.setattr(recipe_generation, "_recipe_sources", lambda *_a, **_k: [])
+    monkeypatch.setattr(recipe_generation.ai, "llm_json", lambda *_a, **_k: {
+        "name": "Сыр с зеленью", "cuisine": "european", "minutes": 10, "reason": "", "tip": "",
+        "ingredients": ["сулугуни 150 г", "зелень"], "steps": [{"text": "Нарежь сыр", "minutes": 5},
+                                                             {"text": "Подай с зеленью", "minutes": 5}]})
+    dish = {"name": "Сыр сулугуни с зеленью", "note": ""}
+    idea = recipe_generation.get_cooking_home_idea(cid, cuisine="georgian", dish=dish)
+    assert idea["name"] == "Сыр сулугуни с зеленью" and idea["cuisine"] == "georgian"
+
+
+
+def test_menu_dish_recipe_failure_is_an_honest_message(monkeypatch):
+    sent = []
+    monkeypatch.setattr(day_menu, "dish_recipe", lambda *_a: (_ for _ in ()).throw(ValueError("not ready")))
+    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: {"dishes": {"breakfast": {"name": "Менемен"}}})
+
+    class Status:
+        async def replace(self, text, **kwargs):
+            sent.append((text, kwargs["reply_markup"]))
+
+    asyncio.run(menu.send_food_menu(object(), "42", status=Status(), meal="breakfast"))
+    text, markup = sent[0]
+    assert "Рецепт «Менемен» сейчас не собрать" in text and "пошло не так" not in text
+    assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["a_recipe_breakfast"], ["m_food", "m_menu"]]

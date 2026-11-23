@@ -103,70 +103,71 @@ def test_fridge_migration_removes_other_and_sorts_database_records():
 
 
 def test_fridge_home_is_the_shared_list_without_add_or_edit(monkeypatch):
-    from fridge_model import BASE_PRODUCTS
+    from fridge_model import GROUPS
     _memory_store(monkeypatch, [
-        {"name": "курица", "cat": "мясо и птица", "on": True},
-        {"name": "индейка", "cat": "мясо и птица", "on": False},
-        {"name": "яблоки", "cat": "фрукты и ягоды", "on": True},
-        {"name": "утка", "cat": "мясо и птица", "on": True},  # свой продукт прежних версий — не показывается
+        {"name": "курица", "cat": "мясо и птица", "on": True, "group": "chicken"},
+        {"name": "индейка", "cat": "мясо и птица", "on": False, "group": "turkey"},
+        {"name": "яблоки и груши", "cat": "фрукты и ягоды", "on": True, "group": "apples"},
+        {"name": "утка", "cat": "мясо и птица", "on": True},  # запись прежних версий — не показывается
     ])
     bot = _Bot()
 
     asyncio.run(fridge.send_fridge(bot, "fridge-home"))
 
     message = bot.messages[-1]
-    assert message["text"] == ("🎚️ Любимые продукты · 2\n\nОтмечай в категориях, что любишь и обычно покупаешь, — "
-                               "рецепт «Из любимых продуктов» соберу из них.")
+    assert message["text"] == ("🎚️ Мои продукты · 2\n\nОтмечай в категориях, что любишь и обычно покупаешь, — "
+                               "рецепт «Из моих продуктов» соберу из них.")
     labels = _labels(message["reply_markup"])
-    assert labels[:2] == [["Мясо и птица · 1"], ["Рыба и морепродукты · 0"]]  # у всех одни и те же категории
-    assert len(labels) == len(BASE_PRODUCTS) + 2 and labels[-2:] == [["📝 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert "✅ Добавить продукт" not in sum(labels, [])
+    assert labels[:2] == [["Мясо и птица · 1"], ["Рыба и морепродукты · 0"]]
+    assert len(labels) == len(GROUPS) + 2 and labels[-2:] == [["📝 Выбрать предпочтения"], ["⬅️ Назад", "#️⃣ Главная"]]
 
 
-def test_category_is_the_same_list_for_everyone_and_toggles(monkeypatch):
-    from fridge_model import BASE_PRODUCTS
-    state = _memory_store(monkeypatch, [{"name": "курица", "cat": "мясо и птица", "on": True}])
+def test_category_has_five_groups_with_examples_and_toggles(monkeypatch):
+    from fridge_model import GROUPS
+    state = _memory_store(monkeypatch, [{"name": "курица", "cat": "мясо и птица", "on": True, "group": "chicken"}])
     bot = _Bot()
 
-    asyncio.run(fridge.send_fridge_cat(bot, "fridge-category", 0, 0))
+    asyncio.run(fridge.send_fridge_cat(bot, "fridge-category", 1, 0))  # рыба
+    assert bot.messages[-1]["text"] == "Рыба и морепродукты · 0 из 5"
+    assert _labels(bot.messages[-1]["reply_markup"])[:-1] == [
+        ["□ Лосось"], ["□ Тунец"], ["□ Белая рыба (треска, судак)"], ["□ Скумбрия и сельдь"],
+        ["□ Морепродукты (креветки, кальмары, мидии)"]]
+    assert all(len(groups) == 5 for groups in GROUPS.values())
 
-    message = bot.messages[-1]
-    meat = BASE_PRODUCTS["мясо и птица"]
-    assert message["text"] == f"Мясо и птица · 1 из {len(meat)}"
-    rows = _labels(message["reply_markup"])
-    assert rows[:-1] == [[("✅ " if name == "Курица" else "□ ") + name] for name in meat]  # порядок списка, без «Изменить»
-    assert rows[-1] == ["⬅️ Назад", "#️⃣ Главная"]
-
-    asyncio.run(fridge.fridge_fav(bot, "fridge-category", 0, meat.index("Говядина")))  # □ → ✅
-    asyncio.run(fridge.fridge_fav(bot, "fridge-category", 0, meat.index("Курица")))  # ✅ → □
-    assert fridge._fridge_available(state) == ["говядина"]
-    assert ["✅ Говядина"] in _labels(bot.messages[-1]["reply_markup"])
+    asyncio.run(fridge.fridge_fav(bot, "fridge-category", 1, 2))  # □ → ✅ белая рыба
+    asyncio.run(fridge.fridge_fav(bot, "fridge-category", 0, 2))  # ✅ → □ курица
+    assert fridge._fridge_available(state) == ["Белая рыба (треска, судак)"]
+    assert ["✅ Курица"] not in _labels(bot.messages[-1]["reply_markup"])
 
 
-def test_chat_add_marks_shared_list_products_and_rejects_others(monkeypatch):
+def test_chat_add_marks_groups_and_rejects_others(monkeypatch):
     state = _memory_store(monkeypatch, [])
     bot = _Bot()
 
     asyncio.run(fridge.fridge_add_done(bot, "fridge-chat", "курица"))  # первая — сразу рецепт дня
-    asyncio.run(fridge.fridge_add_done(bot, "fridge-chat", "куриные ножки, сыр гауда, кинза, дуриан, чипсы"))
+    asyncio.run(fridge.fridge_add_done(bot, "fridge-chat", "куриные сердечки, сыр гауда, кинза, дуриан, чипсы, курица"))
 
-    assert sorted(fridge._fridge_available(state)) == ["зелень", "курица", "сыр"]  # похожие → продукт списка
-    text = next(m["text"] for m in bot.messages if m["text"].startswith("Любимые продукты обновлены"))
+    assert fridge._fridge_available(state) == [
+        "Курица", "Фарш и субпродукты (печень, сердечки, желудки)", "Зелень и салатные листья",
+        "Сыр (твёрдый, моцарелла, фета)"]
+    text = next(m["text"] for m in bot.messages if m["text"].startswith("Мои продукты обновлены"))
     assert "Отметил любимыми:" in text and "Уже любимые:\nКурица" in text
     assert "• дуриан — нет в списке продуктов" in text and "• чипсы — нет в списке продуктов" in text
 
 
-def test_switch_to_shared_list_maps_own_favorites(monkeypatch):
-    profile = {"fridge_base_v": 3}
+def test_switch_to_groups_maps_previous_marks(monkeypatch):
+    profile = {"fridge_base_v": 4}
     state = _memory_store(monkeypatch, [
         {"name": "куриные ножки", "cat": "мясо и птица", "on": True},
         {"name": "филе лосося", "cat": "рыба и морепродукты", "on": True},
         {"name": "сельдь", "cat": "рыба и морепродукты", "on": True},
+        {"name": "грибы", "cat": "овощи и зелень", "on": True},
         {"name": "батончики", "cat": "сладкое и напитки", "on": True},
     ], profile=profile)
+    assert fridge._fridge_available(state) == ["Курица", "Лосось", "Скумбрия и сельдь"]  # ещё до переноса
 
     asyncio.run(fridge.send_fridge(_Bot(), "fridge-switch"))
 
-    assert sorted(fridge._fridge_available(state)) == ["курица", "лосось"]  # своё → похожий продукт списка
-    assert {"куриные ножки", "сельдь", "батончики"} <= {item["name"] for item in state}  # данные не удалены
+    assert fridge._fridge_available(state) == ["Курица", "Лосось", "Скумбрия и сельдь"]
+    assert {"куриные ножки", "грибы", "батончики"} <= {item["name"] for item in state}  # данные не удалены
     assert profile["fridge_base_v"] == fridge.BASE_VERSION

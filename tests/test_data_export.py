@@ -20,7 +20,7 @@ def test_export_choice_has_clear_categories_and_navigation():
     assert labels == [
         ["📤 Всё"],
         ["📤 Мой шкаф"],
-        ["📤 Любимые продукты"],
+        ["📤 Мои продукты"],
         ["📤 Мой словарь"],
         ["📤 Любимое"],
         ["⬅️ Назад", "#️⃣ Главная"],

@@ -102,7 +102,7 @@ _SCREENS = {
     "m_food": (
         UI_FOOD,
         "Кухня",
-        "Подберу блюдо из любимых продуктов и покажу короткий понятный рецепт.",
+        "Подберу блюдо из твоих продуктов и покажу короткий понятный рецепт.",
         [
             [("🍳 Что приготовить", "m_food")],
             [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
@@ -427,9 +427,9 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
              fact="", trip_stats=None, eating_out="", trip_extra=None):
     """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
 
-    show_mine=False — в отпуске: кнопки «Из любимых продуктов» нет (в поездке не готовишь дома).
+    show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (в поездке не готовишь дома).
     trip — в отпуске: «Пробуем в отпуске» — одно блюдо trip_dish и факт о кухне fact (_trip_menu).
-    stats — {"products": N}: курсивная строка внизу — «Любимые продукты · N».
+    stats — {"products": N}: курсивная строка внизу — «Мои продукты · N».
     """
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     if trip:
@@ -448,7 +448,9 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
         b.bold("Меню на день:")
         b.newline()
     for label, dish in rows:
-        note = _cooking_text(dish.get("note"))
+        # Русское название — само по себе («Лобиани», «Сыр сулугуни с зеленью»); пояснение — только к названию
+        # латиницей, где без него непонятно: «Crostata, песочный пирог с джемом».
+        note = "" if re.search(r"[а-яё]", dish["name"], re.I) else _cooking_text(dish.get("note"))
         b.line(f"• {label} — {dish['name']}" + (f", {note[:1].lower()}{note[1:]}" if note else ""))
     if stats:
         b.spacer()
@@ -459,14 +461,14 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
 
 
 def fridge_stats_line(products, meals=None) -> str:
-    """«Любимые продукты · 24» (число приёмов пищи владелец счёл бесполезным и оно не показывается)."""
-    return f"Любимые продукты · {int(products or 0)}"
+    """«Мои продукты · 24» (число приёмов пищи владелец счёл бесполезным и оно не показывается)."""
+    return f"Мои продукты · {int(products or 0)}"
 
 
 def food_menu(idea=None, *, meal="", from_fridge=False):
     """Полный рецепт блюда из меню дня для выбранного приёма пищи.
 
-    from_fridge — рецепт «Из любимых продуктов»: строка «Не хватает» и кнопка «Другой рецепт»;
+    from_fridge — рецепт «Из моих продуктов»: строка «Не хватает» и кнопка «Другой рецепт»;
     у блюда меню дня (из любых продуктов) их нет.
     """
     idea = idea or {}
@@ -524,8 +526,22 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
     return b.build_stripped(reply_markup=mine_recipe_kb() if from_fridge else InlineKeyboardMarkup([nav_row("m_food")]))
 
 
+def dish_recipe_unavailable(name, meal=""):
+    """Рецепт блюда меню не собрался (сервис рецептов не ответил): честно и с повтором, без общей ошибки."""
+    b = MessageBuilder()
+    b.section(" ".join(part for part in ("🍳 Что приготовить", _MEAL_TITLES.get(meal, "")) if part))
+    b.spacer()
+    dish = str(name or "").strip()
+    b.line((f"Рецепт «{dish}» сейчас не собрать" if dish else "Рецепт сейчас не собрать")
+           + " — сервис рецептов не ответил. Нажми ещё раз через минуту.")
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"a_recipe_{key}") for key, label in _MEAL_NAMES if key == meal],
+        nav_row("m_food"),
+    ] if meal in dict(_MEAL_NAMES) else [nav_row("m_food")]))
+
+
 def mine_recipe_kb():
-    """Под рецептом «Из любимых продуктов»: «Другой рецепт» открывает выбор кухни (food_mine_pick)."""
+    """Под рецептом «Из моих продуктов»: «Другой рецепт» открывает выбор кухни (food_mine_pick)."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Другой рецепт", callback_data="food_mine_pick")],
         nav_row("m_food"),
@@ -533,11 +549,11 @@ def mine_recipe_kb():
 
 
 def fridge_empty_for_mine():
-    """«Из любимых продуктов», а любимых ещё нет: отметить их в базовом наборе."""
+    """«Из моих продуктов», а любимых ещё нет: отметить их в базовом наборе."""
     b = MessageBuilder()
-    b.section("🥕 Из любимых продуктов")
+    b.section("🥕 Из моих продуктов")
     b.spacer()
-    b.line("Любимых продуктов пока нет. Отметь в категориях, что любишь и обычно покупаешь, — и я соберу рецепт "
+    b.line("Моих продуктов пока нет. Отметь в категориях, что любишь и обычно покупаешь, — и я соберу рецепт "
            "из них.")
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton("🎚️ Настроить продукты", callback_data="as_fridge_home")],
@@ -546,14 +562,14 @@ def fridge_empty_for_mine():
 
 
 def food_card_kb(meals=None, show_mine=True):
-    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Из любимых продуктов» (кроме отпуска)."""
+    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Из моих продуктов» (кроме отпуска)."""
     meals = meals or [meal for meal, _label in _MEAL_NAMES]
     rows = [
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
     ]
     if show_mine:
-        # Рецепт из любимых продуктов под время суток (меню дня — из любых продуктов).
-        rows.append([InlineKeyboardButton("🥕 Из любимых продуктов", callback_data="food_mine")])
+        # Рецепт из моих продуктов под время суток (меню дня — из любых продуктов).
+        rows.append([InlineKeyboardButton("🥕 Из моих продуктов", callback_data="food_mine")])
     rows.append([InlineKeyboardButton("🎚️ Настроить продукты", callback_data="as_fridge_home"),
                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")])
     return InlineKeyboardMarkup(rows)
@@ -561,7 +577,7 @@ def food_card_kb(meals=None, show_mine=True):
 
 def food_cuisine_kb(cuisines, prefix="food_go_day_", back="food_card"):
     """Выбор кухни; cuisines — [(код, подпись)]. По умолчанию — старая «Другое меню на сегодня» из истории
-    чата; «Другой рецепт» из любимых продуктов — prefix food_mine_go_, back food_mine_card."""
+    чата; «Другой рецепт» из моих продуктов — prefix food_mine_go_, back food_mine_card."""
     rows = [[InlineKeyboardButton(label, callback_data=f"{prefix}{key}")]
             for key, label in cuisines]
     rows.append(nav_row(back))

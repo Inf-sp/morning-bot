@@ -394,7 +394,7 @@ def test_legacy_group_cuisines_expand_to_concrete_ones(monkeypatch):
 def test_cuisine_settings_screen_has_no_descriptions_or_current_line():
     text = settings.settings_ui.cuisines().text
 
-    assert text == ("📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из любимых продуктов "
+    assert text == ("📝 Предпочтения\n\nВыбери кухни, которые нравятся — подберу рецепт дня и блюда из твоих продуктов "
                     "с их учётом.\nНиже — какие приёмы пищи готовишь и ограничения в еде.")
 
 
@@ -555,7 +555,7 @@ def test_first_fridge_fill_text_input_opens_normal_cooking_home(monkeypatch):
         lambda *_args: asyncio.sleep(0),
     ))
 
-    assert opened == [(cid, False)]  # первые любимые продукты — сразу рецепт дня
+    assert opened == [(cid, False)]  # первые мои продукты — сразу рецепт дня
     assert cid not in store.pending_input
     assert sent == []
 

@@ -133,7 +133,7 @@ def test_inline_status_starts_with_action_specific_text():
         "m_leisure": "🎬 Смотрю афиши кинотеатров...",
         "game_again": "🕵️ Ищу загадку...",
         "a_recipe_lunch": "📖 Открываю книгу рецептов...",
-        "food_mine": "🥕 Перебираю любимые продукты...",
+        "food_mine": "🥕 Перебираю твои продукты...",
         "m_myday": "☀️ Смотрю на погоду...",
         "set_preferences": "⚙️ Открываю настройки...",
     }
