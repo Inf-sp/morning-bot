@@ -740,7 +740,6 @@ def runtime_label(minutes, *, episode=False) -> str:
     return f"серия {label}" if episode else label
 
 
-_TODAY_KIND = {"movie": "фильм", "tv": "сериал", "music": "музыкальный альбом"}
 
 
 def _today_name(b: MessageBuilder, pick, meta=True) -> None:
@@ -757,35 +756,21 @@ def _finish_sentence(text) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
-def _read_line(b: MessageBuilder, item) -> bool:
-    """«• Заголовок · источник · EN · N мин — анонс.» (заголовок в оригинале жирной ссылкой); нет ссылки — False."""
-    title, link = " ".join(str((item or {}).get("title") or "").split()), str((item or {}).get("link") or "")
-    if not title or not link.startswith("http"):
-        return False
-    b.text_line("• ")
-    b.bold_link(title, link)
-    minutes = int(item.get("minutes") or 0)
-    meta = [item.get("source"), item.get("lang"), f"{minutes} мин" if minutes else ""]
-    b.text_line("".join(f" · {value}" for value in meta if str(value or "").strip()))
-    about = str(item.get("about") or "").strip()
-    if about:
-        b.text_line(f" — {_finish_sentence(about)}")
-    b.newline()
-    return True
+_TODAY_LABEL = {"movie": "Фильм дня:", "tv": "Сериал дня:", "music": "Артист дня:", "read": "Статья дня:",
+                "premiere": "Премьера недели:", "concert": "Ближайший концерт:"}
 
 
-def leisure_today_screen(picks, *, city="", library=None, read=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: «Фильм дня:» — имя, 3–4 пункта метаданных и описание; ниже один вариант
-    «Если не хочется кино:» — «• Имя · сериал · …»; «Статья дня:» — первая из «Статей»; статистика библиотеки
-    курсивом. Концерты и остальные статьи — кнопками. picks — что показать (leisure_hub.today_data, поле shown)."""
+def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> MessageSpec:
+    """«🍿 Досуг на сегодня · Alkmaar»: одна карточка раздела — «Фильм дня:» / «Сериал дня:» / «Статья дня:» /
+    «Артист дня:» / «Премьера недели:» / «Ближайший концерт:», ниже «• Имя · метаданные — описание»; внизу курсивом
+    статистика библиотеки. Раздел меняется по кругу при каждом открытии (leisure_hub.next_today_pick)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
         b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Сериалы» ниже.")
     else:
-        first = picks[0]
-        # Как в погодном предупреждении: «Фильм дня:» жирным, ниже «• имя · метаданные — описание».
-        b.bold({"movie": "Фильм дня:", "tv": "Сериал дня:", "music": "Альбом дня:"}.get(first.get("kind"), "На сегодня:"))
+        first = picks[0]  # одна карточка — раздел по кругу (leisure_hub.next_today_pick)
+        b.bold(_TODAY_LABEL.get(first.get("kind"), "На сегодня:"))
         b.newline()
         b.text_line("• ")
         _today_name(b, {**first, "meta": [*first.get("meta", ()), first.get("runtime")]})
@@ -793,20 +778,6 @@ def leisure_today_screen(picks, *, city="", library=None, read=None, reply_marku
         if about:
             b.text_line(f" — {about}")  # регистр не трогаем: описание часто начинается с имени («Пол Атрейдес…»)
         b.newline()
-        rest = [pick for pick in picks if pick is not first]
-        if rest:
-            b.spacer()
-            b.bold("Если не хочется кино:" if first["kind"] == "movie" else "Другие варианты:")
-            b.newline()
-            for pick in rest:  # «• Колесо Времени · сериал · 2021 · Prime Video · фантастика · USA»
-                b.text_line("• ")
-                _today_name(b, {**pick, "meta": [_TODAY_KIND.get(pick["kind"], ""), *pick.get("meta", ())]})
-                b.newline()
-    if read and str(read.get("link") or "").startswith("http") and str(read.get("title") or "").strip():
-        b.spacer()
-        b.bold("Статья дня:")
-        b.newline()
-        _read_line(b, read)
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))

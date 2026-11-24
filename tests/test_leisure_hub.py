@@ -524,40 +524,51 @@ def _today_picks(monkeypatch):
     return leisure_hub.today_data("42", day=date(2026, 10, 13))
 
 
-def test_today_screen_is_main_film_one_alternative_and_stats(monkeypatch):
+def test_today_screen_is_one_card_and_stats(monkeypatch):
     data = _today_picks(monkeypatch)
-    msg = leisure_ui.leisure_today_screen(data["shown"], city=data["city"], library=data["library"])
+    msg = leisure_ui.leisure_today_screen(data["picks"][:1], city=data["city"], library=data["library"])
 
     assert msg.text == (
         "🍿 Досуг на сегодня · Alkmaar\n\n"
-        "Фильм дня:\n"  # как в погодном предупреждении: подпись, ниже пункты «•»
+        "Фильм дня:\n"  # подпись, ниже пункт «•»
         "• Восставший · 2026 · история · DE · 1 ч 52 мин — Историческая драма о восстании. Второе.\n\n"  # один жанр
-        "Если не хочется кино:\n"
-        "• Нили · сериал · 2025 · Prime Video · драма\n\n"  # один вариант в день; USA/UK — не пишем
         "Твоя библиотека · 55 фильмов · 42 артиста"
-    )  # концерта нет — он кнопкой «Концерты»; статьи дня нет, пока набор не собран
+    )  # одна карточка: ни «Если не хочется кино», ни статьи под ней
     assert [pick["name"] for pick in data["picks"]] == ["Восставший", "Нили", "Focus Group"]
-    import leisure_hub
-    from datetime import date
-    assert [pick["name"] for pick in leisure_hub._shown_picks(data["picks"], date(2026, 10, 14))] == ["Восставший", "Focus Group"]
     raw = msg.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
-    assert ("text_link", "Восставший") in marked and ("bold", "Нили") in marked
+    assert ("text_link", "Восставший") in marked
     assert [e.type for e in msg.entities][-1] == "italic"
-    read = {"title": "Why we still love cassettes", "link": "https://g.co/a", "source": "The Guardian", "lang": "EN",
-            "minutes": 6, "about": "Почему кассеты снова в моде"}
-    msg = leisure_ui.leisure_today_screen(data["shown"], city=data["city"], library=data["library"], read=read)
-    assert ("Статья дня:\n• Why we still love cassettes · The Guardian · EN · 6 мин — Почему кассеты снова в моде.\n\n"
-            "Твоя библиотека") in msg.text
+
+
+def test_hub_card_rotates_through_sections_on_every_open(monkeypatch):
+    import leisure_hub
+    profile = {}
+    monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_hub.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+    options = {kind: {"kind": kind, "name": kind} for kind in ("movie", "tv", "read", "music", "premiere", "concert")}
+    shown = [leisure_hub.next_today_pick("42", options)["kind"] for _ in range(7)]
+    assert shown == ["movie", "tv", "read", "music", "premiere", "concert", "movie"]  # по кругу, даже за день
+    del options["read"]  # нет статьи — раздел пропускается
+    assert leisure_hub.next_today_pick("42", options, advance=False)["kind"] in options
+    read = {"kind": "read", "name": "Why we still love cassettes", "url": "https://g.co/a",
+            "meta": ["The Guardian", "21 ноября", "EN", "6 мин"], "about": "Почему кассеты снова в моде."}
+    text = leisure_ui.leisure_today_screen([read]).text
+    assert text.endswith("Статья дня:\n• Why we still love cassettes · The Guardian · 21 ноября · EN · 6 мин — "
+                         "Почему кассеты снова в моде.")
+    concert = {"kind": "concert", "name": "Muse", "url": "https://t", "meta": ["4 декабря 2026", "Ziggo Dome"],
+               "about": "Стадионный рок с оркестром."}
+    assert "Ближайший концерт:\n• Muse · 4 декабря 2026 · Ziggo Dome — Стадионный рок" in \
+        leisure_ui.leisure_today_screen([concert]).text
 
 
 def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     data = _today_picks(monkeypatch)
 
-    # Без фильма главной становится первая карточка — без описания строка не ломается.
-    msg = leisure_ui.leisure_today_screen(data["picks"][1:], city="Alkmaar")
-    assert msg.text.startswith("🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма\n")
-    assert "Другие варианты:\n• Focus Group · музыкальный альбом" in msg.text
+    # Карточка сериала — без описания строка не ломается.
+    msg = leisure_ui.leisure_today_screen(data["picks"][1:2], city="Alkmaar")
+    assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты", "📰 Статьи", "🎉 Праздники"]] and _callbacks(kb)[0] == "lz_prem"
@@ -611,11 +622,11 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
     data = _today_picks(monkeypatch)
 
-    assert "• Focus Group · музыкальный альбом · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"]).text
+    assert "Артист дня:\n• Focus Group · «Blue Rev» · 2022" in leisure_ui.leisure_today_screen(data["picks"][2:]).text
     this_year = date.today().replace(month=1, day=9).isoformat()
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)
-    assert "· «Signal» · 9 января" in leisure_ui.leisure_today_screen(data["picks"]).text  # в этом году — дата
+    assert "· «Signal» · 9 января" in leisure_ui.leisure_today_screen(data["picks"][2:]).text  # в этом году — дата
 
 
 def test_premiere_of_day_picks_one_todays_premiere_by_personal_priority(monkeypatch):

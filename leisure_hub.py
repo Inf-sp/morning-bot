@@ -485,15 +485,76 @@ def _music_pick(artist):
             "about": artist.get("desc") or ""}
 
 
-def _shown_picks(picks, today) -> list:
-    """На экране — главная карточка и один вариант (по дням по очереди: сериал, музыка); остальное — кнопками."""
-    rest = picks[1:]
-    return picks[:1] + ([rest[today.toordinal() % len(rest)]] if rest else [])
+# «Досуг на сегодня» — одна карточка, по кругу при каждом открытии (даже в течение дня), из готовых кэшей разделов
+# хаба: фильм → сериал → статья → артист → премьера → концерт. Нет данных раздела — он пропускается.
+_ROTATION = ("movie", "tv", "read", "music", "premiere", "concert")
+_ROTATION_KEY = "hub_rotation"  # профиль: номер следующего показа
+
+
+def _premiere_pick(cid, today):
+    feed = premieres_feed(cid, today)
+    if not feed:
+        return None
+    kind, item = feed[today.toordinal() % len(feed)]
+    name, url, meta, about = leisure_ui._week_item(item, kind)
+    values = [str(value).lstrip("— ").strip() for value in meta if str(value or "").strip()]
+    return {"kind": "premiere", "name": name or "", "url": url,
+            "meta": [leisure_ui._PREMIERE_TYPE.get(kind, "").lower(), *values], "about": item.get("note") or about or ""}
+
+
+def _concert_pick(cid):
+    items = leisure_concerts.cached_favorite_concerts(cid, 1)
+    if not items:
+        return None
+    item = items[0]
+    notes = store._load(config.CONCERT_ARTIST_NOTES_KEY) or {}
+    note = notes.get(leisure_concerts._concert_identity_text(item["artist"])) if isinstance(notes, dict) else None
+    return {"kind": "concert", "name": item["artist"], "url": item.get("url") or "",
+            "meta": [leisure_ui._concert_date_label(item.get("date")), item.get("venue") or item.get("city") or ""],
+            "about": (note or {}).get("about") or ""}
+
+
+def _read_pick(cid, today):
+    import leisure_reads
+    item = next(iter(leisure_reads.top(cid, today)), None)
+    if not item or not str(item.get("link") or "").startswith("http"):
+        return None
+    minutes = int(item.get("minutes") or 0)
+    return {"kind": "read", "name": item.get("title") or "", "url": item["link"],
+            "meta": [item.get("source") or "", leisure_ui._event_date_label(item.get("published")),
+                     item.get("lang") or "", f"{minutes} мин" if minutes else ""],
+            "about": item.get("about") or ""}
+
+
+def today_options(cid, today, picks) -> dict:
+    """Карточки разделов для ротации {вид: карточка} из кэшей, без сети и AI."""
+    options = {pick.get("kind") or "movie": pick for pick in picks}
+    for kind, build in (("read", lambda: _read_pick(cid, today)), ("premiere", lambda: _premiere_pick(cid, today)),
+                        ("concert", lambda: _concert_pick(cid))):
+        try:
+            pick = build()
+        except Exception:
+            _log.debug("leisure today: %s unavailable", kind, exc_info=True)
+            pick = None
+        if pick and pick.get("name"):
+            options[kind] = pick
+    return options
+
+
+def next_today_pick(cid, options, advance=True):
+    """Следующая карточка по кругу _ROTATION (номер показа — в профиле); advance=False — без сдвига."""
+    kinds = [kind for kind in _ROTATION if kind in options]
+    if not kinds:
+        return None
+    number = int((store.get_profile(cid) or {}).get(_ROTATION_KEY) or 0)
+    if advance:
+        store.mutate_profile(cid, lambda profile: ({**profile, _ROTATION_KEY: number + 1}, None))
+    return options[kinds[number % len(kinds)]]
 
 
 def today_data(cid, day=None) -> dict:
-    """Досуг на сегодня: персональные карточки дня (фильм, сериал, артист) из кэшей — picks все, shown — что на
-    экране (главная и один вариант), и статистика библиотеки. Без AI и сети; концерты и статьи — своими кнопками."""
+    """Досуг на сегодня: персональные карточки дня (фильм, сериал, артист) из кэшей и статистика библиотеки; статью,
+    премьеру и концерт для ротации добавляет today_options. Без AI и сети."""
     today = day or _today_and_cc(cid)[0]
     picks = []
     for kind in _TODAY_KINDS:
@@ -507,7 +568,7 @@ def today_data(cid, day=None) -> dict:
             picks.append(pick)
     import leisure_reads
     return {
-        "picks": picks, "shown": _shown_picks(picks, today), "city": store.get_settings(cid).get("city") or "",
+        "picks": picks, "city": store.get_settings(cid).get("city") or "",
         # Статья дня — первая из «Статей» (самая интересная набора дня); набора нет — None.
         "read": next(iter(leisure_reads.top(cid, today)), None),
         "library": {"movies": len(store.get_list(config.FAVORITE_MOVIES_KEY, cid) or []),
@@ -544,7 +605,8 @@ def premiere_of_day(cid, day=None):
 
 
 async def send_hub(bot, cid, q=None):
-    """«🍿 Досуг на сегодня»: главная карточка — фильм на вечер; в отпуске — досуг страны поездки."""
+    """«🍿 Досуг на сегодня»: одна карточка — раздел хаба по кругу при каждом открытии (фильм → сериал → статья →
+    артист → премьера → концерт) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
     import vacation
     if vacation.active(cid):
         await _show(bot, cid, await asyncio.to_thread(_trip_screen, cid, vacation.trip_leisure(cid)), q)
@@ -562,8 +624,11 @@ async def send_hub(bot, cid, q=None):
     if not (data.get("read") or {}).get("about"):  # статьи или её анонса ещё нет — фоном, к следующему открытию
         import leisure_reads  # (не чаще раза в 10 минут: build_off_loop)
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
+    today = _today_and_cc(cid)[0]
+    options = await asyncio.to_thread(today_options, cid, today, data["picks"])
+    pick = await asyncio.to_thread(next_today_pick, cid, options)  # каждое открытие — следующий раздел
     msg = leisure_ui.leisure_today_screen(
-        data.get("shown") or data["picks"], city=data["city"], library=data["library"], read=data.get("read"),
+        [pick] if pick else [], city=data["city"], library=data["library"],
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
     await _show(bot, cid, msg, q)
