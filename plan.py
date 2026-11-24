@@ -45,7 +45,9 @@ def collect(cid, now=None) -> dict:
     tomorrow = now.date() + timedelta(days=1)
     place = {**(store.get_settings(cid) or {}), "_cid": cid}
     iso = tomorrow.isoformat()
+    import util
     plan = {"day": tomorrow, "city": place.get("city") or "", "cc": str(place.get("cc") or "").upper(),
+            "flag": util.flag_from_cc(place.get("cc") or ""),
             "weather": _weather_periods(place, now), "official": [], "holidays": [], "events": [],
             "premieres": [], "works": []}
 

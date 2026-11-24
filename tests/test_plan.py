@@ -6,7 +6,7 @@ from ui import myday as myday_ui
 
 def test_plan_has_weather_and_everything_for_tomorrow():
     msg = myday_ui.tomorrow_plan({
-        "day": date(2026, 11, 25), "city": "Alkmaar", "cc": "NL",
+        "day": date(2026, 11, 25), "city": "Alkmaar", "cc": "NL", "flag": "🇳🇱",
         "weather": [{"title": "❄️ Утром", "temp": "до -1°C", "rain": "без дождя", "wind": "ветер 4 м/с"},
                     {"title": "🌤️ Днём", "temp": "до +3°C", "rain": "без дождя", "wind": "ветер 4–5 м/с"}],
         "official": ["Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00"],
@@ -17,9 +17,8 @@ def test_plan_has_weather_and_everything_for_tomorrow():
                        "meta": ["фантастика"]}],
         "works": []})
     assert msg.text == (
-        "🗓️ План на завтра · ср, 25 ноября\n\n"
-        "Город: Alkmaar\n\n"
-        "Погода:\n❄️ Утром: до -1°C · без дождя · ветер 4 м/с\n🌤️ Днём: до +3°C · без дождя · ветер 4–5 м/с\n\n"
+        "План на завтра · Ср, 25 ноября · Alkmaar, NL 🇳🇱\n\n"
+        "❄️ Утром: до -1°C · без дождя · ветер 4 м/с\n🌤️ Днём: до +3°C · без дождя · ветер 4–5 м/с\n\n"
         "⚠️ Предупреждение: Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00.\n"
         "🎉 Праздник: Sinterklaasavond — вечер подарков.\n"
         "🏙️ Городское событие: Ice rink on Waagplein · Waagplein · бесплатно\n"

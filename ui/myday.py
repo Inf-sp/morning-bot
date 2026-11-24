@@ -430,14 +430,16 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
     from ui import leisure as leisure_ui
     from util import _MONTHS
     day = plan["day"]
-    weekdays = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+    weekdays = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
     b = MessageBuilder()
-    b.title(f"🗓️ План на завтра · {weekdays[day.weekday()]}, {day.day} {_MONTHS[day.month - 1]}")
-    if plan.get("city"):
-        b.labeled_line("Город", plan["city"], lowercase=False)
-    if plan.get("weather"):
+    # Заголовок — как у «Моего дня»: «План на завтра · Ср, 25 ноября · Alkmaar, NL 🇳🇱», жирным, без эмодзи.
+    place = " ".join(part for part in (f"{plan.get('city') or ''}{', ' + plan['cc'] if plan.get('cc') else ''}",
+                                       plan.get("flag") or "") if part).strip(" ,")
+    b.bold(" · ".join(part for part in ("План на завтра", f"{weekdays[day.weekday()]}, {day.day} {_MONTHS[day.month - 1]}",
+                                        place) if part))
+    b.newline()
+    if plan.get("weather"):  # что это погода — и так понятно: сразу части суток
         b.spacer()
-        b.labeled_line("Погода")
         for part in plan["weather"]:
             b.line(f"{part['title']}: {part['temp']} · {part['rain']} · {part['wind']}")
     extra = []
