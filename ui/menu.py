@@ -184,7 +184,7 @@ def _grammar_lesson(phrase) -> dict:
     term, meaning = _grammar_head({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")}) \
         if phrase.get("topic") else _grammar_parts(phrase.get("rule"))[0:1] + ("",)
     if phrase.get("topic") and card.get("intro") and card.get("points"):
-        intro, points = _without_period(card["intro"]), [_with_period(point) for point in card["points"]]
+        intro, points = _without_period(card["intro"]), [_with_period(_quotes(point)) for point in card["points"]]
         example, translation = card.get("example"), card.get("translation")
     else:
         explanation = _grammar_explanation(phrase) if phrase.get("topic") and phrase.get("explain") else (
@@ -193,13 +193,22 @@ def _grammar_lesson(phrase) -> dict:
         if term and not meaning and sentences and len(sentences[0].split()) <= 3 and ":" not in sentences[0]:
             meaning, sentences = _without_period(sentences[0]), sentences[1:]  # «Zodra» + «Как только.» — значение
         intro, points = (_without_period(sentences[0]).rstrip(" :") if sentences else ""), sentences[1:3]
-        if meaning:
-            points = [f"{term} = {_without_period(meaning)[:1].lower()}{_without_period(meaning)[1:]}.", *points][:3]
+        if meaning:  # первым фактом — перевод: «Переводится как «поэтому».»
+            points = [f"Переводится как «{_without_period(meaning)[:1].lower()}{_without_period(meaning)[1:]}».",
+                      *points][:3]
         example, translation = phrase.get("more"), phrase.get("more_translation")
     # Пример — сначала перевод, потом фраза: «Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik…».
     example = (f"{_without_period(translation)} → {_with_period(example)}" if example and translation
                else _with_period(example) if example else "")
     return {"term": _without_period(term), "intro": intro, "points": points, "example": example}
+
+
+def _quotes(text) -> str:
+    """'Поэтому' или "поэтому" → «поэтому» — кавычки-ёлочки, как во всём боте; русский перевод в них — со строчной."""
+    def fix(match):
+        inner = match.group(1)
+        return f"«{inner[:1].lower()}{inner[1:]}»" if re.match(r"[А-ЯЁ][а-яё]", inner) else f"«{inner}»"
+    return re.sub(r"""(?<![\w])['"]([^'"]{1,40})['"](?![\w])""", fix, str(text or ""))
 
 
 def _bold_term(b, text, term) -> None:
