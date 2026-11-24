@@ -444,7 +444,8 @@ def probe(service: str) -> bool:
             payload = (response.json() or {}).get("data") or {}
             daily = payload.get("free_model_daily_requests") or {}
             if isinstance(daily, dict) and daily.get("limit"):
-                api_usage.set_plan_limit("openrouter", int(daily["limit"]))
+                api_usage.set_plan_limit("openrouter", int(daily["limit"]),
+                                         int(daily["used"]) if daily.get("used") is not None else None)
                 if daily.get("remaining") is not None:
                     total, remaining = int(daily["limit"]), max(0, int(daily["remaining"]))
             elif "is_free_tier" in payload:

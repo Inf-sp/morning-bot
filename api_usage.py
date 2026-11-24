@@ -126,11 +126,16 @@ def limit_state(service: str) -> dict | None:
         svc = {}
     limit = int(svc.get("plan_limit") or limit)  # тариф ключа из проверки сервиса (OpenRouter: 50 или 1000)
     used = _count(svc, period, unit)
+    remote = svc.get("plan_used") or {}  # расход, который сообщил сам сервис (OpenRouter) за этот же период
+    if remote.get("bucket") == _bucket(period):
+        used = max(used, int(remote.get("used") or 0))
     return {"used": used, "limit": int(limit), "period": period, "share": used / int(limit)}
 
 
-def set_plan_limit(service: str, limit: int | None) -> None:
-    """Лимит по тарифу ключа, который увидела проверка сервиса; None — по config.API_FREE_LIMITS."""
+def set_plan_limit(service: str, limit: int | None, used: int | None = None) -> None:
+    """Лимит по тарифу ключа и расход, которые увидела проверка сервиса; limit None — по config.API_FREE_LIMITS."""
+    period = (config.API_FREE_LIMITS.get(service) or ("day",))[0]
+
     def mut(data):
         data = data or _template()
         svc = _service(data, service)
@@ -138,6 +143,8 @@ def set_plan_limit(service: str, limit: int | None) -> None:
             svc["plan_limit"] = int(limit)
         else:
             svc.pop("plan_limit", None)
+        if used is not None:
+            svc["plan_used"] = {"bucket": _bucket(period), "used": int(used)}
         return data, True
 
     try:
@@ -287,6 +294,9 @@ def record_request(service: str, ok: bool = True, *, units: dict | None = None,
     now = _now()
     now_ts = int(now.timestamp())
     units = ({"requests": 1} if include_request else {}) | (units or {})
+    if ok and include_request:
+        # Успешные запросы — отдельно: отказы (401, 429, сеть) лимит у сервиса не тратят и в расход не идут.
+        units = {**units, "success": 1}
 
     def mut(data):
         data = data or _template()

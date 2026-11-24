@@ -37,13 +37,14 @@ WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAI
 # env: API_LIMIT_YOUTUBE=10000.
 API_FREE_LIMITS = {
     "youtube": ("day", "units", _env_int("API_LIMIT_YOUTUBE", 10000)),  # search — 100 единиц, videos.list — 1
-    "ticketmaster": ("day", "requests", _env_int("API_LIMIT_TICKETMASTER", 5000)),
-    "spoonacular": ("day", "requests", _env_int("API_LIMIT_SPOONACULAR", 150)),
-    "serpapi": ("month", "requests", _env_int("API_LIMIT_SERPAPI", 100)),
+    # «success» — только принятые запросы: отказ (неверный ключ, 429) лимит у сервиса не тратит.
+    "ticketmaster": ("day", "success", _env_int("API_LIMIT_TICKETMASTER", 5000)),
+    "spoonacular": ("day", "success", _env_int("API_LIMIT_SPOONACULAR", 150)),
+    "serpapi": ("month", "success", _env_int("API_LIMIT_SERPAPI", 100)),
     "openweather": ("day", "requests", WEATHER_HARD_DAILY_LIMIT),
     # Бесплатные модели OpenRouter: дневной лимит проверка ключа читает сама (free_model_daily_requests.limit);
     # по умолчанию — 50.
-    "openrouter": ("day", "requests", _env_int("API_LIMIT_OPENROUTER", 50)),
+    "openrouter": ("day", "success", _env_int("API_LIMIT_OPENROUTER", 50)),
 }
 OPENROUTER_PAID_DAILY_LIMIT = _env_int("OPENROUTER_PAID_DAILY_LIMIT", 1000)
 API_LIMIT_WARN_SHARE = 0.8

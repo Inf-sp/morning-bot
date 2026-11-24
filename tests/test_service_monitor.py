@@ -676,3 +676,15 @@ def test_openrouter_probe_reads_free_model_daily_limit_from_key(monkeypatch):
     assert service_monitor.probe("openrouter") is True
     # Кредиты на ключе есть (is_free_tier: false), но лимит бесплатных моделей OpenRouter сообщает сам — 50.
     assert service_monitor.api_usage.limit_state("openrouter")["limit"] == 50
+
+
+def test_rejected_requests_do_not_eat_the_free_limit(monkeypatch):
+    _memory_store(monkeypatch)
+    import api_usage
+    monkeypatch.setattr(api_usage.provider_runtime, "record_result", lambda *_a, **_k: None)
+    for _ in range(48):  # старый ключ: 48 отказов 401 — у OpenRouter лимит не тратится
+        api_usage.record_request("openrouter", ok=False, status_code=401, error="HTTP 401")
+    api_usage.record_request("openrouter", ok=True)
+    assert api_usage.limit_state("openrouter")["used"] == 1 and api_usage.has_budget("openrouter")
+    api_usage.set_plan_limit("openrouter", 50, used=30)  # сам OpenRouter сообщил расход за сегодня
+    assert api_usage.limit_state("openrouter")["used"] == 30
