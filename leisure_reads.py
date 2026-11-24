@@ -211,7 +211,18 @@ def _about_ru(items) -> dict:
     return {link: texts["about"] for link, texts in _texts_ru(items).items() if texts.get("about")}
 
 
+_RU_BATCH = 5  # статей в одном AI-запросе: 15 разом не влезали в ответ (JSON обрывался) — набор оставался пустым
+
+
 def _texts_ru(items) -> dict:
+    """Русские заголовки и краткое содержание пачками по _RU_BATCH: сбой одной пачки не теряет остальные."""
+    result = {}
+    for start in range(0, len(items), _RU_BATCH):
+        result.update(_texts_ru_batch(items[start:start + _RU_BATCH]))
+    return result
+
+
+def _texts_ru_batch(items) -> dict:
     """{ссылка: {"about": краткое содержание по-русски в два-три предложения, "title": заголовок по-русски}} — один
     AI-запрос на статьи без них; сбой — {}. Источник — заголовок, анонс RSS и начало текста статьи (английский или
     нидерландский)."""
@@ -253,12 +264,12 @@ def _texts_ru(items) -> dict:
     return result
 
 
-def build(cid, now=None) -> dict:
+def build(cid, now=None, force=False) -> dict:
     """Набор статей дня (ночной прогрев, сеть и AI — вне обработчика). Уже собран сегодня — как есть; у статей без
-    анонса (AI не ответил при сборке) он дописывается одним запросом."""
+    анонса (AI не ответил при сборке) он дописывается. force — «Обновить карточки» в админке: собрать заново."""
     now = now or datetime.now(config.TZ)
     saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
-    if (saved.get("date") == now.date().isoformat() and saved.get("items") and saved.get("v") == _VERSION
+    if not force and (saved.get("date") == now.date().isoformat() and saved.get("items") and saved.get("v") == _VERSION
             and tuple(saved.get("themes") or _THEMES) == themes(cid)):
         return _with_teasers(cid, saved)
     cutoff = (now.date() - timedelta(days=_SEEN_DAYS)).isoformat()

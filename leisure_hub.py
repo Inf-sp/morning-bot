@@ -948,9 +948,9 @@ async def warm_hub_cache(cid):
     return not failed
 
 
-def _reads_build(cid):
+def _reads_build(cid, force=False):
     import leisure_reads
-    return leisure_reads.build(cid)
+    return leisure_reads.build(cid, force=force)
 
 
 async def _warm_premiere_notes(cid):

@@ -214,3 +214,17 @@ def test_titles_are_russian_with_source_language_and_themes_are_chosen(monkeypat
     assert leisure_reads.top("42", now.date()) == []
     card = leisure_ui.reads_card([{**article, "published": "2026-10-17"}]).text
     assert card.startswith("📰 Квир-история Амстердама\n\nExpreszo · 17 октября · NL")
+
+
+def test_translations_go_in_small_batches_so_a_long_answer_is_not_cut(monkeypatch):
+    calls = []
+
+    def llm(prompt, *_a, **_k):
+        count = prompt.count('"title": "T')
+        calls.append(count)
+        return {"items": [{"id": i, "title": "Заголовок", "about": "Краткое содержание."} for i in range(count)]}
+
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", llm)
+    items = [{"title": f"T{i}", "link": f"https://a/{i}", "summary": "", "text": ""} for i in range(12)]
+    texts = leisure_reads._texts_ru(items)
+    assert calls == [5, 5, 2] and len(texts) == 12

@@ -272,6 +272,8 @@ async def _refresh_card_cache(cid, key, bot=None):
         leisure_concerts.invalidate_user_concerts_cache(cid)
         vacation._clear_leisure_cards(cid)  # фильм, сериал и артист дня — по-настоящему новые
         await leisure_movies.warm_movie_premieres_cache(cid)
+        import leisure_reads  # статьи дня — заново (набор без переводов иначе стоял бы до завтра)
+        await asyncio.to_thread(leisure_reads.build, cid, None, True)
         return await leisure_hub.warm_hub_cache(cid)
     if key == "myday":
         for dependency in ("wardrobe", "cooking", "learning", "leisure"):
