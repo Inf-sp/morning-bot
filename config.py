@@ -71,7 +71,7 @@ BACKUP_DIR = os.environ.get("BACKUP_DIR", "/var/backups/morning-bot")  # еже�
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "morning-bot")  # systemd-сервис бота (перезапуск из админки)
 # Старая PostgreSQL на Railway: нужна только скрипту tools/migrate_to_sqlite.py.
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip().strip("\"'")  # пробел, перевод строки или кавычки из env — не часть ключа
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "").strip()
 CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b").strip() or "gpt-oss-120b"
 # GitHub Models: токен GitHub с правом models:read.
