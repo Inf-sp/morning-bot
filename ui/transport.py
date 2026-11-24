@@ -94,10 +94,10 @@ def ns_alert(city, disruption, titles=None) -> MessageSpec:
     b.spacer()
     route = route_label(titles or [disruption.get("title") or ""], city)
     if route:
-        b.labeled_line("Участок", route, lowercase=False)
+        b.labeled_line("Маршрут", route, lowercase=False)
     cause = _sentence(disruption.get("cause"))
     if cause:
-        b.labeled_line("Причина", cause, lowercase=False)
+        b.labeled_line("Причина", cause)  # после подписи — со строчной: «неисправность сигнализации.»
     until = _time_label(disruption.get("until"))
     if until:
         b.labeled_line("Ожидаемое восстановление", f"{until}.", lowercase=False)
@@ -113,12 +113,12 @@ def ns_restored(title, *, since="", until="", cause="", city="", titles=None) ->
     b.spacer()
     route = route_label(titles or ([title] if title else []), city)
     if route:
-        b.labeled_line("Участок", route, lowercase=False)
+        b.labeled_line("Маршрут", route, lowercase=False)
     else:
         b.line("Поезда снова ходят.")
     start, end = _time_label(since), _time_label(until)
     if start and end and start != end:
-        b.labeled_line("Сбой длился", f"с {start} до {end}.", lowercase=False)
+        b.labeled_line("Сбой длился", f"{start} - {end}.", lowercase=False)
     return b.build_stripped()
 
 
