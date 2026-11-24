@@ -607,3 +607,23 @@ def test_admin_title_counts_problems():
     message = admin_ui.home(system_rows=["AI", "🔴 Groq · Резерв · ключ не принимается"],
                             attention=["Groq — ключ не принимается: обнови GROQ_API_KEY", "Gemini — кредиты"])
     assert message.text.startswith("🛠️ Админ · ⚠️ 2 проблемы\n\n⚠️ Нужно внимание:")
+
+
+def test_admin_refreshes_one_leisure_part_like_reads(monkeypatch):
+    import leisure_hub
+    import leisure_reads
+    ran, forced = [], []
+
+    async def fake(name):
+        ran.append(name)
+
+    monkeypatch.setattr(leisure_hub, "_warm_concerts", lambda _cid: fake("concerts"))
+    monkeypatch.setattr(leisure_reads, "build", lambda cid, now=None, force=False: forced.append(force) or {})
+    bot = RecordingBot()
+
+    asyncio.run(admin.refresh_card(bot, "42", "lz_reads"))
+
+    assert forced == [True] and ran == []  # только статьи, заново; концерты не трогаем
+    assert "✅ 🍿 Статьи — обновлено." in bot.sent[0]["text"]
+    callbacks = [b.callback_data for row in bot.sent[0]["reply_markup"].inline_keyboard for b in row]
+    assert callbacks[:3] == ["adm_refresh_card_leisure", "adm_refresh_card_lz_cards", "adm_refresh_card_lz_reads"]

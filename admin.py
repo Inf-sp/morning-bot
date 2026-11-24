@@ -241,15 +241,50 @@ _REFRESH_CARDS = (
 )
 
 
+# Досуг по частям: «Весь Досуг» и отдельные части (leisure_hub.WARM_PARTS).
+_LEISURE_PARTS = (
+    ("cards", "Фильм, сериал и артист"),
+    ("reads", "Статьи"),
+    ("premieres", "Премьеры"),
+    ("concerts", "Концерты"),
+    ("events", "События"),
+)
+
+
 async def send_card_refresh_menu(bot, cid, q=None, *, status=""):
     rows = [
-        [InlineKeyboardButton(label, callback_data=f"adm_refresh_card_{key}")]
+        [InlineKeyboardButton(label, callback_data="adm_refresh_leisure" if key == "leisure"
+                              else f"adm_refresh_card_{key}")]
         for key, label in _REFRESH_CARDS
     ]
     rows.append(nav_row("adm_home"))
     await _show(
         bot, cid, ui.card_refresh_menu(status), InlineKeyboardMarkup(rows), q,
     )
+
+
+async def send_leisure_refresh_menu(bot, cid, q=None, *, status=""):
+    """«Обновить карточки → Досуг»: весь Досуг или одна часть — статьи, премьеры и т. п."""
+    rows = [[InlineKeyboardButton("Весь Досуг", callback_data="adm_refresh_card_leisure")]]
+    rows += [[InlineKeyboardButton(label, callback_data=f"adm_refresh_card_lz_{key}")] for key, label in _LEISURE_PARTS]
+    rows.append(nav_row("adm_refresh_cards"))
+    await _show(bot, cid, ui.card_refresh_menu(status, title="🍿 Обновить Досуг",
+                                               hint="Выбери, что обновить: весь Досуг или одну часть."),
+                InlineKeyboardMarkup(rows), q)
+
+
+async def _refresh_leisure_part(cid, part):
+    import leisure_hub
+    if part == "cards":
+        import vacation
+        vacation._clear_leisure_cards(cid)  # фильм, сериал и артист дня — по-настоящему новые
+    elif part == "concerts":
+        import leisure_concerts
+        leisure_concerts.invalidate_user_concerts_cache(cid)
+    elif part == "premieres":
+        import leisure_movies
+        await leisure_movies.warm_movie_premieres_cache(cid)
+    return await leisure_hub.warm_hub_cache(cid, only=leisure_hub.WARM_PARTS[part])
 
 
 async def _refresh_card_cache(cid, key, bot=None):
@@ -275,6 +310,8 @@ async def _refresh_card_cache(cid, key, bot=None):
         import leisure_reads  # статьи дня — заново (набор без переводов иначе стоял бы до завтра)
         await asyncio.to_thread(leisure_reads.build, cid, None, True)
         return await leisure_hub.warm_hub_cache(cid)
+    if key.startswith("lz_"):
+        return await _refresh_leisure_part(cid, key[3:])
     if key == "myday":
         for dependency in ("wardrobe", "cooking", "learning", "leisure"):
             await _refresh_card_cache(cid, dependency)
@@ -285,7 +322,7 @@ async def _refresh_card_cache(cid, key, bot=None):
 
 
 async def refresh_card(bot, cid, key, q=None):
-    labels = dict(_REFRESH_CARDS)
+    labels = {**dict(_REFRESH_CARDS), **{f"lz_{part}": f"🍿 {name}" for part, name in _LEISURE_PARTS}}
     label = labels.get(key)
     if not label:
         await send_card_refresh_menu(bot, cid, q, status="⚠️ Карточка не найдена.")
@@ -303,16 +340,20 @@ async def refresh_card(bot, cid, key, q=None):
         result = await _refresh_card_cache(cid, key, bot)
         if result is False:
             raise RuntimeError("card cache is incomplete")
-        outcome = f"✅ {label} обновлена."
+        outcome = f"✅ {label} — обновлено." if key.startswith("lz_") else f"✅ {label} обновлена."
         refreshed = True
     except Exception:
         _log.exception("admin card refresh failed cid=%s card=%s", cid, key)
         import leisure_hub
-        failed = leisure_hub.failed_steps.get(str(cid)) if key in ("leisure", "myday") else None
+        failed = leisure_hub.failed_steps.get(str(cid)) if key in ("leisure", "myday") or key.startswith("lz_") \
+            else None
         outcome = f"⚠️ {label}: не обновились — {', '.join(failed)}" if failed else f"⚠️ {label} не обновилась."
     if status is not None:
         await status.stop(delete=True)
-    await send_card_refresh_menu(bot, cid, q, status=outcome)
+    if key == "leisure" or key.startswith("lz_"):
+        await send_leisure_refresh_menu(bot, cid, q, status=outcome)
+    else:
+        await send_card_refresh_menu(bot, cid, q, status=outcome)
     if key == "myday" and refreshed:
         # Кэш пересобран, но прежнее сообщение «Мой день» в чате не меняется — присылаем свежую карточку.
         import myday

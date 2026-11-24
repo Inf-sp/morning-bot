@@ -125,15 +125,16 @@ def notice(title, text):
     return b.build_stripped()
 
 
-def card_refresh_menu(status=""):
+def card_refresh_menu(status="", *, title="🔄 Обновить карточки",
+                      hint="Выбери карточку для принудительного обновления кэша."):
     b = MessageBuilder()
-    b.bold("🔄 Обновить карточки")
+    b.bold(title)
     b.newline()
     b.spacer()
     if status:
         b.line(status)
         b.spacer()
-    b.line("Выбери карточку для принудительного обновления кэша.")
+    b.line(hint)
     return b.build_stripped()
 
 

@@ -913,9 +913,21 @@ _WARM_STEP_LABELS = {
 failed_steps = {}
 
 
-async def warm_hub_cache(cid):
+# Части Досуга для «Обновить карточки → Досуг» в админке: шаги прогрева каждой части.
+WARM_PARTS = {
+    "cards": ("movie_reco", "tv_reco", "artist_reco"),
+    "reads": ("reads",),
+    "premieres": ("movie_premieres", "series", "new_music", "favorite_releases", "album_notes", "details",
+                  "premiere_notes"),
+    "concerts": ("concerts",),
+    "events": ("agenda", "event_images"),
+}
+
+
+async def warm_hub_cache(cid, only=None):
     """Ночной прогрев хаба и карточки «Что посмотреть»; сеть только для устаревших кэшей.
 
+    only — шаги одной части (WARM_PARTS) из админки; статьи тогда собираются заново.
     Ошибка одного источника не мешает остальным; False — хотя бы один не обновился
     (их названия — в failed_steps[cid]).
     """
@@ -932,13 +944,15 @@ async def warm_hub_cache(cid):
         ("album_notes", lambda: _warm_album_notes(cid)),
         ("details", lambda: _warm_details(cid)),
         ("premiere_notes", lambda: _warm_premiere_notes(cid)),  # после стран и релизов: лента уже готова
-        ("reads", lambda: asyncio.to_thread(_reads_build, cid)),
+        ("reads", lambda: asyncio.to_thread(_reads_build, cid, bool(only))),
         ("trip_afisha", lambda: _warm_trip_afisha(cid)),
         ("agenda", lambda: asyncio.to_thread(_agenda, cid, True)),
         ("event_images", lambda: asyncio.to_thread(_event_images, cid)),  # после афиши: её события уже в ленте
     )
     failed = []
     for name, call in steps:
+        if only is not None and name not in only:
+            continue
         try:
             await call()
         except Exception:

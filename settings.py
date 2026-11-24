@@ -1441,6 +1441,9 @@ async def handle_callback(bot, cid, data, q=None):
     elif data == "adm_refresh_cards":
         import admin as _adm
         await _admin_guard(bot, cid, lambda b, c: _adm.send_card_refresh_menu(b, c, q))
+    elif data == "adm_refresh_leisure":
+        import admin as _adm
+        await _admin_guard(bot, cid, lambda b, c: _adm.send_leisure_refresh_menu(b, c, q))
     elif data.startswith("adm_refresh_card_"):
         import admin as _adm
         card = data[len("adm_refresh_card_"):]
