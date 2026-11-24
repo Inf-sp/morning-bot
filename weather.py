@@ -375,14 +375,26 @@ def _clock(value, tz=None):
 PRECIPITATION_ICONS = ("🌧️", "☀️🌧️", "❄️", "🌩️")  # дождь, ливень в жару, снег, гроза — их вечером не заменяем
 
 
+_DARK_ICONS = {"☀️": "✨", "🌤️": "☁️"}  # вечером и ночью солнца нет: ясно — ✨, переменная облачность — ☁️
+
+
 def evening_icon(icon, label):
-    """Вечером без дождя и снега — 🌒 вместо солнца, облаков или ветра: вечер не «солнечный»."""
-    return "🌒" if label == "Вечером" and icon not in PRECIPITATION_ICONS else icon
+    """Вечером и ночью — знак погоды без солнца (ясно ✨, облачно ☁️, ветер, осадки — как есть), не луна."""
+    return _DARK_ICONS.get(icon, icon) if label in ("Вечером", "Ночью") else icon
 
 
 def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
-    icon = evening_icon(weather_icon(code, temp, rain, wind_ms, rain_mm, clouds), label)
-    return "🌑" if label == "Ночью" and icon in ("☀️", "🌤️") else icon
+    return evening_icon(weather_icon(code, temp, rain, wind_ms, rain_mm, clouds), label)
+
+
+def period_title(period) -> str:
+    """Заголовок части суток одним знаком погоды: минус хотя бы в часть периода — ❄️ (с дождём — 🧊 гололёд),
+    иначе знак погоды периода: «❄️ Ночью», «🌧️ Днём», «✨ Вечером»."""
+    frost = period.get("tmin", period["tmax"]) <= 0
+    icon = period["icon"]
+    if frost:
+        icon = "🧊" if icon in ("🌧️", "☀️🌧️") else icon if icon == "🌩️" else "❄️"
+    return f"{icon} {period['label']}"
 
 
 def _full_forecast_parts(now):
@@ -442,7 +454,7 @@ def _period_lines(period) -> list:
     strong = max(period["winds"], default=0) > 10
     frost = period.get("tmin", period["tmax"]) <= 0  # минус хотя бы в часть периода — лёд на дорогах
     temp = f"до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
-    title = f"{period['icon']} {'🧊 ' if frost else ''}{period['label']}"  # мороз — значком в заголовке: «🌑 🧊 Ночью»
+    title = period_title(period)  # мороз — снежинкой: «❄️ Ночью»
     wind = f"{_speed_range(period['winds'])} м/с" + (", сильный" if strong else "")
     return [(title, None), ("Температура", temp), ("Осадки", rain), ("Ветер", wind)]
 
@@ -528,8 +540,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
         periods = [
             {
-                # Минус хотя бы в часть периода — 🧊 в заголовке («🌑 🧊 Ночью»), с дождём ещё «гололёд».
-                "title": f"{p['icon']} {'🧊 ' if p.get('tmin', p['tmax']) <= 0 else ''}{p['label']}",
+                # Минус хотя бы в часть периода — ❄️ вместо знака погоды («❄️ Ночью»), с дождём ещё «гололёд».
+                "title": period_title(p),
                 "lines": [
                     f"Температура до {p['tmax']:+.0f}°C"
                     + (" · гололёд" if p.get("tmin", p["tmax"]) <= 0 and _rain_real(p["rain"], p["rain_mm"]) else ""),

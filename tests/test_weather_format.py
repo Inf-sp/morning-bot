@@ -110,10 +110,10 @@ def test_daily_rain_code_without_real_rain_gives_no_rain_icon():
 
 def test_period_icon_follows_period_rain_and_clouds():
     assert weather._period_weather_icon("Днём", 61, 20, 0, 6, 0) == "☁️"
-    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "🌑"
+    assert weather._period_weather_icon("Ночью", 0, 15, 0, 2, 0) == "✨"  # ясная ночь — без луны
     assert weather._period_weather_icon("Ночью", 61, 15, 90, 2, 4) == "🌧️"
-    assert weather._period_weather_icon("Вечером", 0, 15, 0, 2, 0) == "🌒"  # ясно
-    assert weather._period_weather_icon("Вечером", 3, 15, 0, 9, 0) == "🌒"  # облачно и ветер
+    assert weather._period_weather_icon("Вечером", 0, 15, 0, 2, 0) == "✨"  # ясно
+    assert weather._period_weather_icon("Вечером", 3, 15, 0, 9, 0) == "💨"  # ветер — знаком погоды
     assert weather._period_weather_icon("Вечером", 61, 15, 90, 2, 4) == "🌧️"  # дождь — как был
     assert weather._period_weather_icon("Вечером", 73, -2, 90, 2, 4) == "❄️"  # снег — как был
     assert weather.evening_icon("☀️", "Днём") == "☀️"
@@ -559,7 +559,8 @@ def test_tomorrow_warning_uses_tomorrow_and_only_important_hazards(monkeypatch):
 def test_tomorrow_period_marks_frost_and_ice():
     import weather
     cold = {"label": "Утром", "icon": "🌤️", "tmax": -1, "tmin": -3, "rain": 0, "rain_mm": 0, "winds": [2, 3]}
-    assert weather._period_lines(cold)[:2] == [("🌤️ 🧊 Утром", None), ("Температура", "до -1°C")]
+    assert weather._period_lines(cold)[:2] == [("❄️ Утром", None), ("Температура", "до -1°C")]  # минус — снежинка
+    assert weather.period_title({**cold, "label": "Ночью", "icon": "🌧️", "rain": 80}) == "🧊 Ночью"  # гололёд
     wet = {**cold, "tmax": 1, "rain": 80, "rain_mm": 2.0}
     assert weather._period_lines(wet)[1:3] == [("Температура", "до +1°C · гололёд"), ("Осадки", "🌧️ дождь 80%")]
     warm = {**cold, "tmax": 5, "tmin": 2}
