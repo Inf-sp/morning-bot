@@ -20,6 +20,7 @@ NOTIF_TYPES = [
     ("daily_words",     "Обучение языку"),
     ("evening_weather", "Погода на завтра"),
     ("ns_disruptions",  "Поезда NS"),
+    ("bus_disruptions", "Автобусы"),  # сбои автобусов у вокзала города (OVapi), вместе с проверкой NS
     ("flight_deals",    "Дешёвые билеты"),
     ("week_holidays",   "Праздники и мероприятия"),  # по понедельникам: праздники и события города на неделю
     ("holidays",        "Праздники и концерты"),  # накануне: праздник, событие города, концерт твоего артиста
@@ -123,7 +124,7 @@ NOTIF_TIMES = {
 _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
     "evening_weather": "Погода на завтра",
-    "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS",
+    "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS", "bus_disruptions": "Автобусы",
     "flight_deals": "Дешёвые билеты", "holidays": "Праздники и концерты",
     "week_holidays": "Праздники и мероприятия", "trip_day": "План дня в отпуске",
 }
@@ -205,7 +206,7 @@ def next_notification(cid, now=None) -> str:
 def user_notif_label(cid, kind) -> str:
     """«Обучение языку · 11:00» с временем, выбранным пользователем."""
     title = _NOTIF_TITLES.get(kind, kind)
-    if kind == "ns_disruptions":
+    if kind in ("ns_disruptions", "bus_disruptions"):
         return f"{title} · при сбое"
     if kind == "flight_deals":
         return f"{title} · из Амстердама"
@@ -233,7 +234,7 @@ def notif_on(cid, kind):
     # До появления переключателя погодные предупреждения приходили всем.
     # Сохраняем это поведение для старых профилей, пока пользователь сам их
     # не отключит.
-    if kind in ("weather_warn", "ns_disruptions", "holidays", "trip_day", "week_holidays"):  # план дня в отпуске — тоже
+    if kind in ("weather_warn", "ns_disruptions", "bus_disruptions", "holidays", "trip_day", "week_holidays"):  # план дня в отпуске — тоже
         # Сбои NS включены по умолчанию: без города в Нидерландах они всё равно молчат.
         return True
     for legacy_kind in _LEGACY_NOTIF_KINDS.get(kind, ()):
@@ -572,6 +573,9 @@ async def _send_scheduled_notification(bot, cid, kind):
     elif kind == "ns_disruptions":
         import ns_alerts
         await ns_alerts.check_user(bot, cid)
+    elif kind == "bus_disruptions":
+        import bus_alerts
+        await bus_alerts.check_user(bot, cid)
     elif kind == "flight_deals":
         import flight_deals
         await flight_deals.check_user(bot, cid)
@@ -687,6 +691,7 @@ _ADMIN_NOTIFICATION_META = {
     "daily_words":     ("11:00", "Обучение языку"),
     "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
+    "bus_disruptions": ("06:00–23:00, при сбое", "Автобусы · сбои у вокзала"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
     "holidays":        ("накануне 18:00, если есть праздник или концерт", "Праздники и концерты"),
     "week_holidays":   ("пн 10:00", "Праздники и мероприятия"),
@@ -721,7 +726,7 @@ def notification_available(cid, kind) -> bool:
     if kind == "trip_day":
         import vacation
         return vacation.active(cid)
-    if kind in ("ns_disruptions", "flight_deals"):
+    if kind in ("ns_disruptions", "bus_disruptions", "flight_deals"):
         return str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL"
     return True
 

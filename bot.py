@@ -399,12 +399,14 @@ async def job_ns_disruptions(context: ContextTypes.DEFAULT_TYPE):
     if not config.NS_API_KEY or not ns_alerts.is_active_time():
         return
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, ns_alerts.KIND):
-            continue
-        try:
-            await settings.send_scheduled_notification(context.bot, cid, ns_alerts.KIND)
-        except Exception:
-            logging.exception("job_ns_disruptions failed for cid=%s", cid)
+        # Тем же проходом — сбои автобусов у вокзала (OVapi, без ключа).
+        for kind in (ns_alerts.KIND, "bus_disruptions"):
+            if not settings.notif_on(cid, kind) or not settings.notification_available(cid, kind):
+                continue
+            try:
+                await settings.send_scheduled_notification(context.bot, cid, kind)
+            except Exception:
+                logging.exception("job_ns_disruptions failed for cid=%s kind=%s", cid, kind)
 
 
 @ai.background_job

@@ -83,7 +83,7 @@ def test_next_notification_line(monkeypatch):
 
 def test_settings_summary_line(monkeypatch):
     saved = {"notif_evening_weather": True, "notif_daily_words": True, "notif_weather_warn": False,
-             "notif_ns_disruptions": False, "notif_weekend_events": False,
+             "notif_ns_disruptions": False, "notif_bus_disruptions": False, "notif_weekend_events": False,
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
 

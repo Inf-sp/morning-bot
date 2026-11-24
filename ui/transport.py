@@ -86,7 +86,36 @@ def _sentence(text) -> str:
     return f"{text[:1].upper()}{text[1:]}." if text else ""
 
 
-def ns_alert(city, disruption, titles=None) -> MessageSpec:
+def _clock(moment) -> str:
+    return moment.strftime("%H:%M") if hasattr(moment, "strftime") else ""
+
+
+def bus_line(item) -> str:
+    """«6 → Bergen 08:12» (+N мин, если опаздывает)."""
+    delay = int(item.get("delay_min") or 0)
+    text = f"{item.get('line')} → {item.get('destination')} {_clock(item.get('expected') or item.get('planned'))}"
+    return text + (f" (+{delay} мин)" if delay >= 3 else "")
+
+
+def bus_alert(stop, events) -> MessageSpec:
+    """«🔴 Сбой автобусов», «**Остановка:** Station Alkmaar», пункты: «• 6 → Bergen 08:12 — отменён», «• 165 → Hoorn
+    08:27 — опаздывает на 15 мин (по плану 08:12)», «• Сообщение перевозчика: …»."""
+    b = MessageBuilder()
+    b.section("🔴 Сбой автобусов")
+    b.spacer()
+    b.labeled_line("Остановка", stop, lowercase=False)
+    for event in events:
+        if event["kind"] == "cancel":
+            b.line(f"• {event['line']} → {event['destination']} {_clock(event['planned'])} — отменён")
+        elif event["kind"] == "delay":
+            b.line(f"• {event['line']} → {event['destination']} {_clock(event['expected'])} — опаздывает на "
+                   f"{event['delay_min']} мин (по плану {_clock(event['planned'])})")
+        else:
+            b.line(f"• {_sentence(event['text'])}")
+    return b.build_stripped()
+
+
+def ns_alert(city, disruption, titles=None, buses=None) -> MessageSpec:
     """Сбой NS коротко: «🔴 Сбой NS», участки к городу, причина, ожидаемое восстановление."""
     title = "Авария NS" if disruption.get("type") == "CALAMITY" else "Сбой NS"
     b = MessageBuilder()
@@ -103,6 +132,8 @@ def ns_alert(city, disruption, titles=None) -> MessageSpec:
         b.labeled_line("Ожидаемое восстановление", f"{until}.", lowercase=False)
     if not cause and not until and disruption.get("situation"):  # причины и срока нет — что пишет NS
         b.line(_sentence(disruption["situation"]))
+    if buses:  # замена поездам — ближайшие автобусы от вокзала (OVapi)
+        b.labeled_line("Автобусы от вокзала", " · ".join(bus_line(item) for item in buses), lowercase=False)
     return b.build_stripped()
 
 

@@ -48,6 +48,9 @@ API_FREE_LIMITS = {
 }
 OPENROUTER_PAID_DAILY_LIMIT = _env_int("OPENROUTER_PAID_DAILY_LIMIT", 1000)
 API_LIMIT_WARN_SHARE = 0.8
+OVAPI_STOPS_KEY = "ovapi_stops.json"  # {город: {v, ts, stops{код: название}}} — остановки города из OVapi, месяц
+# Автобусы у вокзала: остановки со словом в названии (Station Alkmaar и Station Alkmaar Noord — обе).
+BUS_STOP_NAME = os.environ.get("BUS_STOP_NAME", "Station").strip() or "Station"
 CUISINE_FACTS_KEY = "cuisine_facts.json"  # {кухня: {v, facts[]}} — факты о кухне сверх базы data/cuisine_facts.json
 ADMIN_ALERTS_KEY = "admin_alerts.json"  # {сервис: дата} — что уже сообщено админу сегодня (одно сообщение на сервис в день)
 API_LIMIT_RESERVE_SHARE = 0.95

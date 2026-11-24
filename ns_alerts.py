@@ -160,7 +160,12 @@ async def check_user(bot, cid):
         active[item["id"]]["cause"] = translated.get("cause") or active[item["id"]]["cause"]
         titles = [other["title"] for other in current if active[other["id"]]["sig"] == sig]
         active[item["id"]]["titles"] = titles
-        msg = transport_ui.ns_alert(city, translated, titles)
+        try:  # ближайшие автобусы от вокзала — чем заменить поезд (OVapi, без ключа); сбой — без строки
+            import ovapi
+            buses = await asyncio.wait_for(asyncio.to_thread(ovapi.next_buses, city), 12)
+        except Exception:
+            buses = []
+        msg = transport_ui.ns_alert(city, translated, titles, buses)
         await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, reply_markup=_keyboard())
     still_active = {value["sig"] for value in active.values()}
     restored = {}
