@@ -84,7 +84,9 @@ def _day_menu_message(menu, cid=None):
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),
         # Описание кухни: дома — из списка кухонь; кухня страны отпуска — из гида поездки.
-        intro=day_menu.CUISINE_INTRO.get(menu.get("cuisine"), "")
+        # Дома — факт дня о кухне (по кругу без повторов), без фактов — описание кухни; в отпуске — из гида поездки.
+        intro=(day_menu.cuisine_fact(cid, menu.get("cuisine")) if cid is not None and not vacation.active(cid) else "")
+        or day_menu.CUISINE_INTRO.get(menu.get("cuisine"), "")
         or (vacation.local_cuisine_intro(cid) if cid is not None
             and str(menu.get("cuisine") or "").startswith(day_menu.LOCAL_PREFIX) else ""),
         flag=day_menu.cuisine_flag(menu.get("cuisine")),

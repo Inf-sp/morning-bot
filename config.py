@@ -43,6 +43,7 @@ API_FREE_LIMITS = {
     "openweather": ("day", "requests", WEATHER_HARD_DAILY_LIMIT),
 }
 API_LIMIT_WARN_SHARE = 0.8
+CUISINE_FACTS_KEY = "cuisine_facts.json"  # {кухня: {v, facts[]}} — факты о кухне сверх базы data/cuisine_facts.json
 ADMIN_ALERTS_KEY = "admin_alerts.json"  # {сервис: дата} — что уже сообщено админу сегодня (одно сообщение на сервис в день)
 API_LIMIT_RESERVE_SHARE = 0.95
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"

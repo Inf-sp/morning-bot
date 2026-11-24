@@ -626,7 +626,7 @@ def test_week_icon_ignores_night_rain_with_local_hourly():
 def test_home_menu_drops_notes_that_repeat_the_name_and_fixes_typos(monkeypatch):
     import language_tool
     _setup(monkeypatch, {
-        "breakfast": {"name": "Блины с творогом", "note": "тонкие блины с твороговой начинкой"},
+        "breakfast": {"name": "Омлет с сыром", "note": "омлет с сыром внутри"},
         "lunch": {"name": "Щи", "note": "суп из квашенной капусты"},
         "dinner": {"name": "Голубцы", "note": "капустные листья с фаршем и рисом"},
     })
@@ -642,7 +642,7 @@ def test_home_menu_drops_notes_that_repeat_the_name_and_fixes_typos(monkeypatch)
 
     monkeypatch.setattr(language_tool, "check_text", check)
     dishes = day_menu.build_day_menu("42", cuisine="russian")["dishes"]
-    assert dishes["breakfast"] == {"name": "Блины с творогом", "note": ""}  # пересказ названия — только название
+    assert dishes["breakfast"] == {"name": "Омлет с сыром", "note": ""}  # пересказ названия — только название
     assert dishes["lunch"]["note"] == "суп из квашеной капусты"  # очевидная опечатка исправлена
     assert dishes["dinner"]["note"] == "капустные листья с фаршем и рисом"
 

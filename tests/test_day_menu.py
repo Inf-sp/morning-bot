@@ -55,20 +55,20 @@ def test_cuisine_of_the_day_rotates_through_preferences(monkeypatch):
 def test_ai_menu_is_validated_and_saved_with_history(monkeypatch):
     profile = _profile(monkeypatch)
     prompts = _ai(monkeypatch, {
-        "breakfast": {"name": "Crostata", "note": "песочный пирог с джемом."},
+        "breakfast": {"name": "Yogurt con frutta", "note": "йогурт с фруктами."},
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
-        "dinner": {"name": "Crostata", "note": "дубль — должен замениться"},
+        "dinner": {"name": "Yogurt con frutta", "note": "дубль — должен замениться"},
     })
 
     menu_data = day_menu.get_day_menu("42", now=NOW, cuisine="italian")
 
     dishes = menu_data["dishes"]
-    assert dishes["breakfast"] == {"name": "Crostata", "note": "песочный пирог с джемом"}
-    assert dishes["dinner"]["name"] != "Crostata"  # повтор в одном меню заменён типичным блюдом
+    assert dishes["breakfast"] == {"name": "Yogurt con frutta", "note": "йогурт с фруктами"}
+    assert dishes["dinner"]["name"] != "Yogurt con frutta"  # повтор в одном меню заменён типичным блюдом
     assert dishes["dinner"]["name"] in {name for name, _ in recipe_generation.TYPICAL_DISHES["italian"]["dinner"]}
     assert "Итальянская" in prompts[0] and "яйца" not in prompts[0]  # меню дня — из любых продуктов
     assert profile["cooking_day_menu"]["date"] == "2026-10-09"
-    assert "Crostata" in profile["cooking_day_menu_history"]["names"]
+    assert "Yogurt con frutta" in profile["cooking_day_menu_history"]["names"]
     assert day_menu.get_cached_day_menu("42", now=NOW) == menu_data
 
 
@@ -199,7 +199,7 @@ def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
     import settings
     _profile(monkeypatch)
     prompts = _ai(monkeypatch, {
-        "breakfast": {"name": "Сырники", "note": "творожные оладьи"},
+        "breakfast": {"name": "Омлет", "note": "пышный омлет на молоке"},
         "lunch": {"name": "Борщ", "note": "свекольный суп на говядине"},
         "dinner": {"name": "Котлеты с пюре", "note": "домашние котлеты"},
     })
@@ -210,7 +210,7 @@ def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
     dishes = day_menu.get_day_menu("42", now=NOW, cuisine="russian")["dishes"]
 
     assert "вегетарианское" in prompts[0]
-    assert dishes["breakfast"]["name"] == "Сырники"
+    assert dishes["breakfast"]["name"] == "Омлет"
     for meal in ("lunch", "dinner"):  # мясо от AI заменено подходящим типичным блюдом
         assert day_menu.fits_restrictions(dishes[meal], ["vegetarian"]), dishes[meal]
     # «Борщ на говядине» от AI отклонён; вегетарианский борщ из списка допустим, котлеты — нет.
@@ -457,3 +457,32 @@ def test_mine_recipe_prefers_own_cookbook_and_works_without_ai(monkeypatch):
     assert "Тушёная говядина (говядина, картофель" in prompts[0] and "кулинарная книга" in prompts[0]
     assert idea["name"] and idea["ingredients"]
     assert [item["name"] for item in recipe_generation.cookbook_matches(["Курица"], "breakfast")] == []
+
+
+def test_breakfast_is_light_and_quick(monkeypatch):
+    import recipe_generation
+    # Завтраки в запасном списке — до 10 минут: без выпечки и теста.
+    for cuisine, by_meal in recipe_generation.TYPICAL_DISHES.items():
+        for name, _note in by_meal["breakfast"]:
+            assert recipe_generation.fits_meal({"name": name}, "breakfast"), (cuisine, name)
+    assert not recipe_generation.fits_meal({"name": "Crostata"}, "breakfast")
+    assert not recipe_generation.fits_meal({"name": "Хачапури по-аджарски"}, "breakfast")
+    assert recipe_generation.fits_meal({"name": "Хачапури по-аджарски"}, "dinner")
+    assert recipe_generation._breakfast_minutes(20, "breakfast") == 10
+    assert recipe_generation._breakfast_minutes(20, "dinner") == 20
+    assert "не дольше 10 минут" in day_menu._prompt("italian", [], [], ("breakfast", "lunch"))
+
+
+def test_cuisine_fact_rotates_daily_without_repeats(monkeypatch):
+    from datetime import datetime
+    profile = {}
+    monkeypatch.setattr(day_menu.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(day_menu.store, "mutate_profile", lambda _cid, change: profile.update(change(dict(profile))[0]))
+    monkeypatch.setattr(day_menu.store, "_load", lambda _key: {})
+    facts = day_menu.cuisine_facts("italian")
+    assert len(facts) >= 15 and any("капучино" in fact for fact in facts)
+    days = [datetime(2026, 11, day, 9, tzinfo=day_menu.config.TZ) for day in range(1, 4)]
+    shown = [day_menu.cuisine_fact("42", "italian", now) for now in days]
+    assert len(set(shown)) == 3  # новый день — новый факт
+    assert day_menu.cuisine_fact("42", "italian", days[-1]) == shown[-1]  # весь день — один
+    assert day_menu.cuisine_fact("42", "unknown") == ""

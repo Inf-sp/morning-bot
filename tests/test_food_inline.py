@@ -216,7 +216,7 @@ def test_source_quantities_are_human_and_servings_dropped():
 
 def test_chosen_cuisine_prompt_asks_for_a_typical_dish():
     rule = recipe_generation._typical_dish_rule("italian", "breakfast")
-    assert "типичного блюда" in rule and "Crostata" in rule and "завтрак" in rule
+    assert "типичного блюда" in rule and "Fette biscottate" in rule and "Crostata" not in rule and "завтрак" in rule
     assert "Борщ" in recipe_generation._typical_dish_rule("russian", "lunch")
     assert set(recipe_generation.TYPICAL_DISHES) == {key for key, _ in recipe_generation._cuisine_options()}
 
