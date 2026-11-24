@@ -93,6 +93,8 @@ def _no_rss_reads(monkeypatch):
     monkeypatch.setattr(leisure_reads, "_excerpt", lambda _link: "")
     import local_events
     monkeypatch.setattr(local_events, "_page_image", lambda _url: "")
+    import countries
+    monkeypatch.setattr(countries, "wiki_image", lambda _query, fetch=True: "")
     yield
 
 

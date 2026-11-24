@@ -1,8 +1,10 @@
-"""«🎟️ События» в Досуге: одна лента карточек по дате — концерты (твои артисты и звёзды рядом), фестивали,
-выставки, праздники, городские мероприятия и премьеры; ← n/N → по кругу, как «Премьеры».
+"""«🎟️ События» в Досуге — журнал недели: что будет в городе и стране в ближайшие 7 дней, по дате, как расписание.
+Концерты (твои артисты и крупные концерты рядом), фестивали, выставки, праздники, городские мероприятия, премьеры и
+статьи недели — одна лента карточек с картинкой и датой, ← n/N → по кругу, как «Премьеры».
 
-Всё — из готовых кэшей разделов (концерты, афиша города, праздники, лента премьер), без AI; при открытии сеть нужна
-только для фото артиста текущей карточки (Deezer, кэш месяц). Нет кэша раздела — его карточек просто нет.
+Всё — из готовых кэшей разделов (концерты, афиша города, праздники, лента премьер, набор статей), без AI. Картинка
+есть у каждой карточки: своя (постер, обложка, картинка статьи или страницы события), фото исполнителя (Deezer) или
+картинка из Википедии — по названию, площадке или городу (кэш месяц; прогревается ночью, при открытии — до 5 с).
 """
 import asyncio
 import logging
@@ -13,12 +15,10 @@ import store
 
 _log = logging.getLogger(__name__)
 
-_HORIZON_DAYS = 30  # фестивали, выставки, праздники и город — на месяц, как «Праздники»
-_CONCERT_DAYS = 365  # концерты — на год вперёд, как экран «Концерты»
-_MINE_MAX, _STARS_MAX, _CITY_MAX, _HOLIDAYS_MAX = 5, 3, 12, 3
-_WORLD_FAME = 8
-_PHOTO_WAIT = 4  # фото артиста при открытии карточки ждём не дольше; нет — карточка текстом
-_KIND_ORDER = ("holiday", "festival", "concert", "exhibition", "city", "premiere")
+WEEK_DAYS = 7  # журнал недели: повод заглядывать, а не афиша на месяц
+_MINE_MAX, _POPULAR_MAX, _CITY_MAX, _READS_MAX = 5, 6, 12, 6
+_IMAGE_WAIT = 5  # картинку текущей карточки при открытии ждём не дольше; не успели — карточка текстом
+_KIND_ORDER = ("holiday", "festival", "concert", "exhibition", "city", "premiere", "read")
 
 
 def _today(cid):
@@ -26,11 +26,15 @@ def _today(cid):
     return leisure_hub._today_and_cc(cid)
 
 
+def _week(today):
+    return today, today + timedelta(days=WEEK_DAYS - 1)
+
+
 def _concerts(cid, today, cc) -> list:
-    """Ближайшие концерты своих артистов и до трёх концертов звёзд мировой величины рядом (оценка из кэша заметок)."""
+    """Концерты недели: твои артисты и крупные концерты страны (самые известные — по кэшу заметок, без AI)."""
     import leisure_concerts as concerts
-    end = today + timedelta(days=_CONCERT_DAYS)
-    mine = concerts.concert_items_between(concerts._concerts_cache_get(cid, cc) or [], today, end, _MINE_MAX)
+    start, end = _week(today)
+    mine = concerts.concert_items_between(concerts._concerts_cache_get(cid, cc) or [], start, end, _MINE_MAX)
     taken = {concerts._concert_identity_text(item["artist"]) for item in mine}
     notes = store._load(config.CONCERT_ARTIST_NOTES_KEY) or {}
     notes = notes if isinstance(notes, dict) else {}
@@ -38,23 +42,24 @@ def _concerts(cid, today, cc) -> list:
     def note(item):
         return notes.get(concerts._concert_identity_text(item["artist"])) or {}
 
-    popular = concerts.concert_items_between(concerts._popular_events_cache_get(cc, today) or [], today, end,
-                                             concerts._POPULAR_EVENTS_LIMIT)
-    stars = [item for item in popular if concerts._concert_identity_text(item["artist"]) not in taken
-             and int(note(item).get("fame") or 0) >= _WORLD_FAME][:_STARS_MAX]
+    popular = [item for item in concerts.concert_items_between(
+        concerts._popular_events_cache_get(cc, today) or [], start, end, concerts._POPULAR_EVENTS_LIMIT)
+        if concerts._concert_identity_text(item["artist"]) not in taken]
+    popular = sorted(popular, key=lambda item: (-int(note(item).get("fame") or 0), item["date"]))[:_POPULAR_MAX]
     cards = []
-    for item, mine_flag in [*((item, True) for item in mine), *((item, False) for item in stars)]:
-        place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
+    for item, mine_flag in [*((item, True) for item in mine), *((item, False) for item in popular)]:
         cards.append({"kind": "concert", "name": item["artist"], "url": item.get("url") or "",
-                      "date": item["date"], "end": item["date"], "place": place, "mine": mine_flag,
-                      "about": note(item).get("about") or "", "image": ""})
+                      "date": item["date"], "end": item["date"], "venue": item.get("venue") or "",
+                      "place": ", ".join(part for part in (item.get("venue"), item.get("city")) if part),
+                      "mine": mine_flag, "about": note(item).get("about") or "", "image": ""})
     return cards
 
 
 def _city(cid, today) -> list:
-    """Фестивали, выставки, праздники и городские мероприятия из афиши города (кэш «Праздников»), без сети."""
+    """Фестивали, выставки, праздники и городские мероприятия недели из афиши города (кэш «Праздников»)."""
     import local_events
-    found = local_events.agenda(cid, today, today + timedelta(days=_HORIZON_DAYS - 1), fetch=False)
+    start, end = _week(today)
+    found = local_events.agenda(cid, start, end, fetch=False)
     cards = []
     for event in found[:_CITY_MAX]:
         kind = event.get("kind") if event.get("kind") in ("festival", "exhibition", "concert", "holiday") else "city"
@@ -68,32 +73,52 @@ def _city(cid, today) -> list:
 def _holidays(cid, today) -> list:
     import public_holidays
     cc = (store.get_settings(cid) or {}).get("cc")
-    found = public_holidays.week_holidays(cc, today, today + timedelta(days=_HORIZON_DAYS - 1))
     return [{"kind": "holiday", "name": item["name"], "url": "", "date": item["date"], "end": item["date"],
-             "about": item.get("about") or "", "image": ""} for item in found[:_HOLIDAYS_MAX]]
+             "about": item.get("about") or "", "image": ""}
+            for item in public_holidays.week_holidays(cc, *_week(today))]
 
 
 def _premieres(cid, today) -> list:
+    """Премьеры недели: вышли за последние 7 дней или выходят в ближайшие 7; без даты — нет."""
     import leisure_hub
     from ui import leisure as leisure_ui
+    since, end = (today - timedelta(days=WEEK_DAYS - 1)).isoformat(), _week(today)[1].isoformat()
     cards = []
     for kind, item in leisure_hub.premieres_feed(cid, today):
+        day = leisure_hub._release_day(item)
+        if not day or not since <= day <= end:
+            continue
         name, url, meta, about = leisure_ui._week_item(item, kind)
         values = [str(value).lstrip("— ").strip() for value in meta if str(value or "").strip()]
-        day = leisure_hub._release_day(item)
         cards.append({"kind": "premiere", "premiere": kind, "name": name or "", "url": url or "",
-                      "date": day or today.isoformat(), "end": day or today.isoformat(), "meta": values,
-                      "about": item.get("note") or about or "",
+                      "date": day, "end": day, "meta": values, "about": item.get("note") or about or "",
                       "image": str(item.get("cover" if kind == "music" else "poster") or "")})
     return cards
 
 
+def _reads(cid, today) -> list:
+    """Статьи недели — набор дня «Статей» (свежее за неделю), самые интересные первыми; дата — публикации."""
+    import leisure_reads
+    since = (today - timedelta(days=WEEK_DAYS - 1)).isoformat()
+    cards = []
+    for item in leisure_reads.ranked(cid, today)[:_READS_MAX]:
+        day = str(item.get("published") or "") or today.isoformat()
+        if day < since or not str(item.get("link") or "").startswith("http"):
+            continue
+        minutes = int(item.get("minutes") or 0)
+        cards.append({"kind": "read", "name": item.get("title") or "", "url": item["link"], "date": day, "end": day,
+                      "meta": [item.get("source") or "", item.get("lang") or "", f"{minutes} мин" if minutes else ""],
+                      "about": item.get("about") or "", "image": item.get("image") or ""})
+    return cards
+
+
 def feed(cid) -> list:
-    """Лента «Событий»: все карточки по дате (уже идущие и вышедшие — как сегодня), без пустых имён."""
+    """Лента «Событий» на неделю по дате (уже вышедшее и идущее — как сегодня), без пустых имён и повторов."""
     today, cc = _today(cid)
     cards = []
     for name, build in (("concerts", lambda: _concerts(cid, today, cc)), ("city", lambda: _city(cid, today)),
-                        ("holidays", lambda: _holidays(cid, today)), ("premieres", lambda: _premieres(cid, today))):
+                        ("holidays", lambda: _holidays(cid, today)), ("premieres", lambda: _premieres(cid, today)),
+                        ("reads", lambda: _reads(cid, today))):
         try:
             cards += build()
         except Exception:
@@ -101,7 +126,7 @@ def feed(cid) -> list:
     seen, unique = set(), []
     for card in cards:
         key = (str(card["name"]).casefold(), card["date"])
-        if card["name"] and key not in seen:
+        if card["name"] and card["date"] and key not in seen:
             seen.add(key)
             unique.append(card)
     iso = today.isoformat()
@@ -109,25 +134,54 @@ def feed(cid) -> list:
                                             str(card["name"]).casefold()))
 
 
-async def image_of(card) -> str:
-    """Картинка карточки: фото артиста концерта (Deezer, кэш месяц), постер премьеры, картинка страницы события."""
-    image = str(card.get("image") or "")
-    if image.startswith("https://") or card.get("kind") != "concert":
-        return image if image.startswith("https://") else ""
+def _image_queries(card, city) -> list:
+    """Запросы картинки к Википедии: само событие, площадка в городе, город (последний — почти всегда есть)."""
+    queries = []
+    if card["kind"] != "read":
+        queries.append(f"{card['name']} {city}".strip() if card["kind"] in ("festival", "city", "exhibition")
+                       else card["name"])
+    place = str(card.get("venue") or card.get("place") or "").strip()
+    if place:
+        queries.append(f"{place} {city}".strip())
+    if city:
+        queries.append(city)
+    return queries
+
+
+def image_for(card, city, fetch=True) -> str:
+    """Картинка карточки: своя → фото исполнителя (концерт) → Википедия по событию, площадке, городу."""
     import countries
-    try:
-        photo = await asyncio.wait_for(asyncio.to_thread(countries.artist_photo, card["name"]), _PHOTO_WAIT)
-    except Exception:
-        _log.debug("events: artist photo unavailable", exc_info=True)
-        return ""
-    return photo if str(photo or "").startswith("https://") else ""
+    image = str(card.get("image") or "")
+    if image.startswith("https://"):
+        return image
+    if card["kind"] == "concert":
+        photo = countries.artist_photo(card["name"], fetch=fetch)
+        if str(photo or "").startswith("https://"):
+            return photo
+    for query in _image_queries(card, city):
+        found = countries.wiki_image(query, fetch=fetch)
+        if str(found or "").startswith("https://"):
+            return found
+    return ""
+
+
+def warm_images(cid) -> int:
+    """Ночной прогрев: картинки всех карточек ленты — чтобы открытие и листание не ждали сеть."""
+    city = str((store.get_settings(cid) or {}).get("city") or "")
+    return sum(1 for card in feed(cid) if image_for(card, city))
 
 
 async def send_events(bot, cid, arg="", q=None):
-    """«🎟️ События»: карточка ленты с картинкой, ← n/N → по кругу (lz_ev_<n>) в том же сообщении."""
+    """«🎟️ События»: карточка ленты недели с картинкой и датой, ← n/N → по кругу (lz_ev_<n>) в том же сообщении."""
     import leisure_hub
     from ui import leisure as leisure_ui
     cards = await asyncio.to_thread(feed, cid)
     index = int(arg) % len(cards) if cards and str(arg).isdigit() else 0
-    image = await image_of(cards[index]) if cards else ""
+    image = ""
+    if cards:
+        city = str((store.get_settings(cid) or {}).get("city") or "")
+        try:
+            image = await asyncio.wait_for(asyncio.to_thread(image_for, cards[index], city), _IMAGE_WAIT)
+        except Exception:
+            _log.debug("events: image unavailable", exc_info=True)
     await leisure_hub._show_card(bot, cid, leisure_ui.event_card(cards, index), image, q)

@@ -355,6 +355,14 @@ def artist_photo(name, fetch=True) -> str:
                          ttl=_FANS_TTL) or ""
 
 
+def wiki_image(query, fetch=True) -> str:
+    """Картинка события, праздника, площадки или города из Википедии (поиск на английском); кэш месяц; fetch=False
+    — только кэш."""
+    import wikidata_books
+    return _person_cache(config.EVENT_IMAGE_KEY, query, wikidata_books.search_image, fetch, keep_empty=True,
+                         ttl=_FANS_TTL) or ""
+
+
 def artist_fans(name, fetch=True) -> int | None:
     """Число поклонников артиста на Deezer — мера известности; None — неизвестно (сбой, нет кэша при fetch=False)."""
     found = _person_cache(config.ARTIST_FANS_KEY, _full_name(name), _deezer_fans, fetch, keep_empty=True,

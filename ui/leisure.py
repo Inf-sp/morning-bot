@@ -935,7 +935,7 @@ def leisure_hub_kb():
 
 
 _EVENT_KIND = {"concert": ("🎫", "Концерт"), "festival": ("🎪", "Фестиваль"), "exhibition": ("🖼️", "Выставка"),
-               "holiday": ("🎉", "Праздник"), "city": ("🏙️", "Городское событие")}
+               "holiday": ("🎉", "Праздник"), "city": ("🏙️", "Городское событие"), "read": ("📰", "Статья")}
 _PREMIERE_EMOJI = {"movie": "🎬", "series": "📺", "music": "🎧"}
 
 
@@ -959,6 +959,8 @@ def _event_meta(card) -> tuple:
         return (_PREMIERE_EMOJI.get(kind, "🎬"), f"Премьера · {_PREMIERE_TYPE.get(kind, 'Фильм').lower()}",
                 [*card.get("meta", ()), _event_date_label(card.get("date"))])
     emoji, label = _EVENT_KIND.get(card["kind"], _EVENT_KIND["city"])
+    if card["kind"] == "read":  # «Статья · 21 ноября · Quanta · EN · 8 мин»
+        return emoji, label, [_event_date_label(card.get("date")), *card.get("meta", ())]
     date = (_concert_date_label(card.get("date")) if card["kind"] == "concert"
             else _event_span(card.get("date"), card.get("end")))
     return emoji, label, [date, card.get("place") or "", "бесплатно" if card.get("free") else "",
@@ -979,12 +981,13 @@ def event_pick(card) -> dict:
 
 
 def event_card(cards, index=0) -> MessageSpec:
-    """Карточка ленты «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome, Amsterdam ·
-    твой артист», описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку прикладывает обработчик."""
+    """Карточка журнала недели «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome,
+    Amsterdam · твой артист» (дата — всегда), описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку
+    прикладывает обработчик."""
     b = MessageBuilder()
     if not cards:
         b.title("🎟️ События")
-        b.line("Событий на ближайший месяц пока нет — загляни чуть позже.")
+        b.line("На этой неделе событий пока нет — загляни чуть позже.")
         return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
     index %= len(cards)
     card = cards[index]

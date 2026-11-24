@@ -107,6 +107,18 @@ def article_titles(qid) -> dict:
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+(?=[A-ZА-ЯЁ«\"0-9])")
 
 
+def search_image(query, lang="en") -> str:
+    """Картинка самой подходящей статьи Википедии по запросу (generator=search + pageimages); нет — ""; сбой —
+    исключение."""
+    response = requests.get(f"https://{lang}.wikipedia.org/w/api.php", params={
+        "action": "query", "format": "json", "generator": "search", "gsrsearch": query, "gsrlimit": 1,
+        "prop": "pageimages", "piprop": "thumbnail", "pithumbsize": 1200}, headers=_HEADERS, timeout=_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    pages = ((response.json().get("query") or {}).get("pages") or {}).values()
+    url = next((str((page.get("thumbnail") or {}).get("source") or "") for page in pages), "")
+    return url if url.startswith("https://") else ""
+
+
 def article_intro(lang, title, sentences=2) -> str:
     """Первые предложения статьи Википедии (REST summary — без скобок с датами и сносок); сбой — исключение."""
     response = requests.get(f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",

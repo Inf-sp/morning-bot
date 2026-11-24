@@ -267,11 +267,12 @@ def test_warm_runs_every_step_and_reports_a_failed_one(monkeypatch):
     monkeypatch.setattr(leisure_hub, "_warm_album_notes", step("album_notes"))
     monkeypatch.setattr(leisure_hub, "_warm_details", step("details"))
     monkeypatch.setattr(leisure_hub, "_warm_premiere_notes", step("premiere_notes"))
+    monkeypatch.setattr(leisure_hub, "_event_images", lambda _cid: calls.append("event_images") or 0)
 
     assert asyncio.run(leisure_hub.warm_hub_cache("42")) is False
     assert leisure_hub.failed_steps["42"] == ["концерты"]
     assert calls == ["concerts", "movies", "music", "movie_reco", "tv_reco", "artist_reco",
-                     "series", "album_notes", "details", "premiere_notes"]
+                     "series", "album_notes", "details", "premiere_notes", "event_images"]
 
 
 def test_premieres_and_library_submenus():

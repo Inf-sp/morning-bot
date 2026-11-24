@@ -1,47 +1,60 @@
-import asyncio
 from datetime import date
 
 import leisure_events
 from ui import leisure as leisure_ui
 
+TODAY = date(2026, 11, 24)
 
-def test_events_feed_mixes_all_kinds_by_date_with_photos(monkeypatch):
-    today = date(2026, 11, 24)
-    monkeypatch.setattr(leisure_events, "_today", lambda _cid: (today, "NL"))
+
+def _stub(monkeypatch):
+    monkeypatch.setattr(leisure_events, "_today", lambda _cid: (TODAY, "NL"))
     monkeypatch.setattr(leisure_events, "_concerts", lambda *_a: [
-        {"kind": "concert", "name": "Muse", "url": "https://t/muse", "date": "2026-12-04", "end": "2026-12-04",
-         "place": "Ziggo Dome, Amsterdam", "mine": True, "about": "Стадионный рок с оркестром.", "image": ""}])
+        {"kind": "concert", "name": "Muse", "url": "https://t/muse", "date": "2026-11-28", "end": "2026-11-28",
+         "venue": "Ziggo Dome", "place": "Ziggo Dome, Amsterdam", "mine": True,
+         "about": "Стадионный рок с оркестром.", "image": ""}])
     monkeypatch.setattr(leisure_events, "_city", lambda *_a: [
         {"kind": "festival", "name": "Winterfest", "url": "https://w", "date": "2026-11-29", "end": "2026-11-30",
          "place": "Hortus", "free": True, "about": "зимний фестиваль", "image": "https://img/w.jpg"},
         {"kind": "exhibition", "name": "Vermeer", "url": "", "date": "2026-11-20", "end": "2026-12-20",
          "place": "Stedelijk Museum", "free": False, "about": "", "image": ""}])
-    monkeypatch.setattr(leisure_events, "_holidays", lambda *_a: [
-        {"kind": "holiday", "name": "Sinterklaasavond", "url": "", "date": "2026-12-05", "end": "2026-12-05",
-         "about": "вечер подарков", "image": ""}])
+    monkeypatch.setattr(leisure_events, "_holidays", lambda *_a: [])
     monkeypatch.setattr(leisure_events, "_premieres", lambda *_a: [
         {"kind": "premiere", "premiere": "movie", "name": "Дюна", "url": "https://y", "date": "2026-11-20",
          "end": "2026-11-20", "meta": ["фантастика"], "about": "Пол Атрейдес.", "image": "https://img/d.jpg"}])
+    monkeypatch.setattr(leisure_events, "_reads", lambda *_a: [
+        {"kind": "read", "name": "DNA repair", "url": "https://q/dna", "date": "2026-11-21", "end": "2026-11-21",
+         "meta": ["Quanta", "EN", "8 мин"], "about": "Клетки чинят ДНК.", "image": "https://img/q.jpg"}])
 
+
+def test_events_are_a_week_journal_by_date_with_dates_on_every_card(monkeypatch):
+    _stub(monkeypatch)
     cards = leisure_events.feed("42")
-    # Уже идущее и вышедшее — как сегодня; дальше по дате.
-    assert [card["name"] for card in cards] == ["Vermeer", "Дюна", "Winterfest", "Muse", "Sinterklaasavond"]
-
-    concert = leisure_ui.event_card(cards, 3)
-    assert concert.text == ("🎫 Muse\n\nКонцерт · 4 декабря 2026 · Ziggo Dome, Amsterdam · твой артист\n\n"
-                            "Стадионный рок с оркестром.")
-    rows = concert.reply_markup.inline_keyboard
+    # Уже идущее и вышедшее — как сегодня; дальше по дате, как расписание.
+    assert [card["name"] for card in cards] == ["Vermeer", "Дюна", "DNA repair", "Muse", "Winterfest"]
+    assert leisure_ui.event_card(cards, 3).text == (
+        "🎫 Muse\n\nКонцерт · 28 ноября 2026 · Ziggo Dome, Amsterdam · твой артист\n\nСтадионный рок с оркестром.")
+    assert leisure_ui.event_card(cards, 2).text.startswith("📰 DNA repair\n\nСтатья · 21 ноября · Quanta · EN · 8 мин")
+    assert leisure_ui.event_card(cards, 4).text.startswith("🎪 Winterfest\n\nФестиваль · 29–30 ноября · Hortus · бесплатно")
+    rows = leisure_ui.event_card(cards, 3).reply_markup.inline_keyboard
     assert [b.callback_data for b in rows[0]] == ["lz_ev_2", "noop", "lz_ev_4"] and rows[0][1].text == "4/5"
-    festival = leisure_ui.event_card(cards, 2).text
-    assert festival.startswith("🎪 Winterfest\n\nФестиваль · 29–30 ноября · Hortus · бесплатно")
 
+
+def test_every_card_gets_a_picture(monkeypatch):
     import countries
+    asked = []
     monkeypatch.setattr(countries, "artist_photo", lambda name, fetch=True: f"https://photo/{name}.jpg")
-    assert asyncio.run(leisure_events.image_of(cards[3])) == "https://photo/Muse.jpg"  # фото исполнителя
-    assert asyncio.run(leisure_events.image_of(cards[2])) == "https://img/w.jpg"
-    assert asyncio.run(leisure_events.image_of(cards[0])) == ""
+    monkeypatch.setattr(countries, "wiki_image",
+                        lambda query, fetch=True: asked.append(query) or ("https://wiki/city.jpg" if query == "Alkmaar"
+                                                                          else ""))
+    concert = {"kind": "concert", "name": "Muse", "venue": "Ziggo Dome", "image": ""}
+    assert leisure_events.image_for(concert, "Alkmaar") == "https://photo/Muse.jpg"  # фото исполнителя
+    assert leisure_events.image_for({"kind": "festival", "name": "W", "image": "https://own.jpg"}, "Alkmaar") == \
+        "https://own.jpg"
+    holiday = {"kind": "holiday", "name": "Sinterklaasavond", "image": ""}
+    # Своей нет — Википедия: событие, затем город.
+    assert leisure_events.image_for(holiday, "Alkmaar") == "https://wiki/city.jpg"
+    assert asked == ["Sinterklaasavond", "Alkmaar"]
 
 
-def test_empty_events_screen_is_honest():
-    msg = leisure_ui.event_card([])
-    assert msg.text == "🎟️ События\n\nСобытий на ближайший месяц пока нет — загляни чуть позже."
+def test_empty_week_is_honest():
+    assert leisure_ui.event_card([]).text == "🎟️ События\n\nНа этой неделе событий пока нет — загляни чуть позже."

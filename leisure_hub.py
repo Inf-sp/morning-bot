@@ -516,6 +516,8 @@ def today_options(cid, today) -> dict:
         cards = []
     groups = {"concert": [], "event": [], "premiere": []}
     for card in cards:
+        if card["kind"] == "read":  # статья дня — своей карточкой ниже
+            continue
         group = card["kind"] if card["kind"] in ("concert", "premiere") else "event"
         if len(groups[group]) < _ROTATION_DEPTH:
             groups[group].append(leisure_ui.event_pick(card))
@@ -724,6 +726,11 @@ _HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на меся�
 _AGENDA_WAIT = 25  # поиск афиши при открытии ждём не дольше; не успел — кэш, свежая афиша — к следующему открытию
 
 
+def _event_images(cid):
+    import leisure_events
+    return leisure_events.warm_images(cid)
+
+
 def _agenda(cid, fetch=True):
     """Афиша города на окно «Праздников» (прогрев и экран)."""
     from datetime import timedelta
@@ -888,7 +895,7 @@ _WARM_STEP_LABELS = {
     "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
     "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
     "details": "страны", "trip_afisha": "афиша поездки", "premiere_notes": "описания премьер",
-    "reads": "статья дня", "agenda": "праздники и афиша",
+    "reads": "статья дня", "agenda": "праздники и афиша", "event_images": "картинки событий",
 }
 # Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
 failed_steps = {}
@@ -916,6 +923,7 @@ async def warm_hub_cache(cid):
         ("reads", lambda: asyncio.to_thread(_reads_build, cid)),
         ("trip_afisha", lambda: _warm_trip_afisha(cid)),
         ("agenda", lambda: asyncio.to_thread(_agenda, cid, True)),
+        ("event_images", lambda: asyncio.to_thread(_event_images, cid)),  # после афиши: её события уже в ленте
     )
     failed = []
     for name, call in steps:
