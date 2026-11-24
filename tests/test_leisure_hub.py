@@ -573,7 +573,7 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🎟️ События"], ["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "📰 Статьи"]]
+    assert _labels(kb)[:3] == [["🎟️ События"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["📰 Статьи"]]
     assert "lz_ev" in _callbacks(kb) and not {"lz_prem", "lz_concerts", "lz_holidays"} & set(_callbacks(kb))
     for old in ("lz_prem", "lz_concerts", "lz_holidays", "lz_ev_3"):  # старые кнопки из истории — работают
         assert routing.resolve_callback_handler(old)["handled"]

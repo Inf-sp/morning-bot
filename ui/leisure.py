@@ -921,14 +921,14 @@ def reads_card(items, index=0) -> MessageSpec:
 
 
 def leisure_hub_kb():
-    """Широкая «События» сверху (концерты, фестивали, выставки, праздники, город и премьеры одной лентой), ниже в
-    два столбца Фильм | Сериал, Музыка | Статьи (старые «Премьеры / Концерты / Праздники» из истории работают)."""
+    """Широкая «События» сверху (концерты, фестивали, выставки, праздники, город и премьеры одной лентой), ниже
+    Фильм | Сериал | Музыка в три столбца и широкая «Статьи» (старые «Премьеры / Концерты / Праздники» работают)."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎟️ События", callback_data="lz_ev")],
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
-         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco")],
-        [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
-         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
+         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
+        [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
