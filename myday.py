@@ -469,7 +469,6 @@ def _day_menu_kb(cid=None):
         if cid is not None and vacation.active(cid) else []
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
-        [InlineKeyboardButton("🗓️ План на завтра", callback_data="plan_tomorrow")],
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
         *trip,
         # Блоки сводки настраиваются в «Настройки → Предпочтения → ☀️ Мой день».
