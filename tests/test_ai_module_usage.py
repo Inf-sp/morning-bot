@@ -33,8 +33,6 @@ def test_module_usage_counts_requests_tokens_background_and_cache(monkeypatch):
     row = api_usage.ai_module_usage(1)["food"]
     assert (row["req"], row["fail"], row["bg"], row["cache"], row["in"], row["out"]) == (2, 1, 1, 1, 1000, 200)
     assert row["providers"] == {"gemini": 1, "groq": 1}
-    text = admin_ui.ai_usage(api_usage.ai_module_usage(1), api_usage.ai_module_usage(7)).text
-    assert "• Кухня — 2 запр. · 1 тыс. ток. · сбоев 1 · фон 1 · кэш 1" in text
 
 
 def test_successful_provider_answer_is_counted_under_the_calling_module(monkeypatch):

@@ -10,9 +10,6 @@ import asyncio
 import glob
 import os
 import shutil
-import sqlite3
-import subprocess
-import tempfile
 import time
 from datetime import datetime, timedelta
 
@@ -120,11 +117,7 @@ async def send_home(bot, cid, q=None):
         *([[InlineKeyboardButton(f"⚠️ Ошибки · {errors_today}", callback_data="adm_logs")]] if errors_today else []),
         [InlineKeyboardButton("🩺 Проверить API", callback_data="adm_api_check")],
         [InlineKeyboardButton("🔄 Обновить карточки", callback_data="adm_refresh_cards")],
-        [InlineKeyboardButton("💾 Прислать копию базы", callback_data="adm_backup"),
-         InlineKeyboardButton("🔁 Перезапустить бота", callback_data="adm_restart")],
-        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users"),
-         InlineKeyboardButton("🧮 ИИ по разделам", callback_data="adm_ai_usage")],
-        [InlineKeyboardButton("🚆 Ответ NS", callback_data="adm_ns_raw")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="adm_users")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
     msg = ui.home(
@@ -219,87 +212,6 @@ def night_line(cid):
     return "🌙 Ночь: " + " · ".join(parts) if parts else None
 
 
-# ================= КОПИЯ БАЗЫ И ПЕРЕЗАПУСК =================
-
-_TELEGRAM_FILE_LIMIT = 50 * _MB
-
-
-def _db_snapshot(path):
-    """Согласованный снимок SQLite (backup API): запись в базу во время копирования не портит файл."""
-    source = sqlite3.connect(config.DATABASE_PATH)
-    target = sqlite3.connect(path)
-    try:
-        source.backup(target)
-    finally:
-        target.close()
-        source.close()
-    return os.path.getsize(path)
-
-
-async def send_backup(bot, cid, q=None):
-    back = InlineKeyboardMarkup([nav_row("adm_home")])
-    if not config.DATABASE_PATH:
-        await _show(bot, cid, ui.notice("💾 Копия базы", "Копия недоступна: база не на диске."), back, q)
-        return
-    with tempfile.TemporaryDirectory() as folder:
-        path = os.path.join(folder, f"morning-bot-{datetime.now(config.TZ):%Y-%m-%d-%H%M}.db")
-        try:
-            size = await asyncio.to_thread(_db_snapshot, path)
-        except Exception:
-            _log.exception("admin backup failed")
-            await _show(bot, cid, ui.notice("💾 Копия базы", "Не удалось сделать копию базы."), back, q)
-            return
-        if size > _TELEGRAM_FILE_LIMIT:
-            text = f"База {round(size / _MB)} МБ — больше лимита Telegram в 50 МБ, прислать нельзя."
-            await _show(bot, cid, ui.notice("💾 Копия базы", text), back, q)
-            return
-        with open(path, "rb") as file:  # noqa: ASYNC230 — открыть файл мгновенно, читает его отправка Telegram
-            await bot.send_document(chat_id=cid, document=file, filename=os.path.basename(path),
-                                    caption=f"💾 Копия базы · {max(1, round(size / _MB))} МБ")
-
-
-def _auto_restart_enabled():
-    """Ненулевой код выхода поднимает сервис снова только при Restart=always или on-failure."""
-    try:
-        result = subprocess.run(
-            ["systemctl", "show", config.SERVICE_NAME, "-p", "Restart", "--value"],
-            capture_output=True, text=True, timeout=5, check=False,
-        )
-    except Exception:
-        _log.warning("admin restart: systemctl unavailable", exc_info=True)
-        return False
-    return result.stdout.strip() in ("always", "on-failure")
-
-
-async def send_restart_confirm(bot, cid, q=None):
-    # Время в callback: после рестарта Telegram может повторить нажатие — старое не перезапускает снова.
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔁 Перезапустить", callback_data=f"adm_restart_ok_{int(time.time())}"),
-         InlineKeyboardButton("Отмена", callback_data="adm_home")],
-    ])
-    text = "Бот остановится и через несколько секунд поднимется сам."
-    await _show(bot, cid, ui.notice("🔁 Перезапустить бота", text), kb, q)
-
-
-_RESTART_DELAY_SECONDS = 3  # Telegram успевает получить ответ и подтвердить нажатие до выхода
-
-
-async def restart(bot, cid, pressed_at, q=None):
-    back = InlineKeyboardMarkup([nav_row("adm_home")])
-    if pressed_at < int(deploy_report._STARTED_AT.timestamp()):
-        await send_home(bot, cid, q)  # повтор нажатия из прошлого запуска
-        return
-    if not await asyncio.to_thread(_auto_restart_enabled):
-        text = "Перезапуск недоступен: сервис не поднимется сам."
-        await _show(bot, cid, ui.notice("🔁 Перезапустить бота", text), back, q)
-        return
-    await _show(bot, cid, ui.notice("🔁 Перезапустить бота", "Перезапускаюсь…"), None, q)
-    _log.warning("admin restart requested cid=%s", cid)
-    await asyncio.sleep(_RESTART_DELAY_SECONDS)
-    logging.shutdown()
-    os._exit(1)  # ненулевой код: systemd (Restart=on-failure) поднимает сервис
-
-
 async def send_api_check(bot, cid, q=None):
     """Живая проверка всех API: статус ожидания → одна строка на сервис."""
     import util
@@ -318,32 +230,6 @@ async def send_api_check(bot, cid, q=None):
         nav_row("adm_home"),
     ])
     await _show(bot, cid, ui.api_check(results), kb, q)
-
-
-async def send_ns_raw(bot, cid, q=None):
-    """Последний непустой ответ NS о сбоях и работах файлом JSON: запись NS как есть и рядом наш разбор — сверить,
-    правильно ли бот понимает участки, замену поездов, время и советы."""
-    import io
-    import json
-    import ns_api
-    data = await asyncio.to_thread(ns_api.last_raw)
-    kb = InlineKeyboardMarkup([nav_row("adm_home")])
-    if not data:
-        await _show(bot, cid, ui.notice("🚆 Ответ NS", "Сбоев и работ на станциях ещё не было — сохранять нечего."),
-                    kb, q)
-        return
-    body = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode("utf-8")
-    when = _log_date_time(data.get("ts"))
-    await bot.send_document(chat_id=cid, document=io.BytesIO(body), filename="ns_last_response.json",
-                            caption=f"🚆 Ответ NS · {when} · записей {len(data['items'])}: raw — как прислал NS, "
-                                    "parsed — как понял бот")
-
-
-async def send_ai_usage(bot, cid, q=None):
-    """Запросы и токены ИИ по разделам: сегодня и за 7 дней (api_usage.record_ai_module)."""
-    import api_usage
-    kb = InlineKeyboardMarkup([nav_row("adm_home")])
-    await _show(bot, cid, ui.ai_usage(api_usage.ai_module_usage(1), api_usage.ai_module_usage(7)), kb, q)
 
 
 _REFRESH_CARDS = (

@@ -64,8 +64,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     assert "API работают" not in bot.sent[0]["text"]
     assert all(button.text != "🛠 Система" for row in markup for button in row)
     assert [[button.text for button in row] for row in markup] == [
-        ["🩺 Проверить API"], ["🔄 Обновить карточки"], ["💾 Прислать копию базы"], ["🔁 Перезапустить бота"],
-        ["👥 Пользователи"], ["🧮 ИИ по разделам"], ["🚆 Ответ NS"], ["#️⃣ Главная"],
+        ["🩺 Проверить API"], ["🔄 Обновить карточки"], ["👥 Пользователи"], ["#️⃣ Главная"],
     ]  # админка — все кнопки в один столбец
     assert all(button.callback_data != "adm_logs" for row in markup for button in row)  # ошибок нет — нет и кнопки
 
@@ -507,57 +506,6 @@ class _DocumentBot(RecordingBot):
 
     async def send_document(self, **kwargs):
         self.documents.append((kwargs["filename"], kwargs["document"].read(), kwargs["caption"]))
-
-
-def test_backup_sends_consistent_sqlite_snapshot_or_explains_limit(monkeypatch, tmp_path):
-    import sqlite3
-
-    database = tmp_path / "bot.db"
-    with sqlite3.connect(database) as connection:
-        connection.execute("create table kv (key text, value text)")
-        connection.execute("insert into kv values ('a', 'b')")
-    monkeypatch.setattr(admin.config, "DATABASE_PATH", str(database))
-    bot = _DocumentBot()
-
-    asyncio.run(admin.send_backup(bot, "42"))
-
-    name, body, caption = bot.documents[0]
-    copy_path = tmp_path / name
-    copy_path.write_bytes(body)
-    with sqlite3.connect(copy_path) as connection:
-        assert connection.execute("select * from kv").fetchall() == [("a", "b")]
-    assert caption == "💾 Копия базы · 1 МБ"
-
-    monkeypatch.setattr(admin, "_TELEGRAM_FILE_LIMIT", 10)
-    asyncio.run(admin.send_backup(bot, "42"))
-    assert len(bot.documents) == 1
-    assert "больше лимита Telegram в 50 МБ" in bot.sent[-1]["text"]
-
-
-def test_restart_refuses_without_systemd_auto_restart(monkeypatch):
-    calls = []
-
-    class Result:
-        stdout = "no\n"
-
-    monkeypatch.setattr(admin.subprocess, "run", lambda args, **_kwargs: calls.append(args) or Result())
-    monkeypatch.setattr(admin.os, "_exit", lambda code: pytest.fail("must not exit"))
-    bot = RecordingBot()
-
-    asyncio.run(admin.restart(bot, "42", int(admin.time.time())))
-
-    assert calls == [["systemctl", "show", "morning-bot", "-p", "Restart", "--value"]]
-    assert "Перезапуск недоступен: сервис не поднимется сам." in bot.sent[0]["text"]
-
-
-def test_restart_ignores_press_repeated_from_previous_run(monkeypatch):
-    monkeypatch.setattr(admin, "_auto_restart_enabled", lambda: pytest.fail("must not check"))
-    monkeypatch.setattr(admin, "send_home", lambda bot, cid, q=None: bot.send_message(chat_id=cid, text="home"))
-    bot = RecordingBot()
-
-    asyncio.run(admin.restart(bot, "42", 0))
-
-    assert bot.sent[0]["text"] == "home"
 
 
 def test_refresh_my_day_sends_fresh_card(monkeypatch):
