@@ -1184,7 +1184,7 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
     if not api_usage.has_budget("openrouter"):  # дневной лимит бесплатных моделей почти исчерпан — не тратим остаток
         _log.info("openrouter: daily free requests almost used, skipped")
         return None
-    token_cap = 5000 if response_mode == "json" else 700
+    token_cap = 5000 if response_mode == "json" else 1500
     try:
         timeout = _bounded_timeout(
             BACKGROUND_PROVIDER_TIMEOUT_SECONDS if _is_background()
@@ -1198,6 +1198,9 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": min(int(max_tokens or 400), token_cap),
             "temperature": min(float(temperature or 0.7), 0.8),
+            # Бесплатные модели роутера часто «думают» (gpt-oss, DeepSeek R1): без этого всё окно токенов уходит в
+            # размышления и ответ приходит пустым («invalid response»). Низкое усилие, размышления в ответ не берём.
+            "reasoning": {"effort": "low", "exclude": True},
         }
         if response_mode == "json":
             payload["response_format"] = {"type": "json_object"}

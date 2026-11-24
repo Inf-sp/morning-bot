@@ -446,3 +446,21 @@ def _patch_mutate_kv(monkeypatch, store):
         return result
 
     monkeypatch.setattr(store, "mutate_kv", mutate)
+
+
+def test_openrouter_asks_free_models_not_to_spend_the_answer_on_reasoning(monkeypatch):
+    sent = []
+
+    class Resp:
+        status_code, headers = 200, {}
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Готовый ответ."}}]}
+
+    monkeypatch.setattr(ai.config, "OPENROUTER_API_KEY", "key")
+    monkeypatch.setattr(ai.api_usage, "has_budget", lambda _service: True)
+    monkeypatch.setattr(ai.api_usage, "record_request", lambda *_a, **_k: None)
+    monkeypatch.setattr(ai.requests, "post", lambda *_a, **kw: sent.append(kw["json"]) or Resp())
+    assert ai._openrouter_plain_text_fallback("Привет", 2000, 0.5, "gemini", "test") == "Готовый ответ."
+    # Размышления — с низким усилием и не в ответ; окно ответа — до 1500 токенов, а не 700.
+    assert sent[0]["reasoning"] == {"effort": "low", "exclude": True} and sent[0]["max_tokens"] == 1500
