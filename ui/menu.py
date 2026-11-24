@@ -177,30 +177,43 @@ def _grammar_explanation(phrase) -> str:
 
 
 def _grammar_lesson(phrase) -> dict:
-    """Тема дня → {term, meaning, intro, usage, example}. Есть карточка темы (phrase["card"]) — из неё; нет — из
-    краткого разбора: первое предложение — суть, остальные — «Как использовать»."""
+    """Тема дня → {term, intro, points, example}. Карточка темы (phrase["card"]): суть с темой внутри, 2–3 факта и
+    пример уровня B1 (перевод → фраза); нет карточки — из краткого разбора: первое предложение — суть, остальные —
+    факты, значение — первым фактом."""
     card = phrase.get("card") or {}
-    if phrase.get("topic") and card.get("intro") and card.get("usage"):
-        term, meaning = _grammar_head({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")})
-        intro = _with_period(card["intro"])
-        usage = [f"{item['when'][:1].upper()}{item['when'][1:]} — {item['form']} → {_with_period(item['example'])}"
-                 for item in card["usage"]]
+    term, meaning = _grammar_head({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")}) \
+        if phrase.get("topic") else _grammar_parts(phrase.get("rule"))[0:1] + ("",)
+    if phrase.get("topic") and card.get("intro") and card.get("points"):
+        intro, points = _without_period(card["intro"]), [_with_period(point) for point in card["points"]]
+        example, translation = card.get("example"), card.get("translation")
     else:
-        if phrase.get("topic") and phrase.get("explain"):
-            (term, meaning), explanation = _grammar_head(phrase), _grammar_explanation(phrase)
-        else:  # прежний краткий формат правила: «_Zodra_ — как только. …»
-            (term, explanation), meaning = _grammar_parts(phrase.get("rule")), ""
-        points = _grammar_points(str(explanation or "").split("\n\n")[0])
-        if term and not meaning and points and len(points[0].split()) <= 3 and ":" not in points[0]:
-            # «Zodra» + «Как только.» → значение «как только», без отдельной строки из двух слов.
-            meaning, points = _without_period(points[0]), points[1:]
-        intro, usage = (points[0] if points else ""), points[1:3]
-    example, translation = phrase.get("more"), phrase.get("more_translation")
-    if example and translation:
-        example = f"{_without_period(example)} → {_with_period(translation)}"
-    meaning = _without_period(meaning)
-    return {"term": _without_period(term), "meaning": meaning[:1].upper() + meaning[1:], "intro": intro,
-            "usage": usage, "example": _with_period(example) if example else ""}
+        explanation = _grammar_explanation(phrase) if phrase.get("topic") and phrase.get("explain") else (
+            _grammar_parts(phrase.get("rule"))[1])
+        sentences = _grammar_points(str(explanation or "").split("\n\n")[0])
+        if term and not meaning and sentences and len(sentences[0].split()) <= 3 and ":" not in sentences[0]:
+            meaning, sentences = _without_period(sentences[0]), sentences[1:]  # «Zodra» + «Как только.» — значение
+        intro, points = (_without_period(sentences[0]).rstrip(" :") if sentences else ""), sentences[1:3]
+        if meaning:
+            points = [f"{term} = {_without_period(meaning)[:1].lower()}{_without_period(meaning)[1:]}.", *points][:3]
+        example, translation = phrase.get("more"), phrase.get("more_translation")
+    # Пример — сначала перевод, потом фраза: «Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik…».
+    example = (f"{_without_period(translation)} → {_with_period(example)}" if example and translation
+               else _with_period(example) if example else "")
+    return {"term": _without_period(term), "intro": intro, "points": points, "example": example}
+
+
+def _bold_term(b, text, term) -> None:
+    """Суть темы, где сама тема — жирным («**Daarom** вводит следствие…»); темы в тексте нет — «**Тема** — суть»."""
+    match = re.search(re.escape(term), text, re.IGNORECASE) if term else None
+    if match:
+        b.text_line(text[:match.start()])
+        b.bold(text[match.start():match.end()])
+        b.text_line(text[match.end():])
+    elif term:
+        b.bold(term)
+        b.text_line(f" — {text[:1].lower()}{text[1:]}" if re.match(r"[А-ЯЁ]", text) else f" — {text}")
+    else:
+        b.text_line(text)
 
 
 def learning_menu(home: dict):
@@ -240,32 +253,16 @@ def learning_menu(home: dict):
     b.bold(f"{flag} Изучаем сегодня · {title}")
     b.newline()
 
-    # Грамматика (фраза дня — в «Моём дне», строка «Фраза дня»): тема — значение, суть одной строкой,
-    # «Как использовать:» (ситуация — форма → пример), «Пример: фраза → перевод.».
-    # Первая строка: «**Wachten op** (глагол wachten требует предлога op) → **Ждать кого-то.**» — тема и значение
-    # жирным, суть в скобках обычным; длинная суть или со своими скобками — строкой ниже.
+    # Грамматика дня (фраза дня — в «Моём дне»): суть одной строкой, где тема — жирным, «…:» и под ней 2–3 факта,
+    # что важно знать; «Пример:» — перевод → фраза уровня B1.
     lesson = _grammar_lesson(home.get("live_language") or {})
-    inline = _in_parens(lesson["intro"]) if lesson["term"] else ""
-    if lesson["term"] or lesson["intro"]:
+    if lesson["intro"] or lesson["term"]:
         b.spacer()
-        if lesson["term"]:
-            b.bold(lesson["term"])
-            if inline:
-                b.text_line(f" ({inline})")
-            if lesson["meaning"]:
-                b.text_line(" → ")
-                b.bold(_with_period(lesson["meaning"]))
-            else:
-                b.text_line(".")
-            b.newline()
-        if lesson["intro"] and not inline:
-            b.line(lesson["intro"])
-    if lesson["usage"]:
-        b.spacer()
-        b.bold("Как использовать:")
+        _bold_term(b, lesson["intro"] or lesson["term"], lesson["term"])
+        b.text_line(":" if lesson["points"] else ".")
         b.newline()
-        for item in lesson["usage"]:
-            b.line(f"• {item}")
+        for point in lesson["points"]:
+            b.line(f"• {point}")
     if lesson["example"]:
         b.spacer()
         b.bold("Пример:")
