@@ -52,6 +52,12 @@ def _persistent():
         raise StorageUnavailableError(
             "DATABASE_PATH is not set: run tools/migrate_to_sqlite.py --apply first"
         )
+    if os.environ.get("INVOCATION_ID"):
+        # Запуск из systemd (прод на VM): без DATABASE_PATH бот работал бы в пустой памяти — «потерял» бы
+        # настройки, шкаф и библиотеку всех пользователей. Лучше не стартовать и показать причину в журнале.
+        raise StorageUnavailableError(
+            "DATABASE_PATH is not set in /etc/morning-bot.env: refusing to run with in-memory storage"
+        )
     return False
 
 
