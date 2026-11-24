@@ -396,7 +396,8 @@ def day_summary(
         b.label("Статья дня")
         b.text_line(" ")
         b.link(" ".join(str(read["title"]).split()), str(read["link"]))
-        meta = [str(read.get("source") or "").strip(), f"{minutes} мин" if minutes else ""]
+        meta = [str(read.get("source") or "").strip(), str(read.get("lang") or "").strip(),
+                f"{minutes} мин" if minutes else ""]
         if any(meta):
             b.text_line(" · " + " · ".join(value for value in meta if value))
         b.newline()

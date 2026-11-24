@@ -1161,7 +1161,20 @@ def leisure_library_menu(back="m_leisure") -> MessageSpec:
         ("🎬 Фильмы и сериалы", "movie_favorites"),
         ("🎧 Музыка", "artist_favorites"),
         ("🎫 Концерты", "a_concerts_find"),
+        ("📰 Статьи", "lz_rt"),
     )).inline_keyboard, nav_row(back)]))
+
+
+def read_themes_screen(labels, chosen) -> MessageSpec:
+    """«📰 Темы статей»: переключатели тем (✅ выбрано / □ нет) — по ним «Статьи», «Статья дня» и «События»; ниже
+    «Назад» — в «Мою библиотеку»."""
+    b = MessageBuilder()
+    b.title("📰 Темы статей")
+    b.line("Из этих тем собираю статьи дня — на русском, с источником и языком оригинала.")
+    rows = [[InlineKeyboardButton(("✅ " if key in chosen else "□ ") + label, callback_data=f"lz_rt_{key}")]
+            for key, label in labels]
+    rows.append(nav_row("lz_lib"))
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 
 # ---------- «Новинка» в меню «Выбрать жанр» ----------

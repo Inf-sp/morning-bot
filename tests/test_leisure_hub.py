@@ -279,10 +279,10 @@ def test_premieres_and_library_submenus():
     library = leisure_ui.leisure_library_menu()
 
     assert _labels(library.reply_markup) == [
-        ["🎬 Фильмы и сериалы"], ["🎧 Музыка"], ["🎫 Концерты"], ["⬅️ Назад", "#️⃣ Главная"],
+        ["🎬 Фильмы и сериалы"], ["🎧 Музыка"], ["🎫 Концерты"], ["📰 Статьи"], ["⬅️ Назад", "#️⃣ Главная"],
     ]
     assert _callbacks(library.reply_markup) == [
-        "movie_favorites", "artist_favorites", "a_concerts_find", "m_leisure", "m_menu",
+        "movie_favorites", "artist_favorites", "a_concerts_find", "lz_rt", "m_leisure", "m_menu",
     ]
     for collection in ("cinema_favorites", "music_favorite_artists"):
         assert cleanup.COLLECTIONS[collection]["back"] == "lz_lib"

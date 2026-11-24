@@ -861,6 +861,18 @@ async def _show_card(bot, cid, msg, image, q=None):
             _log.debug("premieres: old message not deleted", exc_info=True)
 
 
+async def send_read_themes(bot, cid, toggle="", q=None):
+    """«Моя библиотека → 📰 Статьи»: выбор тем статей; смена тем пересобирает набор дня при следующем открытии."""
+    import leisure_reads
+    import settings as user_settings
+    chosen = list(leisure_reads.themes(cid))
+    if toggle in leisure_reads.THEME_LABELS:
+        chosen = [theme for theme in chosen if theme != toggle] if toggle in chosen else [*chosen, toggle]
+        chosen = chosen or [toggle]  # хотя бы одна тема
+        user_settings.set_(cid, leisure_reads.THEMES_KEY, chosen)
+    await _show(bot, cid, leisure_ui.read_themes_screen(tuple(leisure_reads.THEME_LABELS.items()), chosen), q)
+
+
 async def send_library_menu(bot, cid, q=None):
     await _show(bot, cid, leisure_ui.leisure_library_menu(), q)
 

@@ -26,7 +26,8 @@ def _profile(monkeypatch):
 def test_day_set_puts_todays_theme_first_by_interests_and_fresh_only(monkeypatch):
     profile = _profile(monkeypatch)
     now = datetime(2026, 10, 18, 3, tzinfo=config.TZ)
-    theme = leisure_reads.theme_of(now.date())
+    monkeypatch.setattr(leisure_reads, "themes", lambda _cid: ("science", "design"))  # выбор в «Статьях»
+    theme = leisure_reads.theme_of(now.date(), ("science", "design"))
     feeds = {
         "Quanta": [{"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "summary": "space",
                     "date": "Fri, 16 Oct 2026 10:00:00 +0000", "source": "Quanta"},
@@ -184,3 +185,24 @@ def test_reads_card_shows_publication_date_and_summary_from_article_text(monkeyp
     monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda prompt, *_a, **_k: prompts.append(prompt) or {})
     leisure_reads._about_ru([{"title": "T", "link": "https://x", "summary": "", "text": "Cells repair broken DNA."}])
     assert "Cells repair broken DNA." in prompts[0]
+
+
+def test_titles_are_russian_with_source_language_and_themes_are_chosen(monkeypatch):
+    profile = _profile(monkeypatch)
+    now = datetime(2026, 10, 18, 9, tzinfo=config.TZ)
+    chosen = {"themes": ("lgbt",)}
+    monkeypatch.setattr(leisure_reads, "themes", lambda _cid: chosen["themes"])
+    item = {"title": "Queer history of Amsterdam", "link": "https://e.example/q", "summary": "", "source": "Expreszo",
+            "date": "Sat, 17 Oct 2026 10:00:00 +0000"}
+    monkeypatch.setattr(leisure_reads, "_feed", lambda source, _url: [item] if source == "Expreszo" else [])
+    monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda *_a, **_k: {"items": [
+        {"id": 0, "title": "Квир-история Амстердама", "about": "Как город стал столицей прайдов."}]})
+    entry = leisure_reads.build("42", now)
+    article = entry["items"][0]
+    assert (article["title"], article["original_title"], article["lang"]) == (
+        "Квир-история Амстердама", "Queer history of Amsterdam", "NL")
+    assert leisure_reads.lang_label("It's Nice That") == "ENG"
+    chosen["themes"] = ("science",)  # сменил темы — набор дня собирается заново
+    assert leisure_reads.top("42", now.date()) == []
+    card = leisure_ui.reads_card([{**article, "published": "2026-10-17"}]).text
+    assert card.startswith("📰 Квир-история Амстердама\n\nExpreszo · 17 октября · NL")
