@@ -321,8 +321,5 @@ def build_warning(data, cid, tomorrow=False):
         icon = icon or mark
         events.append(text.replace("Сегодня ожидается", "Ожидается") if tomorrow else text)
     when = _local_when(_when_for(ctx, [h.key for h in top]), cid)
-    import countries
     place = store.get_settings(cid) or {}
-    country = countries.name_ru(place.get("cc")) or str(place.get("country") or "")
-    return weather_ui.weather_warning(events, when, icon, country=country, city=str(place.get("city") or ""),
-                                      tomorrow=tomorrow)
+    return weather_ui.weather_warning(events, when, icon, city=str(place.get("city") or ""), tomorrow=tomorrow)

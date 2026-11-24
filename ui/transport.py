@@ -94,10 +94,10 @@ def ns_alert(city, disruption, titles=None) -> MessageSpec:
     b.spacer()
     route = route_label(titles or [disruption.get("title") or ""], city)
     if route:
-        b.line(route)
+        b.labeled_line("Участок", route, lowercase=False)
     cause = _sentence(disruption.get("cause"))
     if cause:
-        b.labeled_line("Причина", cause[:1].lower() + cause[1:], lowercase=False)
+        b.labeled_line("Причина", cause, lowercase=False)
     until = _time_label(disruption.get("until"))
     if until:
         b.labeled_line("Ожидаемое восстановление", f"{until}.", lowercase=False)
@@ -112,10 +112,13 @@ def ns_restored(title, *, since="", until="", cause="", city="", titles=None) ->
     b.section("🟢 Движение восстановлено")  # город — уже в строке участка
     b.spacer()
     route = route_label(titles or ([title] if title else []), city)
-    b.line(route or "Поезда снова ходят.")
+    if route:
+        b.labeled_line("Участок", route, lowercase=False)
+    else:
+        b.line("Поезда снова ходят.")
     start, end = _time_label(since), _time_label(until)
     if start and end and start != end:
-        b.line(f"Сбой длился с {start} до {end}.")
+        b.labeled_line("Сбой длился", f"с {start} до {end}.", lowercase=False)
     return b.build_stripped()
 
 
@@ -125,14 +128,16 @@ def flight_deal(item, details) -> MessageSpec:
     b.section("✈️ Ошибочный тариф из Амстердама" if details.get("error_fare") else "✈️ Дешёвый билет из Амстердама")
     b.spacer()
     destination = details.get("destination") or ""
-    b.line(f"Amsterdam → {destination}" if destination else item.get("title") or "")
-    meta = [part for part in (
-        f"от {details['price']}" if details.get("price") else "",
-        details.get("trip") or "",
-        item.get("source") or "",
-    ) if part]
-    if meta:
-        b.line(" · ".join(meta))
+    if destination:
+        b.labeled_line("Куда", f"Amsterdam → {destination}", lowercase=False)
+    else:
+        b.line(item.get("title") or "")
+    if details.get("price"):
+        b.labeled_line("Цена", f"от {details['price']}", lowercase=False)
+    if details.get("trip"):
+        b.labeled_line("Билет", details["trip"])
+    if item.get("source"):
+        b.labeled_line("Источник", item["source"], lowercase=False)
     b.spacer()
     b.line("Такие цены держатся недолго — проверь даты и цену в публикации.")
     return b.build_stripped()

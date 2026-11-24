@@ -59,5 +59,5 @@ def test_first_check_only_remembers_then_sends_new_once(monkeypatch):
     asyncio.run(flight_deals.check_user(RecordingBot(sent), "42", [old, new]))
     asyncio.run(flight_deals.check_user(RecordingBot(sent), "42", [old, new]))
     assert len(sent) == 1
-    assert sent[0]["text"].startswith("✈️ Дешёвый билет из Амстердама\n\nAmsterdam → Tokyo, Japan\nот €450 · туда-обратно · Fly4free")
+    assert sent[0]["text"].startswith("✈️ Дешёвый билет из Амстердама\n\nКуда: Amsterdam → Tokyo, Japan\nЦена: от €450\nБилет: туда-обратно\nИсточник: Fly4free")
     assert sent[0]["reply_markup"].inline_keyboard[0][0].url == "https://example.com/b"

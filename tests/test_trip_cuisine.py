@@ -504,7 +504,7 @@ def test_trip_quiz_asks_a_word_with_three_options(monkeypatch):
     assert len(poll["options"]) == 3 and len(set(poll["options"])) == 3
 
 
-def test_weather_warning_has_country_city_and_local_when(monkeypatch):
+def test_weather_warning_has_bold_labels_city_and_local_when(monkeypatch):
     from zoneinfo import ZoneInfo
     import weather_warn
     monkeypatch.setattr(vacation, "local_tz", lambda _cid: ZoneInfo("Africa/Johannesburg"))
@@ -514,11 +514,14 @@ def test_weather_warning_has_country_city_and_local_when(monkeypatch):
     from ui import weather as weather_ui
     msg = weather_ui.weather_warning(["Жарко, до +32°C.", "Высокий UV-индекс — 14."], "12:00–19:00", "🌡️",
                                      country="ЮАР", city="Йоханнесбург")
-    assert msg.text == ("🌡️ Погодное предупреждение · ЮАР\n\nЙоханнесбург:\n• Жарко, до +32°C.\n"
-                        "• Высокий UV-индекс — 14.\n\nКогда: 12:00–19:00")
+    assert msg.text == ("🌡️ Погодное предупреждение\n\nГород: Йоханнесбург\nПричины:\n• Жарко, до +32°C.\n"
+                        "• Высокий UV-индекс — 14.\nКогда: 12:00–19:00")  # без страны; подписи жирным
     utf16 = msg.text.encode("utf-16-le")
     styled = {(e.type, utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")) for e in msg.entities}
-    assert ("bold", "Йоханнесбург:") in styled and ("italic", "Когда: 12:00–19:00") in styled
+    assert {("bold", "Город:"), ("bold", "Причины:"), ("bold", "Когда:")} <= styled
+    assert not any(kind == "italic" for kind, _ in styled)
+    one = weather_ui.weather_warning(["Возможен гололёд."], "в течение дня", "🧊", city="Alkmaar")
+    assert one.text == "🧊 Погодное предупреждение\n\nГород: Alkmaar\nПричина: Возможен гололёд.\nКогда: в течение дня"
 
 
 def test_trip_menu_has_second_dessert_drink_or_snack(monkeypatch):

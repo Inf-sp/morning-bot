@@ -188,8 +188,8 @@ def test_concert_eve_comes_for_favorite_artist_tomorrow_even_without_holidays(mo
     asyncio.run(settings._send_concerts_eve(Bot(), "42", tomorrow))
     text = sent[0]["text"]
     assert text.startswith("🎫 Завтра концерт · среда, 4 ноября\n\nMuse — Стадионный рок с оркестром.\n"
-                           "• Начало: 20:00\n• Где: Ziggo Dome, De Passage 100, Amsterdam\n")
-    assert "• Билеты: от 65 EUR" in text and "• Тур: Muse: Will of the People Tour" in text
+                           "Начало: 20:00\nГде: Ziggo Dome, De Passage 100, Amsterdam\n")
+    assert "Билеты: от 65 EUR" in text and "Тур: Muse: Will of the People Tour" in text
     assert [e.url for e in sent[0]["entities"] if e.type == "text_link"] == ["https://tickets.example/muse"]
     sent.clear()
     asyncio.run(settings._send_concerts_eve(Bot(), "42", date(2026, 11, 5)))

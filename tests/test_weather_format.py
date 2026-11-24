@@ -547,9 +547,9 @@ def test_tomorrow_warning_uses_tomorrow_and_only_important_hazards(monkeypatch):
     today = weather_warn.build_warning(data, "42")
     assert today.text.startswith("☀️ Погодное предупреждение\n")  # сегодня — только высокий UV
     msg = weather_warn.build_warning(data, "42", tomorrow=True)
-    assert msg.text.startswith("💨 Погодное предупреждение на завтра\n\nAlkmaar:\n"
+    assert msg.text.startswith("💨 Погодное предупреждение на завтра\n\nГород: Alkmaar\nПричины:\n"
                                "• Порывы ветра до 22 м/с.\n• Ожидается дождь с вероятностью 90%.")
-    assert "Когда завтра: 12:00–18:00" in msg.text
+    assert "Когда: 12:00–18:00" in msg.text
     calm = {**data, "daily": {**data["daily"], "windgusts_10m_max": [9, 9], "precipitation_probability_max": [10, 10],
                               "weathercode": [3, 3], "uv_index_max": [1, 8]}}
     assert weather_warn.build_warning(calm, "42", tomorrow=True) is None  # UV завтра — не повод писать накануне

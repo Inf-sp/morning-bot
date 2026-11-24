@@ -40,25 +40,25 @@ def forecast_unavailable():
 
 
 def weather_warning(events, when="", icon="⚠️", country="", city="", tomorrow=False):
-    """Погодное предупреждение: «🌡️ Погодное предупреждение · ЮАР» → «Йоханнесбург:» жирным → события списком «•» →
-    курсивом «Когда: …».
-
-    Эмодзи только в заголовке (🌧️ дождь, 💨 ветер, ⛈️ гроза…); события и «Когда:» —
-    без значков, рекомендаций «Что сделать» нет.
-    """
+    """Погодное предупреждение в стиле уведомлений — подпись до двоеточия жирным:
+    «🧊 Погодное предупреждение», «**Город:** Alkmaar», «**Причина:** Возможен гололёд.», «**Когда:** в течение
+    дня». Несколько явлений — «**Причины:**» и пункты «•». Страны в заголовке нет (country — для совместимости).
+    Эмодзи только в заголовке; рекомендаций «Что сделать» нет."""
     b = MessageBuilder()
     title = "Погодное предупреждение на завтра" if tomorrow else "Погодное предупреждение"
-    b.section(" · ".join(part for part in (f"{icon or '⚠️'} {title}", country) if part))
+    b.section(f"{icon or '⚠️'} {title}")
     b.newline()
     if city:
-        b.bold(f"{city}:")
-        b.newline()
-    for ev in events:  # события списком: «• Жарко, до +32°C.»
-        b.line(f"• {ev}")
+        b.labeled_line("Город", city, lowercase=False)
+    events = [str(ev).strip() for ev in events or () if str(ev or "").strip()]
+    if len(events) == 1:
+        b.labeled_line("Причина", _finish_sentence(cap_sentence(events[0])), lowercase=False)
+    elif events:
+        b.labeled_line("Причины")
+        for ev in events:
+            b.line(f"• {_finish_sentence(cap_sentence(ev))}")
     if when:
-        b.spacer()
-        b.italic(f"Когда{' завтра' if tomorrow else ''}: {when}")
-        b.newline()
+        b.labeled_line("Когда", when)
     return b.build_stripped()
 
 

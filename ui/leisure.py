@@ -966,7 +966,8 @@ def leisure_hub_kb():
 
 def concerts_eve(concerts, day=None) -> MessageSpec:
     """Рассылка накануне: «🎫 Завтра концерт · среда, 4 ноября», на концерт — имя жирной ссылкой на билеты, фраза об
-    артисте и пункты «Начало / Где / Жанр / Билеты / Тур» (только то, что известно)."""
+    артисте и строки «**Начало:** 20:00 / Где / Жанр / Билеты / Тур» — подпись жирным, как во всех уведомлениях
+    (только то, что известно)."""
     b = MessageBuilder()
     when = ""
     if day is not None:
@@ -994,7 +995,7 @@ def concerts_eve(concerts, day=None) -> MessageSpec:
         ]
         for label, value in rows:
             if str(value or "").strip():
-                b.line(f"• {label}: {value}")
+                b.labeled_line(label, str(value).strip(), lowercase=False)
     return b.build_stripped()
 
 
