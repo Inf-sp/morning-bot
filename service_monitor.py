@@ -203,8 +203,12 @@ def _format_ai_row(service: str, state: dict | None = None) -> str:
         (None, None) if service == "openrouter"
         else _confirmed_quota(service, state)
     )
+    limit = api_usage.limit_state(service) if service == "openrouter" else None
     if service == "gemini":
         detail = _usage_detail(service)
+    elif limit:  # «12 из 50 сегодня» — бесплатные модели считают запросы, а не деньги
+        detail = (f"{_number(limit['used'])} из {_number(limit['limit'])} сегодня" if limit["used"] < limit["limit"]
+                  else "дневной лимит исчерпан")
     else:
         detail = (
             _quota_text(quota_remaining, quota_total)
@@ -434,6 +438,12 @@ def probe(service: str) -> bool:
             total = payload.get("totalCredits")
             if total is None:
                 total = payload.get("total_credits")
+        elif service == "openrouter" and ok:
+            # /api/v1/key: is_free_tier — без купленных кредитов 50 запросов в день к бесплатным моделям, иначе 1000.
+            payload = (response.json() or {}).get("data") or {}
+            if "is_free_tier" in payload:
+                api_usage.set_plan_limit("openrouter", None if payload.get("is_free_tier")
+                                         else config.OPENROUTER_PAID_DAILY_LIMIT)
         elif service == "tavily" and ok:
             payload = (response.json() or {}).get("key") or {}
             used, limit = payload.get("usage"), payload.get("limit")

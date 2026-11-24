@@ -41,7 +41,11 @@ API_FREE_LIMITS = {
     "spoonacular": ("day", "requests", _env_int("API_LIMIT_SPOONACULAR", 150)),
     "serpapi": ("month", "requests", _env_int("API_LIMIT_SERPAPI", 100)),
     "openweather": ("day", "requests", WEATHER_HARD_DAILY_LIMIT),
+    # Бесплатные модели OpenRouter: 50 запросов в день без купленных кредитов, 1000 — с кредитами от $10 (тариф ключа
+    # проверка ключа видит сама — `is_free_tier`).
+    "openrouter": ("day", "requests", _env_int("API_LIMIT_OPENROUTER", 50)),
 }
+OPENROUTER_PAID_DAILY_LIMIT = _env_int("OPENROUTER_PAID_DAILY_LIMIT", 1000)
 API_LIMIT_WARN_SHARE = 0.8
 CUISINE_FACTS_KEY = "cuisine_facts.json"  # {кухня: {v, facts[]}} — факты о кухне сверх базы data/cuisine_facts.json
 ADMIN_ALERTS_KEY = "admin_alerts.json"  # {сервис: дата} — что уже сообщено админу сегодня (одно сообщение на сервис в день)

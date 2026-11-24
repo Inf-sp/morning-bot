@@ -59,7 +59,7 @@ AI
   сервисы сюда не попадают.
 - Бесплатные лимиты (`config.API_FREE_LIMITS`, переопределяются env `API_LIMIT_<СЕРВИС>`): YouTube — 10 000 единиц в
   день (поиск — 100, `videos.list` — 1), Ticketmaster — 5 000 запросов в день, Spoonacular — 150 в день, SerpApi —
-  100 в месяц, OpenWeather — `WEATHER_HARD_DAILY_LIMIT`; Tavily — свой месячный бюджет. С 80% расхода в «Нужно
+  100 в месяц, OpenWeather — `WEATHER_HARD_DAILY_LIMIT`, OpenRouter — 50 запросов в день к бесплатным моделям (ключ с купленными кредитами от $10 — 1000: часовая проверка ключа `GET /api/v1/key` читает `is_free_tier` и запоминает тариф, `api_usage.set_plan_limit`; строка админки — «OpenRouter · Резерв 5 · 12 из 50 сегодня»); Tavily — свой месячный бюджет. С 80% расхода в «Нужно
   внимание» — «YouTube — израсходовано 82% дневного лимита (8 200 из 10 000)»; с 95% (`api_usage.has_budget`) бот
   сам не тратит остаток и берёт резерв: YouTube — ссылка на поиск, Ticketmaster — очередь проверки до следующего дня
   и сохранённая афиша, Spoonacular — TheMealDB и AI, SerpApi — другие поиски; строка дополняется «: бот перешёл на

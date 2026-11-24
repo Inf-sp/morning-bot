@@ -234,11 +234,22 @@ def test_successful_ai_probe_clears_expired_rate_limit(monkeypatch):
 def test_openrouter_row_shows_requests_not_money(monkeypatch):
     _memory_store(monkeypatch)
     monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
-    monkeypatch.setattr(service_monitor.api_usage, "service_usage", lambda _service: {"requests_today": 12})
+    monkeypatch.setattr(service_monitor.api_usage, "_count", lambda _svc, _period, _unit, dt=None: 12)
     state = provider_runtime.blank_state("openrouter")
     state.update({"status": provider_runtime.OK})
 
-    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 5 · 12 сегодня"
+    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 5 · 12 из 50 сегодня"
+    service_monitor.api_usage.set_plan_limit("openrouter", 1000)  # ключ с кредитами — 1000 в день
+    assert service_monitor.format_row("openrouter", state) == "🟢 OpenRouter · Резерв 5 · 12 из 1 000 сегодня"
+
+
+def test_openrouter_is_skipped_near_its_daily_limit(monkeypatch):
+    import ai
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(ai.config, "OPENROUTER_API_KEY", "key")
+    monkeypatch.setattr(ai.api_usage, "_count", lambda _svc, _period, _unit, dt=None: 48)
+    monkeypatch.setattr(ai.requests, "post", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no request")))
+    assert ai._openrouter_plain_text_fallback("hi", 50, 0.3, "gemini", "test") is None  # 48 из 50 — бережём
 
 
 def test_unclassified_failure_after_real_success_is_green(monkeypatch):

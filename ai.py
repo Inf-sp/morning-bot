@@ -1181,6 +1181,9 @@ def _openrouter_plain_text_fallback(prompt, max_tokens, temperature, origin_prov
                                     models_override=None):
     if not config.OPENROUTER_API_KEY:
         return None
+    if not api_usage.has_budget("openrouter"):  # дневной лимит бесплатных моделей почти исчерпан — не тратим остаток
+        _log.info("openrouter: daily free requests almost used, skipped")
+        return None
     token_cap = 5000 if response_mode == "json" else 700
     try:
         timeout = _bounded_timeout(

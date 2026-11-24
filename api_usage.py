@@ -124,8 +124,26 @@ def limit_state(service: str) -> dict | None:
         svc = ((data.get("services") or {}).get(service) or {}) if isinstance(data, dict) else {}
     except Exception:
         svc = {}
+    limit = int(svc.get("plan_limit") or limit)  # тариф ключа из проверки сервиса (OpenRouter: 50 или 1000)
     used = _count(svc, period, unit)
     return {"used": used, "limit": int(limit), "period": period, "share": used / int(limit)}
+
+
+def set_plan_limit(service: str, limit: int | None) -> None:
+    """Лимит по тарифу ключа, который увидела проверка сервиса; None — по config.API_FREE_LIMITS."""
+    def mut(data):
+        data = data or _template()
+        svc = _service(data, service)
+        if limit:
+            svc["plan_limit"] = int(limit)
+        else:
+            svc.pop("plan_limit", None)
+        return data, True
+
+    try:
+        store.mutate_kv(config.API_USAGE_KEY, mut)
+    except Exception:
+        _log.debug("set_plan_limit: ignored error", exc_info=True)
 
 
 def has_budget(service: str) -> bool:
