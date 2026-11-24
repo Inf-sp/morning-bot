@@ -477,29 +477,23 @@ def test_premieres_open_waits_for_notes_and_fetches_country_in_background(monkey
     assert calls == [False, False, True]  # открытие — из кэша, страна — догрузка в фоне
 
 
-def test_empty_hub_builds_day_cards_right_away(monkeypatch):
+def test_empty_hub_refreshes_day_cards_in_background_without_waiting(monkeypatch):
     import leisure_hub
-    built = []
-    monkeypatch.setattr(leisure_hub, "today_data", lambda _cid: {
-        "picks": [{"name": "Дюна"}] if built else [], "outing": None, "city": "", "library": {}})
-
-    async def build(cid):
-        built.append(cid)
+    refreshed, shown = [], []
+    monkeypatch.setattr(leisure_hub, "today_data", lambda _cid: {"picks": [], "city": "", "library": {}})
+    monkeypatch.setattr(leisure_hub, "refresh_cards", lambda cid: refreshed.append(cid))
+    monkeypatch.setattr(leisure_hub, "today_options", lambda _cid, _today: {
+        "premiere": [{"kind": "premiere", "label": "Премьера:", "name": "Дюна", "meta": [], "about": ""}]})
 
     async def show(_bot, _cid, msg, _q=None):
-        built.append(msg.text)
+        shown.append(msg.text)
 
-    monkeypatch.setattr(leisure_hub, "_build_cards", build)
     monkeypatch.setattr(leisure_hub, "_show", show)
-    monkeypatch.setattr(leisure_hub.leisure_ui, "leisure_today_screen",
-                        lambda picks, **_kwargs: type("M", (), {"text": [pick["name"] for pick in picks]})())
     import vacation
     monkeypatch.setattr(vacation, "active", lambda _cid: False)
-
     asyncio.run(leisure_hub.send_hub(None, "cards-42"))
-
-    # Карточки стёрты (начало или конец отпуска) — хаб собирает их сразу, а не ждёт ночного прогрева.
-    assert built == ["cards-42", ["Дюна"]]
+    # Карточки «Фильм / Сериал / Музыка» — фоном для их кнопок; экран не ждёт и показывает свежее.
+    assert refreshed == ["cards-42"] and "Премьера:\n• Дюна" in shown[0]
 
 
 def _today_picks(monkeypatch):
@@ -547,11 +541,18 @@ def test_hub_card_rotates_through_sections_on_every_open(monkeypatch):
     monkeypatch.setattr(leisure_hub.store, "get_profile", lambda _cid: profile)
     monkeypatch.setattr(leisure_hub.store, "mutate_profile",
                         lambda _cid, change: profile.update(change(dict(profile))[0]))
-    options = {kind: {"kind": kind, "name": kind} for kind in ("movie", "tv", "read", "music", "premiere", "concert")}
-    shown = [leisure_hub.next_today_pick("42", options)["kind"] for _ in range(7)]
-    assert shown == ["movie", "tv", "read", "music", "premiere", "concert", "movie"]  # по кругу, даже за день
-    del options["read"]  # нет статьи — раздел пропускается
-    assert leisure_hub.next_today_pick("42", options, advance=False)["kind"] in options
+    options = {"concert": [{"name": "c1"}, {"name": "c2"}], "event": [{"name": "e1"}],
+               "premiere": [{"name": "p1"}, {"name": "p2"}, {"name": "p3"}], "read": [{"name": "r1"}]}
+    shown = [leisure_hub.next_today_pick("42", options)["name"] for _ in range(9)]
+    # Вид по кругу: концерт → мероприятие → премьера → статья; внутри вида — следующая карточка.
+    assert shown == ["c1", "e1", "p1", "r1", "c2", "e1", "p2", "r1", "c1"]
+    assert leisure_hub._ROTATION == ("concert", "event", "premiere", "read")  # без старых фильмов и сериалов
+    del options["read"]  # нет статьи — вид пропускается
+    assert leisure_hub.next_today_pick("42", options, advance=False)["name"] in {"c1", "c2", "e1", "p1", "p2", "p3"}
+    card = {"kind": "festival", "name": "Winterfest", "url": "https://w", "date": "2026-11-29", "end": "2026-11-30",
+            "place": "Hortus", "free": True, "about": "зимний фестиваль"}
+    assert leisure_ui.leisure_today_screen([leisure_ui.event_pick(card)]).text.endswith(
+        "Фестиваль:\n• Winterfest · 29–30 ноября · Hortus · бесплатно — зимний фестиваль")
     read = {"kind": "read", "name": "Why we still love cassettes", "url": "https://g.co/a",
             "meta": ["The Guardian", "21 ноября", "EN", "6 мин"], "about": "Почему кассеты снова в моде."}
     text = leisure_ui.leisure_today_screen([read]).text
@@ -571,7 +572,7 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "📰 Статьи"], ["🎟️ События"]]
+    assert _labels(kb)[:3] == [["🎟️ События"], ["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "📰 Статьи"]]
     assert "lz_ev" in _callbacks(kb) and not {"lz_prem", "lz_concerts", "lz_holidays"} & set(_callbacks(kb))
     for old in ("lz_prem", "lz_concerts", "lz_holidays", "lz_ev_3"):  # старые кнопки из истории — работают
         assert routing.resolve_callback_handler(old)["handled"]
@@ -589,9 +590,9 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
 
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 
-    assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nФильм дня:\n• Восставший · 2026")
-    assert "Если захочется выйти" not in bot.sent[0]["text"]
-    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "movie_reco"
+    text = bot.sent[0]["text"]
+    assert text.startswith("🍿 Досуг на сегодня · Alkmaar\n\n") and "Восставший" not in text  # без старого фильма
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_ev"
 
 
 def test_runtime_label_and_weekday_limit():

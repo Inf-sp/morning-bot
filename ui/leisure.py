@@ -761,16 +761,16 @@ _TODAY_LABEL = {"movie": "Фильм дня:", "tv": "Сериал дня:", "mu
 
 
 def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: одна карточка раздела — «Фильм дня:» / «Сериал дня:» / «Статья дня:» /
-    «Артист дня:» / «Премьера недели:» / «Ближайший концерт:», ниже «• Имя · метаданные — описание»; внизу курсивом
-    статистика библиотеки. Раздел меняется по кругу при каждом открытии (leisure_hub.next_today_pick)."""
+    """«🍿 Досуг на сегодня · Alkmaar»: одна свежая карточка — «Ближайший концерт:» / «Фестиваль:» / «Выставка:» /
+    «Премьера:» / «Статья дня:», ниже «• Имя · метаданные — описание»; внизу курсивом статистика библиотеки.
+    Карточка меняется по кругу при каждом открытии (leisure_hub.next_today_pick)."""
     b = MessageBuilder()
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
-        b.line("Собираю варианты на сегодня — загляни чуть позже или открой «Фильмы» и «Сериалы» ниже.")
+        b.line("Собираю концерты, события и премьеры — загляни чуть позже или открой разделы ниже.")
     else:
         first = picks[0]  # одна карточка — раздел по кругу (leisure_hub.next_today_pick)
-        b.bold(_TODAY_LABEL.get(first.get("kind"), "На сегодня:"))
+        b.bold(first.get("label") or _TODAY_LABEL.get(first.get("kind"), "На сегодня:"))
         b.newline()
         b.text_line("• ")
         _today_name(b, {**first, "meta": [*first.get("meta", ()), first.get("runtime")]})
@@ -921,14 +921,14 @@ def reads_card(items, index=0) -> MessageSpec:
 
 
 def leisure_hub_kb():
-    """В два столбца Фильм | Сериал, Музыка | Статьи; ниже широкая «События» — концерты, фестивали, выставки,
-    праздники, город и премьеры одной лентой (старые кнопки «Премьеры / Концерты / Праздники» из истории работают)."""
+    """Широкая «События» сверху (концерты, фестивали, выставки, праздники, город и премьеры одной лентой), ниже в
+    два столбца Фильм | Сериал, Музыка | Статьи (старые «Премьеры / Концерты / Праздники» из истории работают)."""
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎟️ События", callback_data="lz_ev")],
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco")],
         [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
          InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
-        [InlineKeyboardButton("🎟️ События", callback_data="lz_ev")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -952,6 +952,32 @@ def _event_span(start, end) -> str:
     return f"{_format_date_label(first, include_year=year)} – {_format_date_label(last, include_year=year)}"
 
 
+def _event_meta(card) -> tuple:
+    """(эмодзи, вид, метаданные) карточки «Событий»: «Концерт», [«4 декабря 2026», «Ziggo Dome», «твой артист»]."""
+    if card["kind"] == "premiere":
+        kind = card.get("premiere")
+        return (_PREMIERE_EMOJI.get(kind, "🎬"), f"Премьера · {_PREMIERE_TYPE.get(kind, 'Фильм').lower()}",
+                [*card.get("meta", ()), _event_date_label(card.get("date"))])
+    emoji, label = _EVENT_KIND.get(card["kind"], _EVENT_KIND["city"])
+    date = (_concert_date_label(card.get("date")) if card["kind"] == "concert"
+            else _event_span(card.get("date"), card.get("end")))
+    return emoji, label, [date, card.get("place") or "", "бесплатно" if card.get("free") else "",
+                          "твой артист" if card.get("mine") else ""]
+
+
+_PICK_LABEL = {"concert": "Ближайший концерт:", "premiere": "Премьера:"}
+
+
+def event_pick(card) -> dict:
+    """Карточка «Событий» → строка «Досуга на сегодня»: подпись («Ближайший концерт:», «Фестиваль:», «Премьера:»),
+    «• **Имя** · метаданные — описание»."""
+    _emoji, label, meta = _event_meta(card)
+    if card["kind"] == "premiere":
+        meta = [_PREMIERE_TYPE.get(card.get("premiere"), "Фильм"), *meta]
+    return {"kind": card["kind"], "label": _PICK_LABEL.get(card["kind"], f"{label}:"), "name": card.get("name") or "",
+            "url": card.get("url") or "", "meta": meta, "about": card.get("about") or ""}
+
+
 def event_card(cards, index=0) -> MessageSpec:
     """Карточка ленты «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome, Amsterdam ·
     твой артист», описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку прикладывает обработчик."""
@@ -962,16 +988,8 @@ def event_card(cards, index=0) -> MessageSpec:
         return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
     index %= len(cards)
     card = cards[index]
-    if card["kind"] == "premiere":
-        emoji = _PREMIERE_EMOJI.get(card.get("premiere"), "🎬")
-        meta = [f"Премьера · {_PREMIERE_TYPE.get(card.get('premiere'), 'Фильм').lower()}",
-                *card.get("meta", ()), _event_date_label(card.get("date"))]
-    else:
-        emoji, label = _EVENT_KIND.get(card["kind"], _EVENT_KIND["city"])
-        date = (_concert_date_label(card.get("date")) if card["kind"] == "concert"
-                else _event_span(card.get("date"), card.get("end")))
-        meta = [label, date, card.get("place") or "", "бесплатно" if card.get("free") else "",
-                "твой артист" if card.get("mine") else ""]
+    emoji, label, meta = _event_meta(card)
+    meta = [label, *meta]
     name = " ".join(str(card.get("name") or "").split())
     url = str(card.get("url") or "")
     b.text_line(f"{emoji} ")

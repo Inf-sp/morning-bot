@@ -485,33 +485,13 @@ def _music_pick(artist):
             "about": artist.get("desc") or ""}
 
 
-# «Досуг на сегодня» — одна карточка, по кругу при каждом открытии (даже в течение дня), из готовых кэшей разделов
-# хаба: фильм → сериал → статья → артист → премьера → концерт. Нет данных раздела — он пропускается.
-_ROTATION = ("movie", "tv", "read", "music", "premiere", "concert")
+# «Досуг на сегодня» — одна карточка, по кругу при каждом открытии (даже в течение дня), только свежее: ближайший
+# концерт → мероприятие города (фестиваль, выставка, праздник) → премьера или новинка → статья дня. Старые фильмы
+# и сериалы-рекомендации здесь не показываются — они кнопками «Фильм» и «Сериал». Нет данных вида — он пропускается;
+# внутри вида карточки тоже идут по кругу.
+_ROTATION = ("concert", "event", "premiere", "read")
 _ROTATION_KEY = "hub_rotation"  # профиль: номер следующего показа
-
-
-def _premiere_pick(cid, today):
-    feed = premieres_feed(cid, today)
-    if not feed:
-        return None
-    kind, item = feed[today.toordinal() % len(feed)]
-    name, url, meta, about = leisure_ui._week_item(item, kind)
-    values = [str(value).lstrip("— ").strip() for value in meta if str(value or "").strip()]
-    return {"kind": "premiere", "name": name or "", "url": url,
-            "meta": [leisure_ui._PREMIERE_TYPE.get(kind, "").lower(), *values], "about": item.get("note") or about or ""}
-
-
-def _concert_pick(cid):
-    items = leisure_concerts.cached_favorite_concerts(cid, 1)
-    if not items:
-        return None
-    item = items[0]
-    notes = store._load(config.CONCERT_ARTIST_NOTES_KEY) or {}
-    note = notes.get(leisure_concerts._concert_identity_text(item["artist"])) if isinstance(notes, dict) else None
-    return {"kind": "concert", "name": item["artist"], "url": item.get("url") or "",
-            "meta": [leisure_ui._concert_date_label(item.get("date")), item.get("venue") or item.get("city") or ""],
-            "about": (note or {}).get("about") or ""}
+_ROTATION_DEPTH = 3  # из каждого вида — до трёх ближайших карточек по кругу
 
 
 def _read_pick(cid, today):
@@ -526,30 +506,37 @@ def _read_pick(cid, today):
             "about": item.get("about") or ""}
 
 
-def today_options(cid, today, picks) -> dict:
-    """Карточки разделов для ротации {вид: карточка} из кэшей, без сети и AI."""
-    options = {pick.get("kind") or "movie": pick for pick in picks}
-    for kind, build in (("read", lambda: _read_pick(cid, today)), ("premiere", lambda: _premiere_pick(cid, today)),
-                        ("concert", lambda: _concert_pick(cid))):
-        try:
-            pick = build()
-        except Exception:
-            _log.debug("leisure today: %s unavailable", kind, exc_info=True)
-            pick = None
-        if pick and pick.get("name"):
-            options[kind] = pick
-    return options
+def today_options(cid, today) -> dict:
+    """{вид ротации: [карточки]} из ленты «Событий» и набора статей — готовые кэши, без сети и AI."""
+    import leisure_events
+    try:
+        cards = leisure_events.feed(cid)
+    except Exception:
+        _log.warning("leisure today: events unavailable cid=%s", cid, exc_info=True)
+        cards = []
+    groups = {"concert": [], "event": [], "premiere": []}
+    for card in cards:
+        group = card["kind"] if card["kind"] in ("concert", "premiere") else "event"
+        if len(groups[group]) < _ROTATION_DEPTH:
+            groups[group].append(leisure_ui.event_pick(card))
+    try:
+        read = _read_pick(cid, today)
+    except Exception:
+        read = None
+    return {kind: picks for kind, picks in (*groups.items(), ("read", [read] if read else [])) if picks}
 
 
 def next_today_pick(cid, options, advance=True):
-    """Следующая карточка по кругу _ROTATION (номер показа — в профиле); advance=False — без сдвига."""
-    kinds = [kind for kind in _ROTATION if kind in options]
+    """Следующая карточка по кругу: вид — по _ROTATION, внутри вида — следующая из ближайших (номер показа — в
+    профиле); advance=False — без сдвига."""
+    kinds = [kind for kind in _ROTATION if options.get(kind)]
     if not kinds:
         return None
     number = int((store.get_profile(cid) or {}).get(_ROTATION_KEY) or 0)
     if advance:
         store.mutate_profile(cid, lambda profile: ({**profile, _ROTATION_KEY: number + 1}, None))
-    return options[kinds[number % len(kinds)]]
+    picks = options[kinds[number % len(kinds)]]
+    return picks[(number // len(kinds)) % len(picks)]
 
 
 def today_data(cid, day=None) -> dict:
@@ -605,28 +592,21 @@ def premiere_of_day(cid, day=None):
 
 
 async def send_hub(bot, cid, q=None):
-    """«🍿 Досуг на сегодня»: одна карточка — раздел хаба по кругу при каждом открытии (фильм → сериал → статья →
-    артист → премьера → концерт) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
+    """«🍿 Досуг на сегодня»: одна свежая карточка по кругу при каждом открытии (концерт → мероприятие → премьера
+    → статья) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
     import vacation
     if vacation.active(cid):
         await _show(bot, cid, await asyncio.to_thread(_trip_screen, cid, vacation.trip_leisure(cid)), q)
         return
-    # Плашка ожидания «🎬 Смотрю афиши кинотеатров...» — общий индикатор роутера (bot_callbacks).
     data = await asyncio.to_thread(today_data, cid)
-    if len(data["picks"]) < len(_TODAY_KINDS):  # карточки стёрты (начало или конец отпуска) — не ждём ночи
-        task = refresh_cards(cid)
-        if not data["picks"]:
-            try:
-                await asyncio.wait_for(asyncio.shield(task), _CARDS_WAIT)
-            except Exception:
-                _log.info("leisure hub: day cards not ready cid=%s", cid)
-            data = await asyncio.to_thread(today_data, cid)
+    if len(data["picks"]) < len(_TODAY_KINDS):  # карточки «Фильм / Сериал / Музыка» стёрты — фоном, к их кнопкам
+        refresh_cards(cid)
     if not (data.get("read") or {}).get("about"):  # статьи или её анонса ещё нет — фоном, к следующему открытию
         import leisure_reads  # (не чаще раза в 10 минут: build_off_loop)
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     today = _today_and_cc(cid)[0]
-    options = await asyncio.to_thread(today_options, cid, today, data["picks"])
-    pick = await asyncio.to_thread(next_today_pick, cid, options)  # каждое открытие — следующий раздел
+    options = await asyncio.to_thread(today_options, cid, today)
+    pick = await asyncio.to_thread(next_today_pick, cid, options)  # каждое открытие — следующая карточка
     msg = leisure_ui.leisure_today_screen(
         [pick] if pick else [], city=data["city"], library=data["library"],
         reply_markup=leisure_ui.leisure_hub_kb(),
@@ -661,7 +641,6 @@ async def send_reads(bot, cid, arg="", q=None):
     await _show_card(bot, cid, leisure_ui.reads_card(items, index), image if image.startswith("https://") else "", q)
 
 
-_CARDS_WAIT = 25  # пустой хаб ждёт карточки дня не дольше; остальное дособирается в фоне
 _CARDS_TASKS = {}  # сборка карточек чата уже идёт
 
 
