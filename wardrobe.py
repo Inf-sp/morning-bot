@@ -36,7 +36,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 15  # 15 — в мороз тёплая верхняя одежда раньше непродуваемой ветровки: образ пересобирается
+COPY_VALIDATOR_VERSION = 16  # 16 — верхняя одежда и кофта по диапазонам «ощущается», образ в мороз собирается
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Кофты", "Низ", "Верхняя одежда", "Обувь")
 def _kb(rows):

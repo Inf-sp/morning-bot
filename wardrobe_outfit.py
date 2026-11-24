@@ -286,13 +286,17 @@ def _with_light_shirt_layers(combos, candidates, weather_ctx, selected_styles=No
     low, high = _SHIRT_LAYER_LOVED if loved else _SHIRT_LAYER_RANGE
     if tmax is None or not low <= tmax <= high or weather_ctx.get("hot"):
         return combos
+    # Рубашка нараспашку — слой вместо кофты, а не четвёртый слой поверх свитера и под курткой.
+    combos_with_room = [combo for combo in combos if not any(item.get("zone") == "Кофты" for item in combo)]
+    if not combos_with_room:
+        return combos
     shirts = _top_candidates([
         item for item in candidates.get("Верх", []) if _is_layerable_shirt(item)
     ], limit=3 if loved else 2, selected_styles=selected_styles)
     if not shirts:
         return combos
     layered = []
-    for combo in combos:
+    for combo in combos_with_room:
         if not any(_is_light_base_top(item) for item in combo):
             continue
         combo_ids = {item.get("id") for item in combo if item.get("id")}
@@ -329,7 +333,11 @@ def _temp_conflicts(item, weather_ctx):
     if not tr or tmax is None:
         return False
     lo, hi = tr
-    return tmax > hi + _TEMP_CONFLICT_MARGIN or tmax < lo - _TEMP_CONFLICT_MARGIN
+    if tmax > hi + _TEMP_CONFLICT_MARGIN:
+        return True
+    # В холод исключаются только лёгкие вещи: обычная футболка, брюки и кроссовки — под кофтой и курткой — годятся и в
+    # мороз (иначе в -8° не собирался ни один образ); тёплую верхнюю одежду выбирают правила зоны ниже.
+    return item.get("warmth") == "лёгкие" and tmax < lo - _TEMP_CONFLICT_MARGIN
 
 
 def _is_sunglasses(item):
@@ -367,6 +375,13 @@ def select_outfit_candidates(w, weather_ctx):
         items = sorted(items, key=lambda it: str(it.get("last_used") or ""))
         # Жёсткие правила погоды: шорты в дождь и ветер, тёплое в жару и т. п. — исключаются.
         items = [it for it in items if not _temp_conflicts(it, weather_ctx) and rules.allowed(it, weather_ctx)]
+        low = rules.feels_low(weather_ctx)
+        if zone != "Верхняя одежда" and low is not None and low >= rules.WARM_ITEMS_FEELS_MIN:
+            # Не холодно — без утеплённых ботинок и шерстяного свитера, если в зоне есть вещи легче.
+            items = [it for it in items if it.get("warmth") != "тёплые"] or items
+        elif zone == "Кофты" and low is not None and low < rules.FROST_FEELS_MAX:
+            # Мороз — тёплый свитер, если он есть, а не худи.
+            items = [it for it in items if it.get("warmth") == "тёплые"] or items
         if zone == "Обувь" and weather_ctx.get("has_rain"):
             # В дождь без замши и текстиля, если есть закрытая непромокающая альтернатива.
             items = [it for it in items if rules.rain_shoe_ok(it)] or items
@@ -378,10 +393,23 @@ def select_outfit_candidates(w, weather_ctx):
             if not outerwear_needed:
                 candidates[zone] = []
                 continue
-            if rules.colder_than(weather_ctx, rules.WARM_OUTER_FEELS_MAX):
-                # Холодно — сначала тепло: не ветровка и не лёгкая куртка, если в шкафу есть теплее. Ветер и дождь
-                # выбирают уже среди тёплых: иначе при порывах оставалась бы одна непродуваемая ветровка в мороз.
-                items = [it for it in items if not rules.light_outerwear(it)] or items
+            # Тепло по диапазонам «ощущается» в самый холодный час — раньше ветра и дождя:
+            #   в минус — самая тёплая верхняя одежда шкафа;
+            #   до +8 — не ветровка и не лёгкая куртка (в дождь от +5 допустим лёгкий дождевик поверх кофты);
+            #   от +3 — без пуховика и парки, если есть обычная куртка.
+            # Ветер и дождь выбирают уже среди подходящих по теплу: иначе при порывах в мороз оставалась бы одна
+            # непродуваемая ветровка, а в +10 с дождём — пуховик.
+            warmth = {"лёгкие": 0, "обычные": 1, "тёплые": 2}
+            if low is not None and low < rules.FROST_FEELS_MAX:
+                warmest = max((warmth.get(it.get("warmth"), 1) for it in items), default=1)
+                items = [it for it in items if warmth.get(it.get("warmth"), 1) == warmest
+                         and (warmest == 0 or not rules.light_outerwear(it))] or items
+            elif rules.colder_than(weather_ctx, rules.WARM_OUTER_FEELS_MAX):
+                items = [it for it in items if not rules.light_outerwear(it)
+                         or (weather_ctx.get("has_rain") and it.get("rain_ok")
+                             and low is not None and low >= rules.RAINCOAT_FEELS_MIN)] or items
+            if low is not None and low >= rules.HEAVY_OUTER_FEELS_MAX:
+                items = [it for it in items if it.get("warmth") != "тёплые"] or items
             if weather_ctx.get("has_rain"):
                 # Есть непромокаемая — только она.
                 items = [it for it in items if it.get("rain_ok")] or items
