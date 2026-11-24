@@ -363,6 +363,15 @@ def wiki_image(query, fetch=True) -> str:
                          ttl=_FANS_TTL) or ""
 
 
+def stock_photo(topic, fetch=True) -> str:
+    """Тематическое фото (Unsplash, иначе Pexels) по теме на английском — «ice rink», «christmas market»; кэш месяц;
+    fetch=False — только кэш."""
+    def load(key):
+        import travel_photos
+        return str((travel_photos.find_illustration(key.split("|", 1)[1]) or {}).get("url") or "")
+    return _person_cache(config.EVENT_IMAGE_KEY, f"stock|{topic}", load, fetch, keep_empty=True, ttl=_FANS_TTL) or ""
+
+
 def artist_fans(name, fetch=True) -> int | None:
     """Число поклонников артиста на Deezer — мера известности; None — неизвестно (сбой, нет кэша при fetch=False)."""
     found = _person_cache(config.ARTIST_FANS_KEY, _full_name(name), _deezer_fans, fetch, keep_empty=True,

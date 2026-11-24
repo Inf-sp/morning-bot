@@ -95,6 +95,7 @@ def _no_rss_reads(monkeypatch):
     monkeypatch.setattr(local_events, "_page_image", lambda _url: "")
     import countries
     monkeypatch.setattr(countries, "wiki_image", lambda _query, fetch=True: "")
+    monkeypatch.setattr(countries, "stock_photo", lambda _topic, fetch=True: "")
     import ovapi
     monkeypatch.setattr(ovapi, "_get", lambda _path: None)  # автобусы OVapi в тестах — без сети
     yield

@@ -77,3 +77,17 @@ def test_every_event_gets_a_short_description(monkeypatch):
     # AI не ответил — короткая подпись без AI, карточка не остаётся пустой.
     assert leisure_events._plain_about({"kind": "city", "place": "Waagplein"}, "Alkmaar") == (
         "Городское событие — Waagplein, Alkmaar.")
+
+
+def test_city_event_photo_matches_its_topic_not_the_square(monkeypatch):
+    import countries
+    asked = []
+    monkeypatch.setattr(countries, "stock_photo", lambda topic, fetch=True: asked.append(topic) or f"https://stock/{topic}")
+    monkeypatch.setattr(countries, "wiki_image", lambda _q, fetch=True: "https://wiki/waag.jpg")
+    rink = {"kind": "city", "name": "Ice rink on Waagplein", "place": "Waagplein",
+            "image": "https://alkmaar.nl/og-image-default.jpg"}
+    assert leisure_events.topic_of(rink, "Alkmaar") == "ice rink"
+    assert leisure_events.image_for(rink, "Alkmaar") == "https://stock/ice rink"  # каток, а не площадь
+    assert leisure_events.topic_of({"kind": "city", "name": "Kerstmarkt Alkmaar"}, "Alkmaar") == "christmas market"
+    poster = {"kind": "festival", "name": "Winterfest", "image": "https://fest.nl/poster-2026.jpg"}
+    assert leisure_events.image_for(poster, "Alkmaar") == "https://fest.nl/poster-2026.jpg"  # у фестиваля — афиша

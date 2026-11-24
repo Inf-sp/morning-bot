@@ -220,12 +220,48 @@ def _image_queries(card, city) -> list:
     return queries
 
 
+_TOPIC_STOP = {"on", "the", "in", "at", "of", "and", "de", "het", "een", "op", "van", "aan", "bij", "in", "en",
+               "met", "voor", "naar", "alkmaar"}
+# Частые слова афиши по-нидерландски → тема фото по-английски.
+_TOPIC_NL = {"ijsbaan": "ice rink", "schaatsbaan": "ice rink", "schaatsen": "ice skating", "kerstmarkt": "christmas market",
+             "kerst": "christmas", "markt": "market", "kermis": "funfair", "intocht": "parade", "lichtjes": "lights",
+             "tentoonstelling": "exhibition", "expositie": "exhibition", "boekenmarkt": "book market",
+             "rommelmarkt": "flea market", "vuurwerk": "fireworks", "optocht": "parade", "kaasmarkt": "cheese market"}
+_GENERIC_IMAGE = ("logo", "default", "placeholder", "og-image", "share", "social", "fallback", "favicon")
+
+
+def topic_of(card, city="") -> str:
+    """Тема фото события без имён мест: «Ice rink on Waagplein» → «ice rink», «Kerstmarkt Alkmaar» → «christmas
+    market»; ничего не осталось — по виду события."""
+    skip = {word.casefold() for word in f"{card.get('place') or ''} {card.get('venue') or ''} {city}".split()}
+    words = [word for word in re.findall(r"[A-Za-zÀ-ÿ]+", str(card.get("name") or ""))
+             if word.casefold() not in _TOPIC_STOP and word.casefold() not in skip and len(word) > 2]
+    words = [_TOPIC_NL.get(word.casefold(), word.casefold()) for word in words]
+    topic = " ".join(dict.fromkeys(words[:3]))
+    return topic or {"festival": "festival crowd", "exhibition": "art exhibition", "city": "city event",
+                     "holiday": "celebration"}.get(card["kind"], "")
+
+
 def image_for(card, city, fetch=True) -> str:
-    """Картинка карточки: своя → фото исполнителя (концерт) → Википедия по событию, площадке, городу."""
+    """Картинка по смыслу события: у городских событий — тематическое фото (каток, рынок), потом своя картинка
+    страницы; у фестиваля и выставки — своя (афиша), потом тематическая; у концерта — фото исполнителя; дальше —
+    Википедия по названию, площадке и городу."""
     import countries
     image = str(card.get("image") or "")
-    if image.startswith("https://"):
+    own = image if image.startswith("https://") and not any(word in image.casefold() for word in _GENERIC_IMAGE) else ""
+    if card["kind"] in ("read", "premiere") and image.startswith("https://"):
         return image
+    stock = ""
+    if card["kind"] in ("city", "festival", "exhibition", "holiday"):
+        if card["kind"] != "city" and own:
+            return own
+        stock = countries.stock_photo(topic_of(card, city), fetch=fetch)
+        if str(stock or "").startswith("https://"):
+            return stock
+        if own:
+            return own
+    elif own:
+        return own
     if card["kind"] == "concert":
         photo = countries.artist_photo(card["name"], fetch=fetch)
         if str(photo or "").startswith("https://"):
