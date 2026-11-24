@@ -232,7 +232,7 @@ def firecrawl_search(query: str, max_results: int = 5, *, topic: str = "general"
 
 def serpapi_search(query: str, max_results: int = 5, **_unused) -> list:
     """Последний резерв веб-поиска (Google через SerpAPI, ключ SERP_API_KEY): [{title, url, content}]."""
-    if not config.SERP_API_KEY:
+    if not config.SERP_API_KEY or not api_usage.has_budget("serpapi"):  # месячный лимит бережём до конца
         return []
     try:
         r = requests.get("https://serpapi.com/search.json", timeout=tracking.bounded_timeout(15), params={

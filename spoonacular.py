@@ -80,6 +80,8 @@ def _request(path: str, params=None, *, ttl=_SEARCH_TTL):
         api_usage.record_cache_hit("spoonacular")
         return cached
 
+    if not api_usage.has_budget("spoonacular"):  # дневные баллы почти исчерпаны — рецепт из резерва (TheMealDB, AI)
+        return None
     started = time.time()
     try:
         response = requests.get(f"{_BASE_URL}{safe_path}", params=query, timeout=tracking.bounded_timeout(10))

@@ -82,6 +82,8 @@ def _ticketmaster_get(url, params, timeout=15):
     remaining = _ticketmaster_cooldown_remaining()
     if remaining:
         raise TicketmasterRateLimitError(f"ticketmaster cooldown {remaining}s")
+    if not api_usage.has_budget("ticketmaster"):  # дневной лимит почти исчерпан — как пауза: очередь до завтра
+        raise TicketmasterRateLimitError("ticketmaster daily budget reserved")
     delays = (0,) + _TICKETMASTER_RETRY_DELAYS
     for i, delay in enumerate(delays):
         if delay:

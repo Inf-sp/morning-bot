@@ -612,3 +612,39 @@ def test_idle_line_lists_configured_services_without_real_requests_for_a_week(mo
     usage["services"]["openrouter"]["last_request_at"] = now
     usage["services"]["serpapi"] = {"last_request_at": now}
     assert service_monitor.idle_line(now) == ""  # всё в работе — строки нет
+
+
+def test_free_limits_warn_at_80_percent_and_switch_to_reserve_at_95(monkeypatch):
+    import api_usage
+    import config
+    counts = {"used": 0}
+    monkeypatch.setattr(api_usage, "_count", lambda _svc, _period, _unit, dt=None: counts["used"])
+    monkeypatch.setattr(config, "API_FREE_LIMITS", {"youtube": ("day", "units", 10000)})
+    counts["used"] = 7000
+    assert api_usage.has_budget("youtube") and api_usage.limit_warning("youtube", "YouTube") == ""
+    counts["used"] = 8200
+    assert api_usage.limit_warning("youtube", "YouTube") == (
+        "YouTube — израсходовано 82% дневного лимита (8 200 из 10 000)")
+    counts["used"] = 9600
+    assert not api_usage.has_budget("youtube")  # дальше — резерв, последнее не тратим
+    assert api_usage.limit_warning("youtube", "YouTube").endswith(": бот перешёл на резерв")
+    assert api_usage.has_budget("tmdb")  # сервис без известного лимита — не ограничиваем
+
+
+def test_admin_gets_one_alert_per_service_a_day(monkeypatch):
+    import asyncio
+    import store
+    saved, sent = {}, []
+    monkeypatch.setattr(store, "_load", lambda key: saved.get(key))
+    monkeypatch.setattr(store, "mutate_kv", lambda key, change: saved.__setitem__(key, change(saved.get(key))[0]))
+    monkeypatch.setattr(service_monitor, "attention", lambda: ["YouTube — израсходовано 82% дневного лимита"])
+    monkeypatch.setattr(service_monitor.config, "ADMIN_CHAT_ID", "42")
+
+    class Bot:
+        async def send_message(self, **kwargs):
+            sent.append(kwargs["text"])
+
+    assert asyncio.run(service_monitor.notify_admin(Bot())) is True
+    assert asyncio.run(service_monitor.notify_admin(Bot())) is False  # сегодня уже сообщили
+    assert sent[0].startswith("⚠️ Сервисы · нужно внимание\n\n• YouTube — израсходовано 82%")
+    assert "Пользователь ошибок не видит" in sent[0]

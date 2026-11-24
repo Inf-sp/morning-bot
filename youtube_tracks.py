@@ -165,9 +165,14 @@ def _search(params) -> list | None:
 def _api(url, params) -> list | None:
     """GET к YouTube Data API: items; None — сбой запроса (не кэшируется)."""
     started = time.monotonic()
+    if not api_usage.has_budget("youtube"):  # лимит дня почти исчерпан — ссылка на поиск YouTube, а не ошибка
+        _log.info("youtube: daily units almost used, fallback to search links")
+        return None
+    cost = 100 if url == _SEARCH_URL else 1  # единицы квоты YouTube Data API
 
     def record(ok, **kwargs):
-        api_usage.record_request("youtube", ok, latency_ms=int((time.monotonic() - started) * 1000), **kwargs)
+        api_usage.record_request("youtube", ok, units={"units": cost},
+                                 latency_ms=int((time.monotonic() - started) * 1000), **kwargs)
 
     try:
         response = requests.get(

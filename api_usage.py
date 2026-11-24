@@ -110,6 +110,41 @@ def service_usage(service: str) -> dict:
     }
 
 
+_PERIOD_LABEL = {"day": "дневного", "month": "месячного", "hour": "часового"}
+
+
+def limit_state(service: str) -> dict | None:
+    """Расход бесплатного лимита сервиса (config.API_FREE_LIMITS): {used, limit, period, share}; без лимита — None."""
+    spec = config.API_FREE_LIMITS.get(service)
+    if not spec or not spec[2]:
+        return None
+    period, unit, limit = spec
+    try:
+        data = store._load(config.API_USAGE_KEY)
+        svc = ((data.get("services") or {}).get(service) or {}) if isinstance(data, dict) else {}
+    except Exception:
+        svc = {}
+    used = _count(svc, period, unit)
+    return {"used": used, "limit": int(limit), "period": period, "share": used / int(limit)}
+
+
+def has_budget(service: str) -> bool:
+    """False — израсходовано от API_LIMIT_RESERVE_SHARE лимита: дальше бот берёт резерв, а не тратит последнее."""
+    state = limit_state(service)
+    return state is None or state["share"] < config.API_LIMIT_RESERVE_SHARE
+
+
+def limit_warning(service: str, label: str) -> str:
+    """«YouTube — израсходовано 82% дневного лимита (8 200 из 10 000)»; меньше API_LIMIT_WARN_SHARE — ""."""
+    state = limit_state(service)
+    if not state or state["share"] < config.API_LIMIT_WARN_SHARE:
+        return ""
+    number = lambda value: f"{value:,}".replace(",", " ")  # noqa: E731
+    text = (f"{label} — израсходовано {min(100, round(state['share'] * 100))}% "
+            f"{_PERIOD_LABEL.get(state['period'], '')} лимита ({number(state['used'])} из {number(state['limit'])})")
+    return text + (": бот перешёл на резерв" if state["share"] >= config.API_LIMIT_RESERVE_SHARE else "")
+
+
 def tavily_budget() -> dict:
     """Local monthly budget view; never makes a Tavily network request."""
     usage = service_usage("tavily")

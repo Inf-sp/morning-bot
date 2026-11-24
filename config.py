@@ -32,6 +32,19 @@ def _env_first(*names, default=""):
 
 WEATHER_FREE_DAILY_LIMIT = _env_int("WEATHER_FREE_DAILY_LIMIT", 1000)
 WEATHER_HARD_DAILY_LIMIT = _env_int("WEATHER_HARD_DAILY_LIMIT", WEATHER_FREE_DAILY_LIMIT)
+# Бесплатные лимиты внешних API: (период, единица, лимит). При 80% — предупреждение в админке, с 95% бот сам
+# переходит на резерв (кэш, другой источник), чтобы пользователь не увидел «лимит исчерпан». Переопределяются
+# env: API_LIMIT_YOUTUBE=10000.
+API_FREE_LIMITS = {
+    "youtube": ("day", "units", _env_int("API_LIMIT_YOUTUBE", 10000)),  # search — 100 единиц, videos.list — 1
+    "ticketmaster": ("day", "requests", _env_int("API_LIMIT_TICKETMASTER", 5000)),
+    "spoonacular": ("day", "requests", _env_int("API_LIMIT_SPOONACULAR", 150)),
+    "serpapi": ("month", "requests", _env_int("API_LIMIT_SERPAPI", 100)),
+    "openweather": ("day", "requests", WEATHER_HARD_DAILY_LIMIT),
+}
+API_LIMIT_WARN_SHARE = 0.8
+ADMIN_ALERTS_KEY = "admin_alerts.json"  # {сервис: дата} — что уже сообщено админу сегодня (одно сообщение на сервис в день)
+API_LIMIT_RESERVE_SHARE = 0.95
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
 GEMINI_DAILY_LIMIT = _env_int("GEMINI_DAILY_LIMIT", 0)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

@@ -300,6 +300,12 @@ def attention() -> list[str]:
             out.append(f"{label} — лимит исчерпан")
         else:
             out.append(f"{label} — {state.get('last_error') or 'не отвечает'}")
+    for service in config.API_FREE_LIMITS:
+        if _configured(service):
+            label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+            warning = api_usage.limit_warning(service, label)
+            if warning:
+                out.append(warning)
     try:
         budget = api_usage.tavily_budget()
         if _configured("tavily") and budget["total"] and budget["remaining"] < budget["total"] * _TAVILY_LOW_SHARE:
@@ -508,9 +514,55 @@ def check_all(*, force=False) -> None:
     # it has answered a real feature request in the AI router.
 
 
-async def monitoring_job(_context) -> None:
+async def monitoring_job(context) -> None:
     import asyncio
     await asyncio.to_thread(check_all)
+    try:
+        await notify_admin(getattr(context, "bot", None))
+    except Exception:
+        _log.warning("monitoring: admin alert failed", exc_info=True)
+
+
+def _new_alerts(items, today) -> list[str]:
+    """Пункты «внимания», о которых сегодня ещё не писали админу (ключ — сервис до « — »); отмечает их."""
+    import store
+    sent = store._load(config.ADMIN_ALERTS_KEY) or {}
+    sent = sent if isinstance(sent, dict) else {}
+    fresh = [item for item in items if sent.get(item.split(" — ", 1)[0]) != today]
+    if fresh:
+        def mutate(data):
+            data = data if isinstance(data, dict) else {}
+            data.update({item.split(" — ", 1)[0]: today for item in fresh})
+            return data, None
+        store.mutate_kv(config.ADMIN_ALERTS_KEY, mutate)
+    return fresh
+
+
+async def notify_admin(bot) -> bool:
+    """Сервис подходит к лимиту, исчерпал его или не принимает ключ — коротко админу, один раз в день на сервис:
+    «⚠️ Сервисы · нужно внимание», пункты «•», внизу курсивом, что бот делает сам. Нечего сказать — False."""
+    import asyncio
+    from datetime import datetime
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from ui.builder import MessageBuilder
+    if bot is None or not config.ADMIN_CHAT_ID:
+        return False
+    items = await asyncio.to_thread(attention)
+    fresh = await asyncio.to_thread(_new_alerts, items, datetime.now(config.TZ).date().isoformat())
+    if not fresh:
+        return False
+    b = MessageBuilder()
+    b.title("⚠️ Сервисы · нужно внимание")
+    for item in fresh:
+        b.line(f"• {item}")
+    b.spacer()
+    b.italic("Пользователь ошибок не видит: бот берёт резерв — другой сервис или сохранённый ответ.")
+    b.newline()
+    msg = b.build_stripped()
+    await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=msg.text, entities=msg.entities,
+                           reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛠 Админка", callback_data="adm_home")],
+                                                              [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]]))
+    return True
 
 
 # ================= Ручная проверка API (🩺 Проверить API) =================
