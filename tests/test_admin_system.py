@@ -619,6 +619,7 @@ def test_admin_refreshes_one_leisure_part_like_reads(monkeypatch):
 
     monkeypatch.setattr(leisure_hub, "_warm_concerts", lambda _cid: fake("concerts"))
     monkeypatch.setattr(leisure_reads, "build", lambda cid, now=None, force=False: forced.append(force) or {})
+    monkeypatch.setattr(leisure_reads, "ranked", lambda _cid: [{"title": "Статья"}])  # набор собрался
     bot = RecordingBot()
 
     asyncio.run(admin.refresh_card(bot, "42", "lz_reads"))
