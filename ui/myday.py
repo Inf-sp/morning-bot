@@ -227,7 +227,7 @@ def _short_fact(text) -> str:
     return head.rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
 
 
-_MAX_BLOCKS = 7  # строк-блоков в сводке вместе с цитатой; больше — цитата не показывается
+_MAX_BLOCKS = 10  # строк-блоков в сводке вместе с цитатой; больше — цитата не показывается
 
 
 def day_summary(
@@ -249,6 +249,9 @@ def day_summary(
     holidays=None,
     vacation=None,
     premiere=None,
+    meal=None,
+    event=None,
+    read=None,
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -275,7 +278,7 @@ def day_summary(
         len(rail_works or []), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
         bool(word_line or movie_rebus), bool([item for item in outfit_items or [] if str(item).strip()]),
         bool(str((vacation.get("try_dish") or {}).get("name") or "").strip()),
-        bool(str(vacation.get("country_fact") or "").strip()), bool(premiere),
+        bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(meal), bool(event), bool(read),
     ))
 
     # Плановые работы NS на станциях города — только в дни работ.
@@ -358,9 +361,46 @@ def day_summary(
         b.labeled_line("Факт дня", finish_dot(_short_fact(country_fact)), lowercase=False)
         b.spacer()
 
+    # Блюдо Кухни по времени суток: «🍳 Завтрак: Шакшука (яйца в томатах).»
+    if meal and str(meal.get("name") or "").strip():
+        note = str(meal.get("note") or "").strip()
+        b.text_line("🍳 ")
+        b.labeled_line(meal.get("label") or "Блюдо", finish_dot(str(meal["name"]).strip()
+                                                               + (f" ({note[:1].lower()}{note[1:]})" if note else "")),
+                       lowercase=False)
+        b.spacer()
+
+    # Ближайшее событие недели из «Событий» Досуга: «🎫 Концерт: Muse · 28 ноября 2026 · Ziggo Dome, Amsterdam».
+    if event and str(event.get("name") or "").strip():
+        from ui import leisure as leisure_ui
+        emoji, label, meta = leisure_ui._event_meta(event)
+        b.text_line(f"{emoji} ")
+        b.label(label)
+        b.text_line(" ")
+        name, url = " ".join(str(event["name"]).split()), str(event.get("url") or "")
+        b.link(name, url) if url.startswith("http") else b.text_line(name)
+        values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
+        if values:
+            b.text_line(" · " + " · ".join(values))
+        b.newline()
+        b.spacer()
+
     # Премьера дня из Досуга — только сегодняшняя, одна строка.
     if premiere:
         _premiere_line(b, premiere)
+
+    # Статья дня из «Статей»: «📰 Статья дня: Заголовок · Quanta · 8 мин».
+    if read and str(read.get("title") or "").strip() and str(read.get("link") or "").startswith("http"):
+        minutes = int(read.get("minutes") or 0)
+        b.text_line("📰 ")
+        b.label("Статья дня")
+        b.text_line(" ")
+        b.link(" ".join(str(read["title"]).split()), str(read["link"]))
+        meta = [str(read.get("source") or "").strip(), f"{minutes} мин" if minutes else ""]
+        if any(meta):
+            b.text_line(" · " + " · ".join(value for value in meta if value))
+        b.newline()
+        b.spacer()
 
     quote_text = str(quote_text or "").strip().strip("«»\"")
     quote_author = str(quote_author or "").strip()

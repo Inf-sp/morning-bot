@@ -208,5 +208,26 @@ def test_day_summary_drops_the_quote_on_a_busy_day():
         "Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись", outfit_items=["Худи"],
         holidays=["Сегодня: Sint Maarten — день святого Мартина", "Сегодня: Lichtjesavond — вечер огней"],
         rail_works=[{"title": "Alkmaar – Uitgeest"}],
-        premiere={"kind": "series", "name": "Медведь", "season_number": 5}, quote_text="Цитата")
-    assert "Цитата" not in busy.text and busy.text.count("\n\n") == 7  # семь строк — без цитаты
+        premiere={"kind": "series", "name": "Медведь", "season_number": 5},
+        meal={"label": "Ужин", "name": "Пад тай", "note": "жареная лапша"},
+        event={"kind": "concert", "name": "Muse", "url": "https://t", "date": "2026-11-28", "place": "Ziggo Dome"},
+        read={"title": "DNA repair", "link": "https://q", "source": "Quanta", "minutes": 8}, quote_text="Цитата")
+    assert "Цитата" not in busy.text and busy.text.count("\n\n") == 10  # десять строк — без цитаты
+    assert "🍳 Ужин: Пад тай (жареная лапша)." in busy.text
+    assert "🎫 Концерт: Muse · 28 ноября 2026 · Ziggo Dome" in busy.text
+    assert "📰 Статья дня: DNA repair · Quanta · 8 мин" in busy.text
+
+
+def test_meal_of_day_follows_time_of_day(monkeypatch):
+    import day_menu
+    import myday
+    menu = {"dishes": {"breakfast": {"name": "Шакшука", "note": "яйца в томатах"},
+                       "lunch": {"name": "Том ям", "note": "острый суп"}, "dinner": {"name": "Пад тай"}}}
+    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: menu)
+    for period, label, name in (("Утром", "Завтрак", "Шакшука"), ("Днём", "Обед", "Том ям"),
+                                ("Вечером", "Ужин", "Пад тай")):
+        monkeypatch.setattr(myday, "_weather_period", lambda period=period: period)
+        meal = myday._meal_of_day("42")
+        assert (meal["label"], meal["name"]) == (label, name)
+    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: None)
+    assert myday._meal_of_day("42") is None  # меню нет — строки нет
