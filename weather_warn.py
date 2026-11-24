@@ -7,11 +7,16 @@
 текст события, приоритет. Тексты — детерминированные шаблоны (без LLM).
 Отправлять только при наличии хотя бы одного значимого фактора (тихие дни — молчим).
 """
+import logging
 from dataclasses import dataclass
 from typing import Callable
 
+import config
+import meteoalarm
 import store
 import weather
+
+_log = logging.getLogger(__name__)
 
 # Максимумы по ТЗ: не перегружать уведомление.
 MAX_EVENTS = 3
@@ -301,6 +306,28 @@ def tomorrow_view(data):
                               for key, values in daily.items()}}
 
 
+def _official(place, tomorrow=False) -> list:
+    """Официальные предупреждения KNMI (MeteoAlarm) для координат из Настроек: сегодня — действующие и
+    начинающиеся сегодня, накануне — на завтра; только Нидерланды; сервис не ответил — []."""
+    if str(place.get("cc") or "").upper() != "NL" or place.get("lat") is None:
+        return []
+    from datetime import datetime, timedelta
+    try:
+        items = meteoalarm.warnings_for(float(place["lat"]), float(place["lon"]), "NL") or []
+    except Exception:
+        _log.warning("weather warn: meteoalarm failed", exc_info=True)
+        return []
+    today = datetime.now(config.TZ).date()
+    day = today + timedelta(days=1) if tomorrow else today
+
+    def covers(item):
+        start = item["onset"].date() if item["onset"] else today
+        end = item["expires"].date() if item["expires"] else start
+        return start <= day <= end
+
+    return [item for item in items if covers(item)]
+
+
 def build_warning(data, cid, tomorrow=False):
     """Собирает MessageSpec погодного предупреждения или None (тихий день). tomorrow — накануне: прогноз на завтра
     и только важные явления (TOMORROW_KEYS)."""
@@ -311,15 +338,17 @@ def build_warning(data, cid, tomorrow=False):
             return None
     ctx = collect_context(data, cid)
     fired = [h for h in evaluate(ctx) if not tomorrow or h.key in TOMORROW_KEYS]
-    if not fired:
+    place = store.get_settings(cid) or {}
+    official = _official(place, tomorrow)
+    if not fired and not official:
         return None
     top = fired[:MAX_EVENTS]
-    # Значок главного события — в заголовок, сами события без эмодзи.
-    icon, events = "", []
+    # Официальное предупреждение KNMI — первым пунктом и значком; затем свой расчёт по прогнозу, без эмодзи.
+    icon = official[0]["emoji"] if official else ""
+    events = [meteoalarm.line(item) + "." for item in official[:2]]
     for h in top:
         mark, _sep, text = h.event(ctx).partition(" ")
         icon = icon or mark
         events.append(text.replace("Сегодня ожидается", "Ожидается") if tomorrow else text)
-    when = _local_when(_when_for(ctx, [h.key for h in top]), cid)
-    place = store.get_settings(cid) or {}
+    when = _local_when(_when_for(ctx, [h.key for h in top]), cid) if top else ""
     return weather_ui.weather_warning(events, when, icon, city=str(place.get("city") or ""), tomorrow=tomorrow)

@@ -252,6 +252,7 @@ def day_summary(
     meal=None,
     event=None,
     read=None,
+    city_fact="",
 ):
     """Сводка дня: заголовок, затем по одной строке на блок с пустой строкой между ними."""
     b = MessageBuilder()
@@ -279,6 +280,7 @@ def day_summary(
         bool(word_line or movie_rebus), bool([item for item in outfit_items or [] if str(item).strip()]),
         bool(str((vacation.get("try_dish") or {}).get("name") or "").strip()),
         bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(meal), bool(event), bool(read),
+        bool(city_fact),
     ))
 
     # Плановые работы NS на станциях города — только в дни работ.
@@ -368,6 +370,12 @@ def day_summary(
         b.labeled_line(meal.get("label") or "Блюдо", finish_dot(str(meal["name"]).strip()
                                                                + (f" ({note[:1].lower()}{note[1:]})" if note else "")),
                        lowercase=False)
+        b.spacer()
+
+    # Город в цифрах (CBS): «📊 Город в цифрах: В Alkmaar живёт 110 000 человек — данные CBS за 2025 год.»
+    if str(city_fact or "").strip():
+        b.text_line("📊 ")
+        b.labeled_line("Город в цифрах", finish_dot(str(city_fact).strip()), lowercase=False)
         b.spacer()
 
     # Ближайшее событие недели из «Событий» Досуга: «🎫 Концерт: Muse · 28 ноября 2026 · Ziggo Dome, Amsterdam».

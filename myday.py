@@ -520,6 +520,18 @@ def _event_of_week(cid):
     return concert or next((card for card in cards if card["kind"] not in ("premiere", "read", "holiday")), None)
 
 
+def _city_fact(settings_data, day) -> str:
+    """Город в цифрах из CBS (только Нидерланды, кэш на месяц, без сети): факт по кругу по датам; нет — ""."""
+    if str(settings_data.get("cc") or "").upper() != "NL":
+        return ""
+    try:
+        import cbs
+        return cbs.fact_of_day(settings_data.get("city"), day)
+    except Exception:
+        _log.warning("myday: cbs fact unavailable", exc_info=True)
+        return ""
+
+
 def _read_of_day(cid):
     """Статья дня — первая из «Статей» (кэш набора дня); нет — None."""
     try:
@@ -722,6 +734,7 @@ def _build_day_text(cid, *, refresh_current=False):
     meal = (None if trip else _meal_of_day(cid)) if on("meal") else None  # в отпуске — «Попробовать»
     event = _event_of_week(cid) if on("leisure") else None
     read = _read_of_day(cid) if on("read") and not trip else None
+    city_fact = _city_fact(s, now.date()) if on("city") and not trip else ""
     msg = myday_ui.day_summary(
         header,
         s.get("city", ""),
@@ -748,6 +761,7 @@ def _build_day_text(cid, *, refresh_current=False):
         meal=meal,
         event=event,
         read=read,
+        city_fact=city_fact,
     )
     text = msg.text
     # weather-грейдер: предупреждение в логи, если в сводке упомянут зонт без дождя
@@ -824,6 +838,13 @@ async def warm_day_cache(cid, bot=None):
         await asyncio.to_thread(local_events.events, cid, True)
     except Exception:
         _log.warning("myday warm: local events failed cid=%s", cid, exc_info=True)
+    try:
+        import cbs
+        place = store.get_settings(cid) or {}
+        if str(place.get("cc") or "").upper() == "NL":  # город в цифрах — раз в месяц (кэш)
+            await asyncio.to_thread(cbs.facts, place.get("city"), True)
+    except Exception:
+        _log.warning("myday warm: cbs failed cid=%s", cid, exc_info=True)
     cached = _load_day_cache(cid, today)
     if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True

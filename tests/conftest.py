@@ -98,6 +98,10 @@ def _no_rss_reads(monkeypatch):
     monkeypatch.setattr(countries, "stock_photo", lambda _topic, fetch=True: "")
     import ovapi
     monkeypatch.setattr(ovapi, "_get", lambda _path: None)  # автобусы OVapi в тестах — без сети
+    import meteoalarm
+    import cbs
+    monkeypatch.setattr(meteoalarm, "_feed", lambda _cc: [])  # предупреждения KNMI — без сети
+    monkeypatch.setattr(cbs, "_get", lambda _path: None)
     yield
 
 

@@ -220,7 +220,7 @@ def _image_queries(card, city) -> list:
     return queries
 
 
-_TOPIC_STOP = {"on", "the", "in", "at", "of", "and", "de", "het", "een", "op", "van", "aan", "bij", "in", "en",
+_TOPIC_STOP = {"on", "the", "in", "at", "of", "and", "de", "het", "een", "op", "van", "aan", "bij", "en",
                "met", "voor", "naar", "alkmaar"}
 # Частые слова афиши по-нидерландски → тема фото по-английски.
 _TOPIC_NL = {"ijsbaan": "ice rink", "schaatsbaan": "ice rink", "schaatsen": "ice skating", "kerstmarkt": "christmas market",

@@ -48,6 +48,7 @@ API_FREE_LIMITS = {
 }
 OPENROUTER_PAID_DAILY_LIMIT = _env_int("OPENROUTER_PAID_DAILY_LIMIT", 1000)
 API_LIMIT_WARN_SHARE = 0.8
+CBS_FACTS_KEY = "cbs_facts.json"  # {город: {v, ts, facts[]}} — город в цифрах из CBS, месяц
 EVENT_NOTES_KEY = "event_notes.json"  # {название|дата: {ts, value}} — короткое описание события для «Событий», месяц
 OVAPI_STOPS_KEY = "ovapi_stops.json"  # {город: {v, ts, stops{код: название}}} — остановки города из OVapi, месяц
 # Автобусы у вокзала: остановки со словом в названии (Station Alkmaar и Station Alkmaar Noord — обе).
