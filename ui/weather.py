@@ -93,7 +93,10 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
     b.section(header)
     b.newline()
     for line in main_lines or []:
-        if line:
+        if isinstance(line, tuple):  # («Температура», «до +6°C») — подпись жирным, как во всех уведомлениях
+            label, value = line
+            b.labeled_line(label, value, lowercase=False)
+        elif line:
             b.line(line)
         else:
             b.spacer()  # пустая строка между частями суток

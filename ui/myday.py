@@ -154,13 +154,13 @@ def no_holidays(city, period) -> MessageSpec:
 
 
 def holidays_eve(city, lines):
-    """Рассылка накануне: «🎉 Завтра · Алкмар» и по строке на праздник или событие."""
+    """Рассылка накануне в стиле уведомлений: заголовок «🎉 Завтра праздник · Alkmaar» (не жирный, как у всех), ниже
+    пункты «• Sinterklaasavond — вечер подарков и шуточных стихов»."""
     b = MessageBuilder()
-    b.bold(f"🎉 Завтра · {city}".rstrip(" ·"))
-    b.newline()
-    b.spacer()
+    b.title(" · ".join(part for part in ("🎉 Завтра праздник" if len(lines) == 1 else "🎉 Завтра праздники",
+                                         str(city or "").strip()) if part))
     for line in lines:
-        b.line(line)
+        b.line(f"• {line}")
     return b.build_stripped()
 
 

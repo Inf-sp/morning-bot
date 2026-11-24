@@ -434,16 +434,17 @@ def forecast_periods(data, now, day=0):
     return periods
 
 
-def _period_lines(period) -> list[str]:
-    """Блок части суток в прогнозе на завтра: «🌧️ Днём», ниже «· Температура до +18°C», «· Дождь 70%»,
-    «· Ветер 3–5 м/с» — каждое с новой строки."""
+def _period_lines(period) -> list:
+    """Блок части суток в прогнозе на завтра в стиле уведомлений — «**🌧️ Днём:**», ниже «**Температура:** до
+    +18°C», «**Осадки:** 🌧️ дождь 70%», «**Ветер:** 3–5 м/с»: пары (подпись, значение), подпись жирным."""
     wet = _rain_real(period["rain"], period["rain_mm"])
-    rain = f"🌧️ Дождь {period['rain']:.0f}%" if wet else "Без дождя"  # дождь — заметно, значком
-    wind = "Сильный ветер" if max(period["winds"], default=0) > 10 else "Ветер"
+    rain = f"🌧️ дождь {period['rain']:.0f}%" if wet else "без дождя"  # дождь — заметно, значком
+    strong = max(period["winds"], default=0) > 10
     frost = period.get("tmin", period["tmax"]) <= 0  # минус хотя бы в часть периода — лёд на дорогах
-    temp = f"· Температура до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
+    temp = f"до {period['tmax']:+.0f}°C" + (" · гололёд" if frost and wet else "")
     title = f"{period['icon']} {'🧊 ' if frost else ''}{period['label']}"  # мороз — значком в заголовке: «🌑 🧊 Ночью»
-    return [title, temp, f"· {rain}", f"· {wind} {_speed_range(period['winds'])} м/с"]
+    wind = f"{_speed_range(period['winds'])} м/с" + (", сильный" if strong else "")
+    return [(title, None), ("Температура", temp), ("Осадки", rain), ("Ветер", wind)]
 
 
 def today_conditions(data, now):
@@ -629,7 +630,6 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         cc = str(s.get("cc") or "").upper()
         flag = flag_from_cc(cc) or ""
         place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"  # «Alkmaar, NL 🇳🇱»
-        header = f"Завтра · {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS_SHORT[dt.month-1]} · {place}"
         code = d["weathercode"][day]
         _tmin, tmax = _daytime_temperature_range(
             data, day_str := d["time"][day], d["temperature_2m_min"][day], d["temperature_2m_max"][day],
@@ -645,13 +645,16 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         wind_ms = day_weather["wind_ms"] or 0
         icon = weather_icon(code, tmax, rain, wind_ms, rain_mm,
                             _mean(_daytime_values(data, day_str, "cloudcover")))
+        # Как остальные уведомления: значок погоды и название, ниже «**Город:** Alkmaar, NL 🇳🇱».
+        header = f"{icon} Погода на завтра · {_WEEKDAY_SHORT[dt.weekday()].lower()}, {dt.day} {_MONTHS[dt.month-1]}"
         rain_p = _periods(data, day_str, "precipitation_probability", RAIN_PROB_MIN)
         alert = storm_alert(wind_ms, code, rain, rain_mm, cc=cc)
         # Утро, день и вечер — блоками через пустую строку ("" в списке — отступ); без почасовых данных — одна
         # общая строка. Метео-итога нет.
         blocks = [_period_lines(p) for p in forecast_periods(data, now, day=1)]
-        main_lines = [line for index, block in enumerate(blocks) for line in ([""] if index else []) + block] \
-            or [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)]
+        main_lines = [("Город", place), ""] + ([line for index, block in enumerate(blocks)
+                                                for line in ([""] if index else []) + block]
+                                               or [_compact_forecast_line(icon, tmax, rain, rain_mm, rain_p, wind_ms)])
         msg = weather_ui.day_forecast(header, main_lines, alert=alert)
         await bot.send_message(
             chat_id=cid,

@@ -176,10 +176,10 @@ def test_tomorrow_forecast_is_split_into_morning_day_and_evening():
 
     blocks = [weather._period_lines(p) for p in weather.forecast_periods(data, late_evening, day=1)]
 
-    assert [block[0].split(" ", 1)[1] for block in blocks] == ["Утром", "Днём", "Вечером"]  # весь день
-    assert blocks[0][1:] == ["· Температура до +14°C", "· Без дождя", "· Ветер 3–5 м/с"]
-    assert blocks[1][1:] == ["· Температура до +18°C", "· 🌧️ Дождь 70%", "· Сильный ветер 11 м/с"]
-    assert blocks[2][1:] == ["· Температура до +15°C", "· Без дождя", "· Ветер 4 м/с"]
+    assert [block[0][0].split(" ", 1)[1] for block in blocks] == ["Утром", "Днём", "Вечером"]  # весь день
+    assert blocks[0][1:] == [("Температура", "до +14°C"), ("Осадки", "без дождя"), ("Ветер", "3–5 м/с")]
+    assert blocks[1][1:] == [("Температура", "до +18°C"), ("Осадки", "🌧️ дождь 70%"), ("Ветер", "11 м/с, сильный")]
+    assert blocks[2][1:] == [("Температура", "до +15°C"), ("Осадки", "без дождя"), ("Ветер", "4 м/с")]
     assert weather.forecast_periods(data, late_evening, day=2) == []  # нет данных на этот день
 
 
@@ -488,11 +488,12 @@ def test_tomorrow_notification_has_city_country_flag_and_three_periods(monkeypat
     asyncio.run(weather.send_weather(RecordingBot(sent), "42", "tomorrow_plain"))
 
     lines = sent[0]["text"].split("\n")
-    assert lines[0].endswith(" · Alkmaar, NL 🇳🇱") and "📍" not in lines[0] and lines[1] == ""
-    # Каждая часть суток — заголовок и три строки с «·», между частями — пустая строка.
-    assert [line.split(" ", 1)[1] for line in (lines[2], lines[7], lines[12])] == ["Утром", "Днём", "Вечером"]
-    assert lines[3:7] == ["· Температура до +12°C", "· Без дождя", "· Ветер 3 м/с", ""]
-    assert len(lines) == 16 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога
+    assert " Погода на завтра · " in lines[0] and "📍" not in lines[0] and lines[1] == ""
+    assert lines[2] == "Город: Alkmaar, NL 🇳🇱" and lines[3] == ""  # как в погодном предупреждении
+    # Каждая часть суток — жирная подпись и три строки «Подпись: значение», между частями — пустая строка.
+    assert [line.split(" ", 1)[1] for line in (lines[4], lines[9], lines[14])] == ["Утром:", "Днём:", "Вечером:"]
+    assert lines[5:9] == ["Температура: до +12°C", "Осадки: без дождя", "Ветер: 3 м/с", ""]
+    assert len(lines) == 18 and "Метео-итог" not in sent[0]["text"]  # только три части суток, без AI-итога
 
 
 def test_period_weather_uses_forecast_soon_and_last_year_later(monkeypatch):
@@ -558,8 +559,8 @@ def test_tomorrow_warning_uses_tomorrow_and_only_important_hazards(monkeypatch):
 def test_tomorrow_period_marks_frost_and_ice():
     import weather
     cold = {"label": "Утром", "icon": "🌤️", "tmax": -1, "tmin": -3, "rain": 0, "rain_mm": 0, "winds": [2, 3]}
-    assert weather._period_lines(cold)[:2] == ["🌤️ 🧊 Утром", "· Температура до -1°C"]
+    assert weather._period_lines(cold)[:2] == [("🌤️ 🧊 Утром", None), ("Температура", "до -1°C")]
     wet = {**cold, "tmax": 1, "rain": 80, "rain_mm": 2.0}
-    assert weather._period_lines(wet)[1:3] == ["· Температура до +1°C · гололёд", "· 🌧️ Дождь 80%"]
+    assert weather._period_lines(wet)[1:3] == [("Температура", "до +1°C · гололёд"), ("Осадки", "🌧️ дождь 80%")]
     warm = {**cold, "tmax": 5, "tmin": 2}
-    assert weather._period_lines(warm)[:2] == ["🌤️ Утром", "· Температура до +5°C"]
+    assert weather._period_lines(warm)[:2] == [("🌤️ Утром", None), ("Температура", "до +5°C")]

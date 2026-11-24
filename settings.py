@@ -596,12 +596,13 @@ async def send_week_holidays(bot, cid):
     start = datetime.now(config.TZ).date()
     end = start + timedelta(days=6)
     holidays = await asyncio.to_thread(public_holidays.week_holidays, place.get("cc"), start, end)
-    events = await asyncio.to_thread(local_events.week_events, cid, start, end)
+    # Та же городская афиша, что «🎉 Праздники» в Досуге (разделы, площадка, «бесплатно»), только на неделю.
+    events = await asyncio.to_thread(local_events.agenda, cid, start, end)
     if not holidays and not events:
         return
     period = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if start.month == end.month
               else f"{start.day} {_MONTHS[start.month - 1]} – {end.day} {_MONTHS[end.month - 1]}")
-    msg = myday_ui.week_holidays(place.get("city", ""), period, holidays, events)
+    msg = myday_ui.holidays_agenda(place.get("city", ""), period, holidays, events)
     await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities, disable_web_page_preview=True,
                            reply_markup=InlineKeyboardMarkup([notif_row()]))
 

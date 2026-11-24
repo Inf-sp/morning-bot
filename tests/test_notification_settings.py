@@ -146,7 +146,7 @@ def test_holidays_eve_sends_tomorrow_holiday_and_local_events_only_when_any(monk
     monkeypatch.setattr(public_holidays, "holiday_lines", lambda _cc, _day: ["Сегодня: A", "Завтра: Koningsdag — День короля"])
     monkeypatch.setattr(local_events, "starting_on", lambda _cid, _day, fetch=True: ["Amsterdam Pride — прайд-фестиваль"])
     asyncio.run(settings._send_holidays_eve(Bot(), "42"))
-    assert sent[0]["text"] == "🎉 Завтра · Амстердам\n\nKoningsdag — День короля\nAmsterdam Pride — прайд-фестиваль"
+    assert sent[0]["text"] == "🎉 Завтра праздники · Амстердам\n\n• Koningsdag — День короля\n• Amsterdam Pride — прайд-фестиваль"
 
     sent.clear()
     monkeypatch.setattr(public_holidays, "holiday_lines", lambda *_a: [])
@@ -259,18 +259,22 @@ def test_week_holidays_digest_has_holidays_with_about_and_city_events(monkeypatc
     import datetime as dt_module
     monkeypatch.setattr(dt_module, "datetime", Monday)
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "NL"})
-    monkeypatch.setattr(local_events, "week_events", lambda _cid, _s, _e: [
+    monkeypatch.setattr(local_events, "agenda", lambda _cid, _s, _e, fetch=True: [
+        {"name": "Filmfestival Alkmaar", "about": "", "start": "2026-11-03", "end": "2026-11-10", "url": "",
+         "section": "culture"},
         {"name": "Sinterklaasintocht Alkmaar", "about": "прибытие Синтерклааса", "start": "2026-11-14",
-         "end": "2026-11-14", "url": "https://inalkmaar.nl/sint"},
-        {"name": "Filmfestival Alkmaar", "about": "", "start": "2026-11-03", "end": "2026-11-10", "url": ""}])
+         "end": "2026-11-14", "url": "https://inalkmaar.nl/sint", "section": "season", "place": "Waagplein",
+         "free": True}])
     asyncio.run(settings.send_week_holidays(Bot(), "42"))
     assert sent[0]["text"] == (
         "🎉 Праздники и мероприятия · Alkmaar · 9–15 ноября\n\n"
         "Праздники:\n• 11 ноября — Sint-Maarten: дети с фонариками ходят по домам, поют и получают сладости.\n\n"
-        "В городе:\n• 14 ноября — Sinterklaasintocht Alkmaar — прибытие Синтерклааса\n"
-        "• 3–10 ноября — Filmfestival Alkmaar")
+        "Зима и праздники сезона:\n• 14 ноября — Sinterklaasintocht Alkmaar — прибытие Синтерклааса · Waagplein · "
+        "бесплатно\n\n"
+        "Концерты и культура:\n• 3–10 ноября — Filmfestival Alkmaar\n\n"
+        "Бесплатных событий · 1")  # та же афиша по разделам, что «Праздники» в Досуге
     sent.clear()
-    monkeypatch.setattr(local_events, "week_events", lambda *_a: [])
+    monkeypatch.setattr(local_events, "agenda", lambda *_a, **_k: [])
     monkeypatch.setattr(public_holidays, "week_holidays", lambda *_a: [])
     asyncio.run(settings.send_week_holidays(Bot(), "42"))
     assert sent == []  # пустая неделя — без сообщения
