@@ -54,7 +54,8 @@ _INTERESTS = {
 }
 PROFILE_KEY = "hub_reads"  # {date, items[{title, link, source, lang, minutes, about, image, published}], index, seen}
 _FRESH_DAYS, _SEEN_DAYS = 7, 30
-_PER_THEME = 3  # статей каждой темы в наборе дня — тема дня первой
+_PER_THEME = 5  # статей каждой темы в наборе дня — тема дня первой (с запасом: без картинки или перевода не показываем)
+_RU_TRIES = 3  # сколько раз за день дописывать перевод и краткое содержание, если AI не ответил
 _WORDS_PER_MINUTE = 230
 _MAX_MINUTES = 60
 _ABOUT_MAX = 400  # краткое содержание — два-три предложения
@@ -287,19 +288,34 @@ def build(cid, now=None) -> dict:
     return entry
 
 
+def _has_russian(text) -> bool:
+    return bool(re.search(r"[а-яё]", str(text or ""), re.I))
+
+
+def ready(item) -> bool:
+    """Статью показываем, только когда она готова: картинка, заголовок и краткое содержание по-русски."""
+    return (str(item.get("image") or "").startswith("https://") and _has_russian(item.get("about"))
+            and _has_russian(item.get("title")))
+
+
 def _with_teasers(cid, saved) -> dict:
-    """Дописать анонсы и русские заголовки статьям, у которых их нет; AI снова не ответил — набор как есть."""
-    # Повтор — только для статей без анонса (AI не ответил при сборке); заголовок дописывается заодно.
+    """Дописать краткое содержание и русский заголовок статьям, у которых их нет (AI не ответил при сборке) — не
+    больше _RU_TRIES раз за день; AI снова не ответил — набор как есть."""
     missing = [{**item, "title": item.get("original_title") or item["title"]} for item in saved["items"]
-               if not item.get("about")]
-    texts = _texts_ru(missing) if missing else {}
-    if not texts:
+               if str(item.get("image") or "").startswith("https://")
+               and not (_has_russian(item.get("about")) and _has_russian(item.get("title")))]
+    if not missing or int(saved.get("ru_tries") or 0) >= _RU_TRIES:
         return saved
+    texts = _texts_ru(missing)
+    if not texts:
+        tried = {**saved, "ru_tries": int(saved.get("ru_tries") or 0) + 1}
+        store.mutate_profile(cid, lambda profile: ({**profile, PROFILE_KEY: tried}, None))
+        return tried
     entry = {**saved, "items": [{
         **item, "about": item.get("about") or (texts.get(item["link"]) or {}).get("about", ""),
-        "title": (texts.get(item["link"]) or {}).get("title") if item["title"] == item.get("original_title")
+        "title": (texts.get(item["link"]) or {}).get("title") if not _has_russian(item["title"])
         and (texts.get(item["link"]) or {}).get("title") else item["title"]}
-        for item in saved["items"]]}
+        for item in saved["items"]], "ru_tries": int(saved.get("ru_tries") or 0) + 1}
     store.mutate_profile(cid, lambda profile: ({**profile, PROFILE_KEY: entry}, None))
     return entry
 
@@ -331,6 +347,7 @@ def top(cid, today=None, limit=_TOP) -> list:
     if (saved.get("date") != today.isoformat() or saved.get("v") != _VERSION
             or tuple(saved.get("themes") or _THEMES) != themes(cid)):
         return []  # набора нет, старого вида или темы сменились — экран «Статьи» соберёт новый
+    items = [item for item in items if ready(item)]  # без картинки или перевода — не показываем
     ranked = sorted(enumerate(items), key=lambda pair: (-max(_score(pair[1], theme) for theme in _THEMES), pair[0]))
     return [dict(item) for _, item in ranked[:limit]]
 

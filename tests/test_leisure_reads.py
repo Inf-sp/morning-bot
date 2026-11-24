@@ -73,17 +73,22 @@ def test_hub_has_no_article_block_and_reads_are_a_button():
 def test_reads_are_a_circular_feed_most_interesting_first(monkeypatch):
     profile = _profile(monkeypatch)
     now = datetime(2026, 10, 18, 9, tzinfo=config.TZ)
-    items = [{"title": f"Plain story {n}", "link": f"https://x.example/{n}", "source": "Colossal", "lang": "EN",
-              "summary": "", "about": "Обычная история"} for n in range(3)]
-    items.insert(2, {"title": "A black hole near a quantum galaxy", "link": "https://q.example/bh", "source": "Quanta",
-                     "lang": "EN", "summary": "", "minutes": 6, "about": "Чёрная дыра растёт быстрее моделей"})
+    items = [{"title": f"Обычная история {n}", "original_title": f"Plain story {n}", "link": f"https://x.example/{n}",
+              "source": "Colossal", "lang": "ENG", "summary": "", "about": "Обычная история",
+              "image": f"https://img.example/{n}.jpg"} for n in range(3)]
+    items.insert(2, {"title": "Чёрная дыра у квантовой галактики", "original_title": "A black hole near a quantum galaxy",
+                     "link": "https://q.example/bh", "source": "Quanta", "lang": "ENG", "summary": "", "minutes": 6,
+                     "about": "Чёрная дыра растёт быстрее моделей", "image": "https://img.example/bh.jpg"})
+    # Без картинки или без перевода — не показываем.
+    items.append({**items[0], "link": "https://x.example/noimg", "image": ""})
+    items.append({**items[0], "link": "https://x.example/en", "title": "Plain story", "about": ""})
     profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": "2026-10-18", "index": 0, "items": items}
     top = leisure_reads.top("42", now.date())
     assert [item["link"] for item in top] == ["https://q.example/bh", "https://x.example/0", "https://x.example/1"]
     feed = leisure_reads.ranked("42", now.date())
     assert len(feed) == 4 and feed[0]["link"] == "https://q.example/bh"  # лента — весь набор, интересные первыми
     msg = leisure_ui.reads_card(feed, 0)
-    assert msg.text == ("📰 A black hole near a quantum galaxy\n\nQuanta · EN · 6 мин\n\n"
+    assert msg.text == ("📰 Чёрная дыра у квантовой галактики\n\nQuanta · ENG · 6 мин\n\n"
                         "Чёрная дыра растёт быстрее моделей.")
     assert [e.url for e in msg.entities if e.type == "text_link"][0] == "https://q.example/bh"
     rows = msg.reply_markup.inline_keyboard
@@ -135,8 +140,9 @@ def test_missing_teaser_is_filled_later_with_one_request(monkeypatch):
     now = datetime(2026, 10, 18, 12, tzinfo=config.TZ)
     profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": "2026-10-18", "index": 0, "seen": {}, "items": [
         {"title": "On’s new editorial platform", "link": "https://n.example/on", "summary": "Ondesign goes…",
-         "about": ""},
-        {"title": "How Black Holes Grow Up", "link": "https://q.example/bh", "about": "Уже есть анонс."}]}
+         "about": "", "image": "https://img.example/on.jpg"},
+        {"title": "Как растут чёрные дыры", "link": "https://q.example/bh", "about": "Уже есть анонс.",
+         "image": "https://img.example/bh.jpg"}]}
     asked = []
     monkeypatch.setattr(leisure_reads.ai, "llm_json", lambda prompt, *_a, **_k: asked.append(prompt) or {
         "items": [{"id": 0, "about": "Как команды On придумывают вещи для спорта и города."}]})
@@ -146,8 +152,10 @@ def test_missing_teaser_is_filled_later_with_one_request(monkeypatch):
     assert [item["about"] for item in entry["items"]] == ["Как команды On придумывают вещи для спорта и города.",
                                                           "Уже есть анонс."]
     assert "On’s new editorial platform" in asked[0] and "Black Holes" not in asked[0]  # только статья без анонса
-    leisure_reads.build("42", now)
-    assert len(asked) == 1  # анонсы на месте — без повторного запроса
+    for _ in range(5):
+        leisure_reads.build("42", now)
+    # Заголовок AI не перевёл — дописываем ещё, но не больше трёх попыток за день.
+    assert len(asked) == leisure_reads._RU_TRIES
 
 
 def test_article_preview_image_comes_from_og_image_or_feed_picture():
