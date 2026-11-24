@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .builder import MessageBuilder, MessageSpec
 from .constants import CUISINE_FLAG, LANGUAGE_EMOJI, ui_label
-from .food import CUISINE_RU
+from .food import CUISINE_RU, recipe_sentence, recipe_tip
 from .navigation import nav_row
 from .text import ru_plural
 
@@ -355,13 +355,6 @@ def _cooking_text(value) -> str:
     return " ".join(value.split()).strip(" -•")
 
 
-def _cooking_sentence(value) -> str:
-    value = _cooking_text(value)
-    if value and value[-1] not in ".!?…":
-        value += "."
-    return value
-
-
 _MEAL_TITLES = {"breakfast": "на завтрак", "lunch": "на обед", "dinner": "на ужин"}
 
 
@@ -532,7 +525,7 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
         minutes = step.get("minutes")
         if text and minutes and not re.search(r"\d+(?:\s*[–-]\s*\d+)?\s*мин", text, re.I):
             text = f"{text.rstrip('.!?…')} — {int(minutes)} мин"
-        text = _cooking_sentence(text)
+        text = recipe_sentence(_cooking_text(text))
         if text:
             steps.append(text)
     if steps:
@@ -541,8 +534,8 @@ def food_menu(idea=None, *, meal="", from_fridge=False):
         b.newline()
         for step in steps:
             b.bullet(step)
-    tip = _cooking_sentence(idea.get("tip"))
-    if tip:
+    tip = recipe_tip(_cooking_text(idea.get("tip")), steps)
+    if tip:  # повтор шага приготовления не показываем
         b.spacer()
         b.italic(tip)  # финальная подсказка экрана — курсивом
         b.newline()

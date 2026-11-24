@@ -145,7 +145,7 @@ def test_other_menu_picker_lists_cuisines_and_starts_new_day_menu(monkeypatch):
 def test_meal_button_builds_recipe_of_that_menu_dish(monkeypatch):
     _profile(monkeypatch, {"cooking_day_menu": {
         "date": datetime.now(config.TZ).date().isoformat(), "cuisine": "italian",
-        "dishes": {"breakfast": {"name": "Crostata", "note": "пирог"},
+        "dishes": {"breakfast": {"name": "Ricotta e miele", "note": "рикотта"},
                    "lunch": {"name": "Pasta al pomodoro", "note": ""},
                    "dinner": {"name": "Lasagna", "note": ""}},
     }})

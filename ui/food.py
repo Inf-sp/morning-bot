@@ -84,6 +84,40 @@ _STEP_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
+_YOU_RE = re.compile(r"^(?:ты|вы)\s+", re.IGNORECASE)
+_TIP_STOP = {"перед", "чтобы", "после", "когда", "если", "тогда", "будет", "станет", "можно", "лучше", "очень",
+             "сразу", "оно", "она", "они", "его", "её"}
+
+
+def recipe_sentence(text) -> str:
+    """Шаг или совет рецепта: без «ты» в начале (модель пишет «ты смешай»), с заглавной буквы и точкой."""
+    text = _YOU_RE.sub("", " ".join(str(text or "").split()).strip(" -•"))
+    if not text:
+        return ""
+    text = text[0].upper() + text[1:]
+    return text if text[-1] in ".!?…" else text + "."
+
+
+def _stems(text) -> set:
+    return {word[:5] for word in re.findall(r"[а-яёa-z]+", str(text).casefold())
+            if len(word) >= 4 and word not in _TIP_STOP}
+
+
+def tip_repeats_steps(tip, steps) -> bool:
+    """Совет повторяет шаг: его действие уже есть в приготовлении и большая часть слов совета — тоже
+    («Охлади тесто перед раскаткой» при шаге «…замеси тесто и охлади»)."""
+    tip_stems = _stems(tip)
+    step_stems = set().union(*(_stems(step) for step in steps)) if steps else set()
+    first = next(iter(re.findall(r"[а-яёa-z]+", str(tip).casefold())), "")[:5]
+    return bool(tip_stems) and first in step_stems and len(tip_stems & step_stems) * 2 >= len(tip_stems)
+
+
+def recipe_tip(tip, steps) -> str:
+    """Финальный совет рецепта: с заглавной буквы; повтор шага — не показываем."""
+    tip = recipe_sentence(tip)
+    return "" if not tip or tip_repeats_steps(tip, steps) else tip
+
+
 def _step_text(step) -> str:
     """Оставляет действие шага без отдельного времени и служебной детализации."""
     text = str(step.get("text", "") if isinstance(step, dict) else step).strip()
@@ -91,9 +125,7 @@ def _step_text(step) -> str:
     text = re.sub(r"\s+", " ", text).strip(" -—,.;")
     sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", text) if part.strip()]
     text = " ".join(sentences[:2]) if sentences else text
-    if text and text[-1] not in ".!?…":
-        text += "."
-    return text
+    return recipe_sentence(text)
 
 
 def compact_step_lines(steps) -> list[str]:
@@ -142,9 +174,7 @@ def food_card(data, cuisine_emoji_fallback=None, show_cuisine_emoji=True):
     if cuisine_label:
         # кухня уже показана в заголовке — не дублируем её прилагательным в name
         name = _strip_cuisine_from_name(name, cuisine_code)
-    chef_tip = str(data.get("chef_tip") or "").strip()
-    if chef_tip and chef_tip[-1] not in ".!?…":
-        chef_tip += "."
+    chef_tip = recipe_tip(data.get("chef_tip"), steps)
 
     b = MessageBuilder()
     header = f"{CUISINE_FLAG.get(cuisine_code, '🍳')} Что приготовить"

@@ -233,6 +233,8 @@ def get_cached_day_menu(cid, now=None) -> dict | None:
     if "top" in menu:  # набор отпуска: приём пищи без блюда пропускается, но хоть одно блюдо должно быть
         return menu if trip_dish(menu).get("name") else None
     meals = _settings().food_meals(cid)
+    if not fits_meal(dishes.get("breakfast") or {}, "breakfast"):
+        return None  # меню, собранное до правила «завтрак до 10 минут» (кростата, блины), — собрать заново
     return menu if all((dishes.get(meal) or {}).get("name") for meal in meals) else None
 
 
@@ -552,7 +554,11 @@ def get_day_menu(cid, now=None, refresh=False, cuisine=None) -> dict:
     cached = get_cached_day_menu(cid, now)
     if cached and not refresh:
         return cached
-    if refresh and cuisine is None:
+    saved = (store.get_profile(cid) or {}).get("cooking_day_menu") or {}
+    if not cached and isinstance(saved, dict) and saved.get("date") == _today(now).isoformat() \
+            and "top" not in saved and not fits_meal((saved.get("dishes") or {}).get("breakfast") or {}, "breakfast"):
+        cached = saved  # меню на экране отброшено (долгий завтрак) — кухню и блюда для «не повторяй» берём из него
+    if (refresh or cached) and cuisine is None:
         cuisine = (cached or {}).get("cuisine")  # «Другое меню на сегодня» — та же кухня, что на экране
     current = [dish["name"] for dish in ((cached or {}).get("dishes") or {}).values()]
     menu = build_day_menu(cid, now=now, cuisine=cuisine, avoid=current)
