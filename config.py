@@ -65,7 +65,10 @@ SPOONACULAR_API_KEY = os.environ.get("SPOONACULAR_API_KEY", "").strip()
 THEMEALDB_API_KEY = os.environ.get("THEMEALDB_API_KEY", "1").strip() or "1"
 CF_API_TOKEN = _env_first("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN")
 CF_ACCOUNT_ID = _env_first("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")
-CF_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/openai/gpt-oss-20b").strip() or "@cf/openai/gpt-oss-20b"
+# Резерв Cloudflare — быстрая чат-модель без «размышлений»: gpt-oss на Workers AI думает дольше лимита времени
+# резерва (4 с) и отвечает в другом формате. Переопределяется CLOUDFLARE_MODEL.
+CF_MODEL = (os.environ.get("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast").strip()
+            or "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "").strip()  # SQLite-файл KV на VM
 BACKUP_DIR = os.environ.get("BACKUP_DIR", "/var/backups/morning-bot")  # ежедневные копии базы на VM

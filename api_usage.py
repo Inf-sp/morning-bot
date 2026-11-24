@@ -67,15 +67,21 @@ def groq_model_service(model: str) -> str:
     return f"groq_model:{_model_slug(model)}"
 
 
-def estimate_cloudflare_neurons(prompt: str, output: str) -> int:
-    """Estimate Workers AI neurons for gpt-oss-20b from input/output tokens.
+# Нейроны Workers AI на миллион токенов (вход, выход) — по опубликованным тарифам моделей; бесплатно — 10 000 в день.
+_CF_NEURON_RATES = {
+    "gpt-oss-20b": (18182, 27273),
+    "llama-3.3-70b-instruct-fp8-fast": (26668, 204805),
+}
 
-    The inference response does not expose the account's daily neuron meter, so
-    the local counter uses the published per-token model rates.
-    """
+
+def estimate_cloudflare_neurons(prompt: str, output: str, model: str = "") -> int:
+    """Оценка нейронов Workers AI по токенам входа и выхода для модели (ответ API дневной счётчик не отдаёт)."""
+    model = str(model or config.CF_MODEL)
+    rate_in, rate_out = next((rates for name, rates in _CF_NEURON_RATES.items() if name in model),
+                             _CF_NEURON_RATES["llama-3.3-70b-instruct-fp8-fast"])
     input_tokens = max(1, round(len(str(prompt or "")) / 4))
     output_tokens = max(1, round(len(str(output or "")) / 4))
-    return max(1, round(input_tokens * 18182 / 1_000_000 + output_tokens * 27273 / 1_000_000))
+    return max(1, round(input_tokens * rate_in / 1_000_000 + output_tokens * rate_out / 1_000_000))
 
 
 def last_request_at(service: str) -> int | None:

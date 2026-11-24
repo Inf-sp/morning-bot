@@ -1038,6 +1038,14 @@ def _cloudflare_response_text(payload) -> str | None:
         text = _stream_content(content)
         if text:
             return text
+    # Формат Responses (gpt-oss на Workers AI): output — размышления и сообщение; берём только текст сообщения.
+    for block in result.get("output") or []:
+        if isinstance(block, dict) and block.get("type") == "message":
+            parts = [part.get("text") for part in block.get("content") or []
+                     if isinstance(part, dict) and part.get("type") in ("output_text", "text")]
+            text = "".join(part for part in parts if isinstance(part, str)).strip()
+            if text:
+                return text
     return None
 
 # ---------- одиночная генерация ----------

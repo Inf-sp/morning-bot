@@ -464,3 +464,13 @@ def test_openrouter_asks_free_models_not_to_spend_the_answer_on_reasoning(monkey
     assert ai._openrouter_plain_text_fallback("Привет", 2000, 0.5, "gemini", "test") == "Готовый ответ."
     # Размышления — с низким усилием и не в ответ; окно ответа — до 1500 токенов, а не 700.
     assert sent[0]["reasoning"] == {"effort": "low", "exclude": True} and sent[0]["max_tokens"] == 1500
+
+
+def test_cloudflare_reads_legacy_openai_and_responses_shapes():
+    assert ai._cloudflare_response_text({"result": {"response": "Привет"}}) == "Привет"
+    assert ai._cloudflare_response_text({"result": {"choices": [{"message": {"content": "Да"}}]}}) == "Да"
+    responses = {"result": {"output": [
+        {"type": "reasoning", "content": [{"type": "reasoning_text", "text": "думаю…"}]},
+        {"type": "message", "content": [{"type": "output_text", "text": "Готово."}]}]}}
+    assert ai._cloudflare_response_text(responses) == "Готово."  # размышления в ответ не попадают
+    assert "gpt-oss" not in ai.config.CF_MODEL  # резерв — быстрая модель без размышлений
