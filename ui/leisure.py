@@ -921,18 +921,78 @@ def reads_card(items, index=0) -> MessageSpec:
 
 
 def leisure_hub_kb():
-    """«Премьеры» — одной строкой сверху; ниже в два столбца Фильм | Сериал, Музыка | Концерты, Статьи | Праздники."""
+    """В два столбца Фильм | Сериал, Музыка | Статьи; ниже широкая «События» — концерты, фестивали, выставки,
+    праздники, город и премьеры одной лентой (старые кнопки «Премьеры / Концерты / Праздники» из истории работают)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco")],
         [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
-         InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
-        [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads"),
-         InlineKeyboardButton("🎉 Праздники", callback_data="lz_holidays")],
+         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
+        [InlineKeyboardButton("🎟️ События", callback_data="lz_ev")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+_EVENT_KIND = {"concert": ("🎫", "Концерт"), "festival": ("🎪", "Фестиваль"), "exhibition": ("🖼️", "Выставка"),
+               "holiday": ("🎉", "Праздник"), "city": ("🏙️", "Городское событие")}
+_PREMIERE_EMOJI = {"movie": "🎬", "series": "📺", "music": "🎧"}
+
+
+def _event_span(start, end) -> str:
+    """«28 ноября», «12–14 декабря», «27 ноября – 22 декабря»; год — если не текущий."""
+    first, last = _parse_event_date(str(start or "")[:10]), _parse_event_date(str(end or start or "")[:10])
+    if not first:
+        return ""
+    year = first.year != local_today().year
+    if not last or last <= first:
+        return _format_date_label(first, include_year=year)
+    if (first.year, first.month) == (last.year, last.month):
+        return f"{first.day}–{_format_date_label(last, include_year=year)}"
+    return f"{_format_date_label(first, include_year=year)} – {_format_date_label(last, include_year=year)}"
+
+
+def event_card(cards, index=0) -> MessageSpec:
+    """Карточка ленты «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome, Amsterdam ·
+    твой артист», описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку прикладывает обработчик."""
+    b = MessageBuilder()
+    if not cards:
+        b.title("🎟️ События")
+        b.line("Событий на ближайший месяц пока нет — загляни чуть позже.")
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+    index %= len(cards)
+    card = cards[index]
+    if card["kind"] == "premiere":
+        emoji = _PREMIERE_EMOJI.get(card.get("premiere"), "🎬")
+        meta = [f"Премьера · {_PREMIERE_TYPE.get(card.get('premiere'), 'Фильм').lower()}",
+                *card.get("meta", ()), _event_date_label(card.get("date"))]
+    else:
+        emoji, label = _EVENT_KIND.get(card["kind"], _EVENT_KIND["city"])
+        date = (_concert_date_label(card.get("date")) if card["kind"] == "concert"
+                else _event_span(card.get("date"), card.get("end")))
+        meta = [label, date, card.get("place") or "", "бесплатно" if card.get("free") else "",
+                "твой артист" if card.get("mine") else ""]
+    name = " ".join(str(card.get("name") or "").split())
+    url = str(card.get("url") or "")
+    b.text_line(f"{emoji} ")
+    b.bold_link(name, url) if url.startswith("http") else b.bold(name)
+    b.newline()
+    values = [" ".join(str(value).split()) for value in meta if str(value or "").strip()]
+    if values:
+        b.line(" · ".join(values))
+    about = _hub_about(card.get("about"))
+    if about:
+        b.spacer()
+        b.line(_finish_sentence(about))
+    rows = []
+    if len(cards) > 1:
+        rows.append([
+            InlineKeyboardButton("◀️", callback_data=f"lz_ev_{(index - 1) % len(cards)}"),
+            InlineKeyboardButton(f"{index + 1}/{len(cards)}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"lz_ev_{(index + 1) % len(cards)}"),
+        ])
+    rows.append(nav_row("m_leisure"))
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 
 
 def concerts_eve(concerts, day=None) -> MessageSpec:

@@ -571,7 +571,10 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:4] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "🎫 Концерты"], ["📰 Статьи", "🎉 Праздники"]] and _callbacks(kb)[0] == "lz_prem"
+    assert _labels(kb)[:3] == [["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "📰 Статьи"], ["🎟️ События"]]
+    assert "lz_ev" in _callbacks(kb) and not {"lz_prem", "lz_concerts", "lz_holidays"} & set(_callbacks(kb))
+    for old in ("lz_prem", "lz_concerts", "lz_holidays", "lz_ev_3"):  # старые кнопки из истории — работают
+        assert routing.resolve_callback_handler(old)["handled"]
     assert "✨ Другой вариант" not in sum(_labels(kb), [])
     assert routing.resolve_callback_handler("lz_today_2")["handled"]  # старая кнопка из истории — хаб
 
@@ -588,7 +591,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
 
     assert bot.sent[0]["text"].startswith("🍿 Досуг на сегодня · Alkmaar\n\nФильм дня:\n• Восставший · 2026")
     assert "Если захочется выйти" not in bot.sent[0]["text"]
-    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_prem"
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "movie_reco"
 
 
 def test_runtime_label_and_weekday_limit():

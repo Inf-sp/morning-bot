@@ -18,6 +18,7 @@ import learning_game
 import learning_settings
 import learning_router
 import leisure_concerts
+import leisure_events
 import leisure_hub
 import leisure_movies
 import leisure_music
@@ -72,6 +73,9 @@ def _status_stages(data):
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
         return progress("🎬 Смотрю афиши кинотеатров...", "📺 Смотрю новые сериалы...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")
+    if data == "lz_ev":
+        return progress("🎫 Проверяю афиши...", "🎪 Ищу фестивали и выставки...", "🎉 Смотрю праздники...",
+                        "🎬 Собираю премьеры...")
     if data in ("lz_reads", "lz_read_next"):
         return progress("📰 Листаю журналы...", "🔭 Ищу интересное о науке...", "🎨 Смотрю дизайн и фото...",
                         "📝 Пишу анонсы...")
@@ -514,6 +518,8 @@ ROUTES = (
     R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
     R("lz_country", lambda c: leisure_hub.send_trip_country(c.bot, c.cid, q=c.q)),  # «О стране» в Досуге отпуска
+    R("lz_ev", lambda c: leisure_events.send_events(c.bot, c.cid, q=c.q)),  # «События» — первая карточка ленты
+    R("lz_ev_*", lambda c: leisure_events.send_events(c.bot, c.cid, c.data.removeprefix("lz_ev_"), q=c.q)),
     R("lz_reads", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # «Статьи» в хабе — первая карточка
     R("lz_reads_*", lambda c: leisure_hub.send_reads(c.bot, c.cid, c.data.removeprefix("lz_reads_"), q=c.q)),
     R("lz_read_next", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # старая «Другая статья»
@@ -631,7 +637,8 @@ LEGACY_ALIASES = (
 
 
 # В отпуске у Досуга один экран — досуг страны: старые кнопки премьер, рекомендаций и концертов ведут в него.
-TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_reads*", "lz_read_next", "lz_lib")
+TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_reads*", "lz_read_next", "lz_ev*",
+                     "lz_lib")
 
 
 def _legacy_alias(data, cid=None):
