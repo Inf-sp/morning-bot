@@ -659,3 +659,20 @@ def test_admin_gets_one_alert_per_service_a_day(monkeypatch):
     assert asyncio.run(service_monitor.notify_admin(Bot())) is False  # сегодня уже сообщили
     assert sent[0].startswith("⚠️ Сервисы · нужно внимание\n\n• YouTube — израсходовано 82%")
     assert "Пользователь ошибок не видит" in sent[0]
+
+
+def test_openrouter_probe_reads_free_model_daily_limit_from_key(monkeypatch):
+    _memory_store(monkeypatch)
+    monkeypatch.setattr(service_monitor, "_configured", lambda _service: True)
+
+    class Response:
+        status_code, content, headers = 200, b"{}", {}
+
+        def json(self):
+            return {"data": {"is_free_tier": False,
+                             "free_model_daily_requests": {"used": 3, "limit": 50, "remaining": 47}}}
+
+    monkeypatch.setattr(service_monitor.requests, "request", lambda *_a, **_k: Response())
+    assert service_monitor.probe("openrouter") is True
+    # Кредиты на ключе есть (is_free_tier: false), но лимит бесплатных моделей OpenRouter сообщает сам — 50.
+    assert service_monitor.api_usage.limit_state("openrouter")["limit"] == 50

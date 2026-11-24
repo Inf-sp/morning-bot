@@ -439,9 +439,15 @@ def probe(service: str) -> bool:
             if total is None:
                 total = payload.get("total_credits")
         elif service == "openrouter" and ok:
-            # /api/v1/key: is_free_tier — без купленных кредитов 50 запросов в день к бесплатным моделям, иначе 1000.
+            # /api/v1/key: лимит бесплатных моделей — прямо в free_model_daily_requests {used, limit, remaining};
+            # старый ответ без него — по is_free_tier (без кредитов 50 в день, с кредитами от $10 — 1000).
             payload = (response.json() or {}).get("data") or {}
-            if "is_free_tier" in payload:
+            daily = payload.get("free_model_daily_requests") or {}
+            if isinstance(daily, dict) and daily.get("limit"):
+                api_usage.set_plan_limit("openrouter", int(daily["limit"]))
+                if daily.get("remaining") is not None:
+                    total, remaining = int(daily["limit"]), max(0, int(daily["remaining"]))
+            elif "is_free_tier" in payload:
                 api_usage.set_plan_limit("openrouter", None if payload.get("is_free_tier")
                                          else config.OPENROUTER_PAID_DAILY_LIMIT)
         elif service == "tavily" and ok:

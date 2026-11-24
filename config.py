@@ -41,8 +41,8 @@ API_FREE_LIMITS = {
     "spoonacular": ("day", "requests", _env_int("API_LIMIT_SPOONACULAR", 150)),
     "serpapi": ("month", "requests", _env_int("API_LIMIT_SERPAPI", 100)),
     "openweather": ("day", "requests", WEATHER_HARD_DAILY_LIMIT),
-    # Бесплатные модели OpenRouter: 50 запросов в день без купленных кредитов, 1000 — с кредитами от $10 (тариф ключа
-    # проверка ключа видит сама — `is_free_tier`).
+    # Бесплатные модели OpenRouter: дневной лимит проверка ключа читает сама (free_model_daily_requests.limit);
+    # по умолчанию — 50.
     "openrouter": ("day", "requests", _env_int("API_LIMIT_OPENROUTER", 50)),
 }
 OPENROUTER_PAID_DAILY_LIMIT = _env_int("OPENROUTER_PAID_DAILY_LIMIT", 1000)
