@@ -156,6 +156,21 @@ def _extract(city, rows, today, horizon=_HORIZON_DAYS, kinds=_CITY_KINDS):
     return sorted(events, key=lambda event: event["start"])[:_MAX_EVENTS]
 
 
+def expire(cid):
+    """«Обновить → События» в админке: кэши событий и афиши города устарели — следующая сборка ищет заново;
+    прежние события остаются запасом, если поиск не ответит."""
+    _city_name, _cc, key = _place(cid)
+
+    def mutate(data):
+        data = data if isinstance(data, dict) else {}
+        for name in (key, f"agenda|{key}"):
+            if isinstance(data.get(name), dict):
+                data[name] = {**data[name], "ts": 0}
+        return data, None
+
+    store.mutate_kv(config.LOCAL_EVENTS_KEY, mutate)
+
+
 def events(cid, fetch=True) -> list:
     """События города из Настроек (в отпуске — города поездки) из недельного кэша; fetch=False — без сети."""
     city, cc, key = _place(cid)

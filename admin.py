@@ -274,6 +274,7 @@ async def send_leisure_refresh_menu(bot, cid, q=None, *, status=""):
 
 
 async def _refresh_leisure_part(cid, part):
+    """Часть Досуга — по-настоящему заново: кэш части сбрасывается до прогрева (иначе прогрев отдал бы дневной)."""
     import leisure_hub
     if part == "cards":
         import vacation
@@ -281,10 +282,37 @@ async def _refresh_leisure_part(cid, part):
     elif part == "concerts":
         import leisure_concerts
         leisure_concerts.invalidate_user_concerts_cache(cid)
+        result = await leisure_concerts.refresh_concerts_cache(cid, force=True)  # все артисты — сейчас
+        if result.get("status") == "unavailable":
+            leisure_hub.failed_steps[str(cid)] = ["концерты"]
+            return False
+        return True
     elif part == "premieres":
         import leisure_movies
         await leisure_movies.warm_movie_premieres_cache(cid)
-    return await leisure_hub.warm_hub_cache(cid, only=leisure_hub.WARM_PARTS[part])
+    leisure_hub.expire_part(cid, part)
+    ok = await leisure_hub.warm_hub_cache(cid, only=leisure_hub.WARM_PARTS[part])
+    if ok and not await asyncio.to_thread(_leisure_part_built, cid, part):
+        # Прогрев прошёл без ошибок, но показать нечего (источники или ИИ не ответили) — не «✅ обновлено».
+        leisure_hub.failed_steps[str(cid)] = ["ничего не собралось, источники не ответили"]
+        return False
+    return ok
+
+
+def _leisure_part_built(cid, part) -> bool:
+    """После обновления части в Досуге есть что показать: карточки дня, готовые статьи, премьеры, события."""
+    import leisure_hub
+    if part == "cards":
+        return bool(leisure_hub.today_data(cid)["picks"])
+    if part == "reads":
+        import leisure_reads
+        return bool(leisure_reads.ranked(cid))
+    if part == "premieres":
+        return bool(leisure_hub.premieres_feed(cid))
+    if part == "events":
+        import leisure_events
+        return bool(leisure_events.feed(cid))
+    return True
 
 
 async def _refresh_card_cache(cid, key, bot=None):
@@ -309,6 +337,8 @@ async def _refresh_card_cache(cid, key, bot=None):
         await leisure_movies.warm_movie_premieres_cache(cid)
         import leisure_reads  # статьи дня — заново (набор без переводов иначе стоял бы до завтра)
         await asyncio.to_thread(leisure_reads.build, cid, None, True)
+        for part in ("premieres", "events"):  # сериалы, релизы любимых и афиша города — тоже заново
+            leisure_hub.expire_part(cid, part)
         return await leisure_hub.warm_hub_cache(cid)
     if key.startswith("lz_"):
         return await _refresh_leisure_part(cid, key[3:])

@@ -925,7 +925,7 @@ async def _fetch_concerts(artists, cc, cname, *, explicit_artist_search=False,
     return filter_concert_events(merge_concert_events([*retained_events, *fresh_events], []), cc)
 
 
-async def refresh_concerts_cache(cid):
+async def refresh_concerts_cache(cid, force=False):
     """Обновляет только артистов, которым пора сверить афишу.
 
     Пятничный job по-прежнему готовит уведомление, но Ticketmaster для каждого
@@ -947,7 +947,8 @@ async def refresh_concerts_cache(cid):
     if not config.TICKETMASTER_API_KEY:
         return {"status": "unavailable", "artists": len(artists), "events": 0,
                 "popular_events": len(popular_events)}
-    events = await _fetch_concerts(artists, cc, cname, cid=cid)
+    # force — «Обновить → Концерты» в админке: сверить всех артистов сейчас, а не раз в месяц.
+    events = await _fetch_concerts(artists, cc, cname, cid=cid, force_artists=artists if force else ())
     _concerts_cache_set(cid, cc, events)
     return {
         "status": "updated",

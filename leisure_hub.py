@@ -726,6 +726,11 @@ _HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на меся�
 _AGENDA_WAIT = 25  # поиск афиши при открытии ждём не дольше; не успел — кэш, свежая афиша — к следующему открытию
 
 
+def _city_events(cid):
+    import local_events
+    return local_events.events(cid, True)
+
+
 def _event_images(cid):
     import leisure_events
     return leisure_events.warm_images(cid)
@@ -907,7 +912,7 @@ _WARM_STEP_LABELS = {
     "movie_reco": "фильм дня", "tv_reco": "сериал дня", "artist_reco": "артист дня",
     "series": "сериалы недели", "favorite_releases": "релизы любимых", "album_notes": "описания альбомов",
     "details": "страны", "trip_afisha": "афиша поездки", "premiere_notes": "описания премьер",
-    "reads": "статья дня", "agenda": "праздники и афиша", "event_images": "картинки событий",
+    "reads": "статья дня", "city_events": "события города", "agenda": "праздники и афиша", "event_images": "картинки событий",
 }
 # Шаги последнего прогрева, которые не собрались, — для админки («не обновились — концерты, артист дня»).
 failed_steps = {}
@@ -920,8 +925,18 @@ WARM_PARTS = {
     "premieres": ("movie_premieres", "series", "new_music", "favorite_releases", "album_notes", "details",
                   "premiere_notes"),
     "concerts": ("concerts",),
-    "events": ("agenda", "event_images"),
+    "events": ("city_events", "agenda", "event_images"),
 }
+
+
+def expire_part(cid, part):
+    """Админка: кэши части Досуга устарели — прогрев соберёт её заново (а не вернёт дневной кэш)."""
+    if part == "premieres":
+        store.mutate_profile(cid, lambda profile: (
+            {key: value for key, value in profile.items() if key not in ("hub_series", "hub_music_fav")}, None))
+    elif part == "events":
+        import local_events
+        local_events.expire(cid)
 
 
 async def warm_hub_cache(cid, only=None):
@@ -946,6 +961,7 @@ async def warm_hub_cache(cid, only=None):
         ("premiere_notes", lambda: _warm_premiere_notes(cid)),  # после стран и релизов: лента уже готова
         ("reads", lambda: asyncio.to_thread(_reads_build, cid, bool(only))),
         ("trip_afisha", lambda: _warm_trip_afisha(cid)),
+        ("city_events", lambda: asyncio.to_thread(_city_events, cid)),
         ("agenda", lambda: asyncio.to_thread(_agenda, cid, True)),
         ("event_images", lambda: asyncio.to_thread(_event_images, cid)),  # после афиши: её события уже в ленте
     )
