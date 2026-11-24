@@ -875,7 +875,8 @@ async def send_read_themes(bot, cid, toggle="", q=None):
         chosen = [theme for theme in chosen if theme != toggle] if toggle in chosen else [*chosen, toggle]
         chosen = chosen or [toggle]  # хотя бы одна тема
         user_settings.set_(cid, leisure_reads.THEMES_KEY, chosen)
-    await _show(bot, cid, leisure_ui.read_themes_screen(tuple(leisure_reads.THEME_LABELS.items()), chosen), q)
+    sources = {theme: [name for name, _url in feeds] for theme, feeds in leisure_reads.SOURCES.items()}
+    await _show(bot, cid, leisure_ui.read_themes_screen(tuple(leisure_reads.THEME_LABELS.items()), chosen, sources), q)
 
 
 async def send_library_menu(bot, cid, q=None):

@@ -1165,14 +1165,20 @@ def leisure_library_menu(back="m_leisure") -> MessageSpec:
     )).inline_keyboard, nav_row(back)]))
 
 
-def read_themes_screen(labels, chosen) -> MessageSpec:
-    """«📰 Темы статей»: переключатели тем (✅ выбрано / □ нет) — по ним «Статьи», «Статья дня» и «События»; ниже
-    «Назад» — в «Мою библиотеку»."""
+def read_themes_screen(labels, chosen, sources=None) -> MessageSpec:
+    """«📰 Темы статей»: источники выбранных тем строками «**Тема:** источник · источник», переключатели тем
+    (✅ выбрано / □ нет) в два столбца; ниже «Назад» — в «Мою библиотеку»."""
     b = MessageBuilder()
     b.title("📰 Темы статей")
     b.line("Из этих тем собираю статьи дня — на русском, с источником и языком оригинала.")
-    rows = [[InlineKeyboardButton(("✅ " if key in chosen else "□ ") + label, callback_data=f"lz_rt_{key}")]
-            for key, label in labels]
+    picked = [(key, label) for key, label in labels if key in chosen and (sources or {}).get(key)]
+    if picked:
+        b.spacer()
+        for key, label in picked:
+            b.labeled_line(label.split(" ", 1)[-1], " · ".join(sources[key]), lowercase=False)
+    buttons = [InlineKeyboardButton(("✅ " if key in chosen else "□ ") + label, callback_data=f"lz_rt_{key}")
+               for key, label in labels]
+    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
     rows.append(nav_row("lz_lib"))
     return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))
 

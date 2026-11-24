@@ -228,3 +228,16 @@ def test_translations_go_in_small_batches_so_a_long_answer_is_not_cut(monkeypatc
     items = [{"title": f"T{i}", "link": f"https://a/{i}", "summary": "", "text": ""} for i in range(12)]
     texts = leisure_reads._texts_ru(items)
     assert calls == [5, 5, 2] and len(texts) == 12
+
+
+def test_themes_screen_lists_sources_of_chosen_themes_and_old_profiles_keep_three_themes(monkeypatch):
+    import settings as user_settings
+    monkeypatch.setattr(user_settings, "get", lambda *_a: None)
+    assert leisure_reads.themes("42") == ("science", "design", "lgbt")  # не все девять — набор не тяжелеет
+    assert [leisure_reads.per_theme(n) for n in (3, 5, 9)] == [5, 3, 2]
+    sources = {theme: [name for name, _url in feeds] for theme, feeds in leisure_reads.SOURCES.items()}
+    msg = leisure_ui.read_themes_screen(tuple(leisure_reads.THEME_LABELS.items()), ("ux",), sources)
+    assert "UI/UX и продукт: Nielsen Norman Group · Smashing Magazine · UX Collective" in msg.text
+    assert "Наука" not in msg.text  # источники — только выбранных тем
+    rows = msg.reply_markup.inline_keyboard
+    assert len(rows[0]) == 2 and rows[0][0].callback_data == "lz_rt_science"

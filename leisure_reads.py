@@ -28,8 +28,25 @@ SOURCES = {
                 ("New Scientist", "https://www.newscientist.com/feed/home/")),
     "design": (("It's Nice That", "https://feeds.feedburner.com/itsnicethat/SlXC"),
                ("Creative Boom", "https://www.creativeboom.com/feed/"),
-               ("Colossal", "https://www.thisiscolossal.com/feed/"),
-               ("Magnum Photos", "https://www.magnumphotos.com/feed/")),
+               ("Eye on Design", "https://eyeondesign.aiga.org/feed/"),
+               ("Dezeen", "https://www.dezeen.com/feed/"),
+               ("Colossal", "https://www.thisiscolossal.com/feed/")),
+    "ux": (("Nielsen Norman Group", "https://www.nngroup.com/feed/rss/"),
+           ("Smashing Magazine", "https://www.smashingmagazine.com/feed/"),
+           ("UX Collective", "https://uxdesign.cc/feed")),
+    "photo": (("Magnum Photos", "https://www.magnumphotos.com/feed/"),
+              ("PetaPixel", "https://petapixel.com/feed/"),
+              ("The Guardian Photography", "https://www.theguardian.com/artanddesign/photography/rss")),
+    "books": (("Reactor", "https://reactormag.com/feed/"),
+              ("Literary Hub", "https://lithub.com/feed/"),
+              ("The Marginalian", "https://www.themarginalian.org/feed")),
+    "mind": (("Psyche", "https://psyche.co/feed"),
+             ("Aeon", "https://aeon.co/feed.rss"),
+             ("ADDitude", "https://www.additudemag.com/feed/")),
+    "nl": (("DutchNews.nl", "https://www.dutchnews.nl/feed/"),
+           ("NL Times", "https://nltimes.nl/rss")),
+    "food": (("Eater", "https://www.eater.com/rss/index.xml"),
+             ("Bon Appétit", "https://www.bonappetit.com/feed/rss")),
     "lgbt": (("PinkNews", "https://www.thepinknews.com/feed/"),
              ("them", "https://www.them.us/feed/rss"),
              ("Expreszo", "https://www.expreszo.nl/feed/")),
@@ -38,8 +55,12 @@ SOURCES = {
 SOURCES["science"] = (*SOURCES["science"],
                       ("Scientias", "https://www.scientias.nl/feed/"),
                       ("NEMO Kennislink", "https://www.nemokennislink.nl/feeds/publicaties/"))
-_THEMES = ("science", "design", "lgbt")
-THEME_LABELS = {"science": "🔭 Наука", "design": "🎨 Дизайн и фото", "lgbt": "🏳️‍🌈 ЛГБТК+"}
+# Порядок — как на экране «Темы статей»: самые близкие владельцу первыми.
+_THEMES = ("science", "design", "ux", "photo", "books", "mind", "nl", "lgbt", "food")
+_DEFAULT_THEMES = ("science", "design", "lgbt")  # ничего не выбрано или старый профиль — прежний набор, не все девять
+THEME_LABELS = {"science": "🔭 Наука и космос", "design": "🎨 Дизайн и типографика", "ux": "🧩 UI/UX и продукт",
+                "photo": "📷 Фотография", "books": "📚 Книги и фантастика", "mind": "🧠 Психология и мозг",
+                "nl": "🌷 Нидерланды", "lgbt": "🏳️‍🌈 ЛГБТК+", "food": "🍳 Еда и кухни мира"}
 _SOURCE_LANG = {"Scientias": "NL", "NEMO Kennislink": "NL", "Expreszo": "NL"}  # остальные — английские (ENG)
 THEMES_KEY = "read_themes"  # настройки: выбранные темы статей; нет — все
 # Интересы владельца: фантастика и наука, дизайн и фото по профессии — статья с ними поднимается выше.
@@ -47,14 +68,26 @@ _INTERESTS = {
     "science": ("space", "universe", "cosmic", "galaxy", "black hole", "planet", "mars", "moon", "star", "alien",
                 "ai", "artificial intelligence", "robot", "quantum", "physics", "time", "brain", "evolution",
                 "math", "climate", "ocean"),
-    "design": ("typograph", "type", "font", "poster", "photograph", "photo", "illustrat", "graphic", "brand",
-               "identity", "design", "architect", "print", "book", "cover", "animation", "sculpt"),
+    "design": ("typograph", "type", "font", "poster", "illustrat", "graphic", "brand", "identity", "design",
+               "festival", "grid", "logo", "architect", "print", "book", "cover", "animation", "sculpt"),
+    "ux": ("ux", "ui", "usability", "research", "interface", "design system", "accessib", "figma", "prototyp",
+           "navigation", "product", "onboarding", "form", "pattern"),
+    "photo": ("photograph", "photo", "camera", "lens", "portrait", "street", "documentary", "film", "light",
+              "exhibition", "archive"),
+    "books": ("science fiction", "sci-fi", "novel", "book", "author", "orwell", "dystopia", "space", "future",
+              "fantasy", "reading", "library"),
+    "mind": ("adhd", "attention", "focus", "brain", "habit", "memory", "anxiety", "creativ", "sleep", "mind",
+             "motivation", "procrastinat"),
+    "nl": ("amsterdam", "alkmaar", "dutch", "netherlands", "train", "ns", "bike", "cycling", "housing", "festival",
+           "museum", "culture", "design"),
+    "food": ("recipe", "cook", "kitchen", "chef", "restaurant", "cuisine", "bread", "noodle", "street food", "spice"),
     "lgbt": ("queer", "trans", "pride", "gay", "lesbian", "lgbt", "bisexual", "rights", "culture", "film", "art",
              "music", "history", "nederland", "amsterdam", "roze"),
 }
 PROFILE_KEY = "hub_reads"  # {date, items[{title, link, source, lang, minutes, about, image, published}], index, seen}
 _FRESH_DAYS, _SEEN_DAYS = 7, 30
 _PER_THEME = 5  # статей каждой темы в наборе дня — тема дня первой (с запасом: без картинки или перевода не показываем)
+_PER_DAY = 15  # всего статей в наборе: много тем — меньше статей каждой (страницы и перевод — не на 45 статей)
 _RU_TRIES = 3  # сколько раз за день дописывать перевод и краткое содержание, если AI не ответил
 _WORDS_PER_MINUTE = 230
 _MAX_MINUTES = 60
@@ -69,10 +102,10 @@ def themes(cid) -> tuple:
     import settings as user_settings
     saved = user_settings.get(cid, THEMES_KEY, None) if cid is not None else None
     chosen = tuple(theme for theme in _THEMES if theme in (saved or ()))
-    return chosen or _THEMES
+    return chosen or _DEFAULT_THEMES
 
 
-def theme_of(day, chosen=_THEMES) -> str:
+def theme_of(day, chosen=_DEFAULT_THEMES) -> str:
     """Темы — по очереди по дням (из выбранных)."""
     return chosen[day.toordinal() % len(chosen)]
 
@@ -113,7 +146,12 @@ def _score(item, theme) -> int:
     return sum(1 for word in _INTERESTS[theme] if re.search(rf"\b{re.escape(word)}", text))
 
 
-def _candidates(theme, now, seen) -> list:
+def per_theme(count) -> int:
+    """Статей одной темы в наборе дня: 3 темы — по 5, 9 тем — по 2."""
+    return max(2, min(_PER_THEME, _PER_DAY // max(1, count)))
+
+
+def _candidates(theme, now, seen, limit=_PER_THEME) -> list:
     """Свежие (до недели) непоказанные статьи темы: по интересам, затем по свежести."""
     since = now - timedelta(days=_FRESH_DAYS)
     found = []
@@ -128,7 +166,7 @@ def _candidates(theme, now, seen) -> list:
         if item["source"] not in sources or len(sources) >= len(SOURCES[theme]):
             picked.append(item)
             sources.add(item["source"])
-        if len(picked) >= _PER_THEME:
+        if len(picked) >= limit:
             break
     return picked
 
@@ -270,7 +308,7 @@ def build(cid, now=None, force=False) -> dict:
     now = now or datetime.now(config.TZ)
     saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
     if not force and (saved.get("date") == now.date().isoformat() and saved.get("items") and saved.get("v") == _VERSION
-            and tuple(saved.get("themes") or _THEMES) == themes(cid)):
+            and tuple(saved.get("themes") or _DEFAULT_THEMES) == themes(cid)):
         return _with_teasers(cid, saved)
     cutoff = (now.date() - timedelta(days=_SEEN_DAYS)).isoformat()
     # Сегодняшние статьи в «показанные» не считаются: пересборка набора старого вида возьмёт те же самые.
@@ -278,7 +316,7 @@ def build(cid, now=None, force=False) -> dict:
     chosen = themes(cid)
     first = theme_of(now.date(), chosen)
     picked = [item for theme in (first, *(theme for theme in chosen if theme != first))
-              for item in _candidates(theme, now, seen)]
+              for item in _candidates(theme, now, seen, per_theme(len(chosen)))]
     if not picked:
         return saved
     picked = [{**item, "text": _excerpt(item["link"])} for item in picked]
@@ -356,7 +394,7 @@ def top(cid, today=None, limit=_TOP) -> list:
     saved = (store.get_profile(cid) or {}).get(PROFILE_KEY) or {}
     items = saved.get("items") or []
     if (saved.get("date") != today.isoformat() or saved.get("v") != _VERSION
-            or tuple(saved.get("themes") or _THEMES) != themes(cid)):
+            or tuple(saved.get("themes") or _DEFAULT_THEMES) != themes(cid)):
         return []  # набора нет, старого вида или темы сменились — экран «Статьи» соберёт новый
     items = [item for item in items if ready(item)]  # без картинки или перевода — не показываем
     ranked = sorted(enumerate(items), key=lambda pair: (-max(_score(pair[1], theme) for theme in _THEMES), pair[0]))
