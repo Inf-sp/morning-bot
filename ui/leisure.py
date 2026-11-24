@@ -921,14 +921,14 @@ def reads_card(items, index=0) -> MessageSpec:
 
 
 def leisure_hub_kb():
-    """«Премьеры» — первой строкой; Фильмы | Сериалы | Музыка — полные карточки; ниже Концерты | Статьи."""
+    """«Премьеры» — одной строкой сверху; ниже в два столбца Фильм | Сериал, Музыка | Концерты, Статьи | Праздники."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # стандартного цвета
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
-         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts"),
-         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads"),
+         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco")],
+        [InlineKeyboardButton("🎧 Музыка", callback_data="music_reco"),
+         InlineKeyboardButton("🎫 Концерты", callback_data="lz_concerts")],
+        [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads"),
          InlineKeyboardButton("🎉 Праздники", callback_data="lz_holidays")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],

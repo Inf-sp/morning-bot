@@ -571,7 +571,7 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["🎫 Концерты", "📰 Статьи", "🎉 Праздники"]] and _callbacks(kb)[0] == "lz_prem"
+    assert _labels(kb)[:4] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал"], ["🎧 Музыка", "🎫 Концерты"], ["📰 Статьи", "🎉 Праздники"]] and _callbacks(kb)[0] == "lz_prem"
     assert "✨ Другой вариант" not in sum(_labels(kb), [])
     assert routing.resolve_callback_handler("lz_today_2")["handled"]  # старая кнопка из истории — хаб
 
