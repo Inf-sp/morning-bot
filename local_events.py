@@ -283,7 +283,8 @@ def _agenda_extract(city, rows, today, end) -> list:
         "праздники, ярмарки и маркеты, рождественские и зимние события (каток, ёлка, рождественский маркет), "
         "концерты, спектакли, выставки, фестивали, городские программы. Спорт не нужен. Бери ТОЛЬКО события, "
         "дата которых прямо написана в тексте; ничего не додумывай, без даты — не включай.\n"
-        "name — оригинальное название события; about — что это, по-русски, 2–7 слов; start и end — YYYY-MM-DD "
+        "name — оригинальное название события; about — что это и чем интересно, по-русски, одно предложение до "
+        "120 символов (обязательно; только по тексту страницы, без выдуманных цен и времени); start и end — YYYY-MM-DD "
         "(однодневное — end = start); url — адрес страницы, где это написано; evidence — точная цитата из текста "
         "этой страницы с датой (до 80 символов); place — площадка или место оригинальным названием (Grote Kerk, "
         "Waagplein) или пусто; section — season (Рождество, зима, Синтерклас, ярмарки сезона, каток), culture "
@@ -314,7 +315,7 @@ def _agenda_extract(city, rows, today, end) -> list:
                 or str(item.get("status") or "").strip().casefold() == "pending"):
             continue
         seen.add(name.casefold())
-        about = " ".join(str(item.get("about") or "").split())[:70]
+        about = " ".join(str(item.get("about") or "").split())[:160]
         section = str(item.get("section") or "").strip().casefold()
         kind = str(item.get("kind") or "").strip().casefold()
         found.append({"name": name, "about": about if re.search(r"[а-яё]", about, re.I) else "",

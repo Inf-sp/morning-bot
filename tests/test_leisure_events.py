@@ -58,3 +58,22 @@ def test_every_card_gets_a_picture(monkeypatch):
 
 def test_empty_week_is_honest():
     assert leisure_ui.event_card([]).text == "🎟️ События\n\nНа этой неделе событий пока нет — загляни чуть позже."
+
+
+def test_every_event_gets_a_short_description(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(leisure_events.store, "_load", lambda key: saved.get(key))
+    monkeypatch.setattr(leisure_events.store, "mutate_kv",
+                        lambda key, change: saved.__setitem__(key, change(saved.get(key))[0]))
+    import ai
+    monkeypatch.setattr(ai, "llm_json", lambda *_a, **_k: {"items": [
+        {"id": 0, "about": "Каток под открытым небом прямо у весовой палаты — с глинтвейном и огнями."}]})
+    rink = {"kind": "city", "name": "Ice rink on Waagplein", "date": "2026-11-27", "place": "Waagplein", "about": ""}
+    assert leisure_events.describe([rink], "Alkmaar") == 1
+    assert rink["about"].startswith("Каток под открытым небом")
+    assert leisure_events._saved_notes()[leisure_events._note_key(rink)] == rink["about"]  # кэш на месяц
+    text = leisure_ui.event_card([rink]).text
+    assert "Городское событие · 27 ноября" in text and "Каток под открытым небом" in text
+    # AI не ответил — короткая подпись без AI, карточка не остаётся пустой.
+    assert leisure_events._plain_about({"kind": "city", "place": "Waagplein"}, "Alkmaar") == (
+        "Городское событие — Waagplein, Alkmaar.")
