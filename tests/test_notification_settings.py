@@ -62,7 +62,7 @@ def test_notification_screen_toggles_and_picks_time(monkeypatch):
 
     assert saved["notif_time_evening_weather"] == "18:00" and saved["notif_evening_weather"] is True
     text, labels, callbacks = shown[-1]
-    assert text.startswith("🔔 Погода на завтра · 18:00")
+    assert text.startswith("🔔 План на завтра · 18:00")
     assert labels[:4] == [["✅ Присылать"], ["✅ 18:00"], ["□ 20:00"], ["□ 21:00"]]
     assert callbacks[-1] == ["set_notif", "m_menu"]
 
@@ -75,7 +75,7 @@ def test_next_notification_line(monkeypatch):
     thursday_evening = datetime(2026, 10, 8, 20, 0, tzinfo=settings.config.TZ)
     thursday_noon = datetime(2026, 10, 8, 12, 0, tzinfo=settings.config.TZ)
 
-    assert settings.next_notification("42", thursday_noon) == "Следующая: Погода на завтра сегодня в 20:00"
+    assert settings.next_notification("42", thursday_noon) == "Следующая: План на завтра сегодня в 20:00"
     assert settings.next_notification("42", thursday_evening) == "Следующая: Концерты недели завтра в 10:00"
     saved.update(notif_evening_weather=False, notif_weekend_events=False)
     assert settings.next_notification("42", thursday_noon) == ""
@@ -87,10 +87,10 @@ def test_settings_summary_line(monkeypatch):
              "cuisines": ["italian", "georgian"]}
     _settings(monkeypatch, saved)
 
-    # + «Праздники и концерты» и «Праздники и мероприятия» по умолчанию
-    assert settings.settings_summary("42").startswith("включено 4 · следующая: ")
-    saved["notif_holidays"] = False
+    # + «Праздники и мероприятия» по умолчанию; праздники накануне — теперь в «Плане на завтра»
     assert settings.settings_summary("42").startswith("включено 3 · следующая: ")
+    saved["notif_week_holidays"] = False
+    assert settings.settings_summary("42").startswith("включено 2 · следующая: ")
 
 
 def test_myday_blocks_toggle_and_reset_day_cache(monkeypatch):

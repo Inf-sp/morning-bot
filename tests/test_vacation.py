@@ -665,7 +665,7 @@ def test_settings_on_vacation_show_trip_home_trip_language_and_skip_paused_learn
         in text
     assert "ZA ·" not in text and "Язык обучения" not in text and "кнопкой «Настроить»" not in text
     # «Обучение языку» в отпуске на паузе: не считается и не показывается следующим.
-    assert "Уведомления: включено 1 · следующая: Погода на завтра" in text
+    assert "Уведомления: включено 1 · следующая: План на завтра" in text
     assert settings.notification_paused("42", "daily_words") and not settings.notification_paused("42", "evening_weather")
 
 

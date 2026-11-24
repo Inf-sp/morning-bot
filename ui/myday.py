@@ -421,3 +421,52 @@ def day_summary(
         b.newline()
 
     return b.build_stripped()
+
+
+def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
+    """«🗓️ План на завтра · ср, 25 ноября»: «**Город:**», «**Погода:**» и строки частей суток «❄️ Утром: до -1°C ·
+    без дождя · ветер 4 м/с», затем по строке «**Подпись:** значение» — KNMI, праздник, события, концерты, премьеры,
+    работы на ЖД (только то, что есть); пусто — курсивом «Завтра без особых событий»."""
+    from ui import leisure as leisure_ui
+    from util import _MONTHS
+    day = plan["day"]
+    weekdays = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+    b = MessageBuilder()
+    b.title(f"🗓️ План на завтра · {weekdays[day.weekday()]}, {day.day} {_MONTHS[day.month - 1]}")
+    if plan.get("city"):
+        b.labeled_line("Город", plan["city"], lowercase=False)
+    if plan.get("weather"):
+        b.spacer()
+        b.labeled_line("Погода")
+        for part in plan["weather"]:
+            b.line(f"{part['title']}: {part['temp']} · {part['rain']} · {part['wind']}")
+    extra = []
+    for line in plan.get("official") or []:  # «Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00»
+        extra.append(("⚠️", "Предупреждение", finish_dot(line)))
+    for holiday in plan.get("holidays") or []:
+        about = str(holiday.get("about") or "").strip()
+        extra.append(("🎉", "Праздник", finish_dot(holiday["name"] + (f" — {about}" if about else ""))))
+    for card in plan.get("events") or []:
+        emoji, label, meta = leisure_ui._event_meta(card)
+        values = [value for value in meta if str(value or "").strip()]
+        extra.append((emoji, label, " · ".join([card["name"], *values[1:]])))  # дата — уже «завтра»
+    for card in plan.get("premieres") or []:
+        emoji, label, meta = leisure_ui._event_meta(card)
+        values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
+        extra.append((emoji, "Премьера", " · ".join([card["name"], *values])))
+    for works in plan.get("works") or []:
+        title = _works_section(works.get("title"))
+        level = str(works.get("level") or "")
+        extra.append(("🚧", "Работы на ЖД", " · ".join(part for part in (
+            title, f"{level[:1].upper()}{level[1:]}." if level else "") if part)))
+    if extra:
+        b.spacer()
+        for emoji, label, value in extra:
+            b.text_line(f"{emoji} ")
+            b.labeled_line(label, value, lowercase=False)
+    else:
+        b.spacer()
+        b.italic("Завтра без особых событий — день можно планировать свободно.")
+        b.newline()
+    return b.build_stripped(reply_markup=reply_markup)
+

@@ -544,10 +544,10 @@ def test_hub_card_rotates_through_sections_on_every_open(monkeypatch):
                         lambda _cid, change: profile.update(change(dict(profile))[0]))
     options = {"concert": [{"name": "c1"}, {"name": "c2"}], "event": [{"name": "e1"}],
                "premiere": [{"name": "p1"}, {"name": "p2"}, {"name": "p3"}], "read": [{"name": "r1"}]}
-    shown = [leisure_hub.next_today_pick("42", options)["name"] for _ in range(9)]
-    # Вид по кругу: концерт → мероприятие → премьера → статья; внутри вида — следующая карточка.
-    assert shown == ["c1", "e1", "p1", "r1", "c2", "e1", "p2", "r1", "c1"]
-    assert leisure_hub._ROTATION == ("concert", "event", "premiere", "read")  # без старых фильмов и сериалов
+    shown = [leisure_hub.next_today_pick("42", options)["name"] for _ in range(7)]
+    # Вид по кругу: концерт → премьера → статья; события города — в «Моём дне», в Досуге их нет.
+    assert shown == ["c1", "p1", "r1", "c2", "p2", "r1", "c1"]
+    assert leisure_hub._ROTATION == ("concert", "premiere", "read")
     del options["read"]  # нет статьи — вид пропускается
     assert leisure_hub.next_today_pick("42", options, advance=False)["name"] in {"c1", "c2", "e1", "p1", "p2", "p3"}
     card = {"kind": "festival", "name": "Winterfest", "url": "https://w", "date": "2026-11-29", "end": "2026-11-30",
@@ -573,8 +573,8 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг на сегодня · Alkmaar\n\nСериал дня:\n• Нили · 2025 · Prime Video · драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[:3] == [["🎟️ События"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["📰 Статьи"]]
-    assert "lz_ev" in _callbacks(kb) and not {"lz_prem", "lz_concerts", "lz_holidays"} & set(_callbacks(kb))
+    assert _labels(kb)[:3] == [["🆕 Премьеры"], ["🎬 Фильм", "📺 Сериал", "🎧 Музыка"], ["📰 Статьи"]]
+    assert "lz_prem" in _callbacks(kb) and not {"lz_ev", "lz_concerts", "lz_holidays"} & set(_callbacks(kb))
     for old in ("lz_prem", "lz_concerts", "lz_holidays", "lz_ev_3"):  # старые кнопки из истории — работают
         assert routing.resolve_callback_handler(old)["handled"]
     assert "✨ Другой вариант" not in sum(_labels(kb), [])
@@ -593,7 +593,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
 
     text = bot.sent[0]["text"]
     assert text.startswith("🍿 Досуг на сегодня · Alkmaar\n\n") and "Восставший" not in text  # без старого фильма
-    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_ev"
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_prem"
 
 
 def test_runtime_label_and_weekday_limit():

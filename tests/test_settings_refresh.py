@@ -52,7 +52,7 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     sent = []
     monkeypatch.setattr(settings.store, "get_settings", lambda _cid: {"city": "Алкмар", "country": "Нидерланды"})
     monkeypatch.setattr(settings, "learning_line", lambda _cid: "Нидерландский · Сложный (B1+)")
-    monkeypatch.setattr(settings, "next_notification", lambda _cid: "Следующая: Погода на завтра сегодня в 20:00")
+    monkeypatch.setattr(settings, "next_notification", lambda _cid: "Следующая: План на завтра сегодня в 20:00")
     monkeypatch.setattr(settings, "notif_on", lambda _cid, kind: kind == "evening_weather")
     monkeypatch.setattr(settings, "cuisines", lambda _cid: ["italian"])
     monkeypatch.setattr(settings.store, "load_wardrobe", lambda _cid: {"zones": {}})
@@ -66,7 +66,7 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     text = sent[0]["text"]
     assert text == (
         "🎚️ Настройки\n\nГород: Алкмар · Нидерланды\nЯзык обучения: Нидерландский · Сложный (B1+)\n"
-        "Уведомления: включено 1 · следующая: Погода на завтра сегодня в 20:00\n\n"
+        "Уведомления: включено 1 · следующая: План на завтра сегодня в 20:00\n\n"
         "Здесь общие параметры бота. Свои данные разделов (шкаф, продукты, словарь, библиотека) — "
         "кнопкой «Настроить» внутри раздела."
     )
@@ -77,4 +77,4 @@ def test_settings_home_shows_city_language_and_summary(monkeypatch):
     assert "set_preferences" in callbacks
     assert "set_notif" in callbacks
     asyncio.run(settings.send_home(RecordingBot(sent), "42"))  # пояснение — только при первом открытии
-    assert sent[1]["text"].endswith("следующая: Погода на завтра сегодня в 20:00")
+    assert sent[1]["text"].endswith("следующая: План на завтра сегодня в 20:00")

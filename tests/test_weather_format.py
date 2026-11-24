@@ -320,11 +320,12 @@ def test_weather_warning_notification_links_to_notification_settings_and_home(mo
 def test_evening_weather_is_at_twenty_and_has_settings_and_home_in_one_row(monkeypatch):
     calls = []
     notification_bot = object()
+    import plan
 
-    async def send_weather(target_bot, cid, mode, status=None, reply_markup=None):
-        calls.append((target_bot, cid, mode, status, reply_markup))
+    async def send(target_bot, cid, reply_markup=None, q=None):
+        calls.append((target_bot, cid, "plan", None, reply_markup))
 
-    monkeypatch.setattr(weather, "send_weather", send_weather)
+    monkeypatch.setattr(plan, "send", send)
 
     asyncio.run(settings._send_scheduled_notification(
         notification_bot, "42", "evening_weather",
@@ -336,8 +337,8 @@ def test_evening_weather_is_at_twenty_and_has_settings_and_home_in_one_row(monke
     )
     keyboard = calls[0][4].inline_keyboard
     assert settings.EVENING_WEATHER_TIME == "20:00"
-    assert option.button_label == "Погода на завтра · 20:00"
-    assert calls[0][:4] == (notification_bot, "42", "tomorrow_plain", None)
+    assert option.button_label == "План на завтра · 20:00"
+    assert calls[0][:4] == (notification_bot, "42", "plan", None)  # вечером — «План на завтра»
     assert [[(button.text, button.callback_data) for button in row] for row in keyboard] == [
         [("🎚️ Настроить уведомления", "set_notif_new"), ("#️⃣ Главная", "m_menu")],
     ]

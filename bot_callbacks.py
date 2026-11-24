@@ -19,6 +19,8 @@ import learning_settings
 import learning_router
 import leisure_concerts
 import leisure_events
+import plan
+from ui.navigation import nav_row
 import leisure_hub
 import leisure_movies
 import leisure_music
@@ -73,6 +75,9 @@ def _status_stages(data):
     if data in ("m_leisure", "lz_more", "watch", "read", "listen", "lz_prem") or data.startswith("lz_prem_"):
         return progress("🎬 Смотрю афиши кинотеатров...", "📺 Смотрю новые сериалы...", "🎧 Слушаю свежие альбомы...",
                         "🍿 Собираю досуг...")
+    if data == "plan_tomorrow":
+        return progress("🌦️ Смотрю погоду на завтра...", "🎉 Проверяю праздники и события...",
+                        "🎬 Ищу премьеры...", "🗓️ Собираю план...")
     if data == "lz_ev":
         return progress("🎫 Проверяю афиши...", "🎪 Ищу фестивали и выставки...", "🎉 Смотрю праздники...",
                         "🎬 Собираю премьеры...")
@@ -520,7 +525,9 @@ ROUTES = (
     R("lz_rt", lambda c: leisure_hub.send_read_themes(c.bot, c.cid, q=c.q)),  # темы статей
     R("lz_rt_*", lambda c: leisure_hub.send_read_themes(c.bot, c.cid, c.data.removeprefix("lz_rt_"), q=c.q)),
     R("lz_country", lambda c: leisure_hub.send_trip_country(c.bot, c.cid, q=c.q)),  # «О стране» в Досуге отпуска
-    R("lz_ev", lambda c: leisure_events.send_events(c.bot, c.cid, q=c.q)),  # «События» — первая карточка ленты
+    R("plan_tomorrow", lambda c: plan.send(c.bot, c.cid, reply_markup=InlineKeyboardMarkup([nav_row("m_myday")]),
+                                           q=c.q)),  # «План на завтра» из «Моего дня»
+    R("lz_ev", lambda c: leisure_events.send_events(c.bot, c.cid, q=c.q)),  # старая «События» из истории чата
     R("lz_ev_*", lambda c: leisure_events.send_events(c.bot, c.cid, c.data.removeprefix("lz_ev_"), q=c.q)),
     R("lz_reads", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # «Статьи» в хабе — первая карточка
     R("lz_reads_*", lambda c: leisure_hub.send_reads(c.bot, c.cid, c.data.removeprefix("lz_reads_"), q=c.q)),

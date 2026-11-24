@@ -924,7 +924,7 @@ def leisure_hub_kb():
     """Широкая «События» сверху (концерты, фестивали, выставки, праздники, город и премьеры одной лентой), ниже
     Фильм | Сериал | Музыка в три столбца и широкая «Статьи» (старые «Премьеры / Концерты / Праздники» работают)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎟️ События", callback_data="lz_ev")],
+        [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # события — в «Моём дне» и «Плане на завтра»
         [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
          InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
          InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],

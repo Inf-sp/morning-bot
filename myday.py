@@ -469,6 +469,7 @@ def _day_menu_kb(cid=None):
         if cid is not None and vacation.active(cid) else []
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗓️ Полный прогноз на сегодня", callback_data="a_w_full")],
+        [InlineKeyboardButton("🗓️ План на завтра", callback_data="plan_tomorrow")],
         [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
         *trip,
         # Блоки сводки настраиваются в «Настройки → Предпочтения → ☀️ Мой день».
@@ -507,17 +508,19 @@ def _meal_of_day(cid):
     return None
 
 
-def _event_of_week(cid):
-    """Ближайшее из «Событий» Досуга на неделю: концерт, иначе фестиваль, выставка, праздник или событие города
-    (кэш ленты, без сети и AI); нет — None."""
+def _event_of_day(cid, day=None):
+    """Событие дня — то, что идёт сегодня: концерт твоего артиста, иначе фестиваль, выставка или событие города
+    (афиша города и кэш концертов, без сети и AI); сегодня ничего — None."""
     try:
         import leisure_events
         cards = leisure_events.feed(cid)
     except Exception:
         _log.warning("myday: events unavailable", exc_info=True)
         return None
-    concert = next((card for card in cards if card["kind"] == "concert"), None)
-    return concert or next((card for card in cards if card["kind"] not in ("premiere", "read", "holiday")), None)
+    iso = (day or datetime.now(TZ).date()).isoformat()
+    today = [card for card in cards if card["kind"] not in ("premiere", "read", "holiday")
+             and card["date"] <= iso <= card["end"]]
+    return next((card for card in today if card["kind"] == "concert"), None) or next(iter(today), None)
 
 
 def _city_fact(settings_data, day) -> str:
@@ -732,7 +735,7 @@ def _build_day_text(cid, *, refresh_current=False):
     premiere = _premiere_of_day(cid) if on("premiere") and not trip else None
     # Из соседних разделов — по строке: блюдо по времени суток (Кухня), ближайшее событие недели и статья (Досуг).
     meal = (None if trip else _meal_of_day(cid)) if on("meal") else None  # в отпуске — «Попробовать»
-    event = _event_of_week(cid) if on("leisure") else None
+    event = _event_of_day(cid, now.date()) if on("leisure") else None
     read = _read_of_day(cid) if on("read") and not trip else None
     city_fact = _city_fact(s, now.date()) if on("city") and not trip else ""
     msg = myday_ui.day_summary(

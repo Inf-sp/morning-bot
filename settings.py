@@ -18,12 +18,11 @@ NOTIF_TYPES = [
     ("weather_warn",     "Погодное предупреждение"),
     ("weekend_events",  "Концерты недели"),
     ("daily_words",     "Обучение языку"),
-    ("evening_weather", "Погода на завтра"),
+    ("evening_weather", "План на завтра"),  # погода и всё, что завтра: KNMI, праздники, события, премьеры
     ("ns_disruptions",  "Поезда NS"),
     ("bus_disruptions", "Автобусы"),  # сбои автобусов у вокзала города (OVapi), вместе с проверкой NS
     ("flight_deals",    "Дешёвые билеты"),
     ("week_holidays",   "Праздники и мероприятия"),  # по понедельникам: праздники и события города на неделю
-    ("holidays",        "Праздники и концерты"),  # накануне: праздник, событие города, концерт твоего артиста
     ("trip_day",        "План дня в отпуске"),  # только в отпуске (notification_available)
 ]
 
@@ -123,7 +122,7 @@ NOTIF_TIMES = {
 }
 _NOTIF_TITLES = {
     "weather_warn": "Погодное предупреждение", "daily_words": "Обучение языку",
-    "evening_weather": "Погода на завтра",
+    "evening_weather": "План на завтра",
     "weekend_events": "Концерты недели", "ns_disruptions": "Поезда NS", "bus_disruptions": "Автобусы",
     "flight_deals": "Дешёвые билеты", "holidays": "Праздники и концерты",
     "week_holidays": "Праздники и мероприятия", "trip_day": "План дня в отпуске",
@@ -134,7 +133,7 @@ _NOTIF_TITLES = {
 MYDAY_BLOCKS = [
     ("weather", "Погода"), ("golden", "Золотой час"), ("outfit", "Образ дня"),
     ("word", "Фраза дня"), ("rail", "Работы на ЖД"), ("holidays", "Праздники"),
-    ("meal", "Блюдо дня"), ("city", "Город в цифрах"), ("leisure", "Событие недели"), ("premiere", "Премьера дня"), ("read", "Статья дня"),
+    ("meal", "Блюдо дня"), ("city", "Город в цифрах"), ("leisure", "Событие дня"), ("premiere", "Премьера дня"), ("read", "Статья дня"),
     ("fact", "Факт о стране"), ("quote", "Цитата"),
 ]
 
@@ -566,10 +565,8 @@ async def _send_scheduled_notification(bot, cid, kind):
         import leisure_concerts
         await leisure_concerts.send_weekend_events(bot, cid)
     elif kind == "evening_weather":
-        import weather as _w
-        # «Настроить уведомления» (настройки уведомлений новым сообщением) | «Главная».
-        kb = InlineKeyboardMarkup([notif_row()])
-        await _w.send_weather(bot, cid, "tomorrow_plain", reply_markup=kb)
+        import plan  # «План на завтра»: погода, KNMI, праздники, события, концерты, премьеры, работы на ЖД
+        await plan.send(bot, cid, reply_markup=InlineKeyboardMarkup([notif_row()]))
     elif kind == "ns_disruptions":
         import ns_alerts
         await ns_alerts.check_user(bot, cid)
@@ -580,7 +577,7 @@ async def _send_scheduled_notification(bot, cid, kind):
         import flight_deals
         await flight_deals.check_user(bot, cid)
     elif kind == "holidays":
-        await _send_holidays_eve(bot, cid)
+        return  # праздники, события и концерты накануне — теперь в «Плане на завтра»
     elif kind == "week_holidays":
         await send_week_holidays(bot, cid)
     elif kind == "trip_day" and notification_available(cid, kind):
@@ -689,11 +686,10 @@ _ADMIN_NOTIFICATION_META = {
     "weather_warn":    ("08:00 и накануне 19:00, если есть повод", "Погодное предупреждение"),
     "weekend_events":  ("пт 10:00", "Концерты недели"),
     "daily_words":     ("11:00", "Обучение языку"),
-    "evening_weather": (EVENING_WEATHER_TIME, "Погода на завтра"),
+    "evening_weather": (EVENING_WEATHER_TIME, "План на завтра"),
     "ns_disruptions":  ("06:00–23:00, при сбое", "Поезда NS · сбои"),
     "bus_disruptions": ("06:00–23:00, при сбое", "Автобусы · сбои у вокзала"),
     "flight_deals":    ("07:00–23:00, при публикации", "Дешёвые билеты · из Амстердама"),
-    "holidays":        ("накануне 18:00, если есть праздник или концерт", "Праздники и концерты"),
     "week_holidays":   ("пн 10:00", "Праздники и мероприятия"),
     "trip_day":        ("08:00, в отпуске", "План дня в отпуске"),
 }
