@@ -36,7 +36,7 @@ from wardrobe_migration import migrate_item_attrs
 _log = logging.getLogger(__name__)
 
 WARDROBE_WIND_LAYER_MS = 6
-COPY_VALIDATOR_VERSION = 14  # 14 — логика комплекта (outfit_conflicts): сегодняшний образ пересобирается
+COPY_VALIDATOR_VERSION = 15  # 15 — в мороз тёплая верхняя одежда раньше непродуваемой ветровки: образ пересобирается
 WARDROBE_CATEGORY_PAGE_SIZE = 8
 CLOSET_ZONE_ORDER = ("Верх", "Кофты", "Низ", "Верхняя одежда", "Обувь")
 def _kb(rows):

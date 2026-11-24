@@ -10,11 +10,11 @@ SQUARE = "52.0,4.0 53.0,4.0 53.0,5.5 52.0,5.5"  # Северная Голлан�
 EAST = "52.0,6.0 53.0,6.0 53.0,7.0 52.0,7.0"
 
 
-def _warning(polygon, level="3; orange; Severe", kind="1; Wind", hours=(2, 10)):
+def _warning(polygon, level="3; orange; Severe", kind="1; Wind", hours=(2, 10), now=NOW):
     return {"alert": {"info": [
         {"language": "nl-NL", "parameter": [], "area": []},
-        {"language": "en-GB", "onset": (NOW + timedelta(hours=hours[0])).isoformat(),
-         "expires": (NOW + timedelta(hours=hours[1])).isoformat(),
+        {"language": "en-GB", "onset": (now + timedelta(hours=hours[0])).isoformat(),
+         "expires": (now + timedelta(hours=hours[1])).isoformat(),
          "parameter": [{"valueName": "awareness_level", "value": level},
                        {"valueName": "awareness_type", "value": kind}],
          "area": [{"areaDesc": "Noord-Holland", "polygon": [polygon]}]}]}}
@@ -33,7 +33,8 @@ def test_weather_warning_starts_with_the_official_knmi_line(monkeypatch):
     import weather_warn
     monkeypatch.setattr(weather_warn.store, "get_settings",
                         lambda _cid: {"city": "Alkmaar", "cc": "NL", "lat": ALKMAAR[0], "lon": ALKMAAR[1]})
-    monkeypatch.setattr(meteoalarm, "_feed", lambda _cc: [_warning(SQUARE, hours=(-1, 10))])
+    # Отсчёт — от текущего времени: предупреждение сверяется с сегодняшней датой.
+    monkeypatch.setattr(meteoalarm, "_feed", lambda _cc: [_warning(SQUARE, hours=(-1, 3), now=datetime.now(config.TZ))])
     monkeypatch.setattr(weather_warn, "collect_context", lambda *_a: {})
     monkeypatch.setattr(weather_warn, "evaluate", lambda _ctx: [])  # свой расчёт ничего не нашёл
     msg = weather_warn.build_warning({}, "42")

@@ -378,15 +378,16 @@ def select_outfit_candidates(w, weather_ctx):
             if not outerwear_needed:
                 candidates[zone] = []
                 continue
+            if rules.colder_than(weather_ctx, rules.WARM_OUTER_FEELS_MAX):
+                # Холодно — сначала тепло: не ветровка и не лёгкая куртка, если в шкафу есть теплее. Ветер и дождь
+                # выбирают уже среди тёплых: иначе при порывах оставалась бы одна непродуваемая ветровка в мороз.
+                items = [it for it in items if not rules.light_outerwear(it)] or items
             if weather_ctx.get("has_rain"):
                 # Есть непромокаемая — только она.
                 items = [it for it in items if it.get("rain_ok")] or items
             elif weather_ctx.get("strong_wind"):
                 # Порывы: есть непродуваемая — только она.
                 items = [it for it in items if it.get("wind_ok") or it.get("rain_ok")] or items
-            if rules.colder_than(weather_ctx, rules.WARM_OUTER_FEELS_MAX):
-                # Холодно: не ветровка, если в шкафу (после правил дождя и ветра) есть теплее.
-                items = [it for it in items if not rules.light_outerwear(it)] or items
         elif zone == "Аксессуары" and (weather_ctx.get("hot") or weather_ctx.get("sunny")):
             # Очки могут лежать дальше первых двух аксессуаров, которые попадут
             # в перебор, поэтому поднимаем их до ограничения пула кандидатов.
