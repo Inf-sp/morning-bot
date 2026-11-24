@@ -46,7 +46,7 @@ _configured = provider_runtime.is_configured
 _load = provider_runtime.load_state
 _quota_from_headers = provider_runtime.quota_from_headers
 
-_AI_SERVICES = ("gemini", "cerebras", "groq", "cloudflare", "github", "openrouter")
+_AI_SERVICES = ("gemini", "groq", "cloudflare", "github", "openrouter")
 _DATA_SERVICES = (
     "openweather", "firecrawl", "tavily", "tmdb", "youtube", "languagetool",
     "spoonacular", "gtts", "ticketmaster", "ns", "pexels", "unsplash",
@@ -67,10 +67,9 @@ _DATA_CATEGORIES = {
 }
 _AI_ROLES = {
     "gemini": "Основной",
-    "cerebras": "Резерв 1",
-    "cloudflare": "Резерв 3",
-    "github": "Резерв 4",
-    "openrouter": "Резерв 5",
+    "cloudflare": "Резерв 2",
+    "github": "Резерв 3",
+    "openrouter": "Резерв 4",
 }
 _GROQ_MODELS = (
     ("simple", config.GROQ_SIMPLE_MODEL, "Основной"),
@@ -156,7 +155,7 @@ def format_row(service: str, state: dict | None = None) -> str:
     status = _display_status(state)
     if service == "groq":
         return _format_groq_row(state)
-    if service in ("gemini", "cerebras", "cloudflare", "github", "openrouter"):
+    if service in ("gemini", "cloudflare", "github", "openrouter"):
         return _format_ai_row(service, state)
     parts = [spec.label]
     category = _DATA_CATEGORIES.get(service, spec.category)
@@ -173,7 +172,7 @@ def _format_groq_row(state: dict | None = None) -> str:
     """Одна пользовательская строка Groq без раскрытия внутренних моделей."""
     state = state or provider_runtime.get_state("groq")
     if not _configured("groq"):
-        return "🔴 Groq · Резерв 2 · API-ключ не настроен"
+        return "🔴 Groq · Резерв 1 · API-ключ не настроен"
     remaining, total = _confirmed_quota("groq", state)
     status = _display_status(state)
     if (status in (OK, UNKNOWN) and remaining is not None and total
@@ -189,7 +188,7 @@ def _format_groq_row(state: dict | None = None) -> str:
         detail = f"{_number(used)} сегодня"
     if status in (WARNING, DOWN) and state.get("error_type") not in ("", "quota"):
         detail = str(state.get("last_error") or "сервис не ответил")
-    return _row(status, f"Groq · Резерв 2 · {detail}")
+    return _row(status, f"Groq · Резерв 1 · {detail}")
 
 
 def _format_ai_row(service: str, state: dict | None = None) -> str:
@@ -266,7 +265,7 @@ def idle_line(now=None) -> str:
 
 # Где менять ключ, если сервис его не принимает: имя переменной в /etc/morning-bot.env.
 _ENV_KEYS = {
-    "gemini": "GEMINI_API_KEY", "cerebras": "CEREBRAS_API_KEY", "groq": "GROQ_API_KEY",
+    "gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY",
     "cloudflare": "CF_API_TOKEN", "github": "GITHUB_API_KEY", "openrouter": "OPENROUTER_API_KEY",
     "openweather": "WEATHER_API_KEY", "firecrawl": "FIRECRAWL_API_KEY", "tavily": "TAVILY_API_KEY",
     "tmdb": "TMDB_API_KEY", "youtube": "YOUTUBE_API_KEY", "spoonacular": "SPOONACULAR_API_KEY",
@@ -354,7 +353,6 @@ def _probe_request(service: str):
         "gemini": ("GET", "https://generativelanguage.googleapis.com/v1beta/models", {"params": {"key": config.GEMINI_API_KEY, "pageSize": 1}}),
         "groq": ("GET", "https://api.groq.com/openai/v1/models", {"headers": {"Authorization": f"Bearer {config.GROQ_API_KEY}"}}),
         "ns": ("GET", "https://gateway.apiportal.ns.nl/disruptions/v3", {"params": {"isActive": "true"}, "headers": {"Ocp-Apim-Subscription-Key": config.NS_API_KEY}}),
-        "cerebras": ("GET", "https://api.cerebras.ai/v1/models", {"headers": {"Authorization": f"Bearer {config.CEREBRAS_API_KEY}"}}),
         "github": ("GET", "https://models.github.ai/catalog/models", {"headers": {"Authorization": f"Bearer {config.GITHUB_API_KEY}"}}),
         "openrouter": ("GET", "https://openrouter.ai/api/v1/key", {"headers": {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"}}),
         "cloudflare": (
@@ -495,7 +493,7 @@ def check_all(*, force=False) -> None:
         # Проверка Groq и Cloudflare может расходовать лимит. Их
         # состояние обновляют реальные попытки из цепочки; фон проверяет лишь
         # основной сервис и последний резерв.
-        # Groq, Cerebras и GitHub проверяются бесплатным списком моделей раз в час: без этого статус резерва,
+        # Groq и GitHub проверяются бесплатным списком моделей раз в час: без этого статус резерва,
         # до которого цепочка редко доходит, неделями показывал старую ошибку. Cloudflare — только реальными
         # запросами: его проверка — вызов модели за нейроны.
         if spec.key == "cloudflare":

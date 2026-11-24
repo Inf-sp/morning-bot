@@ -53,14 +53,13 @@ def _error(name, error_type):
 
 
 def test_default_order_is_gemini_groq_cf_openrouter():
-    assert ai.AI_ORDER == ("gemini", "cerebras", "groq", "cf", "github", "openrouter")
+    assert ai.AI_ORDER == ("gemini", "groq", "cf", "github", "openrouter")
 
 
 def test_each_failed_provider_hands_over_to_the_next_in_order(providers):
     calls, behaviour = providers
     behaviour.update({
         "gemini": _error("gemini", "ReadTimeout"),
-        "cerebras": _error("cerebras", "http_error"),
         "groq": _error("groq", "rate_limit"),
         "cf": _error("cf", "temporary"),
         "github": _error("github", "rate_limit"),
@@ -68,7 +67,7 @@ def test_each_failed_provider_hands_over_to_the_next_in_order(providers):
     })
 
     assert ai.llm("q", module="food", fallback_allowed=True, budget_seconds=30) == "резерв"
-    assert calls == ["gemini", "cerebras", "groq", "cf", "github", "openrouter"]
+    assert calls == ["gemini", "groq", "cf", "github", "openrouter"]
 
 
 def test_first_working_provider_answers_and_later_ones_are_not_called(providers):
@@ -76,7 +75,7 @@ def test_first_working_provider_answers_and_later_ones_are_not_called(providers)
     behaviour["gemini"] = _error("gemini", "rate_limit")
 
     assert ai.llm("q", module="food", fallback_allowed=True, budget_seconds=30) == "ok"
-    assert calls == ["gemini", "cerebras"]
+    assert calls == ["gemini", "groq"]
 
 
 def test_empty_answer_moves_to_the_next_provider(providers):
@@ -84,7 +83,7 @@ def test_empty_answer_moves_to_the_next_provider(providers):
     behaviour["gemini"] = ""
 
     assert ai.llm("q", module="food", budget_seconds=30) == "ok"
-    assert calls == ["gemini", "cerebras"]
+    assert calls == ["gemini", "groq"]
 
 
 def test_unconfigured_provider_is_skipped_without_a_call(providers, monkeypatch):
@@ -92,18 +91,18 @@ def test_unconfigured_provider_is_skipped_without_a_call(providers, monkeypatch)
     monkeypatch.setattr(provider_runtime, "is_configured", lambda p: p != "gemini")
 
     assert ai.llm("q", module="food", budget_seconds=30) == "ok"
-    assert calls == ["cerebras"]
+    assert calls == ["groq"]
 
 
 def test_all_providers_down_raises_after_trying_every_one(providers):
     calls, behaviour = providers
-    for name in ("gemini", "cerebras", "groq", "cf", "github"):
+    for name in ("gemini", "groq", "cf", "github"):
         behaviour[name] = _error(name, "temporary")
     behaviour["openrouter"] = ""
 
     with pytest.raises(Exception):
         ai.llm("q", module="food", fallback_allowed=True, budget_seconds=30)
-    assert calls == ["gemini", "cerebras", "groq", "cf", "github", "openrouter"]
+    assert calls == ["gemini", "groq", "cf", "github", "openrouter"]
 
 
 def test_legacy_unknown_status_text_is_not_shown_in_admin(monkeypatch):
@@ -167,22 +166,6 @@ def test_groq_missing_model_switches_to_stable_fallback(monkeypatch):
 def test_gemini_thinking_format_matches_model_generation():
     assert ai._gemini_thinking("gemini-2.5-flash") == {"thinkingBudget": 0}
     assert ai._gemini_thinking("gemini-3.8-flash") == {"thinkingLevel": "low"}
-
-
-def test_cerebras_missing_model_switches_to_fallback(monkeypatch):
-    calls = _fake_post(monkeypatch, "gpt-oss-120b")
-
-    response = ai._post("https://api.cerebras.ai/v1/chat/completions", {}, {"model": "gpt-oss-120b"}, 5, "cerebras")
-
-    assert response.status_code == 200
-    assert calls[-1][1]["model"] == "llama3.1-8b"
-
-
-def test_cerebras_key_is_redacted_and_provider_registered(monkeypatch):
-    monkeypatch.setattr(ai.config, "CEREBRAS_API_KEY", "csk-secret-123")
-    assert "csk-secret-123" not in ai.secure.redact("auth csk-secret-123")
-    assert "cerebras" in provider_runtime.AI_PROVIDERS
-    assert provider_runtime.is_configured("cerebras")
 
 
 def test_github_models_missing_model_switches_to_fallback_and_key_is_hidden(monkeypatch):

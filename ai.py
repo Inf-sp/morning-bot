@@ -126,7 +126,6 @@ FREE_CHAT_SCENARIO = "assistant/free_chat"
 FREE_CHAT_TIER = "smart"
 _FREE_CHAT_PROVIDER_TIMEOUTS = {
     "gemini": 5.0,
-    "cerebras": 4.0,
     "github": 4.0,
     "groq": 4.0,
     "groq_standard": 4.0,
@@ -353,7 +352,6 @@ def _is_temporary_exception(exc):
 
 _TIMEOUT_CAPS = {
     "gemini": 6.0,
-    "cerebras": 5.0,
     "github": 5.0,
     "groq": 5.0,
     "cf": 4.0,
@@ -647,8 +645,6 @@ GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
 GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
 # OpenAI-совместимые резервы: (адрес, ключ, модель из config, запасная модель при 404).
 _OPENAI_COMPATIBLE = {
-    "cerebras": ("https://api.cerebras.ai/v1/chat/completions",
-                 lambda: config.CEREBRAS_API_KEY, lambda: config.CEREBRAS_MODEL, "llama3.1-8b"),
     "github": ("https://models.github.ai/inference/chat/completions",
                lambda: config.GITHUB_API_KEY, lambda: config.GITHUB_MODEL, "openai/gpt-4o-mini"),
 }
@@ -1304,7 +1300,7 @@ def _compat_request(provider, messages, max_tokens, temperature):
 
 
 def _gen_compat(provider, prompt, max_tokens, temperature, response_mode: ResponseMode = "plain_text"):
-    """Cerebras и GitHub Models: бесплатные OpenAI-совместимые резервы."""
+    """GitHub Models: бесплатный OpenAI-совместимый резерв."""
     url, headers, payload = _compat_request(
         provider, [{"role": "user", "content": prompt}], max_tokens, temperature)
     if response_mode == "json":
@@ -1469,7 +1465,7 @@ def _reserve_gemini_for_action() -> bool:
 
 # Единая цепочка для всех текстовых AI-сценариев. Короткие окна каждой
 # попытки и общий дедлайн не дают первому провайдеру забрать время у резерва.
-AI_ORDER = ("gemini", "cerebras", "groq", "cf", "github", "openrouter")
+AI_ORDER = ("gemini", "groq", "cf", "github", "openrouter")
 SIMPLE_ORDER = AI_ORDER
 STANDARD_ORDER = AI_ORDER
 COMPLEX_ORDER = AI_ORDER
@@ -1481,7 +1477,6 @@ FOOD_ORDER = COMPLEX_ORDER
 
 # Явные пресеты: позволяют приоритизировать конкретный провайдер, не меняя код вызова по всему проекту.
 PROVIDER_ORDER = {
-    "cerebras": AI_ORDER,
     "github": AI_ORDER,
     "cf": AI_ORDER,
     "groq": AI_ORDER,
@@ -1494,7 +1489,7 @@ PROVIDER_ORDER = {
 # leisure → premium-маршрут для финальных рекомендаций
 # Короткие простые тексты по готовым данным (перевод сбоя NS, анонс статьи, шутка о погоде): сначала маленькие
 # модели — Groq gpt-oss-20b и Cloudflare, большие — резервом. Знаний о мире от них не ждём.
-LIGHT_ORDER = (GROQ_SIMPLE, "cf", "cerebras", "groq", "gemini", "github", "openrouter")
+LIGHT_ORDER = (GROQ_SIMPLE, "cf", "groq", "gemini", "github", "openrouter")
 
 TIERS = {
     "light":   (LIGHT_ORDER, None),
