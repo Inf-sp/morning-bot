@@ -520,8 +520,8 @@ def test_weather_warning_has_bold_labels_city_and_local_when(monkeypatch):
     styled = {(e.type, utf16[2 * e.offset:2 * (e.offset + e.length)].decode("utf-16-le")) for e in msg.entities}
     assert {("bold", "Город:"), ("bold", "Причины:"), ("bold", "Когда:")} <= styled
     assert not any(kind == "italic" for kind, _ in styled)
-    one = weather_ui.weather_warning(["Возможен гололёд."], "в течение дня", "🧊", city="Alkmaar")
-    assert one.text == "🧊 Погодное предупреждение\n\nГород: Alkmaar\nПричина: Возможен гололёд.\nКогда: в течение дня"
+    one = weather_ui.weather_warning(["Возможен гололёд."], "в течение дня", "❄️", city="Alkmaar")
+    assert one.text == "❄️ Погодное предупреждение\n\nГород: Alkmaar\nПричина: Возможен гололёд.\nКогда: в течение дня"
 
 
 def test_trip_menu_has_second_dessert_drink_or_snack(monkeypatch):

@@ -388,12 +388,12 @@ def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, cloud
 
 
 def period_title(period) -> str:
-    """Заголовок части суток одним знаком погоды: минус хотя бы в часть периода — ❄️ (с дождём — 🧊 гололёд),
+    """Заголовок части суток одним знаком погоды: минус хотя бы в часть периода — ❄️ (и с дождём — гололёд),
     иначе знак погоды периода: «❄️ Ночью», «🌧️ Днём», «✨ Вечером»."""
     frost = period.get("tmin", period["tmax"]) <= 0
     icon = period["icon"]
     if frost:
-        icon = "🧊" if icon in ("🌧️", "☀️🌧️") else icon if icon == "🌩️" else "❄️"
+        icon = icon if icon == "🌩️" else "❄️"
     return f"{icon} {period['label']}"
 
 

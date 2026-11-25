@@ -29,7 +29,7 @@ def test_cold_warning_formats_negative_temperature():
 
     events = [hazard.event(ctx) for hazard in weather_warn.evaluate(ctx)]
 
-    assert "🥶 Мороз, днём около -3°C." in events
+    assert "❄️ Мороз, днём около -3°C." in events
 
 
 def test_stale_fridge_buttons_open_the_shared_category_list(monkeypatch):

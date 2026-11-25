@@ -82,7 +82,7 @@ HAZARDS = [
             or (c.tmin is not None and c.tmin <= 0
                 and ((c.rain_mm or 0) > 0 or (c.humidity or 0) >= 90))
         ),
-        event=lambda c: "🧊 Возможен гололёд.",
+        event=lambda c: "❄️ Возможен гололёд.",
     ),
     WeatherHazard(
         key="storm_wind", priority=3,
@@ -116,7 +116,7 @@ HAZARDS = [
     WeatherHazard(
         key="cold", priority=8,
         triggers=lambda c: c.tmax is not None and c.tmax <= COLD_TMAX,
-        event=lambda c: f"🥶 Мороз, днём около {c.tmax:+.0f}°C.",
+        event=lambda c: f"❄️ Мороз, днём около {c.tmax:+.0f}°C.",
     ),
     WeatherHazard(
         key="fog", priority=9,

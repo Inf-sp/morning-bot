@@ -561,7 +561,7 @@ def test_tomorrow_period_marks_frost_and_ice():
     import weather
     cold = {"label": "Утром", "icon": "🌤️", "tmax": -1, "tmin": -3, "rain": 0, "rain_mm": 0, "winds": [2, 3]}
     assert weather._period_lines(cold)[:2] == [("❄️ Утром", None), ("Температура", "до -1°C")]  # минус — снежинка
-    assert weather.period_title({**cold, "label": "Ночью", "icon": "🌧️", "rain": 80}) == "🧊 Ночью"  # гололёд
+    assert weather.period_title({**cold, "label": "Ночью", "icon": "🌧️", "rain": 80}) == "❄️ Ночью"  # гололёд — тоже снежинка
     wet = {**cold, "tmax": 1, "rain": 80, "rain_mm": 2.0}
     assert weather._period_lines(wet)[1:3] == [("Температура", "до +1°C · гололёд"), ("Осадки", "🌧️ дождь 80%")]
     warm = {**cold, "tmax": 5, "tmin": 2}
