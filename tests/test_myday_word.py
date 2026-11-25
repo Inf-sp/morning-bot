@@ -55,8 +55,8 @@ def test_day_summary_keeps_only_compact_weather_block():
 
 
 def test_day_wind_text_marks_only_wind_above_ten_as_strong():
-    assert _day_wind_text(10) == "Ветер до 10 м/с"
-    assert _day_wind_text(11) == "Сильный ветер до 11 м/с"
+    assert _day_wind_text(10) == "ветер до 10 м/с"
+    assert _day_wind_text(11) == "сильный ветер до 11 м/с"
 
 
 def test_myday_skips_language_material_when_learning_is_disabled(monkeypatch):
@@ -194,3 +194,17 @@ def test_quote_is_always_last():
     text = myday_ui.day_summary("Пт", "Alkmaar", weather_line="до +15°C", city_fact="Факт",
                                 read={"title": "T", "link": "https://q"}, quote_text="Цитата").text
     assert text.endswith("💭 «Цитата»") and text.index("📊") < text.index("💭")
+
+
+def test_premiere_and_article_lines_are_short():
+    from ui import myday as myday_ui
+    text = myday_ui.day_summary(
+        "Ср", "Alkmaar",
+        premiere={"kind": "movie", "title": "Билли и мир магии",
+                  "genres": "приключения, анимация, семейный, фэнтези, комедия", "country_label": "🇺🇸 USA"},
+        read={"title": "Connor Storrie живёт с Hudson Williams, чтобы снимать Heated Rivalry: «Это удивительно»",
+              "link": "https://p", "source": "PinkNews", "lang": "ENG", "minutes": 2}).text
+    assert "🎬 Премьера в кино: Билли и мир магии · приключения · анимация\n" in text  # два жанра, без USA
+    line = next(row for row in text.split("\n") if row.startswith("📰"))
+    assert line.endswith("… · PinkNews · 2 мин") and "ENG" not in line
+    assert len(line.split(": ", 1)[1].split(" · ")[0]) <= 61

@@ -675,7 +675,7 @@ def test_premiere_line_in_my_day():
     album = myday_ui.day_summary("Пт", "Alkmaar", premiere={"kind": "music", "artist": "Alvvays", "title": "Blue Rev",
                                                             "genre_label": "Инди", "country_label": "🇨🇦 CA"})
 
-    assert movie.text.endswith("🎬 Премьера в кино: Уличный боец · боевик · триллер · USA")
+    assert movie.text.endswith("🎬 Премьера в кино: Уличный боец · боевик · триллер")  # USA — обычная страна, не пишем
     assert any(e.type == "text_link" and e.url == "https://www.youtube.com/watch?v=t" for e in movie.entities)
     assert season.text.endswith("📺 Премьера сериала: Медведь · 5-й сезон")
     assert album.text.endswith("🎧 Новый альбом: Alvvays — «Blue Rev» · Инди · CA")

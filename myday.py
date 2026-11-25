@@ -353,7 +353,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 23  # 23 — без образа и блюда; кино, статья, город в цифрах, цитата последней; 22 — блюдо по времени суток, событие недели и статья дня из других разделов
+_DAY_CACHE_VERSION = 24  # 24 — короче: два жанра, заголовок статьи до 60, «облачно, до +2°», работы «до 30 ноября»; 23 — без образа и блюда; кино, статья, город в цифрах, цитата последней; 22 — блюдо по времени суток, событие недели и статья дня из других разделов
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -465,7 +465,7 @@ def _day_menu_kb(cid=None):
 def _day_wind_text(wind_ms):
     """Короткое обозначение ветра для сводки дня."""
     value = float(wind_ms or 0)
-    label = "Сильный ветер" if value > 10 else "Ветер"
+    label = "сильный ветер" if value > 10 else "ветер"
     return f"{label} до {value:.0f} м/с"
 
 def _event_of_day(cid, day=None):
@@ -649,19 +649,20 @@ def _build_day_text(cid, *, refresh_current=False):
             if rain_when:
                 rain_part += f", {rain_when}"
         elif weather._rain_real(rain, rain_mm):
-            rain_part = f"Дождь {rain_when}".rstrip()
+            rain_part = f"дождь {rain_when}".rstrip()
         else:
             rain_part = ""
         wind_part = _day_wind_text(display_wind_ms)
-        sky_part = "" if rain_part else f" и {weather.sky_word(clouds, code)}"
-        weather_line = (f"до {tmax:+.0f}°C{sky_part}" + (f" · {rain_part}" if rain_part else "")
-                        + f" · {wind_part}")
+        # «облачно, до +2° · ветер до 7 м/с»: сначала небо, затем температура; после «·» — со строчной.
+        # С дождём — он главный: «дождь днём, до +8° · ветер до 9 м/с».
+        lead = rain_part or weather.sky_word(clouds, code)
+        weather_line = f"{lead[:1].lower()}{lead[1:]}, до {tmax:+.0f}° · {wind_part}"
         import vacation
         local = vacation.local_tz(cid)  # в отпуске — часовой пояс места поездки, не Амстердама
         golden = (sun.evening_golden_range(s.get("lat"), s.get("lon"), datetime.now(local).date(), local)
                   if on("golden") else "")
         if golden:
-            weather_line += f" · Золотой час {golden}"
+            weather_line += f" · золотой час {golden}"
     else:
         rain = 0
         rain_mm = None

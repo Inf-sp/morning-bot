@@ -17,10 +17,13 @@ _MONTHS_GENITIVE = ("", "января", "февраля", "марта", "апр�
                     "июля", "августа", "сентября", "октября", "ноября", "декабря")
 
 
-def _works_period(start, end):
-    """«с 5 по 12 октября»; «с 30 сентября по 2 октября»; один день — «10 октября»."""
+def _works_period(start, end, today=None):
+    """«с 5 по 12 октября»; «с 30 сентября по 2 октября»; один день — «10 октября»; работы уже идут — только конец:
+    «до 30 ноября»."""
     if not start or not end:
         return ""
+    if today is not None and start <= today < end:
+        return f"до {end.day} {_MONTHS_GENITIVE[end.month]}"
     if start == end:
         return f"{start.day} {_MONTHS_GENITIVE[start.month]}"
     if start.month == end.month and start.year == end.year:
@@ -29,9 +32,23 @@ def _works_period(start, end):
 
 
 def _works_section(title):
-    """«Alkmaar - Hoorn» → «от Alkmaar до Hoorn»; без двух станций — как есть."""
+    """«Alkmaar – Uitgeest – Hoorn» → «Alkmaar - Hoorn» (крайние станции); без двух станций — как есть."""
     parts = [part.strip() for part in re.split(r"\s[-–—]\s", str(title or "")) if part.strip()]
-    return f"от {parts[0]} до {parts[-1]}" if len(parts) >= 2 else str(title or "").strip()
+    return f"{parts[0]} - {parts[-1]}" if len(parts) >= 2 else str(title or "").strip()
+
+
+def _works_level(level) -> str:
+    """«Меньше поездов.» → «меньше поездов»: продолжение строки после «·», без точки."""
+    level = str(level or "").strip().rstrip(".")
+    return f"{level[:1].lower()}{level[1:]}" if level else ""
+
+
+def _works_text(works, today=None) -> str:
+    """«Haarlem - Alkmaar до 30 ноября · меньше поездов»: участок и даты слитно, дальше — что с поездами."""
+    period = _works_period(works.get("start"), works.get("end"), today)
+    joiner = " " if period.startswith(("с ", "до ")) else " · "  # «… до 30 ноября», но «Station Alkmaar · 10 октября»
+    head = joiner.join(part for part in (_works_section(works.get("title")), period) if part)
+    return " · ".join(part for part in (head, _works_level(works.get("level"))) if part)
 
 
 def _split_word_translation(value):
@@ -164,6 +181,19 @@ def holidays_eve(city, lines):
     return b.build_stripped()
 
 
+_USUAL_COUNTRIES = {"US", "USA", "GB", "UK"}
+_PREMIERE_GENRES = 2  # жанров в строке премьеры: больше — шум
+_READ_TITLE_MAX = 60  # заголовок статьи дня — в одну строку на телефоне
+
+
+def _clip_title(text) -> str:
+    """Заголовок до _READ_TITLE_MAX по слову с «…»; короткий — как есть."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= _READ_TITLE_MAX:
+        return text
+    return text[:_READ_TITLE_MAX].rsplit(" ", 1)[0].rstrip(",;:—-–«\"' ") + "…"
+
+
 _PREMIERE_LABEL = {"movie": ("🎬", "Премьера в кино"), "series": ("📺", "Премьера сериала"),
                    "music": ("🎧", "Новый альбом")}
 
@@ -174,13 +204,15 @@ def _premiere_line(b: MessageBuilder, item) -> None:
     kind = item.get("kind")
     emoji, label = _PREMIERE_LABEL.get(kind, _PREMIERE_LABEL["movie"])
     country = str(item.get("country_label") or "").strip().partition(" ")[2]  # «🇺🇸 USA» → «USA»
+    country = "" if country.upper() in _USUAL_COUNTRIES else country  # страна — только неожиданная, как в Досуге
     if kind == "music":
         name, url = item.get("artist"), youtube_music_link(item.get("artist"), item.get("title"))
         meta = [f"«{item['title']}»" if item.get("title") else "", item.get("genre_label"), country]
     else:
         name, url = item.get("title") if kind == "movie" else item.get("name"), trailer_link(item)
         season = int(item.get("season_number") or 0)
-        genres = str(item.get("genres") or "").replace(", ", " · ")
+        genres = " · ".join([genre.strip() for genre in str(item.get("genres") or "").split(",")
+                             if genre.strip()][:_PREMIERE_GENRES])
         meta = [f"{season}-й сезон" if kind == "series" and season > 1 else "", genres, country]
     name = " ".join(str(name or "").split())
     if not name:
@@ -282,11 +314,9 @@ def day_summary(
 
     # Плановые работы NS на станциях города — только в дни работ.
     for works in rail_works or []:
-        title = _works_section(works.get("title"))
-        period = _works_period(works.get("start"), works.get("end"))
-        # Одной строкой: участок · даты · что с поездами («Меньше поездов.»).
-        level = str(works.get("level") or "")
-        text = " · ".join(part for part in (title, period, f"{level[:1].upper()}{level[1:]}." if level else "") if part)
+        # Одной строкой: «Haarlem - Alkmaar до 30 ноября · меньше поездов» (идут — без начала).
+        from util import local_today
+        text = _works_text(works, local_today())
         if text:
             b.text_line("🚧 ")
             b.labeled_line("Работы на ЖД", text, lowercase=False)
@@ -368,15 +398,14 @@ def day_summary(
     if premiere:
         _premiere_line(b, premiere)
 
-    # Статья дня из «Статей»: «📰 Статья дня: Заголовок · Quanta · 8 мин».
+    # Статья дня из «Статей»: «📰 Статья дня: Заголовок до 60 символов… · Quanta · 8 мин».
     if read and str(read.get("title") or "").strip() and str(read.get("link") or "").startswith("http"):
         minutes = int(read.get("minutes") or 0)
         b.text_line("📰 ")
         b.label("Статья дня")
         b.text_line(" ")
-        b.link(" ".join(str(read["title"]).split()), str(read["link"]))
-        meta = [str(read.get("source") or "").strip(), str(read.get("lang") or "").strip(),
-                f"{minutes} мин" if minutes else ""]
+        b.link(_clip_title(read["title"]), str(read["link"]))
+        meta = [str(read.get("source") or "").strip(), f"{minutes} мин" if minutes else ""]  # язык — в «Статьях»
         if any(meta):
             b.text_line(" · " + " · ".join(value for value in meta if value))
         b.newline()
@@ -434,10 +463,8 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
         values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
         extra.append((emoji, "Премьера", " · ".join([card["name"], *values])))
     for works in plan.get("works") or []:
-        title = _works_section(works.get("title"))
-        level = str(works.get("level") or "")
         extra.append(("🚧", "Работы на ЖД", " · ".join(part for part in (
-            title, f"{level[:1].upper()}{level[1:]}." if level else "") if part)))
+            _works_section(works.get("title")), _works_level(works.get("level"))) if part)))
     if extra:
         b.spacer()
         for emoji, label, value in extra:

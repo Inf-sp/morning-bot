@@ -138,8 +138,8 @@ def test_day_summary_shows_works_period_above_weather():
     ])
 
     # Что меняет планы — первым, погода под ним.
-    assert msg.text.split("\n\n")[1:] == ["🚧 Работы на ЖД: от Alkmaar до Den Helder · с 10 по 12 октября",
-                                          "🚧 Работы на ЖД: от Alkmaar до Uitgeest · с 30 сентября по 2 октября",
+    assert msg.text.split("\n\n")[1:] == ["🚧 Работы на ЖД: Alkmaar - Den Helder с 10 по 12 октября",
+                                          "🚧 Работы на ЖД: Alkmaar - Uitgeest с 30 сентября по 2 октября",
                                           "🌡️ Погода: до +15°C"]
     one_day = myday_ui.day_summary("Сб", "Alkmaar", rail_works=[
         {"title": "Station Alkmaar", "start": _date(2026, 10, 10), "end": _date(2026, 10, 10)}])
@@ -263,7 +263,11 @@ def test_practical_info_sections_level_alternative_extra_and_advice():
     works = {**ns_api.parse_works(PRACTICAL, _date(2026, 10, 11)),
              "alternative": "автобусы между Alkmaar и Hoorn", "advice": "езжай через Zaandam"}
     text = myday_ui.day_summary("Вс", "Alkmaar", rail_works=[works]).text
-    assert "🚧 Работы на ЖД: от Alkmaar до Hoorn · с 10 по 12 октября · Поездов нет или почти нет." in text
+    assert "🚧 Работы на ЖД: Alkmaar - Hoorn с 10 по 12 октября · поездов нет или почти нет" in text
+    # Работы уже идут — только конец: «Haarlem - Alkmaar до 30 ноября · меньше поездов».
+    assert myday_ui._works_text({"title": "Haarlem – Alkmaar", "start": _date(2026, 11, 25), "end": _date(2026, 11, 30),
+                                 "level": "Меньше поездов."}, _date(2026, 11, 26)) == \
+        "Haarlem - Alkmaar до 30 ноября · меньше поездов"
     alert = transport_ui.ns_alert("Alkmaar", {**ns_api.parse_disruption({**RAW, **{
         k: PRACTICAL[k] for k in ("publicationSections",)}}), "situation": "меньше поездов",
         "cause": "неисправный поезд", "alternative": "автобусы", "advice": "езжай через Zaandam"}).text
