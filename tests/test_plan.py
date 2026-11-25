@@ -7,8 +7,9 @@ from ui import myday as myday_ui
 def test_plan_has_weather_and_everything_for_tomorrow():
     msg = myday_ui.tomorrow_plan({
         "day": date(2026, 11, 25), "city": "Alkmaar", "cc": "NL", "flag": "🇳🇱",
-        "weather": [{"title": "❄️ Утром", "temp": "до -1°C", "rain": "без дождя", "wind": "ветер 4 м/с"},
-                    {"title": "🌤️ Днём", "temp": "до +3°C", "rain": "без дождя", "wind": "ветер 4–5 м/с"}],
+        "weather": {"icon": "❄️", "line": "облачно, от -1° до +3° · ветер до 5 м/с · наледь утром",
+                    "take": ["шапку", "перчатки"]},
+        "light": "08:21–16:35",
         "official": ["Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00"],
         "holidays": [{"date": "2026-11-25", "name": "Sinterklaasavond", "about": "вечер подарков"}],
         "events": [{"kind": "city", "name": "Ice rink on Waagplein", "date": "2026-11-20", "end": "2027-01-03",
@@ -18,7 +19,8 @@ def test_plan_has_weather_and_everything_for_tomorrow():
         "works": []})
     assert msg.text == (
         "План на завтра · Ср, 25 ноября · Alkmaar, NL 🇳🇱\n\n"
-        "❄️ Утром: до -1°C · без дождя · ветер 4 м/с\n🌤️ Днём: до +3°C · без дождя · ветер 4–5 м/с\n\n"
+        "❄️ Погода: облачно, от -1° до +3° · ветер до 5 м/с · наледь утром\n🌅 Светло: 08:21–16:35\n"
+        "🧤 Возьми: шапку и перчатки.\n\n"
         "⚠️ Предупреждение: Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00.\n"
         "🎉 Праздник: Sinterklaasavond — вечер подарков.\n"
         "🏙️ Городское событие: Ice rink on Waagplein · Waagplein · бесплатно\n"
@@ -36,6 +38,7 @@ def test_collect_takes_tomorrows_events_and_premieres(monkeypatch):
     import config
     monkeypatch.setattr(plan.store, "get_settings", lambda _cid: {"city": "Alkmaar", "cc": "DE"})
     monkeypatch.setattr(plan, "_weather_periods", lambda *_a: [])
+    monkeypatch.setattr(plan, "daylight", lambda *_a: "")
     monkeypatch.setattr(leisure_events, "feed", lambda _cid: [
         {"kind": "city", "name": "Rink", "date": "2026-11-20", "end": "2027-01-03"},
         {"kind": "concert", "name": "Today", "date": "2026-11-24", "end": "2026-11-24"},
@@ -43,3 +46,24 @@ def test_collect_takes_tomorrows_events_and_premieres(monkeypatch):
     found = plan.collect("42", now=datetime(2026, 11, 24, 20, tzinfo=config.TZ))
     assert [card["name"] for card in found["events"]] == ["Rink"]  # сегодняшний концерт — не в плане на завтра
     assert [card["name"] for card in found["premieres"]] == ["Дюна"]
+
+
+def _period(label, tmin, tmax, rain=0, rain_mm=0.0, icon="☁️"):
+    return {"label": label, "tmin": tmin, "tmax": tmax, "rain": rain, "rain_mm": rain_mm, "winds": [3, 6],
+            "clouds": 90, "code": 3, "icon": icon}
+
+
+def test_tomorrow_weather_is_one_line_without_minus_zero():
+    day = plan.weather_day([_period("Утром", -0.4, 1), _period("Днём", 1, 2), _period("Вечером", -0.3, -0.2)])
+    assert day == {"icon": "❄️", "line": "облачно, от 0° до +2° · ветер до 6 м/с · наледь утром и вечером",
+                   "take": ["шапку", "перчатки"]}
+    rainy = plan.weather_day([_period("Утром", 6, 8), _period("Днём", 8, 11, rain=80, rain_mm=3, icon="🌧️"),
+                              _period("Вечером", 7, 9, rain=70, rain_mm=1, icon="🌧️")])
+    assert rainy == {"icon": "🌧️", "line": "дождь днём и вечером, от +6° до +11° · ветер до 6 м/с",
+                     "take": ["шарф", "зонт"]}
+    assert plan.weather_day([]) == {}
+
+
+def test_daylight_from_coordinates_without_network():
+    light = plan.daylight({"lat": 52.63, "lon": 4.75, "_cid": "42"}, date(2026, 11, 26))
+    assert light.startswith("08:") and "–16:" in light

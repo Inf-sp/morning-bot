@@ -430,9 +430,9 @@ def day_summary(
 
 
 def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
-    """«🗓️ План на завтра · ср, 25 ноября»: «**Город:**», «**Погода:**» и строки частей суток «❄️ Утром: до -1°C ·
-    без дождя · ветер 4 м/с», затем по строке «**Подпись:** значение» — KNMI, праздник, события, концерты, премьеры,
-    работы на ЖД (только то, что есть); пусто — курсивом «Завтра без особых событий»."""
+    """«План на завтра · Чт, 26 ноября · Alkmaar, NL 🇳🇱», затем «❄️ **Погода:** облачно, от 0° до +2° · ветер до
+    6 м/с · наледь утром и вечером», «🌅 **Светло:** 08:22–16:35», «🧤 **Возьми:** шапку и перчатки.», ниже по строке
+    «**Подпись:** значение» — KNMI, праздник, события, премьеры, работы на ЖД; пусто — курсивом «Завтра без событий»."""
     from ui import leisure as leisure_ui
     from util import _MONTHS
     day = plan["day"]
@@ -444,10 +444,21 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
     b.bold(" · ".join(part for part in ("План на завтра", f"{weekdays[day.weekday()]}, {day.day} {_MONTHS[day.month - 1]}",
                                         place) if part))
     b.newline()
-    if plan.get("weather"):  # что это погода — и так понятно: сразу части суток
+    weather_day = plan.get("weather") or {}
+    lines = []  # погода одной строкой, световой день, что взять — первым блоком
+    if weather_day.get("line"):
+        lines.append((weather_day.get("icon") or "🌡️", "Погода", weather_day["line"]))
+    if plan.get("light"):
+        lines.append(("🌅", "Светло", plan["light"]))
+    if weather_day.get("take"):
+        take = weather_day["take"]
+        lines.append(("🧤", "Возьми", finish_dot(" и ".join(take) if len(take) <= 2
+                                                 else ", ".join(take[:-1]) + " и " + take[-1])))
+    if lines:
         b.spacer()
-        for part in plan["weather"]:
-            b.line(f"{part['title']}: {part['temp']} · {part['rain']} · {part['wind']}")
+        for emoji, label, value in lines:
+            b.text_line(f"{emoji} ")
+            b.labeled_line(label, value)
     extra = []
     for line in plan.get("official") or []:  # «Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00»
         extra.append(("⚠️", "Предупреждение", finish_dot(line)))
@@ -463,8 +474,7 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
         values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
         extra.append((emoji, "Премьера", " · ".join([card["name"], *values])))
     for works in plan.get("works") or []:
-        extra.append(("🚧", "Работы на ЖД", " · ".join(part for part in (
-            _works_section(works.get("title")), _works_level(works.get("level"))) if part)))
+        extra.append(("🚧", "Работы на ЖД", _works_text(works, plan["day"])))  # «… до 30 ноября · меньше поездов»
     if extra:
         b.spacer()
         for emoji, label, value in extra:
