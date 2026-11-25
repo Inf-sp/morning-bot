@@ -753,7 +753,14 @@ def get_upcoming_theatrical_releases(country_code, start_date, end_date, languag
         empty_ttl=60 * 60,
         error_ttl=15 * 60,
     )
-    filtered = [movie for movie in movies if movie.release_date and start_date <= movie.release_date <= end_date]
+    # Дата — прокат в стране пользователя (release_dates региона), а не мировая премьера: в карточке «в кино с …».
+    # Проверяем не больше 30 самых популярных; региональной даты нет — остаётся дата TMDb для региона.
+    filtered = []
+    for movie in sorted(movies, key=lambda movie: -(movie.popularity or 0.0))[:30]:
+        local = _regional_theatrical_release_date(movie.id, country_code) if movie.id else None
+        release = local or movie.release_date
+        if release and start_date <= release <= end_date:
+            filtered.append(replace(movie, release_date=release, is_theatrical=bool(local) or movie.is_theatrical))
     ranked = list(enumerate(filtered))
     ranked.sort(key=lambda pair: (
         pair[1].release_date,

@@ -1108,6 +1108,30 @@ def week_items(kind, rows) -> list:
 
 
 _PREMIERE_TYPE = {"movie": "Фильм", "series": "Сериал", "music": "Музыкальный альбом"}
+_MONTHS_NOMINATIVE = ("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь",
+                      "ноябрь", "декабрь")
+_PREMIERE_DATE_KEYS = {"movie": ("date", "release_date"), "series": ("release_date", "air_date", "date"),
+                       "music": ("date", "release_date")}
+_PREMIERE_DATE_PREFIX = {"movie": "в кино с ", "series": "с "}
+
+
+def premiere_date(kind, item) -> str:
+    """Дата премьеры — всегда: у фильма — прокат в стране пользователя («в кино с 28 ноября 2026»), у сериала —
+    старт («с 3 декабря 2026»), у альбома — день выхода; дня нет — месяц и год («декабрь 2026»), только год — год;
+    совсем нет — «дата пока неизвестна»."""
+    raw = next((str(_item_value(item, key, "") or "").strip() for key in _PREMIERE_DATE_KEYS.get(kind, ("date",))
+                if str(_item_value(item, key, "") or "").strip()), "")
+    day = _parse_event_date(raw[:10]) if len(raw) >= 10 else None
+    prefix = _PREMIERE_DATE_PREFIX.get(kind, "")
+    if day:
+        return prefix + _format_date_label(day, include_year=True)
+    if re.match(r"\d{4}-(0[1-9]|1[0-2])(?!\d)", raw):  # только месяц: «с декабря 2026» / «декабрь 2026»
+        from util import _MONTHS
+        month = int(raw[5:7]) - 1
+        return f"{prefix}{_MONTHS[month]} {raw[:4]}" if prefix else f"{_MONTHS_NOMINATIVE[month]} {raw[:4]}"
+    if re.match(r"\d{4}(?!\d)", raw):  # только год
+        return f"{prefix.replace(' с ', ' ').removesuffix('с ')}в {raw[:4]} году" if prefix else f"{raw[:4]} год"
+    return "дата пока неизвестна"
 _RELEASE_TYPES = {"сингл": "Сингл", "EP": "EP"}
 
 
@@ -1135,7 +1159,9 @@ def premiere_card(feed, index=0) -> MessageSpec:
     b.newline()
     # Что это за карточка — первым: «Фильм · драма · 🇩🇪 DE»; у сингла и EP вместо «Музыкальный альбом» — их тип.
     release = next((value for value in values if value in _RELEASE_TYPES), "") if kind == "music" else ""
-    values = [_RELEASE_TYPES.get(release) or _PREMIERE_TYPE[kind], *(value for value in values if value != release)]
+    # Дата премьеры — сразу за типом, всегда («Фильм · в кино с 28 ноября 2026 · драма»).
+    values = [_RELEASE_TYPES.get(release) or _PREMIERE_TYPE[kind], premiere_date(kind, item),
+              *(value for value in values if value != release)]
     b.line(" · ".join(values))
     about = _hub_about(item.get("note") or about)  # описание премьеры (AI), без него — начало описания источника
     if about:

@@ -90,7 +90,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     from datetime import date, timedelta
 
     movies = [{"title": f"Фильм {i}", "overview": "Описание.", "popularity": 10 - i} for i in range(9)]
-    series = [{"kind": "tv", "name": "Суд", "network": "HBO", "overview": "Описание.", "genres": "Драма",
+    series = [{"kind": "tv", "name": "Суд", "network": "HBO", "release_date": "2026-10-14", "overview": "Описание.", "genres": "Драма",
                "origin_country": ["US"], "url": "https://tmdb.example/tv/1"},
               {"kind": "tv", "name": "Без жанра", "overview": "Описание.", "origin_country": ["US"]},
               {"kind": "tv", "name": "Без страны", "overview": "Описание.", "genres": "Драма"}]
@@ -107,7 +107,8 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     items = leisure_ui.week_items("movie", films)
     card = leisure_ui.premiere_card([("movie", item) for item in items], 0)
     # Карточка ленты: имя, метаданные, описание; ← 1/7 → по кругу, «Назад» — в хаб.
-    assert card.text == "🎬 Фильм 0\n\nФильм\n\nОписание."  # что это за карточка — первой строкой метаданных
+    # Что это за карточка — первой строкой метаданных, сразу дата премьеры (у тестовых фильмов её нет).
+    assert card.text == "🎬 Фильм 0\n\nФильм · дата пока неизвестна\n\nОписание."
     assert _labels(card.reply_markup) == [["Не интересно"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert _callbacks(card.reply_markup) == ["lz_prem_x_0", "lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
     assert card.reply_markup.inline_keyboard[0][0].api_kwargs == {"style": "danger"}
@@ -118,18 +119,18 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Сериалы — без жанра или страны не попадают.
     series_items = leisure_ui.week_items("series", leisure_hub.week_data("42", "series", day=monday))
     tab = leisure_ui.premiere_card([("series", item) for item in series_items])
-    assert tab.text == "📺 Суд\n\nСериал · драма · 🇺🇸 USA · HBO\n\nОписание."
+    assert tab.text == "📺 Суд\n\nСериал · с 14 октября 2026 · драма · 🇺🇸 USA · HBO\n\nОписание."
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
     assert _labels(tab.reply_markup) == [["Не интересно"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
 
     album = leisure_ui.premiere_card([("music", {
-        "title": "Blue Rev", "artist": "Alvvays", "genre_label": "Инди", "country_label": "🇨🇦 CA",
+        "title": "Blue Rev", "artist": "Alvvays", "date": "2026-10-16", "genre_label": "Инди", "country_label": "🇨🇦 CA",
         "url": "https://music.example/a", "about": "Мечтательный инди-поп.",
         "note": "Мечтательный инди-поп с шумными гитарами. Третий альбом группы. Лишнее третье предложение."})])
     # Сначала исполнитель; описание премьеры — не больше двух предложений.
-    assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nМузыкальный альбом · Инди · 🇨🇦 CA\n\n"
+    assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nМузыкальный альбом · 16 октября 2026 · Инди · 🇨🇦 CA\n\n"
                           "Мечтательный инди-поп с шумными гитарами. Третий альбом группы.")
     empty = leisure_ui.premiere_card([])
     assert empty.text == "🆕 Премьеры недели\n\nПремьер на эту неделю пока нет."
@@ -813,8 +814,9 @@ def test_not_interested_hides_the_premiere_for_good(monkeypatch):
 
 
 def test_single_premiere_says_it_is_a_single():
-    card = leisure_ui.premiere_card([("music", {"title": "Hit", "artist": "A", "genre_label": "сингл"})])
-    assert card.text.split("\n")[2] == "Сингл"
+    card = leisure_ui.premiere_card([("music", {"title": "Hit", "artist": "A", "genre_label": "сингл",
+                                                "date": "2026-11-27"})])
+    assert card.text.split("\n")[2] == "Сингл · 27 ноября 2026"
 
 
 def test_holidays_tab_shows_month_of_holidays_and_events(monkeypatch):
@@ -859,3 +861,11 @@ def test_holidays_tab_shows_month_of_holidays_and_events(monkeypatch):
     assert "IJsbaan" not in text  # только заявка на разрешение — не показываем как подтверждённое
     assert "Бесплатных событий · 1" in text and len(seen) == 3  # поиск на английском: афиша, зима, культура
     assert routing.resolve_callback_handler("lz_holidays")["handled"]
+
+
+def test_premiere_card_always_has_a_date_in_users_country_or_month_and_year():
+    film = {"title": "Wicked", "date": "2026-11-28", "genres": "мюзикл", "overview": "О."}
+    assert leisure_ui.premiere_card([("movie", film)]).text.split("\n")[2] == "Фильм · в кино с 28 ноября 2026 · мюзикл"
+    assert leisure_ui.premiere_date("series", {"release_date": "2026-12"}) == "с декабря 2026"  # дня нет — месяц и год
+    assert leisure_ui.premiere_date("music", {"date": "2027"}) == "2027 год"
+    assert leisure_ui.premiere_date("series", {}) == "дата пока неизвестна"
