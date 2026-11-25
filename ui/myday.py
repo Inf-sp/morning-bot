@@ -241,15 +241,12 @@ def day_summary(
     word_lang="nl",
     word_title="Фраза дня",
     movie_rebus=None,
-    outfit_items=None,
-    outfit_emoji="🧶",
     quote_text="",
     quote_author="",
     rail_works=None,
     holidays=None,
     vacation=None,
     premiere=None,
-    meal=None,
     event=None,
     read=None,
     city_fact="",
@@ -273,13 +270,13 @@ def day_summary(
     b.newline()
     b.spacer()
 
-    # Порядок — по срочности: что меняет планы (работы на ЖД), погода, праздники и события, затем фраза, образ,
-    # цитата. Цитата — только если сводка не длиннее _MAX_BLOCKS строк: в насыщенный день она лишняя.
+    # Порядок — по срочности: что меняет планы (работы на ЖД), погода, праздники, фраза, затем событие, кино,
+    # статья, город в цифрах и последней — цитата. Цитата — только если сводка не длиннее _MAX_BLOCKS строк: в насыщенный день она лишняя.
     blocks = sum((
         len(rail_works or []), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
-        bool(word_line or movie_rebus), bool([item for item in outfit_items or [] if str(item).strip()]),
+        bool(word_line or movie_rebus),
         bool(str((vacation.get("try_dish") or {}).get("name") or "").strip()),
-        bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(meal), bool(event), bool(read),
+        bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(event), bool(read),
         bool(city_fact),
     ))
 
@@ -336,17 +333,6 @@ def day_summary(
         b.newline()
         b.spacer()
 
-    outfit = ", ".join(
-        str(item).strip()
-        for item in (outfit_items or [])
-        if str(item).strip()
-    )
-    outfit = cap_sentence(outfit)
-    if outfit:
-        b.text_line(f"{str(outfit_emoji or '👕').strip()} ")
-        b.labeled_line("Образ", finish_dot(outfit), lowercase=False)
-        b.spacer()
-
     # В отпуске — блюдо, которое стоит попробовать сегодня (главное в меню Кухни).
     dish = vacation.get("try_dish") or {}
     if str(dish.get("name") or "").strip():  # «🍽 Попробовать: Банни чоу — хлеб с карри.»: название и очень коротко
@@ -361,21 +347,6 @@ def day_summary(
     if country_fact:
         b.text_line("💡 ")
         b.labeled_line("Факт дня", finish_dot(_short_fact(country_fact)), lowercase=False)
-        b.spacer()
-
-    # Блюдо Кухни по времени суток: «🍳 Завтрак: Шакшука (яйца в томатах).»
-    if meal and str(meal.get("name") or "").strip():
-        note = str(meal.get("note") or "").strip()
-        b.text_line("🍳 ")
-        b.labeled_line(meal.get("label") or "Блюдо", finish_dot(str(meal["name"]).strip()
-                                                               + (f" ({note[:1].lower()}{note[1:]})" if note else "")),
-                       lowercase=False)
-        b.spacer()
-
-    # Город в цифрах (CBS): «📊 Город в цифрах: В Alkmaar живёт 110 000 человек — данные CBS за 2025 год.»
-    if str(city_fact or "").strip():
-        b.text_line("📊 ")
-        b.labeled_line("Город в цифрах", finish_dot(str(city_fact).strip()), lowercase=False)
         b.spacer()
 
     # Ближайшее событие недели из «Событий» Досуга: «🎫 Концерт: Muse · 28 ноября 2026 · Ziggo Dome, Amsterdam».
@@ -409,6 +380,12 @@ def day_summary(
         if any(meta):
             b.text_line(" · " + " · ".join(value for value in meta if value))
         b.newline()
+        b.spacer()
+
+    # Город в цифрах (CBS): «📊 Город в цифрах: В Alkmaar живёт 110 000 человек — данные CBS за 2025 год.»
+    if str(city_fact or "").strip():
+        b.text_line("📊 ")
+        b.labeled_line("Город в цифрах", finish_dot(str(city_fact).strip()), lowercase=False)
         b.spacer()
 
     quote_text = str(quote_text or "").strip().strip("«»\"")

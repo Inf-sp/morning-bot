@@ -60,6 +60,7 @@ class CinemaMovie:
     is_theatrical: bool
     vote_count: int = 0
     original_language: str = ""
+    first_release: date | None = None  # мировая премьера: у перевыпуска старого фильма она давно прошла
 
 
 def _get(path, params, timeout=12, language=None):
@@ -726,6 +727,7 @@ def get_now_playing(country_code, language=_LANG, max_results=10):
             movie,
             release_date=theatrical_date,
             is_theatrical=True,
+            first_release=movie.release_date,
         ))
         if len(confirmed) >= limit:
             break
@@ -760,7 +762,8 @@ def get_upcoming_theatrical_releases(country_code, start_date, end_date, languag
         local = _regional_theatrical_release_date(movie.id, country_code) if movie.id else None
         release = local or movie.release_date
         if release and start_date <= release <= end_date:
-            filtered.append(replace(movie, release_date=release, is_theatrical=bool(local) or movie.is_theatrical))
+            filtered.append(replace(movie, release_date=release, is_theatrical=bool(local) or movie.is_theatrical,
+                                    first_release=movie.release_date))
     ranked = list(enumerate(filtered))
     ranked.sort(key=lambda pair: (
         pair[1].release_date,

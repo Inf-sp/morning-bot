@@ -353,7 +353,7 @@ def _movie_rebus_of_day(day):
     return leisure_movies.daily_movie_rebus(day)
 
 
-_DAY_CACHE_VERSION = 22  # 22 — блюдо по времени суток, событие недели и статья дня из других разделов
+_DAY_CACHE_VERSION = 23  # 23 — без образа и блюда; кино, статья, город в цифрах, цитата последней; 22 — блюдо по времени суток, событие недели и статья дня из других разделов
 _day_cache = {}  # cid -> {"date":..., "version":..., "text":..., "entities":..., "ts": float}
 
 def reset_day_cache(cid):
@@ -445,23 +445,9 @@ def _save_day_cache(cid, today, text, entities, ts):
     return cached
 
 
-def _ready_day_sections(cid):
-    """Готовые соседние карточки, которые сводка может показать без новой генерации."""
-    import wardrobe
-
-    import settings as user_settings
-    return {
-        "outfit": bool(wardrobe.get_cached_outfit_summary(cid).get("items")),
-        "meal": user_settings.myday_block_on(cid, "meal") and _meal_of_day(cid) is not None,
-    }
-
-
 def _cache_misses_ready_sections(cache, cid):
-    """Сводка собрана раньше, чем стали готовы образ или меню Кухни, — при открытии собрать заново."""
-    text = str((cache or {}).get("text") or "")
-    ready = _ready_day_sections(cid)
-    return ((ready["outfit"] and " Образ:" not in text)
-            or (ready["meal"] and not any(f" {label}:" in text for label in _MEAL_LABEL.values())))
+    """Сводка собрана раньше соседних карточек: образ и блюдо в «Моём дне» больше не показываются — пересборка не нужна."""
+    return False
 
 def _day_menu_kb(cid=None):
     import vacation
@@ -481,31 +467,6 @@ def _day_wind_text(wind_ms):
     value = float(wind_ms or 0)
     label = "Сильный ветер" if value > 10 else "Ветер"
     return f"{label} до {value:.0f} м/с"
-
-_PERIOD_MEAL = {"Утром": "breakfast", "Днём": "lunch", "Вечером": "dinner", "Ночью": "dinner"}
-_MEAL_LABEL = {"breakfast": "Завтрак", "lunch": "Обед", "dinner": "Ужин"}
-
-
-def _meal_of_day(cid):
-    """Блюдо Кухни по времени суток — утром завтрак, днём обед, вечером ужин — из меню дня (кэш, без AI и сети):
-    {"label": "Завтрак", "name": "Шакшука", "note": "яйца в томатах"}; меню нет — None."""
-    try:
-        import day_menu
-        menu = day_menu.get_cached_day_menu(cid)
-    except Exception:
-        _log.warning("myday: day menu unavailable", exc_info=True)
-        return None
-    dishes = (menu or {}).get("dishes") or {}
-    wanted = _PERIOD_MEAL.get(_weather_period(), "dinner")
-    order = ("breakfast", "lunch", "dinner")
-    for meal in (wanted, *order[order.index(wanted) + 1:], *order[:order.index(wanted)]):
-        dish = dishes.get(meal) or {}
-        if str(dish.get("name") or "").strip():
-            from ui import menu as menu_ui
-            return {"label": _MEAL_LABEL[meal], "name": dish["name"],
-                    "note": menu_ui._dish_hint(dish["name"], dish.get("note"))}
-    return None
-
 
 def _event_of_day(cid, day=None):
     """Событие дня — то, что идёт сегодня: концерт твоего артиста, иначе фестиваль, выставка или событие города
@@ -726,14 +687,11 @@ def _build_day_text(cid, *, refresh_current=False):
         word_line, word_lang = _word_of_day(cid) if learning_enabled and on("word") else ("", "")
     movie_rebus = {} if learning_enabled or trip.get("word") or not on("word") \
         else _movie_rebus_of_day(now.date())
-    import wardrobe
-    outfit_summary = wardrobe.get_cached_outfit_summary(cid) if on("outfit") else {"items": [], "emoji": ""}
     header = f"{weekday_name}, {now.day} {_MONTHS[now.month-1]}"
     quote = _daily_literary_quote(cid) if on("quote") else {}
     # В отпуске премьеры дня (новый альбом, кино) нет — сводка о поездке.
     premiere = _premiere_of_day(cid) if on("premiere") and not trip else None
-    # Из соседних разделов — по строке: блюдо по времени суток (Кухня), ближайшее событие недели и статья (Досуг).
-    meal = (None if trip else _meal_of_day(cid)) if on("meal") else None  # в отпуске — «Попробовать»
+    # Из соседних разделов — по строке: ближайшее событие недели и статья (Досуг); образа и блюда в сводке нет.
     event = _event_of_day(cid, now.date()) if on("leisure") else None
     read = _read_of_day(cid) if on("read") and not trip else None
     city_fact = _city_fact(s, now.date()) if on("city") and not trip else ""
@@ -752,15 +710,12 @@ def _build_day_text(cid, *, refresh_current=False):
         word_lang=word_lang,
         word_title=word_title,
         movie_rebus=movie_rebus,
-        outfit_items=outfit_summary["items"],
-        outfit_emoji=outfit_summary["emoji"],
         quote_text=_clip_quote(quote.get("quote", "")),
         quote_author=quote.get("src", ""),
         rail_works=_rail_works(cid) if on("rail") else [],
         holidays=_holidays(s, cid) if on("holidays") else [],
         vacation=trip,
         premiere=premiere,
-        meal=meal,
         event=event,
         read=read,
         city_fact=city_fact,
@@ -775,23 +730,6 @@ def _build_day_text(cid, *, refresh_current=False):
     for w in _uw:
         _log.warning("[verify] weather: %s", w)
     return text, msg.entities
-
-async def _prepare_outfit(bot, cid):
-    """Молча собирает образ дня для сводки; ошибка гардероба не блокирует «Мой день»."""
-    import settings as user_settings
-    import wardrobe
-    if not user_settings.myday_block_on(cid, "outfit"):
-        return  # блок «Образ дня» выключен — образ не готовим
-    try:
-        if not wardrobe.get_cached_outfit_summary(cid).get("items"):
-            import wardrobe_suitcase
-            if wardrobe_suitcase.trip_suitcase(cid):  # отпуск с чемоданом — образ на сегодня из плана поездки
-                await asyncio.to_thread(wardrobe_suitcase.plan, cid)
-            else:
-                await wardrobe.send_looks(bot, cid, silent=True)
-    except Exception as e:
-        _log.warning("myday: outfit prep failed: %s", e)
-
 
 async def send_plany(bot, cid, force=False, show_loading=True, status=None, reply_markup=None):
     """Собирает и отправляет сводку «Мой день». При inline-действии статус
@@ -809,8 +747,6 @@ async def send_plany(bot, cid, force=False, show_loading=True, status=None, repl
                 await bot.send_chat_action(chat_id=cid, action="typing")
             except Exception:
                 _log.debug("send_plany: ignored error", exc_info=True)
-        # Сбой подготовки образа не должен ронять всю сводку дня.
-        await _prepare_outfit(bot, cid)
         try:
             text, entities = await asyncio.to_thread(
                 _build_day_text, cid, refresh_current=force,
@@ -850,8 +786,6 @@ async def warm_day_cache(cid, bot=None):
     cached = _load_day_cache(cid, today)
     if cached is not None and not _cache_misses_ready_sections(cached, cid):
         return True
-    if bot:
-        await _prepare_outfit(bot, cid)
     text, entities = await asyncio.to_thread(_build_day_text, cid)
     _save_day_cache(cid, today, text, entities, _time.time())
     return True

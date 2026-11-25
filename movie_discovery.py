@@ -114,6 +114,7 @@ def _movie_premiere_item(movie, today):
         "title": title,
         "original_title": str(getattr(movie, "original_title", "") or "").strip(),  # для поиска трейлера
         "date": release.isoformat(),
+        "first_release": (getattr(movie, "first_release", None) or release).isoformat(),
         "date_label": date_label,
         "genres": ", ".join(getattr(movie, "genres", None) or [])[:70],
         "overview": str(getattr(movie, "overview", "") or "").strip(),

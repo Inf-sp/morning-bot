@@ -25,7 +25,7 @@ from leisure_collection import (
 _log = logging.getLogger(__name__)
 
 
-_MOVIE_PREMIERES_CACHE_VERSION = 5
+_MOVIE_PREMIERES_CACHE_VERSION = 6  # 6 — мировая премьера (first_release): перевыпуски старых фильмов — не «Премьера в кино»
 _FAVORITE_MOVIE_VIEW_TTL = 24 * 3600
 _favorite_movie_views = {}
 _FAVORITE_MOVIE_GENRES = (

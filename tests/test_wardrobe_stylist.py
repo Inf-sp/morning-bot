@@ -185,7 +185,7 @@ def test_outfit_header_uses_emoji_of_selected_style():
     assert outfit_group({"primary_style": "Городской"}) == outfit_group({}) == "Повседневный"
 
 
-def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypatch):
+def test_outfit_summary_uses_every_visible_item_in_the_same_order(monkeypatch):
     look = {
         "primary_style": "Минимализм",
         "items": [
@@ -205,12 +205,6 @@ def test_myday_summary_uses_every_visible_outfit_item_in_the_same_order(monkeypa
     assert summary["items"] == outfit_item_names(look) == [
         "Белая футболка", "Чёрные брюки", "Белые кеды", "Серые часы",
     ]
-    message = day_summary(
-        "Вт, 1 сентября", "Алкмар",
-        outfit_items=summary["items"], outfit_emoji=summary["emoji"],
-    )
-    assert "🧢 Образ: Белая футболка, Чёрные брюки, Белые кеды, Серые часы." in message.text
-    assert "носки" not in message.text.casefold()
 
 
 def test_other_outfit_changes_the_base_not_one_random_item():

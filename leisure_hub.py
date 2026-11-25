@@ -565,13 +565,26 @@ def today_data(cid, day=None) -> dict:
     }
 
 
+NEW_RELEASE_DAYS = 120  # «Премьера в кино» — только если мировая премьера не раньше 4 месяцев до проката у нас
+
+
+def is_new_release(item) -> bool:
+    """Действительно новый фильм: мировая премьера (first_release) не старше NEW_RELEASE_DAYS до проката в стране;
+    перевыпуск старого фильма или прокат через год после мира — не премьера. Старый кэш без поля — по дате проката."""
+    local, first = str(item.get("date") or "")[:10], str(item.get("first_release") or item.get("date") or "")[:10]
+    try:
+        return (date.fromisoformat(local) - date.fromisoformat(first)).days <= NEW_RELEASE_DAYS
+    except ValueError:
+        return False
+
+
 def premiere_of_day(cid, day=None):
     """Премьера сегодня для «Моего дня» из кэшей Досуга, без сети и AI: новый сезон любимого сериала → альбом
     любимого артиста → фильм в кино (трендовые первыми) → сериал → альбом недели. Нет сегодняшней — None."""
     today = day or _today_and_cc(cid)[0]
     iso = today.isoformat()
     pools = _pools(cid, today)
-    movies = [item for item in pools["movies"][0] if str(item.get("date") or "")[:10] == iso]
+    movies = [item for item in pools["movies"][0] if str(item.get("date") or "")[:10] == iso and is_new_release(item)]
     series = [item for item in pools["series"][0] if str(item.get("release_date") or "")[:10] == iso]
     saved = (store.get_profile(cid) or {}).get("hub_music") or {}
     albums = [item for item in _with_favorites(cid, saved.get("items") or [], today)

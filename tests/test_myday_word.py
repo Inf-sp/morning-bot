@@ -31,37 +31,6 @@ def test_myday_inline_open_builds_a_missing_daily_cache(monkeypatch):
     assert status.replaced[0] == "Сводка готова"
 
 
-def test_myday_rebuilds_cached_summary_when_ready_sections_are_missing(monkeypatch):
-    class Status:
-        replaced = None
-
-        async def replace(self, text, **kwargs):
-            self.replaced = (text, kwargs)
-
-    stale = {
-        "text": "Мой день\n\n💭 Старая сводка.",
-        "entities": [],
-    }
-    rebuilt = ("Мой день\n\n🧥 Образ: Серая рубашка.", [])
-    monkeypatch.setattr(myday, "_load_day_cache", lambda *_args: stale)
-    monkeypatch.setattr(
-        myday, "_ready_day_sections",
-        lambda _cid: {"outfit": True},
-        raising=False,
-    )
-    monkeypatch.setattr(myday, "_build_day_text", lambda *_args, **_kwargs: rebuilt)
-    monkeypatch.setattr(
-        myday,
-        "_save_day_cache",
-        lambda *_args: {"text": rebuilt[0], "entities": rebuilt[1]},
-    )
-    status = Status()
-
-    asyncio.run(myday.send_plany(object(), "42", status=status))
-
-    assert "🧥 Образ:" in status.replaced[0]
-
-
 def test_myday_menu_offers_detailed_day_and_week_weather():
     keyboard = myday._day_menu_kb().inline_keyboard
     callbacks = [button.callback_data for row in keyboard for button in row]
@@ -202,32 +171,26 @@ def test_quote_comes_from_author_of_selected_country_without_repeats(monkeypatch
 def test_day_summary_drops_the_quote_on_a_busy_day():
     from ui import myday as myday_ui
     calm = myday_ui.day_summary("Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись",
-                                outfit_items=["Худи"], quote_text="Цитата", quote_author="Автор")
+                                quote_text="Цитата", quote_author="Автор")
     assert calm.text.endswith("💭 «Цитата» © Автор")
     busy = myday_ui.day_summary(
-        "Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись", outfit_items=["Худи"],
+        "Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись",
         holidays=["Сегодня: Sint Maarten — день святого Мартина", "Сегодня: Lichtjesavond — вечер огней"],
-        rail_works=[{"title": "Alkmaar – Uitgeest"}],
+        rail_works=[{"title": "Alkmaar – Uitgeest"}, {"title": "Haarlem – Alkmaar"}],
         premiere={"kind": "series", "name": "Медведь", "season_number": 5},
-        meal={"label": "Ужин", "name": "Пад тай", "note": "жареная лапша"},
         event={"kind": "concert", "name": "Muse", "url": "https://t", "date": "2026-11-28", "place": "Ziggo Dome"},
-        read={"title": "DNA repair", "link": "https://q", "source": "Quanta", "minutes": 8}, quote_text="Цитата")
+        read={"title": "DNA repair", "link": "https://q", "source": "Quanta", "minutes": 8},
+        city_fact="В Alkmaar живёт 110 000 человек", quote_text="Цитата")
     assert "Цитата" not in busy.text and busy.text.count("\n\n") == 10  # десять строк — без цитаты
-    assert "🍳 Ужин: Пад тай (жареная лапша)." in busy.text
-    assert "🎫 Концерт: Muse · 28 ноября 2026 · Ziggo Dome" in busy.text
-    assert "📰 Статья дня: DNA repair · Quanta · 8 мин" in busy.text
+    assert "Образ" not in busy.text and "🍳" not in busy.text  # образа и блюда в «Моём дне» нет
+    # Порядок: событие, кино, статья, город в цифрах.
+    order = [busy.text.index(part) for part in ("🎫 Концерт: Muse", "📺 Премьера сериала", "📰 Статья дня: DNA repair",
+                                                 "📊 Город в цифрах")]
+    assert order == sorted(order)
 
 
-def test_meal_of_day_follows_time_of_day(monkeypatch):
-    import day_menu
-    import myday
-    menu = {"dishes": {"breakfast": {"name": "Шакшука", "note": "яйца в томатах"},
-                       "lunch": {"name": "Том ям", "note": "острый суп"}, "dinner": {"name": "Пад тай"}}}
-    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: menu)
-    for period, label, name in (("Утром", "Завтрак", "Шакшука"), ("Днём", "Обед", "Том ям"),
-                                ("Вечером", "Ужин", "Пад тай")):
-        monkeypatch.setattr(myday, "_weather_period", lambda period=period: period)
-        meal = myday._meal_of_day("42")
-        assert (meal["label"], meal["name"]) == (label, name)
-    monkeypatch.setattr(day_menu, "get_cached_day_menu", lambda _cid: None)
-    assert myday._meal_of_day("42") is None  # меню нет — строки нет
+def test_quote_is_always_last():
+    from ui import myday as myday_ui
+    text = myday_ui.day_summary("Пт", "Alkmaar", weather_line="до +15°C", city_fact="Факт",
+                                read={"title": "T", "link": "https://q"}, quote_text="Цитата").text
+    assert text.endswith("💭 «Цитата»") and text.index("📊") < text.index("💭")

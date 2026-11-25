@@ -63,20 +63,9 @@ def test_day_summary_puts_quote_after_movie_rebus():
     assert message.text.encode("utf-16-le")[spoiler.offset * 2:(spoiler.offset + spoiler.length) * 2].decode("utf-16-le") == "Челюсти"
 
 
-def test_day_summary_outfit_keeps_capital_letter_after_label():
-    message = day_summary(
-        "Пн, 20 июля", "Алкмар",
-        outfit_items=["светло-серая рубашка", "чёрные брюки"],
-        outfit_emoji="👕",
-    )
-
-    assert "👕 Образ: Светло-серая рубашка, чёрные брюки" in message.text
-
-
 def test_day_summary_has_no_restaurant_line():
     message = day_summary(
         "Вт, 1 сентября", "Алкмар",
-        outfit_items=["Белая футболка", "Чёрные брюки"], outfit_emoji="👕",
     )
 
     assert "Куда сходить" not in message.text

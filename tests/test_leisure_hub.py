@@ -869,3 +869,13 @@ def test_premiere_card_always_has_a_date_in_users_country_or_month_and_year():
     assert leisure_ui.premiere_date("series", {"release_date": "2026-12"}) == "с декабря 2026"  # дня нет — месяц и год
     assert leisure_ui.premiere_date("music", {"date": "2027"}) == "2027 год"
     assert leisure_ui.premiere_date("series", {}) == "дата пока неизвестна"
+
+
+def test_movie_premiere_of_the_day_is_only_a_really_new_release():
+    import leisure_hub
+    # Новый фильм: мировая премьера за месяц до проката у нас — премьера.
+    assert leisure_hub.is_new_release({"date": "2026-11-25", "first_release": "2026-10-30"})
+    # Перевыпуск старого фильма или прокат через год после мира — не «Премьера в кино».
+    assert not leisure_hub.is_new_release({"date": "2026-11-25", "first_release": "2019-12-04"})
+    assert not leisure_hub.is_new_release({"date": "2026-11-25", "first_release": "2025-09-01"})
+    assert leisure_hub.is_new_release({"date": "2026-11-25"})  # старый кэш без поля — по дате проката
