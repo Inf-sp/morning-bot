@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from telegram import MessageEntity
 
 from .text import finish_dot
@@ -450,6 +451,8 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
         lines.append((weather_day.get("icon") or "🌡️", "Погода", weather_day["line"]))
     if plan.get("light"):
         lines.append(("🌅", "Светло", plan["light"]))
+    if plan.get("bike"):  # «🚲 Велосипед: сухо 08:00–13:00, потом дождь»
+        lines.append(("🚲", "Велосипед", plan["bike"]))
     if weather_day.get("take"):
         take = weather_day["take"]
         lines.append(("🧤", "Возьми", finish_dot(" и ".join(take) if len(take) <= 2
@@ -460,6 +463,10 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
             b.text_line(f"{emoji} ")
             b.labeled_line(label, value)
     extra = []
+    if plan.get("waste"):  # «♻️ Вывоз мусора: бумага и органика (GFT)» — выставить с вечера
+        kinds = plan["waste"]
+        extra.append(("♻️", "Вывоз мусора", " и ".join(kinds) if len(kinds) <= 2
+                      else ", ".join(kinds[:-1]) + " и " + kinds[-1]))
     for line in plan.get("official") or []:  # «Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00»
         extra.append(("⚠️", "Предупреждение", finish_dot(line)))
     for holiday in plan.get("holidays") or []:
@@ -473,8 +480,18 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
         emoji, label, meta = leisure_ui._event_meta(card)
         values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
         extra.append((emoji, "Премьера", " · ".join([card["name"], *values])))
+    for item in plan.get("concerts_soon") or []:  # «🎫 Через 3 дня: Muse · Ziggo Dome, Amsterdam»
+        days = (date.fromisoformat(item["date"]) - plan["day"]).days + 1
+        place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
+        extra.append(("🎫", f"Через {days} {'дня' if days < 5 else 'дней'}",
+                      " · ".join(part for part in (item.get("artist") or item.get("title"), place) if part)))
+    for item in plan.get("releases") or []:  # «🎧 Новый альбом: Muse — «Unravelling»»
+        kind = {"сингл": "Новый сингл", "EP": "Новый EP"}.get(item.get("genre_label"), "Новый альбом")
+        extra.append(("🎧", kind, f"{item.get('artist')} — «{item.get('title')}»"))
     for works in plan.get("works") or []:
         extra.append(("🚧", "Работы на ЖД", _works_text(works, plan["day"])))  # «… до 30 ноября · меньше поездов»
+    for works in plan.get("works_end") or []:  # «🚆 Поезда как обычно: Haarlem - Alkmaar — работы закончились»
+        extra.append(("🚆", "Поезда как обычно", f"{_works_section(works.get('title'))} — работы закончились"))
     if extra:
         b.spacer()
         for emoji, label, value in extra:

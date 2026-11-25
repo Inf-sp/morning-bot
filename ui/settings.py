@@ -20,6 +20,29 @@ def myday_blocks():
     return b.build_stripped()
 
 
+def waste_address_prompt():
+    b = MessageBuilder()
+    b.section("♻️ Вывоз мусора")
+    b.line("Напиши индекс и номер дома — например, 1811 AB 12.")
+    b.spacer()
+    b.italic("Адрес нужен только для календаря вывоза HVC: в «Плане на завтра» появится, что выставить с вечера.")
+    b.newline()
+    return b.build_stripped()
+
+
+def waste_address_error(looks_like_address):
+    b = MessageBuilder()
+    b.line("HVC не нашёл этот адрес или сейчас не отвечает — проверь индекс и номер дома и пришли ещё раз."
+           if looks_like_address else "Не похоже на адрес. Пример: 1811 AB 12.")
+    return b.build_stripped()
+
+
+def waste_address_saved(label):
+    b = MessageBuilder()
+    b.line(f"Готово: вывоз мусора по адресу {label} — в «Плане на завтра».")
+    return b.build_stripped()
+
+
 def notification_kind(label, *, has_time=True):
     """Экран одной рассылки: что приходит и когда."""
     b = MessageBuilder()

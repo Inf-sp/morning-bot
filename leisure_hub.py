@@ -265,6 +265,7 @@ def _with_favorites(cid, items, day) -> list:
     return (favorites + rest)[:_WEEK_TOP]
 
 
+_UPCOMING_RELEASE_DAYS = 7
 _FAVORITES_WARMING = set()  # чаты, где проверка релизов уже идёт: листание карточек не плодит запросы к Deezer
 
 
@@ -295,7 +296,9 @@ async def _warm_favorite_releases(cid):
     found, failed = [], 0
     for artist in leisure_music._ensure_artists(cid):
         try:
-            found.extend(await asyncio.to_thread(apple_music.artist_releases, artist, since, today))
+            # До недели вперёд: анонсированные релизы — для «Плана на завтра»; экраны показывают только вышедшие.
+            found.extend(await asyncio.to_thread(apple_music.artist_releases, artist, since,
+                                                 today + timedelta(days=_UPCOMING_RELEASE_DAYS)))
         except Exception:
             failed += 1
             _log.warning("favorite releases: deezer failed artist=%r", artist, exc_info=True)

@@ -67,3 +67,49 @@ def test_tomorrow_weather_is_one_line_without_minus_zero():
 def test_daylight_from_coordinates_without_network():
     light = plan.daylight({"lat": 52.63, "lon": 4.75, "_cid": "42"}, date(2026, 11, 26))
     assert light.startswith("08:") and "–16:" in light
+
+
+def _hourly(day, rain_from=None, windy_from=None):
+    hours = [f"{day}T{hour:02d}:00" for hour in range(24)]
+    return {"time": hours,
+            "precipitation_probability": [80 if rain_from is not None and hour >= rain_from else 0 for hour in range(24)],
+            "precipitation": [1.0 if rain_from is not None and hour >= rain_from else 0 for hour in range(24)],
+            "windspeed_10m": [12 if windy_from is not None and hour >= windy_from else 4 for hour in range(24)]}
+
+
+def test_bike_window_is_the_longest_dry_and_calm_stretch():
+    day = date(2026, 11, 26)
+    assert plan.bike_window(_hourly("2026-11-26", rain_from=13), day) == "сухо 07:00–13:00, потом дождь"
+    assert plan.bike_window(_hourly("2026-11-26", windy_from=16), day) == "тихо 07:00–16:00, потом сильный ветер"
+    assert plan.bike_window(_hourly("2026-11-26"), day) == ""  # весь день хорошо — и так видно по погоде
+    assert plan.bike_window(_hourly("2026-11-26", rain_from=0), day) == ""  # весь день дождь — окна нет
+
+
+def test_waste_address_and_tomorrows_collection(monkeypatch):
+    import waste
+    assert waste.parse_address("1811 ab, 12a") == {"postcode": "1811AB", "number": "12", "suffix": "a"}
+    assert waste.parse_address("Laat 12") is None
+    assert waste.label({"postcode": "1811AB", "number": "12", "suffix": ""}) == "1811 AB 12"
+    monkeypatch.setattr(waste, "_get", lambda path: [
+        {"title": "Papier en karton", "ophaaldatum": "2026-11-26"}, {"title": "GFT", "ophaaldatum": "2026-11-26"},
+        {"title": "Restafval", "ophaaldatum": "2026-12-01"}, {"title": "Glas", "ophaaldatum": None}])
+    monkeypatch.setattr(waste.util, "ttl_get", lambda *_a: None)
+    monkeypatch.setattr(waste.util, "ttl_set", lambda _ns, _key, value: value)
+    assert waste.on_day({"bagid": "b1"}, date(2026, 11, 26)) == ["бумага", "органика (GFT)"]
+    assert waste.on_day({}, date(2026, 11, 26)) == []  # адреса нет — строки нет
+
+
+def test_plan_shows_bike_waste_concert_soon_release_and_works_end():
+    text = myday_ui.tomorrow_plan({
+        "day": date(2026, 11, 26), "city": "Alkmaar", "cc": "NL", "flag": "🇳🇱",
+        "weather": {"icon": "🌧️", "line": "дождь днём, от +6° до +9° · ветер до 7 м/с", "take": ["зонт"]},
+        "light": "08:21–16:35", "bike": "сухо 07:00–12:00, потом дождь",
+        "waste": ["бумага", "органика (GFT)"],
+        "concerts_soon": [{"artist": "Muse", "date": "2026-11-28", "venue": "Ziggo Dome", "city": "Amsterdam"}],
+        "releases": [{"artist": "Muse", "title": "Unravelling", "genre_label": "сингл"}],
+        "works_end": [{"title": "Haarlem – Alkmaar"}]}).text
+    assert "🚲 Велосипед: сухо 07:00–12:00, потом дождь\n🧤 Возьми: зонт." in text
+    assert "♻️ Вывоз мусора: бумага и органика (GFT)" in text
+    assert "🎫 Через 3 дня: Muse · Ziggo Dome, Amsterdam" in text
+    assert "🎧 Новый сингл: Muse — «Unravelling»" in text
+    assert "🚆 Поезда как обычно: Haarlem - Alkmaar — работы закончились" in text

@@ -115,6 +115,8 @@ async def handle(update, context, remove_reply_keyboard):
         if kind == "suitcase_trip":  # «Кейптаун, 20–27 октября» — чемодан в поездку
             import wardrobe_suitcase
             await wardrobe_suitcase.trip_entered(bot, cid, text); return
+        if kind == "waste_address":
+            await settings.save_waste_address(bot, cid, text); return
         if kind == "concert_artist_search":
             import leisure_concerts
             await leisure_concerts.find_artist_concerts(bot, cid, text); return

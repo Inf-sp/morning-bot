@@ -14,20 +14,72 @@ from ui import myday as myday_ui
 _log = logging.getLogger(__name__)
 
 
-def _weather_periods(place, now):
-    """Утро, день и вечер завтра — по часам Open-Meteo во времени места (weather.forecast_periods); сбой — []."""
+def _weather_data(place):
+    """Прогноз Open-Meteo на 2 дня с почасовыми данными во времени места; сбой — {}."""
     import vacation
     import weather
     import weather_provider
     try:
         data = weather.fetch_weather(place["lat"], place["lon"], 2)
         hours = weather_provider.week_hourly(place["lat"], place["lon"], str(vacation.local_tz(place.get("_cid"))))
-        if hours:
-            data = {**data, "hourly": hours}
-        return weather.forecast_periods(data, now, day=1)
+        return {**data, "hourly": hours} if hours else data
     except Exception:
         _log.warning("plan: tomorrow weather unavailable", exc_info=True)
+        return {}
+
+
+def _weather_periods(data, now):
+    """Утро, день и вечер завтра (weather.forecast_periods); нет данных — []."""
+    import weather
+    try:
+        return weather.forecast_periods(data, now, day=1) if data else []
+    except Exception:
+        _log.warning("plan: tomorrow periods failed", exc_info=True)
         return []
+
+
+BIKE_HOURS = (7, 22)  # окно поездок: с 7 до 22
+BIKE_RAIN_MAX = 30  # %: вероятность дождя выше — час «мокрый»
+BIKE_RAIN_MM = 0.2  # мм за час: больше — мокрый
+BIKE_WIND_MAX = 9  # м/с: сильнее — против ветра тяжело
+BIKE_WINDOW_MIN = 2  # часов: короче — не окно
+
+
+def bike_window(hourly, day) -> str:
+    """Самое длинное сухое и не ветреное окно завтра: «сухо 08:00–13:00, потом дождь». Весь день хорошо или весь
+    день плохо — "" (это и так видно по строке погоды)."""
+    times = list((hourly or {}).get("time") or [])
+    if not times:
+        return ""
+
+    def value(key, index):
+        values = hourly.get(key) or []
+        return float(values[index] or 0) if index < len(values) and values[index] is not None else 0.0
+
+    hours = []
+    for index, stamp in enumerate(times):
+        if not str(stamp).startswith(day.isoformat()) or not BIKE_HOURS[0] <= int(str(stamp)[11:13]) < BIKE_HOURS[1]:
+            continue
+        wet = value("precipitation_probability", index) > BIKE_RAIN_MAX or value("precipitation", index) > BIKE_RAIN_MM
+        windy = value("windspeed_10m", index) > BIKE_WIND_MAX
+        hours.append((int(str(stamp)[11:13]), "rain" if wet else "wind" if windy else ""))
+    if not hours or all(bad for _hour, bad in hours) or not any(bad for _hour, bad in hours):
+        return ""
+    best, run = [], []
+    for hour, bad in hours:
+        run = [] if bad else [*run, hour]
+        best = run if len(run) > len(best) else best
+    if len(best) < BIKE_WINDOW_MIN:
+        return ""
+    after = next((bad for hour, bad in hours if hour > best[-1] and bad), "")
+    before = next((bad for hour, bad in reversed(hours) if hour < best[0] and bad), "")
+    span = f"{best[0]:02d}:00–{best[-1] + 1:02d}:00"
+    words = {"rain": "дождь", "wind": "сильный ветер"}
+    kinds = {bad for _hour, bad in hours if bad}
+    good = "сухо" if kinds == {"rain"} else "тихо" if kinds == {"wind"} else "сухо и тихо"
+    if after:
+        return f"{good} {span}, потом {words[after]}"
+    return f"{good} {span}, до этого {words[before]}" if before else f"{good} {span}"
 
 
 def _degrees(value) -> str:
@@ -95,8 +147,11 @@ def collect(cid, now=None) -> dict:
     import util
     plan = {"day": tomorrow, "city": place.get("city") or "", "cc": str(place.get("cc") or "").upper(),
             "flag": util.flag_from_cc(place.get("cc") or ""),
-            "weather": weather_day(_weather_periods(place, now)), "light": daylight(place, tomorrow), "official": [], "holidays": [], "events": [],
-            "premieres": [], "works": []}
+            "official": [], "holidays": [], "events": [], "premieres": [], "works": [], "works_end": [],
+            "concerts_soon": [], "releases": [], "waste": []}
+    data = _weather_data(place)
+    plan.update(weather=weather_day(_weather_periods(data, now)), light=daylight(place, tomorrow),
+                bike=bike_window(data.get("hourly"), tomorrow))
 
     def safe(name, call):
         try:
@@ -119,6 +174,20 @@ def collect(cid, now=None) -> dict:
     if plan["cc"] == "NL":
         import ns_alerts
         plan["works"] = safe("works", lambda: ns_alerts.todays_works(cid, tomorrow))
+        # Работы заканчиваются сегодня — завтра поезда снова как обычно.
+        ongoing = {item.get("id") for item in plan["works"]}
+        plan["works_end"] = [item for item in safe("works today", lambda: ns_alerts.todays_works(cid, now.date()))
+                             if item.get("end") == now.date() and item.get("id") not in ongoing]
+        import waste
+        address = (store.get_settings(cid) or {}).get(waste.ADDRESS_KEY)
+        plan["waste"] = safe("waste", lambda: waste.on_day(address, tomorrow)) if address else []
+    import leisure_concerts  # концерт твоего артиста через 2–3 дня — успеть с билетами и дорогой
+    soon = safe("concerts", lambda: leisure_concerts.cached_favorite_concerts(cid, 10))
+    plan["concerts_soon"] = [item for item in soon
+                             if (tomorrow + timedelta(days=1)).isoformat() <= str(item.get("date") or "")
+                             <= (tomorrow + timedelta(days=2)).isoformat()][:2]
+    saved = (store.get_profile(cid) or {}).get("hub_music_fav") or {}  # релизы любимых артистов (Deezer, прогрев)
+    plan["releases"] = [item for item in saved.get("items") or [] if str(item.get("date") or "") == iso][:2]
     return plan
 
 

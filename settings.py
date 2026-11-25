@@ -791,9 +791,34 @@ async def send_notif_kind(bot, cid, kind, q=None):
     for slot in slots if len(slots) > 1 else ():  # одно время (праздники — 18:00) не выбирается
         rows.append([InlineKeyboardButton(("✅ " if slot == current else "□ ") + slot,
                                           callback_data=f"set_notiftime_{kind}_{slot.replace(':', '')}")])
+    if kind == "evening_weather" and str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL":
+        import waste  # вывоз мусора в «Плане на завтра» — по адресу (календарь HVC)
+        address = get(cid, waste.ADDRESS_KEY)
+        rows.append([InlineKeyboardButton(f"Вывоз мусора: {waste.label(address)}" if address
+                                          else "Адрес для вывоза мусора", callback_data="set_waste")])
+        if address:
+            rows.append([InlineKeyboardButton("Убрать адрес", callback_data="set_waste_del")])
     rows.append(nav_row("set_notif"))
     msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=len(slots) > 1)
     await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
+async def save_waste_address(bot, cid, text):
+    """Адрес для вывоза мусора: «1811 AB 12» → bagid HVC; не похоже на адрес или HVC его не знает — честно и снова
+    ждём адрес."""
+    import asyncio as _asyncio
+    import waste
+    address = waste.parse_address(text)
+    bagid = await _asyncio.to_thread(waste.find_bagid, address) if address else ""
+    if not bagid:
+        store.pending_input[cid] = "waste_address"
+        msg = settings_ui.waste_address_error(bool(address))
+        await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+        return
+    set_(cid, waste.ADDRESS_KEY, {**address, "bagid": bagid})
+    msg = settings_ui.waste_address_saved(waste.label(address))
+    await bot.send_message(chat_id=cid, text=msg.text, entities=msg.entities)
+    await send_notif_kind(bot, cid, "evening_weather")
 
 
 async def toggle_notif(bot, cid, kind, q=None):
@@ -1364,6 +1389,14 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_food_meal(bot, cid, data[len("set_foodmeal_"):], q)
     elif data.startswith("set_foodrestr_"):
         await toggle_food_restriction(bot, cid, data[len("set_foodrestr_"):], q)
+    elif data == "set_waste":
+        store.pending_input[cid] = "waste_address"
+        await bot.send_message(chat_id=cid, text=settings_ui.waste_address_prompt().text,
+                               entities=settings_ui.waste_address_prompt().entities)
+    elif data == "set_waste_del":
+        import waste
+        set_(cid, waste.ADDRESS_KEY, None)
+        await send_notif_kind(bot, cid, "evening_weather", q)
     elif data.startswith("set_notiftgl_"):
         await toggle_notif(bot, cid, data[len("set_notiftgl_"):], q)
     elif data == "set_myday":
