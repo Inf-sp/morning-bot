@@ -13,7 +13,8 @@ from ui import weather as weather_ui
 import weather_provider as _provider
 from weather_weekly import (
     qualitative_outlook as _qualitative_outlook,
-    week_overview as _week_overview,
+    week_story as _week_story,
+    day_note as _day_note,
 )
 
 _log = logging.getLogger(__name__)
@@ -749,8 +750,11 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         rng = f"{d1.day}–{d2.day} {_MONTHS_SHORT[d1.month-1]}"
     else:
         rng = f"{d1.day} {_MONTHS_SHORT[d1.month-1]} – {d2.day} {_MONTHS_SHORT[d2.month-1]}"
-    overview = _week_overview(day_data)
-    advice = _qualitative_outlook(day_data)
+    # Вместо общих фраз («переменная облачность…», «на следующей неделе…») — конкретно: тренд, дни дождя,
+    # лучший день и выходные; у дня — пометка дождя или ветра.
+    overview, advice = _week_story(day_data)
+    for day in day_data:
+        day["note"] = _day_note(day)
 
     kb = None if week_plain else InlineKeyboardMarkup([nav_row("m_myday")])
     msg = weather_ui.week_forecast(

@@ -77,3 +77,62 @@ def week_overview(days):
     return description + "…"
 
 
+
+
+# ---------- «Неделя»: короткая история недели без AI ----------
+_TO = {"понедельник": "к понедельнику", "вторник": "ко вторнику", "среда": "к среде", "четверг": "к четвергу",
+       "пятница": "к пятнице", "суббота": "к субботе", "воскресенье": "к воскресенью"}
+WINDY_MS = 10  # м/с: у дня пометка «ветер»
+TREND_DEGREES = 3  # °C: разница начала и конца недели — «теплеет / холодает»
+
+
+def _deg(value) -> str:
+    value = round(float(value))
+    return "0°" if value == 0 else f"{value:+d}°"
+
+
+def day_note(day) -> str:
+    """Пометка дня — только когда есть что сказать: «дождь 80%», «ветер 12 м/с»."""
+    notes = []
+    if day.get("rain_real"):
+        notes.append(f"{'снег' if _snowy(day) else 'дождь'} {float(day.get('rain') or 0):.0f}%")
+    if float(day.get("wind") or 0) >= WINDY_MS:
+        notes.append(f"ветер {float(day['wind']):.0f} м/с")
+    return " · ".join(notes)
+
+
+def week_story(days) -> tuple[str, str]:
+    """(вступление, итог): «К четвергу теплеет: с +1° до +8°. Дождь — в вс и ср.» и «Лучший день — пятница:
+    солнечно и сухо. Выходные: сб сухо, вс дождь.»; без AI, по тем же дням, что строки недели."""
+    if not days:
+        return "", ""
+    temps = [float(day["tmax"]) for day in days]
+    start, end = sum(temps[:2]) / len(temps[:2]), sum(temps[-2:]) / len(temps[-2:])
+    peak = max(range(len(days)), key=lambda index: temps[index])
+    if end - start >= TREND_DEGREES:
+        trend = f"Теплеет: с {_deg(temps[0])} до {_deg(temps[peak])} {_TO.get(days[peak]['name'], '')}".strip()
+    elif start - end >= TREND_DEGREES:
+        low = min(range(len(days)), key=lambda index: temps[index])
+        trend = f"Холодает: с {_deg(temps[0])} до {_deg(temps[low])} {_TO.get(days[low]['name'], '')}".strip()
+    else:
+        low_t, high_t = _deg(min(temps)), _deg(max(temps))
+        trend = f"Ровно: около {high_t}" if low_t == high_t else f"Ровно: от {low_t} до {high_t}"
+    wet = [day for day in days if day.get("rain_real")]
+    # Дни с дождём видны пометками в строках — во вступлении только итог недели, если он есть.
+    rain = ("Без дождя всю неделю." if not wet else "Дождь почти каждый день." if len(wet) >= len(days) - 1 else "")
+    intro = " ".join(part for part in (f"{trend}.", rain) if part)
+
+    def score(day):  # сухо, солнце, тише ветер, теплее
+        sky = {"sunny": 0, "partly": 1}.get(_sky(day), 2)
+        return (bool(day.get("rain_real")), sky, float(day.get("wind") or 0) >= WINDY_MS, -float(day["tmax"]))
+
+    best = min(days, key=score)
+    sky_word = {"sunny": "солнечно", "partly": "переменная облачность"}.get(_sky(best), "облачно")
+    parts = []
+    if not best.get("rain_real"):
+        parts.append(f"Лучший день — {best['name']}: {sky_word}, без дождя, {_deg(best['tmax'])}.")
+    weekend = [day for day in days if str(day["abbrev"]).casefold() in ("сб", "вс")]
+    if weekend:
+        parts.append("Выходные: " + ", ".join(
+            f"{str(day['abbrev']).lower()} {'дождь' if day.get('rain_real') else 'сухо'}" for day in weekend) + ".")
+    return intro, " ".join(parts)

@@ -120,13 +120,15 @@ def day_forecast(header, main_lines, alert="", fact_title="", fact=""):
 def week_forecast(rng, city, overview, days, advice, country="", country_code=""):
     b = MessageBuilder()
     place = f"{str(city or '').strip()}{_country_suffix(country, country_code)}".strip(", ")
-    b.bold(f"Неделя с {rng}" + (f" · {place}" if place else ""))
+    b.bold(f"Неделя · {rng}" + (f" · {place}" if place else ""))
     b.newline()
     b.spacer()
     b.line(overview)
     b.spacer()
-    for day in days:
-        b.line(f"{day['abbrev']} · {day['icon']} {day['tmax']:+.0f}°")
+    for day in days:  # «Вс · 🌧️ +4° · дождь 80%»; около нуля — «0°», не «-0°»
+        value = round(float(day["tmax"]))
+        b.line(f"{day['abbrev']} · {day['icon']} {'0' if value == 0 else f'{value:+d}'}°"
+               + (f" · {day['note']}" if day.get("note") else ""))
     b.spacer()
     b.line(_finish_sentence(cap_sentence(advice)))
     return b.build_stripped()

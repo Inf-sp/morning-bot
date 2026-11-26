@@ -223,7 +223,7 @@ def test_week_forecast_header_shows_country_and_flag():
         "5–11 августа", "Лилль", "Тепло", [], "Возьми воду", country="FR", country_code="fr",
     )
 
-    assert message.text.startswith("Неделя с 5–11 августа · Лилль, FR 🇫🇷")
+    assert message.text.startswith("Неделя · 5–11 августа · Лилль, FR 🇫🇷")
 
 
 def test_qualitative_outlook_describes_weather_without_numbers():
@@ -600,3 +600,26 @@ def test_week_icon_has_no_snowflake_in_plus_without_snow():
     assert weather._week_icon(3, 4, 0, 4, 0, 90) == "☁️"  # плюс, сухо — облачно
     assert weather._week_icon(3, -1, 0, 4, 0, 90) == "❄️"  # мороз весь день
     assert weather.weather_icon(73, 6, 80, 4, 3.0, 90) == "🌧️"  # «Мой день» — то же правило
+
+
+def _week_days(rows):
+    return [{"abbrev": a, "name": n, "tmax": t, "rain": r, "rain_mm": 2 if r >= 50 else 0, "rain_real": r >= 50,
+             "wind": wind, "sky": sky, "code": 3, "icon": "☁️"} for a, n, t, r, wind, sky in rows]
+
+
+def test_week_is_a_short_story_with_trend_notes_best_day_and_weekend():
+    from ui import weather as weather_ui
+    days = _week_days([("Пт", "пятница", 1, 0, 4, "sunny"), ("Сб", "суббота", 1, 0, 5, "cloudy"),
+                       ("Вс", "воскресенье", 4, 80, 7, "cloudy"), ("Пн", "понедельник", 4, 0, 6, "cloudy"),
+                       ("Вт", "вторник", 5, 0, 6, "cloudy"), ("Ср", "среда", 8, 70, 12, "cloudy"),
+                       ("Чт", "четверг", 8, 0, 7, "partly")])
+    intro, advice = weather_weekly.week_story(days)
+    assert intro == "Теплеет: с +1° до +8° к среде."
+    assert advice == "Лучший день — пятница: солнечно, без дождя, +1°. Выходные: сб сухо, вс дождь."
+    for day in days:
+        day["note"] = weather_weekly.day_note(day)
+    text = weather_ui.week_forecast("27 ноя – 3 дек", "Alkmaar", intro, days, advice).text
+    assert "Вс · ☁️ +4° · дождь 80%\n" in text and "Ср · ☁️ +8° · дождь 70% · ветер 12 м/с\n" in text
+    assert "Пт · ☁️ +1°\n" in text  # без пометки — короткая строка
+    dry = _week_days([("Пн", "понедельник", 6, 0, 4, "partly")] * 7)
+    assert weather_weekly.week_story(dry)[0] == "Ровно: около +6°. Без дождя всю неделю."
