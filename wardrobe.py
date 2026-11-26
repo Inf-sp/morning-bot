@@ -30,6 +30,7 @@ from wardrobe_outfit import (
     outfit_display_order,
     save_outfit_feedback,
     top_outfits,
+    _temp_conflicts,
 )
 from wardrobe_migration import migrate_item_attrs
 
@@ -148,9 +149,52 @@ def weather_signature(weather_ctx, flags):
     }
 
 
-def wardrobe_counts(w) -> dict:
-    """«Твой шкаф · 36 вещей» — для нижней строки карточки образа."""
-    return {"items": wardrobe_stats(w)[0]}
+_GENITIVE = {"шапку": "шапки", "перчатки": "перчаток", "шарф": "шарфа", "солнечные очки": "солнечных очков"}
+FORGOTTEN_DAYS = 21  # вещь не была в образах три недели — напомнить
+
+
+def wardrobe_gap(w, weather_ctx) -> str:
+    """Чего нет в шкафу под сегодняшнюю погоду: «Для мороза нет шапки и перчаток»; всё есть — ""."""
+    flat = list(_flat_wardrobe_items(w))
+    accessories = [{**item, "zone": zone} for zone, _sub, item in flat if zone == "Аксессуары"]
+    missing = wardrobe_rules.accessory_advice(weather_ctx, accessories)
+    low = wardrobe_rules.feels_low(weather_ctx)
+    frost = low is not None and low <= wardrobe_rules.FROST_FEELS
+    warm_outer = any(zone == "Верхняя одежда" and item.get("warmth") == "тёплые" for zone, _sub, item in flat)
+    if frost and not warm_outer:
+        missing = ["тёплую куртку", *missing]
+    if not missing:
+        return ""
+    names = [_GENITIVE.get(kind, "тёплой куртки" if kind == "тёплую куртку" else kind) for kind in missing]
+    why = ("Для мороза" if frost else "Для солнца" if missing == ["солнечные очки"] else "Для холода")
+    return f"{why} нет {' и '.join(names) if len(names) <= 2 else ', '.join(names[:-1]) + ' и ' + names[-1]}"
+
+
+def forgotten_item(w, weather_ctx, today=None) -> dict:
+    """Вещь под сегодняшнюю погоду, которой давно не было в образах: {"name", "days"}; нет — {}."""
+    today = today or datetime.now(config.TZ).date()
+    best = {}
+    for zone, _sub, item in _flat_wardrobe_items(w):
+        if zone == "Аксессуары" or not item.get("last_used"):
+            continue
+        try:
+            days = (today - datetime.fromisoformat(str(item["last_used"])[:10]).date()).days
+        except ValueError:
+            continue
+        candidate = {**item, "zone": zone}
+        if (days >= FORGOTTEN_DAYS and days > best.get("days", 0) and wardrobe_rules.allowed(candidate, weather_ctx)
+                and not _temp_conflicts(candidate, weather_ctx)):
+            best = {"name": public_item_name(item), "days": days}
+    return best
+
+
+def wardrobe_counts(w, weather_ctx=None) -> dict:
+    """Низ карточки образа: пробел в шкафу под погоду, иначе давно не надетая вещь, иначе «Твой шкаф · 36 вещей»."""
+    stats = {"items": wardrobe_stats(w)[0]}
+    if weather_ctx:
+        stats["gap"] = wardrobe_gap(w, weather_ctx)
+        stats["forgotten"] = {} if stats["gap"] else forgotten_item(w, weather_ctx)
+    return stats
 
 
 def _build_look_message(look_data):
@@ -436,7 +480,7 @@ def _look_data(cid, w, best_sorted, weather_ctx, flags, selected_styles, previou
     groups = _settings.style_groups_of(selected_styles)
     look_data["style_group"] = (_settings.style_group_labels(groups)[0] if len(groups) == 1
                                 else wardrobe_ui.outfit_group(look_data))
-    look_data["stats"] = wardrobe_counts(w)  # нижняя строка: «Твой шкаф · 36 вещей»
+    look_data["stats"] = wardrobe_counts(w, weather_ctx)  # низ: чего нет под погоду / давно не надевал / «Твой шкаф · 36 вещей»
     return _with_trip_flag(cid, look_data)
 
 

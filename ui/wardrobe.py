@@ -92,9 +92,9 @@ def render_wardrobe_message(look_data):
         for item in items:
             b.line(f"• {item}")
 
-    # Нижняя строка курсивом — «Твой шкаф · 36 вещей»: без числа образов и без советов о сочетании цветов.
+    # Нижняя строка курсивом: чего нет в шкафу под погоду → давно не надетая вещь → «Твой шкаф · 36 вещей».
     stats = look_data.get("stats") or {}
-    closing = wardrobe_stats_line(stats.get("items")) if stats.get("items") else ""
+    closing = closing_line(stats)
     if closing:
         b.spacer()
         b.italic(closing)
@@ -155,6 +155,23 @@ def _pluralize_items(n):
     if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
         return "вещи"
     return "вещей"
+
+
+def _weeks(days) -> str:
+    weeks = max(1, int(days) // 7)
+    return f"{weeks} {'неделю' if weeks % 10 == 1 and weeks % 100 != 11 else 'недели' if 2 <= weeks % 10 <= 4 and not 12 <= weeks % 100 <= 14 else 'недель'}"
+
+
+def closing_line(stats) -> str:
+    """«Для мороза нет шапки и перчаток — добавь, и образ будет теплее.» / «Давно не было в образах: Зелёная
+    куртка — 3 недели.» / «Твой шкаф · 36 вещей»; пустой шкаф — ""."""
+    if stats.get("gap"):
+        warm = not stats["gap"].startswith("Для солнца")
+        return f"{stats['gap']} — добавь, и образ будет {'теплее' if warm else 'полнее'}."
+    forgotten = stats.get("forgotten") or {}
+    if forgotten.get("name"):
+        return f"Давно не было в образах: {forgotten['name']} — {_weeks(forgotten['days'])}."
+    return wardrobe_stats_line(stats.get("items")) if stats.get("items") else ""
 
 
 def wardrobe_stats_line(items) -> str:
