@@ -1226,7 +1226,7 @@ def trip_end(cid, cc):
 
 
 async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели",
-                                   min_mine=0, min_popular=0):
+                                   min_mine=0, min_popular=0, popular=True):
     """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
 
     Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
@@ -1263,8 +1263,9 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
             if _concert_identity_text(item["artist"]) not in taken
         ]
 
-    nearby = popular_until(period_end)
-    wide = popular_until(period_start + timedelta(days=_POPULAR_HORIZON_DAYS)) if min_popular and not trip else []
+    nearby = popular_until(period_end) if popular else []  # «только мои артисты» в настройках рассылки
+    wide = (popular_until(period_start + timedelta(days=_POPULAR_HORIZON_DAYS))
+            if popular and min_popular and not trip else [])
     if not mine and not nearby and not wide:
         return None
     notes = await artist_notes([item["artist"] for item in mine + nearby + wide])
@@ -1389,8 +1390,10 @@ def month_concerts_title(cid) -> str:
 
 
 async def send_weekend_events(bot, cid):
-    """Пятница 10:00 — «Концерты недели»; без концертов рассылка не приходит."""
-    msg = await _build_weekly_events_msg(cid)
+    """Пятница 10:00 — «Концерты недели»; без концертов рассылка не приходит. «Какие концерты» в настройках рассылки:
+    только мои артисты — без «Популярного рядом»."""
+    import notif_options
+    msg = await _build_weekly_events_msg(cid, popular=notif_options.get(cid, "weekend_events", "scope") != "mine")
     if msg is None:
         return
     # Как «Главные новости»: действие, ниже «Настроить | Главная» одной строкой.

@@ -20,6 +20,13 @@ def myday_blocks():
     return b.build_stripped()
 
 
+def notif_option(notif_label, title, hint="", *, multi=False):
+    b = MessageBuilder()
+    b.section(f"🔔 {notif_label} · {title}")
+    b.line(hint or ("Отметь, что присылать — можно несколько." if multi else "Выбери, что присылать."))
+    return b.build_stripped()
+
+
 _FLIGHT_FILTER_HINTS = {
     "budget": "Присылаю билеты не дороже выбранной цены — как в публикации, в евро.",
     "hours": "Сколько лететь до места — примерно, по расстоянию. До 4 часов — почти вся Европа.",

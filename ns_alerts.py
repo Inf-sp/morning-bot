@@ -117,6 +117,24 @@ def incident_signature(item):
     return f"{cause}|{until}" if cause and until else str(item.get("id") or "")
 
 
+SEVERE_LEVEL = "поездов нет или почти нет"
+COMMUTE_HOURS = ((6, 10), (15, 20))
+
+
+def wanted(cid, item, now=None) -> bool:
+    """Сбой под доп. настройки рассылки: «Какие сбои» (все / только когда поездов нет) и «Когда» (весь день /
+    утром и вечером). Уровень неизвестен — присылаем: лучше лишний раз сказать о сбое поездов."""
+    import notif_options
+    from datetime import datetime
+    if notif_options.get(cid, "ns_disruptions", "level") == "severe" and item.get("level") \
+            and item.get("level") != SEVERE_LEVEL:
+        return False
+    if notif_options.get(cid, "ns_disruptions", "hours") == "commute":
+        hour = (now or datetime.now(config.TZ)).hour
+        return any(start <= hour < end for start, end in COMMUTE_HOURS)
+    return True
+
+
 async def check_user(bot, cid):
     """Присылает новые сбои и восстановления для одного пользователя."""
     settings_data = store.get_settings(cid) or {}
@@ -151,7 +169,13 @@ async def check_user(bot, cid):
     # NS заводит одну неисправность отдельной записью на каждый маршрут (Amsterdam - Alkmaar,
     # Haarlem - Alkmaar) — сообщаем об инциденте один раз.
     known = {value["sig"] for value in previous.values()}
+    for item in [item for item in current if item["id"] not in previous and not wanted(cid, item)]:
+        # Не под доп. настройки («только когда поездов нет», «утром и вечером») — не присылаем и не запоминаем:
+        # станет серьёзнее или начнётся время поездок — придёт следующей проверкой; «восстановлено» о нём не придёт.
+        active.pop(item["id"], None)
     for item in current:
+        if item["id"] not in active:
+            continue
         sig = active[item["id"]]["sig"]
         if item["id"] in previous or sig in known:
             continue

@@ -601,6 +601,9 @@ async def send_week_holidays(bot, cid):
     holidays = await asyncio.to_thread(public_holidays.week_holidays, place.get("cc"), start, end)
     # Та же городская афиша, что «🎉 Праздники» в Досуге (разделы, площадка, «бесплатно»), только на неделю.
     events = await asyncio.to_thread(local_events.agenda, cid, start, end)
+    import notif_options
+    if notif_options.get(cid, "week_holidays", "free") == "free":  # «только бесплатные» в настройках рассылки
+        events = [event for event in events if event.get("free")]
     if not holidays and not events:
         return
     period = (f"{start.day}–{end.day} {_MONTHS[end.month - 1]}" if start.month == end.month
@@ -792,6 +795,10 @@ async def send_notif_kind(bot, cid, kind, q=None):
     for slot in slots if len(slots) > 1 else ():  # одно время (праздники — 18:00) не выбирается
         rows.append([InlineKeyboardButton(("✅ " if slot == current else "□ ") + slot,
                                           callback_data=f"set_notiftime_{kind}_{slot.replace(':', '')}")])
+    import notif_options  # доп. настройки рассылки: что именно присылать — каждая своим экраном выбора
+    for index, item in enumerate(notif_options.OPTIONS.get(kind, ())):
+        rows.append([InlineKeyboardButton(f"{item.title}: {notif_options.summary(cid, kind, item.key)}",
+                                          callback_data=f"set_no_{notif_options.KINDS.index(kind)}_{index}")])
     if kind == "flight_deals":  # фильтры: бюджет, время в полёте, тип билета — каждый своим экраном выбора
         import flight_deals
         chosen = flight_deals.filters(cid)
@@ -820,6 +827,26 @@ def _flight_filter_label(name, value) -> str:
     if name == "hours":
         return f"до {value} ч" + (" · Европа" if value == 4 else "") if value else "любое"
     return {"return": "туда-обратно", "oneway": "в одну сторону"}.get(value, "любой")
+
+
+async def send_notif_option(bot, cid, kind_index, option_index, q=None):
+    """Экран одной доп. настройки рассылки: ✅ выбранное (у набора — включённые), □ остальные; «Назад» — к рассылке."""
+    import notif_options
+    try:
+        kind = notif_options.KINDS[int(kind_index)]
+        item = notif_options.OPTIONS[kind][int(option_index)]
+    except (IndexError, ValueError):
+        await send_notif(bot, cid, q)
+        return
+    value = notif_options.get(cid, kind, item.key)
+    chosen = set(value) if item.kind == "multi" else {value}
+    rows = [[InlineKeyboardButton(("✅ " if choice in chosen else "□ ") + label,
+                                  callback_data=f"set_nov_{kind_index}_{option_index}_{number}")]
+            for number, (choice, label) in enumerate(item.choices)]
+    rows.append(nav_row(f"set_notifopen_{kind}"))
+    msg = settings_ui.notif_option(_NOTIF_TITLES.get(kind, kind), item.title, item.hint,
+                                   multi=item.kind == "multi")
+    await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 
 async def send_flight_filter(bot, cid, name, q=None):
@@ -1420,6 +1447,19 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_food_meal(bot, cid, data[len("set_foodmeal_"):], q)
     elif data.startswith("set_foodrestr_"):
         await toggle_food_restriction(bot, cid, data[len("set_foodrestr_"):], q)
+    elif data.startswith("set_no_"):
+        kind_index, _sep, option_index = data[len("set_no_"):].partition("_")
+        await send_notif_option(bot, cid, kind_index, option_index, q)
+    elif data.startswith("set_nov_"):
+        import notif_options
+        parts = data[len("set_nov_"):].split("_")
+        try:
+            kind = notif_options.KINDS[int(parts[0])]
+            item = notif_options.OPTIONS[kind][int(parts[1])]
+            notif_options.choose(cid, kind, item.key, item.choices[int(parts[2])][0])
+        except (IndexError, ValueError):
+            pass
+        await send_notif_option(bot, cid, parts[0], parts[1] if len(parts) > 1 else "0", q)
     elif data in ("set_fd_budget", "set_fd_hours", "set_fd_trip"):
         await send_flight_filter(bot, cid, data[len("set_fd_"):], q)
     elif data.startswith("set_fd_"):

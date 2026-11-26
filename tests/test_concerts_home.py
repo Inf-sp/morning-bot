@@ -284,7 +284,7 @@ def test_weekly_concerts_notification_buttons(monkeypatch):
 
     monkeypatch.setattr(
         leisure_concerts, "_build_weekly_events_msg",
-        lambda _cid: _async(MessageSpec(text="🎫 Концерты недели")),
+        lambda _cid, **_k: _async(MessageSpec(text="🎫 Концерты недели")),
     )
 
     asyncio.run(leisure_concerts.send_weekend_events(RecordingBot(sent), "42"))

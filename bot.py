@@ -372,7 +372,9 @@ async def job_evening_quiz(context: ContextTypes.DEFAULT_TYPE):
     """«Вечернее повторение»: викторина Telegram по утреннему слову дня — тем, у кого включено «Обучение языку»."""
     import dictionary_morning
     for cid in access.get_allowed_cids():
-        if not settings.notif_on(cid, "daily_words") or settings.notification_paused(cid, "daily_words"):
+        import notif_options
+        if (not settings.notif_on(cid, "daily_words") or settings.notification_paused(cid, "daily_words")
+                or notif_options.get(cid, "daily_words", "quiz") == "off"):
             continue
         try:
             await dictionary_morning.send_evening_quiz(context.bot, cid)

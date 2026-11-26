@@ -188,6 +188,23 @@ def collect(cid, now=None) -> dict:
                              <= (tomorrow + timedelta(days=2)).isoformat()][:2]
     saved = (store.get_profile(cid) or {}).get("hub_music_fav") or {}  # релизы любимых артистов (Deezer, прогрев)
     plan["releases"] = [item for item in saved.get("items") or [] if str(item.get("date") or "") == iso][:2]
+    return _only_chosen(cid, plan)
+
+
+_BLOCK_FIELDS = {"bike": ("bike",), "waste": ("waste",), "events": ("events", "concerts_soon"),
+                 "premieres": ("premieres", "releases"), "works": ("works", "works_end")}
+
+
+def _only_chosen(cid, plan) -> dict:
+    """«Что показывать» в настройках рассылки: выключенные блоки убираем; погода, KNMI и праздники — всегда."""
+    import notif_options
+    wanted = set(notif_options.get(cid, "evening_weather", "blocks") or ())
+    for block, fields in _BLOCK_FIELDS.items():
+        if block not in wanted:
+            for field in fields:
+                plan[field] = "" if field == "bike" else []
+    if "take" not in wanted and isinstance(plan.get("weather"), dict):
+        plan["weather"] = {**plan["weather"], "take": []}
     return plan
 
 

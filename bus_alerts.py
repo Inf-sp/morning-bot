@@ -49,15 +49,16 @@ def _translate(texts) -> list:
             for index, text in enumerate(texts)]
 
 
-def events(data, now) -> list:
-    """Что сообщить: [{key, kind: cancel|delay|message, …}] — отмены рейсов, опоздания от DELAY_ALERT_MIN и
-    сообщения перевозчика."""
+def events(data, now, delay_min=DELAY_ALERT_MIN) -> list:
+    """Что сообщить: [{key, kind: cancel|delay|message, …}] — отмены рейсов, опоздания от delay_min (None — только
+    отмены, «Опоздание от» в настройках рассылки) и сообщения перевозчика."""
     found = []
     for item in data.get("passes") or []:
         wait = (item["planned"] - now).total_seconds() / 60
         if item["status"] == "CANCEL" and 0 <= wait <= _AHEAD_MIN:
             found.append({"key": f"cancel|{item['id']}", "kind": "cancel", **item})
-        elif (item["status"] not in ("CANCEL", "PASSED", "ARRIVED") and item["delay_min"] >= DELAY_ALERT_MIN
+        elif (delay_min is not None and item["status"] not in ("CANCEL", "PASSED", "ARRIVED")
+              and item["delay_min"] >= delay_min
               and 0 <= wait <= _DELAY_AHEAD_MIN):
             found.append({"key": f"delay|{item['id']}", "kind": "delay", **item})
     for message in data.get("messages") or []:
@@ -79,7 +80,9 @@ async def check_user(bot, cid, now=None):
         return
     now = now or datetime.now(config.TZ)
     seen = dict(((store.get_profile(cid) or {}).get(_STATE_KEY) or {}).get("seen") or {})
-    fresh = [event for event in events(data, now) if event["key"] not in seen]
+    import notif_options
+    delay = notif_options.get(cid, "bus_disruptions", "delay")
+    fresh = [event for event in events(data, now, None if delay == "off" else int(delay)) if event["key"] not in seen]
     if fresh:
         messages = [event for event in fresh if event["kind"] == "message"]
         for event, text in zip(messages, await asyncio.to_thread(_translate, [event["text"] for event in messages])):

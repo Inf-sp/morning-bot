@@ -328,6 +328,11 @@ def _official(place, tomorrow=False) -> list:
     return [item for item in items if covers(item)]
 
 
+# Явление прогноза → группа в «Предупреждать о» (notif_options): гроза, лёд, ветер, дождь, жара, туман.
+WARN_GROUPS = {"thunderstorm": "storm", "ice": "ice", "snow": "ice", "cold": "ice", "storm_wind": "wind",
+               "heavy_rain": "rain", "heat": "heat", "high_uv": "heat", "fog": "fog", "high_humidity": "fog"}
+
+
 def build_warning(data, cid, tomorrow=False):
     """Собирает MessageSpec погодного предупреждения или None (тихий день). tomorrow — накануне: прогноз на завтра
     и только важные явления (TOMORROW_KEYS)."""
@@ -337,7 +342,10 @@ def build_warning(data, cid, tomorrow=False):
         if data is None:
             return None
     ctx = collect_context(data, cid)
-    fired = [h for h in evaluate(ctx) if not tomorrow or h.key in TOMORROW_KEYS]
+    import notif_options  # «Предупреждать о» в настройках рассылки; KNMI — всегда
+    wanted = set(notif_options.get(cid, "weather_warn", "kinds") or ())
+    fired = [h for h in evaluate(ctx) if (not tomorrow or h.key in TOMORROW_KEYS)
+             and WARN_GROUPS.get(h.key, h.key) in wanted]
     place = store.get_settings(cid) or {}
     official = _official(place, tomorrow)
     if not fired and not official:
