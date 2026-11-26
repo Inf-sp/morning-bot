@@ -259,3 +259,12 @@ def test_announcements_are_not_shown_and_read_articles_leave_the_feed(monkeypatc
     assert [item["link"] for item in leisure_reads.ranked("42")] == ["https://a", "https://d"]  # без объявлений
     leisure_reads.mark_read("42", "https://a")
     assert [item["link"] for item in leisure_reads.ranked("42")] == ["https://d"]
+
+
+def test_recipes_are_not_articles_and_discoveries_rank_higher():
+    assert leisure_reads.is_announcement({"original_title": "23 Best Pasta Recipes for Fall"})
+    assert leisure_reads.is_announcement({"original_title": "How to Make Perfect Sourdough"})
+    assert not leisure_reads.is_announcement({"original_title": "Scientists discover how bees count"})
+    found = {"title": "Scientists discover a new state of matter", "summary": ""}
+    plain = {"title": "A quiet walk in the park", "summary": ""}
+    assert leisure_reads._score(found, "science") > leisure_reads._score(plain, "science")
