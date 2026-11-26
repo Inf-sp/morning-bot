@@ -114,13 +114,26 @@ def sky_word(clouds, code):
     return _SKY_WORDS[_sky(clouds, code)]
 
 
+SNOW_CODE_TMAX = 3  # °C: снежный код дня при максимуме выше — днём уже дождь (снег был ночью или в горах)
+
+
+def _snow_icon(code, temp, wet) -> bool:
+    """❄️ дня: снег реален (снежный код и не теплее +3°, или осадки не выше +1°) или мороз весь день (не выше 0°);
+    в плюс без снега — обычный знак."""
+    if temp is None:
+        return wet and code in SNOW_CODES
+    if wet and ((code in SNOW_CODES and temp <= SNOW_CODE_TMAX) or temp <= 1):
+        return True
+    return round(temp) <= 0
+
+
 def weather_icon(code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
     # Суточный код «дождь/гроза/снег» ставится, даже если капнет только ночью:
     # осадочные значки — только когда осадки реальны в показанном окне.
     wet = _rain_real(rain, rain_mm)
     if wet and code in (95, 96, 99):
         return "🌩️"
-    if wet and code in SNOW_CODES:
+    if _snow_icon(code, temp, wet):
         return "❄️"
     if temp is not None and temp > 30 and wet:
         return "☀️🌧️"
@@ -141,7 +154,7 @@ def _week_icon(code, temp, rain, wind_ms=0, rain_mm=None, clouds=None):
     wet = _rain_real(rain, rain_mm)
     if wet and code in (95, 96, 99):
         return "🌩️"
-    if wet and code in SNOW_CODES:
+    if _snow_icon(code, temp, wet):
         return "❄️"
     if wet:
         return "🌧️"
@@ -393,7 +406,8 @@ SNOW_TMAX = 1  # °C: осадки при такой температуре — 
 def snowfall(period) -> bool:
     """В эту часть суток пойдёт снег: реальные осадки и снежный код дня или температура не выше +1°."""
     wet = _rain_real(period.get("rain") or 0, period.get("rain_mm"))
-    return wet and (period.get("code") in SNOW_CODES or period["tmax"] <= SNOW_TMAX)
+    return wet and ((period.get("code") in SNOW_CODES and period["tmax"] <= SNOW_CODE_TMAX)
+                    or period["tmax"] <= SNOW_TMAX)
 
 
 def snowflake(period) -> bool:

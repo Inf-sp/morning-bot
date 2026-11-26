@@ -591,3 +591,12 @@ def test_snowflake_only_for_snow_or_a_frosty_part_of_day():
                                  "icon": "🌧️"}) == "❄️ Утром"  # снежный код дня
     assert weather.period_title({**base, "tmax": 6, "tmin": 3, "rain": 80, "rain_mm": 2,
                                  "icon": "🌧️"}) == "🌧️ Утром"  # дождь в плюс
+
+
+def test_week_icon_has_no_snowflake_in_plus_without_snow():
+    # Снежный код дня (снег ночью), а днём +6° и дождь — дождь, не снежинка.
+    assert weather._week_icon(73, 6, 80, 4, 3.0, 90) == "🌧️"
+    assert weather._week_icon(73, 2, 80, 4, 3.0, 90) == "❄️"  # снег около нуля
+    assert weather._week_icon(3, 4, 0, 4, 0, 90) == "☁️"  # плюс, сухо — облачно
+    assert weather._week_icon(3, -1, 0, 4, 0, 90) == "❄️"  # мороз весь день
+    assert weather.weather_icon(73, 6, 80, 4, 3.0, 90) == "🌧️"  # «Мой день» — то же правило
