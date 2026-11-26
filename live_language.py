@@ -104,14 +104,28 @@ def _short_when(when) -> str:
     return when if 0 < len(when.split()) <= _WHEN_WORDS_MAX else ""
 
 
-_EXPLAIN_MAX = 420  # «Разбор» — 2–3 предложения, на телефоне до шести строк
+_EXPLAIN_MAX = 420
+_LABEL_RE = re.compile(r"(?:(?<=^)|(?<=[.!?]\s))(?:Секрет|Совет|Лайфхак|Важно|Запомни|Нюанс|Подсказка)\s*[:—-]\s*", re.I)
+
+
+def strip_labels(text) -> str:
+    """«Секрет: после глагола тоже возможно» → «После глагола тоже возможно»: объяснение без подписей-рубрик."""
+    def capital(match_end, value):
+        return value[:match_end] + value[match_end:match_end + 1].upper() + value[match_end + 1:]
+    out = str(text or "")
+    while True:
+        found = _LABEL_RE.search(out)
+        if not found:
+            return out
+        out = out[:found.start()] + out[found.end():]
+        out = capital(found.start(), out)  # «Разбор» — 2–3 предложения, на телефоне до шести строк
 
 
 def _clean_card(data) -> dict | None:
     """Ответ ИИ → карточка: значения и разбор по-русски, пример — на изучаемом языке с русским переводом; иначе None."""
     if not isinstance(data, dict) or not _has_cyrillic(data.get("explain")):
         return None
-    explain = _soften(" ".join(str(data["explain"]).split()))
+    explain = strip_labels(_soften(" ".join(str(data["explain"]).split())))
     example, translation = (" ".join(str(data.get(key) or "").split()) for key in ("example", "translation"))
     if len(explain) > _EXPLAIN_MAX or not example or _has_cyrillic(example) or not _has_cyrillic(translation):
         return None
@@ -141,8 +155,9 @@ def build_lesson_card(topic) -> dict | None:
         "meaning — 2–3 русских значения через « · », с заглавной («Кроме того · к тому же»); explain — разбор "
         "в 2–3 коротких предложениях по-русски (до 380 символов): что делает тема («добавляет ещё один довод и "
         "связывает две мысли»), порядок слов простыми словами («В начале предложения требует инверсии — глагол "
-        "сразу после bovendien») и последним — практичный секрет или с чем не путать («Не путать с omdat, после "
-        "которого глагол уходит в конец»); кавычки — «ёлочки»; "
+        "сразу после bovendien») и последним — с чем не путать или что ещё возможно («Не путать с omdat, после "
+        "которого глагол уходит в конец») — обычным понятным текстом, без подписей «Секрет:», «Совет:», «Важно:»; "
+        "кавычки — «ёлочки»; "
         "example — естественная фраза уровня B1 на изучаемом языке в прошедшем времени, где тема работает; "
         "translation — её естественный перевод, как сказал бы носитель русского, не дословно («Я устал», а не "
         "«Я был усталым»). Не пиши «всегда» и «никогда», если у правила есть исключение. Это "

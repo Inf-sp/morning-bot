@@ -177,7 +177,8 @@ def _grammar_lesson(phrase) -> dict:
         if phrase.get("topic") else _grammar_parts(phrase.get("rule"))[0:1] + ("",)
     pos = str(card.get("pos") or "").strip()
     if phrase.get("topic") and card.get("explain"):
-        explain = _quotes(card["explain"])
+        import live_language  # уже сохранённые карточки — тоже без «Секрет:» и «Совет:»
+        explain = _quotes(live_language.strip_labels(card["explain"]))
         example, translation = card.get("example"), card.get("translation")
     else:
         explanation = _grammar_explanation(phrase) if phrase.get("topic") and phrase.get("explain") else (
@@ -193,7 +194,9 @@ def _grammar_lesson(phrase) -> dict:
             explain = candidate
         example, translation = phrase.get("more"), phrase.get("more_translation")
     meaning = _without_period(meaning)
-    meaning = " · ".join(part.strip() for part in re.split(r"\s*[;,·]\s*", meaning) if part.strip()) if meaning else ""
+    parts = [part.strip() for part in re.split(r"\s*[;,·]\s*", meaning) if part.strip()] if meaning else []
+    # Значения через « · »: первое — с заглавной, остальные — со строчной («Кроме того · к тому же»), аббревиатуры как есть.
+    meaning = " · ".join([*parts[:1], *(part if part[:2].isalpha() and part[:2].isupper() else part[:1].lower() + part[1:] for part in parts[1:])])
     # Пример — сначала перевод, потом фраза: «Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik…».
     example = (f"{_without_period(translation)} → {_with_period(example)}" if example and translation
                else _with_period(example) if example else "")

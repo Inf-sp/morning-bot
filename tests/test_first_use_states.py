@@ -644,3 +644,18 @@ def test_grammar_card_is_built_once_and_rejects_bad_answers(monkeypatch):
     assert live_language.build_lesson_card(topic) is not None and len(asked) == 1  # один раз на тему
     assert "B1" in asked[0] and "прошедшем времени" in asked[0] and "не путать" in asked[0].casefold()
     assert "не дословно" in asked[0]
+
+
+def test_grammar_breakdown_has_no_secret_label_and_meanings_after_the_first_are_lowercase():
+    import live_language
+    card = live_language._clean_card({**_BOVENDIEN_CARD, "meaning": "Кроме того · К тому же",
+                                      "explain": "Добавляет ещё один аргумент. Секрет: после глагола тоже возможно — "
+                                                 "Het is bovendien te duur."})
+    text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": {
+        "id": "bovendien", "topic": "Bovendien", "card": card}}).text
+    assert "Bovendien (наречие) → Кроме того · к тому же" in text
+    assert "Секрет" not in text and "Разбор: добавляет ещё один аргумент. После глагола тоже возможно" in text
+    # Уже сохранённая карточка со «Секрет:» — тоже без подписи.
+    saved = {**card, "explain": "Связывает мысли. Совет: не путать с omdat."}
+    assert "Совет" not in menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": {
+        "id": "bovendien", "topic": "Bovendien", "card": saved}}).text
