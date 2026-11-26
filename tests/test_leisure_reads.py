@@ -92,8 +92,9 @@ def test_reads_are_a_circular_feed_most_interesting_first(monkeypatch):
                         "Чёрная дыра растёт быстрее моделей.")
     assert [e.url for e in msg.entities if e.type == "text_link"][0] == "https://q.example/bh"
     rows = msg.reply_markup.inline_keyboard
-    assert [b.callback_data for b in rows[0]] == ["lz_reads_3", "noop", "lz_reads_1"]  # по кругу
-    assert rows[0][1].text == "1/4" and [b.callback_data for b in rows[-1]] == ["m_leisure", "m_menu"]
+    assert [b.callback_data for b in rows[0]] == ["lz_rdone_0"]  # «Прочитано» — первой строкой
+    assert [b.callback_data for b in rows[1]] == ["lz_reads_3", "noop", "lz_reads_1"]  # по кругу
+    assert rows[1][1].text == "1/4" and [b.callback_data for b in rows[-1]] == ["m_leisure", "m_menu"]
     assert leisure_reads.top("42", date(2026, 10, 19)) == []
 
 
@@ -241,3 +242,20 @@ def test_themes_screen_lists_sources_of_chosen_themes_and_old_profiles_keep_thre
     assert "Наука" not in msg.text  # источники — только выбранных тем
     rows = msg.reply_markup.inline_keyboard
     assert len(rows[0]) == 2 and rows[0][0].callback_data == "lz_rt_science"
+
+
+def test_announcements_are_not_shown_and_read_articles_leave_the_feed(monkeypatch):
+    profile = _profile(monkeypatch)
+    today = datetime.now(config.TZ).date()
+    base = {"image": "https://img/x.jpg", "about": "Краткое содержание.", "source": "Quanta"}
+    items = [{**base, "title": "Как растут чёрные дыры", "original_title": "How black holes grow", "link": "https://a"},
+             {**base, "title": "UX-конференция марта объявлена", "original_title": "UX Conference March Announced",
+              "link": "https://b"},
+             {**base, "title": "Курс по типографике", "original_title": "Typography class", "link": "https://c",
+              "ad": True},
+             {**base, "title": "Почему мы спим", "original_title": "Why we sleep", "link": "https://d"}]
+    profile["hub_reads"] = {"v": leisure_reads._VERSION, "date": today.isoformat(),
+                            "themes": list(leisure_reads.themes("42")), "items": items}
+    assert [item["link"] for item in leisure_reads.ranked("42")] == ["https://a", "https://d"]  # без объявлений
+    leisure_reads.mark_read("42", "https://a")
+    assert [item["link"] for item in leisure_reads.ranked("42")] == ["https://d"]

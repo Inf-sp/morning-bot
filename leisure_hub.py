@@ -659,6 +659,17 @@ async def send_reads(bot, cid, arg="", q=None):
     await _show_card(bot, cid, leisure_ui.reads_card(items, index), image if image.startswith("https://") else "", q)
 
 
+async def read_done(bot, cid, arg="", q=None):
+    """«Прочитано»: статья уходит из ленты «Статьи», на её месте — следующая (lz_rdone_<n>)."""
+    import leisure_reads
+    items = await asyncio.to_thread(leisure_reads.ranked, cid)
+    if items and str(arg).isdigit():
+        index = int(arg) % len(items)
+        await asyncio.to_thread(leisure_reads.mark_read, cid, items[index].get("link"))
+        arg = str(index)  # та же позиция — теперь там следующая статья
+    await send_reads(bot, cid, arg, q)
+
+
 _CARDS_TASKS = {}  # сборка карточек чата уже идёт
 
 

@@ -909,7 +909,7 @@ def reads_card(items, index=0) -> MessageSpec:
     if about:
         b.spacer()
         b.line(_finish_sentence(about))
-    rows = []
+    rows = [[InlineKeyboardButton("Прочитано", callback_data=f"lz_rdone_{index}")]]  # убирает статью из ленты
     if len(items) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_reads_{(index - 1) % len(items)}"),
