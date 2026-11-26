@@ -661,8 +661,9 @@ def record_result(
             # иначе реальная причина сбоя (401/429/timeout) не видна ни в админке, ни в истории.
             state["error_type"], state["last_error"] = kind, friendly
             has_fallback = bool(state.get("fallback"))
+            # Обрыв соединения — как таймаут: разовый сбой сети, бот берёт резерв; 🔴 — только ключ, доступ, модель.
             state["status"] = WARNING if has_fallback or kind in (
-                "quota", "rate_limit", "timeout", "temporary", "unknown",
+                "quota", "rate_limit", "timeout", "temporary", "unknown", "network",
             ) else DOWN
             new_incident = not incident_id
             if new_incident:

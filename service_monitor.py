@@ -273,6 +273,7 @@ _ENV_KEYS = {
     "unsplash": "UNSPLASH_ACCESS_KEY",
 }
 _TAVILY_LOW_SHARE = 0.1  # меньше 10% месячного лимита — предупредить заранее
+_OUTAGE_ALERT_S = 3 * 3600  # сеть или таймаут: сказать админу, только если сервис молчит дольше 3 часов
 
 
 def attention() -> list[str]:
@@ -284,9 +285,16 @@ def attention() -> list[str]:
         if not _configured(service):
             continue
         state = current.get(service) or provider_runtime.get_state(service)
-        if _display_status(state) != DOWN:
-            continue
         label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+        if _display_status(state) != DOWN:
+            # Разовый обрыв сети или таймаут — не повод писать: бот берёт резерв, проверка повторится. Долгий сбой
+            # (с начала больше 3 часов, без успеха после) — уже стоит посмотреть.
+            started = int(state.get("incident_started_at") or 0)
+            if (state.get("error_type") in ("network", "timeout") and started
+                    and time.time() - started >= _OUTAGE_ALERT_S
+                    and int(state.get("last_success") or 0) < started):
+                out.append(f"{label} — не отвечает больше 3 часов ({state.get('last_error') or 'ошибка сети'})")
+            continue
         kind = str(state.get("error_type") or "")
         if kind == "auth":
             env = _ENV_KEYS.get(service)

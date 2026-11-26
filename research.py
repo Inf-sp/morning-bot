@@ -154,11 +154,13 @@ def tavily_search(query: str, max_results: int = 5, include_domains=None, *,
             payload["end_date"] = end_date
         if domains:
             payload["include_domains"] = list(domains)
-        r = requests.post(
-            "https://api.tavily.com/search",
-            json=payload,
-            timeout=tracking.bounded_timeout(15),
-        )
+        try:
+            r = requests.post("https://api.tavily.com/search", json=payload, timeout=tracking.bounded_timeout(15))
+        except requests.ConnectionError as error:
+            if isinstance(error, requests.Timeout):
+                raise  # не дождались соединения — повтор только удвоит ожидание
+            # Обрыв соединения (не таймаут) — один повтор: кредит списывается только за ответ.
+            r = requests.post("https://api.tavily.com/search", json=payload, timeout=tracking.bounded_timeout(15))
         ok = 200 <= r.status_code < 300
         error = "" if ok else f"HTTP {r.status_code} {r.text[:240]}"
         api_usage.record_request("tavily", ok=ok, status_code=r.status_code,
