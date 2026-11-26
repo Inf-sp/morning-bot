@@ -20,6 +20,20 @@ def myday_blocks():
     return b.build_stripped()
 
 
+_FLIGHT_FILTER_HINTS = {
+    "budget": "Присылаю билеты не дороже выбранной цены — как в публикации, в евро.",
+    "hours": "Сколько лететь до места — примерно, по расстоянию. До 4 часов — почти вся Европа.",
+    "trip": "Какие билеты присылать: туда-обратно, в одну сторону или любые.",
+}
+
+
+def flight_filter(title, name):
+    b = MessageBuilder()
+    b.section(f"✈️ Дешёвые билеты · {title}")
+    b.line(_FLIGHT_FILTER_HINTS.get(name, ""))
+    return b.build_stripped()
+
+
 def waste_address_prompt():
     b = MessageBuilder()
     b.section("♻️ Вывоз мусора")

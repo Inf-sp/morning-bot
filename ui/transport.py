@@ -153,22 +153,54 @@ def ns_restored(title, *, since="", until="", cause="", city="", titles=None) ->
     return b.build_stripped()
 
 
-def flight_deal(item, details) -> MessageSpec:
-    """Новая публикация авиадила: куда и за сколько; без разбора — заголовок источника."""
+def _flag(cc) -> str:
+    cc = str(cc or "").upper()
+    return "".join(chr(0x1F1E6 + ord(char) - ord("A")) for char in cc) if len(cc) == 2 and cc.isalpha() else ""
+
+
+def _places(info) -> str:
+    """«Ресифи, Бразилия 🇧🇷»; несколько мест — «Кабо-Верде и Ресифи 🇨🇻 🇧🇷»; без разбора — как в заголовке."""
+    places = info.get("places") or []
+    if not places:
+        return str(info.get("destination") or "").strip()
+    if len(places) == 1:
+        place = places[0]
+        same = place["city"].casefold() == str(place.get("country") or "").casefold()
+        name = place["city"] if same or not place.get("country") else f"{place['city']}, {place['country']}"
+        return " ".join(part for part in (name, _flag(place.get("cc"))) if part)
+    names = [place["city"] for place in places]
+    flags = " ".join(dict.fromkeys(flag for flag in (_flag(place.get("cc")) for place in places) if flag))
+    joined = " и ".join(names) if len(names) == 2 else ", ".join(names[:-1]) + " и " + names[-1]
+    return " ".join(part for part in (joined, flags) if part)
+
+
+def _hours(value) -> str:
+    """~2 ч / ~6 ч; меньше полутора — «~1 ч»."""
+    return f"~{max(1, round(float(value)))} ч"
+
+
+def flight_deal(item, info) -> MessageSpec:
+    """«✈️ Амстердам → Ресифи, Бразилия 🇧🇷», ниже «**Цена:** от €526 · туда-обратно», «**Когда:**», «**В полёте:**»,
+    «**Источник:**»; без разбора места — исходный заголовок. Английского заголовка публикации в карточке нет."""
     b = MessageBuilder()
-    b.section("✈️ Ошибочный тариф из Амстердама" if details.get("error_fare") else "✈️ Дешёвый билет из Амстердама")
+    where = _places(info)
+    b.section(f"✈️ Амстердам → {where}" if where else "✈️ Дешёвый билет из Амстердама")
     b.spacer()
-    destination = details.get("destination") or ""
-    if destination:
-        b.labeled_line("Куда", f"Amsterdam → {destination}", lowercase=False)
-    else:
+    if not where:
         b.line(item.get("title") or "")
-    if details.get("price"):
-        b.labeled_line("Цена", f"от {details['price']}", lowercase=False)
-    if details.get("trip"):
-        b.labeled_line("Билет", details["trip"])
+    symbol = {"EUR": "€", "USD": "$", "GBP": "£"}.get(info.get("currency"), "€")
+    price = f"от {symbol}{info['price']}" if info.get("price") else ""
+    trip = {"return": "туда-обратно", "oneway": "в одну сторону"}.get(info.get("trip"), "")
+    value = " · ".join(part for part in (price, trip, "ошибочный тариф" if info.get("error_fare") else "") if part)
+    if value:
+        b.labeled_line("Цена", value, lowercase=False)
+    if info.get("dates"):
+        b.labeled_line("Когда", info["dates"], lowercase=False)
+    if info.get("hours"):
+        b.labeled_line("В полёте", _hours(info["hours"]), lowercase=False)  # оценка по расстоянию, без пересадок
     if item.get("source"):
         b.labeled_line("Источник", item["source"], lowercase=False)
     b.spacer()
-    b.line("Такие цены держатся недолго — проверь даты и цену в публикации.")
+    b.italic("Такие цены держатся недолго — даты и наличие проверь в публикации.")
+    b.newline()
     return b.build_stripped()

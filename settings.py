@@ -792,6 +792,12 @@ async def send_notif_kind(bot, cid, kind, q=None):
     for slot in slots if len(slots) > 1 else ():  # одно время (праздники — 18:00) не выбирается
         rows.append([InlineKeyboardButton(("✅ " if slot == current else "□ ") + slot,
                                           callback_data=f"set_notiftime_{kind}_{slot.replace(':', '')}")])
+    if kind == "flight_deals":  # фильтры: бюджет, время в полёте, тип билета — каждый своим экраном выбора
+        import flight_deals
+        chosen = flight_deals.filters(cid)
+        for name in ("budget", "hours", "trip"):
+            rows.append([InlineKeyboardButton(f"{_FLIGHT_FILTER_TITLES[name]}: {_flight_filter_label(name, chosen[name])}",
+                                              callback_data=f"set_fd_{name}")])
     if kind == "evening_weather" and str((store.get_settings(cid) or {}).get("cc") or "").upper() == "NL":
         import waste  # вывоз мусора в «Плане на завтра» — по адресу (календарь HVC)
         address = get(cid, waste.ADDRESS_KEY)
@@ -801,6 +807,30 @@ async def send_notif_kind(bot, cid, kind, q=None):
             rows.append([InlineKeyboardButton("Убрать адрес", callback_data="set_waste_del")])
     rows.append(nav_row("set_notif"))
     msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=len(slots) > 1)
+    await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
+
+
+_FLIGHT_FILTER_TITLES = {"budget": "Бюджет", "hours": "В полёте", "trip": "Билет"}
+
+
+def _flight_filter_label(name, value) -> str:
+    """«до €100» / «до 4 ч» / «туда-обратно»; без ограничения — «любой» / «любое»."""
+    if name == "budget":
+        return f"до €{value}" if value else "любой"
+    if name == "hours":
+        return f"до {value} ч" + (" · Европа" if value == 4 else "") if value else "любое"
+    return {"return": "туда-обратно", "oneway": "в одну сторону"}.get(value, "любой")
+
+
+async def send_flight_filter(bot, cid, name, q=None):
+    """Экран выбора одного фильтра «Дешёвых билетов»: ✅ выбранное, □ остальные; «Назад» — к рассылке."""
+    import flight_deals
+    values = {"budget": flight_deals.BUDGETS, "hours": flight_deals.HOURS, "trip": flight_deals.TRIP_FILTERS}[name]
+    current = flight_deals.filters(cid)[name]
+    rows = [[InlineKeyboardButton(("✅ " if value == current else "□ ") + _flight_filter_label(name, value),
+                                  callback_data=f"set_fd_{name}_{value}")] for value in values]
+    rows.append(nav_row("set_notifopen_flight_deals"))
+    msg = settings_ui.flight_filter(_FLIGHT_FILTER_TITLES[name], name)
     await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)
 
 
@@ -1390,6 +1420,15 @@ async def handle_callback(bot, cid, data, q=None):
         await toggle_food_meal(bot, cid, data[len("set_foodmeal_"):], q)
     elif data.startswith("set_foodrestr_"):
         await toggle_food_restriction(bot, cid, data[len("set_foodrestr_"):], q)
+    elif data in ("set_fd_budget", "set_fd_hours", "set_fd_trip"):
+        await send_flight_filter(bot, cid, data[len("set_fd_"):], q)
+    elif data.startswith("set_fd_"):
+        import flight_deals
+        name, _sep, value = data[len("set_fd_"):].partition("_")
+        if name in ("budget", "hours"):
+            value = int(value) if value.isdigit() else -1
+        flight_deals.set_filter(cid, name, value)
+        await send_flight_filter(bot, cid, name, q)
     elif data == "set_waste":
         store.pending_input[cid] = "waste_address"
         await bot.send_message(chat_id=cid, text=settings_ui.waste_address_prompt().text,
