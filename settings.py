@@ -338,11 +338,11 @@ def _first_visit(cid, flag) -> bool:
 
 async def send_home(bot, cid, q=None):
     rows = [
-        # Один столбец: Предпочтения, Город, отпуск, Уведомления, Экспорт; язык обучения — в «Предпочтения → Обучение».
+        # Один столбец: Уведомления, Предпочтения, Город, отпуск, Экспорт; язык обучения — в «Предпочтения → Обучение».
+        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📝 Предпочтения", callback_data="set_preferences")],
         [InlineKeyboardButton("📍 Город", callback_data="set_city")],
         [vacation_button(cid)],
-        [InlineKeyboardButton(ui_label("broadcasts", "Уведомления"), callback_data="set_notif")],
         [InlineKeyboardButton("📤 Экспорт", callback_data="as_export")],
         [InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ]
@@ -352,7 +352,7 @@ async def send_home(bot, cid, q=None):
     trip = vacation.state(cid)
     if trip:  # в отпуске — только то, что нужно в поездке: вернуться из отпуска и уведомления
         # «Мои данные» — шкаф, холодильник, словарь, библиотека: поправить, не выходя из отпуска.
-        rows = [[InlineKeyboardButton("🗂 Мои данные", callback_data="set_mydata")], rows[3],
+        rows = [rows[0], [InlineKeyboardButton("🗂 Мои данные", callback_data="set_mydata")],
                 [vacation_button(cid)], rows[-1]]  # «Вернуться из отпуска» — красная, над «Главной»
         msg = settings_ui.settings_trip(_trip_place_line(cid, data), (trip.get("home") or {}).get("city", ""),
                                         _trip_language_line(cid), settings_summary(cid),
