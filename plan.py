@@ -118,8 +118,9 @@ def weather_day(periods) -> dict:
     if ice:
         parts.append(f"{'гололёд' if wet else 'наледь'} {_labels(ice)}")
     take = (["шапку", "перчатки"] if low <= 0 else ["шарф"] if low <= SCARF_TMIN else []) + (["зонт"] if wet else [])
-    icon = (max(wet, key=lambda period: period["rain"])["icon"] if wet and not frost
-            else "❄️" if frost else main["icon"])
+    # ❄️ — только снег или мороз весь день (не выше 0°); в плюс без снега — знак дождя или неба.
+    snowy = any(weather.snowfall(period) for period in periods) or round(high) <= 0
+    icon = ("❄️" if snowy else max(wet, key=lambda period: period["rain"])["icon"] if wet else main["icon"])
     return {"icon": icon, "line": " · ".join(parts), "take": take}
 
 

@@ -55,7 +55,8 @@ def _period(label, tmin, tmax, rain=0, rain_mm=0.0, icon="☁️"):
 
 def test_tomorrow_weather_is_one_line_without_minus_zero():
     day = plan.weather_day([_period("Утром", -0.4, 1), _period("Днём", 1, 2), _period("Вечером", -0.3, -0.2)])
-    assert day == {"icon": "❄️", "line": "облачно, от 0° до +2° · ветер до 6 м/с · наледь утром и вечером",
+    # В плюс днём без снега — не снежинка, а знак неба; наледь — словами.
+    assert day == {"icon": "☁️", "line": "облачно, от 0° до +2° · ветер до 6 м/с · наледь утром и вечером",
                    "take": ["шапку", "перчатки"]}
     rainy = plan.weather_day([_period("Утром", 6, 8), _period("Днём", 8, 11, rain=80, rain_mm=3, icon="🌧️"),
                               _period("Вечером", 7, 9, rain=70, rain_mm=1, icon="🌧️")])

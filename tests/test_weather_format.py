@@ -579,3 +579,15 @@ def test_full_forecast_is_one_line_per_part_of_day():
                         "❄️ Утром: -1° · ветер 5–6 м/с\n🌧️ Днём: +4° · ветер 5–6 м/с · 🌧️ дождь 70%\n\n"
                         "Золотой час будет с 15:36 по 17:00.")
     assert weather.degrees(-0.3) == "0°" and weather.degrees(1.6) == "+2°"
+
+
+def test_snowflake_only_for_snow_or_a_frosty_part_of_day():
+    base = {"label": "Утром", "icon": "☁️", "rain": 0, "rain_mm": 0, "code": 3}
+    assert weather.period_title({**base, "tmax": 2, "tmin": -1}) == "☁️ Утром"  # плюс без снега — без снежинки
+    assert weather.period_title({**base, "tmax": -1, "tmin": -3}) == "❄️ Утром"  # мороз всю часть суток
+    assert weather.period_title({**base, "tmax": 1, "tmin": 0, "rain": 80, "rain_mm": 2,
+                                 "icon": "🌧️"}) == "❄️ Утром"  # осадки около нуля — снег
+    assert weather.period_title({**base, "tmax": 3, "tmin": 1, "rain": 80, "rain_mm": 2, "code": 73,
+                                 "icon": "🌧️"}) == "❄️ Утром"  # снежный код дня
+    assert weather.period_title({**base, "tmax": 6, "tmin": 3, "rain": 80, "rain_mm": 2,
+                                 "icon": "🌧️"}) == "🌧️ Утром"  # дождь в плюс

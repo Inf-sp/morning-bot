@@ -387,12 +387,25 @@ def _period_weather_icon(label, code, temp, rain, wind_ms=0, rain_mm=None, cloud
     return evening_icon(weather_icon(code, temp, rain, wind_ms, rain_mm, clouds), label)
 
 
+SNOW_TMAX = 1  # °C: осадки при такой температуре — снег или мокрый снег
+
+
+def snowfall(period) -> bool:
+    """В эту часть суток пойдёт снег: реальные осадки и снежный код дня или температура не выше +1°."""
+    wet = _rain_real(period.get("rain") or 0, period.get("rain_mm"))
+    return wet and (period.get("code") in SNOW_CODES or period["tmax"] <= SNOW_TMAX)
+
+
+def snowflake(period) -> bool:
+    """❄️ — только снег или мороз всю часть суток (максимум не выше 0°); в плюс без снега — обычный знак погоды."""
+    return snowfall(period) or round(period["tmax"]) <= 0
+
+
 def period_title(period) -> str:
-    """Заголовок части суток одним знаком погоды: минус хотя бы в часть периода — ❄️ (и с дождём — гололёд),
-    иначе знак погоды периода: «❄️ Ночью», «🌧️ Днём», «✨ Вечером»."""
-    frost = period.get("tmin", period["tmax"]) <= 0
+    """Заголовок части суток одним знаком погоды: снег или мороз всю часть суток — ❄️, иначе знак погоды периода
+    (в плюс без снега снежинки нет): «❄️ Ночью», «🌧️ Днём», «✨ Вечером»."""
     icon = period["icon"]
-    if frost:
+    if snowflake(period):
         icon = icon if icon == "🌩️" else "❄️"
     return f"{icon} {period['label']}"
 
