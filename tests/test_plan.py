@@ -21,9 +21,9 @@ def test_plan_has_weather_and_everything_for_tomorrow():
         "План на завтра · Ср, 25 ноября · Alkmaar, NL 🇳🇱\n\n"
         "❄️ Погода: облачно, от -1° до +3° · ветер до 5 м/с · наледь утром\n🌅 Светло: 08:21–16:35\n"
         "🧤 Возьми: шапку и перчатки.\n\n"
-        "⚠️ Предупреждение: Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00.\n"
-        "🎉 Праздник: Sinterklaasavond — вечер подарков.\n"
-        "🏙️ Городское событие: Ice rink on Waagplein · Waagplein · бесплатно\n"
+        "⚠️ Предупреждение: Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00.\n\n"
+        "🎉 Праздник: Sinterklaasavond\nВечер подарков.\n\n"  # праздник и события — в конце, с описанием
+        "🏙️ Городское событие: Ice rink on Waagplein · Waagplein · до 3 января · бесплатно\n"
         "🎬 Премьера: Дюна · фантастика")
 
 
@@ -114,3 +114,14 @@ def test_plan_shows_bike_waste_concert_soon_release_and_works_end():
     assert "🎫 Через 3 дня: Muse · Ziggo Dome, Amsterdam" in text
     assert "🎧 Новый сингл: Muse — «Unravelling»" in text
     assert "🚆 Поезда как обычно: Haarlem - Alkmaar — работы закончились" in text
+
+
+def test_events_go_last_with_time_place_and_a_short_description():
+    text = myday_ui.tomorrow_plan({
+        "day": date(2026, 11, 27), "city": "Alkmaar", "weather": {"icon": "☀️", "line": "малооблачно", "take": []},
+        "events": [{"kind": "concert", "name": "Muse", "date": "2026-11-27", "end": "2026-11-27",
+                    "place": "Ziggo Dome, Amsterdam", "time": "20:00", "mine": True,
+                    "about": "Стадионный рок с оркестром."}],
+        "works": [{"title": "Haarlem – Alkmaar", "start": date(2026, 11, 25), "end": date(2026, 11, 30)}]}).text
+    assert text.endswith("🎫 Концерт: Muse · 20:00 · Ziggo Dome, Amsterdam · твой артист\nСтадионный рок с оркестром.")
+    assert text.index("🚧") < text.index("🎫")

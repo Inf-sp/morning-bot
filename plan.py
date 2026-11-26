@@ -171,6 +171,8 @@ def collect(cid, now=None) -> dict:
     plan["events"] = [card for card in cards if card["kind"] not in ("premiere", "read", "holiday")
                       and card["date"] <= iso <= card["end"]][:4]
     plan["premieres"] = [card for card in cards if card["kind"] == "premiere" and card["date"] == iso][:2]
+    # Каждому событию и премьере — короткое описание «чем интересно» (общий кэш описаний, один ИИ-запрос на новые).
+    safe("describe", lambda: leisure_events.describe(plan["events"] + plan["premieres"], plan["city"]) and [])
     if plan["cc"] == "NL":
         import ns_alerts
         plan["works"] = safe("works", lambda: ns_alerts.todays_works(cid, tomorrow))

@@ -53,7 +53,8 @@ def _concerts(cid, today, cc) -> list:
         cards.append({"kind": "concert", "name": item["artist"], "url": item.get("url") or "",
                       "date": item["date"], "end": item["date"], "venue": item.get("venue") or "",
                       "place": ", ".join(part for part in (item.get("venue"), item.get("city")) if part),
-                      "mine": mine_flag, "about": note(item).get("about") or "", "image": ""})
+                      "mine": mine_flag, "about": note(item).get("about") or "", "image": "",
+                      "time": str(item.get("time") or "")[:5]})
     return cards
 
 

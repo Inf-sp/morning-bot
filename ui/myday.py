@@ -469,17 +469,6 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
                       else ", ".join(kinds[:-1]) + " и " + kinds[-1]))
     for line in plan.get("official") or []:  # «Код жёлтый KNMI — ветер, завтра с 10:00 до 18:00»
         extra.append(("⚠️", "Предупреждение", finish_dot(line)))
-    for holiday in plan.get("holidays") or []:
-        about = str(holiday.get("about") or "").strip()
-        extra.append(("🎉", "Праздник", finish_dot(holiday["name"] + (f" — {about}" if about else ""))))
-    for card in plan.get("events") or []:
-        emoji, label, meta = leisure_ui._event_meta(card)
-        values = [value for value in meta if str(value or "").strip()]
-        extra.append((emoji, label, " · ".join([card["name"], *values[1:]])))  # дата — уже «завтра»
-    for card in plan.get("premieres") or []:
-        emoji, label, meta = leisure_ui._event_meta(card)
-        values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
-        extra.append((emoji, "Премьера", " · ".join([card["name"], *values])))
     for item in plan.get("concerts_soon") or []:  # «🎫 Через 3 дня: Muse · Ziggo Dome, Amsterdam»
         days = (date.fromisoformat(item["date"]) - plan["day"]).days + 1
         place = ", ".join(part for part in (item.get("venue"), item.get("city")) if part)
@@ -492,11 +481,33 @@ def tomorrow_plan(plan, reply_markup=None) -> MessageSpec:
         extra.append(("🚧", "Работы на ЖД", _works_text(works, plan["day"])))  # «… до 30 ноября · меньше поездов»
     for works in plan.get("works_end") or []:  # «🚆 Поезда как обычно: Haarlem - Alkmaar — работы закончились»
         extra.append(("🚆", "Поезда как обычно", f"{_works_section(works.get('title'))} — работы закончились"))
+    # Праздники, события и премьеры — в конце, с описанием: чего ждать завтра.
+    for holiday in plan.get("holidays") or []:  # «🎉 Праздник: Sinterklaasavond», ниже — коротко, что это
+        extra.append(("🎉", "Праздник", holiday["name"], str(holiday.get("about") or "").strip()))
+    for card in plan.get("events") or []:  # «🏙️ Городское событие: Ice rink · Waagplein · до 3 января», ниже — описание
+        emoji, label, _meta = leisure_ui._event_meta(card)
+        until = (f"до {date.fromisoformat(card['end']).day} {_MONTHS_GENITIVE[date.fromisoformat(card['end']).month]}"
+                 if str(card.get("end") or "")[:10] > plan["day"].isoformat() else "")
+        values = [card["name"], card.get("time") or "", card.get("place") or "", until,
+                  "бесплатно" if card.get("free") else "", "твой артист" if card.get("mine") else ""]
+        extra.append((emoji, label, " · ".join(value for value in values if value), str(card.get("about") or "")))
+    for card in plan.get("premieres") or []:
+        emoji, _label, meta = leisure_ui._event_meta(card)
+        values = [value for value in meta[:-1] if str(value or "").strip()]  # без даты — она завтра
+        extra.append((emoji, "Премьера", " · ".join([card["name"], *values]), str(card.get("about") or "")))
     if extra:
+        # Строки без описания — подряд; событие с описанием — отдельным абзацем: «что это и чем интересно» под ним.
         b.spacer()
-        for emoji, label, value in extra:
+        previous_about = False
+        for entry in extra:
+            emoji, label, value, about = (*entry, "")[:4]
+            if (about or previous_about) and entry is not extra[0]:
+                b.spacer()
             b.text_line(f"{emoji} ")
             b.labeled_line(label, value, lowercase=False)
+            if about:
+                b.line(finish_dot(about[:1].upper() + about[1:]))
+            previous_about = bool(about)
     else:
         b.spacer()
         b.italic("Завтра без особых событий — день можно планировать свободно.")
