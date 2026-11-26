@@ -83,9 +83,8 @@ def bike_window(hourly, day) -> str:
 
 
 def _degrees(value) -> str:
-    """«+2°», «-3°», а около нуля — «0°» (не «-0°»)."""
-    value = round(float(value))
-    return "0°" if value == 0 else f"{value:+d}°"
+    import weather
+    return weather.degrees(value)
 
 
 def _labels(names) -> str:

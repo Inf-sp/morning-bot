@@ -74,7 +74,12 @@ def full_forecast(header, current, periods, sunrise_line="", sunset_line="", adv
         b.section(current.get("title") or "Сейчас")
         for line in current.get("lines") or []:
             b.bullet(line)
-    for period in periods:
+    if periods and "value" in periods[0]:  # части суток строками «❄️ **Утром:** -1° · ветер 5–6 м/с»
+        b.spacer()
+        for period in periods:
+            b.text_line(f"{period['icon']} ")
+            b.labeled_line(period["label"], period["value"], lowercase=False)
+    for period in periods if not periods or "value" not in periods[0] else ():
         b.spacer()
         b.section(period.get("title") or period.get("label") or "Прогноз")
         for line in period.get("lines") or []:

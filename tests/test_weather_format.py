@@ -566,3 +566,16 @@ def test_tomorrow_period_marks_frost_and_ice():
     assert weather._period_lines(wet)[1:3] == [("Температура", "до +1°C · гололёд"), ("Осадки", "🌧️ дождь 80%")]
     warm = {**cold, "tmax": 5, "tmin": 2}
     assert weather._period_lines(warm)[:2] == [("🌤️ Утром", None), ("Температура", "до +5°C")]
+
+
+def test_full_forecast_is_one_line_per_part_of_day():
+    from ui import weather as weather_ui
+    msg = weather_ui.full_forecast(
+        "Полный прогноз · Чт, 26 ноября · Alkmaar, NL 🇳🇱", None,
+        [{"icon": "❄️", "label": "Утром", "value": "-1° · ветер 5–6 м/с"},
+         {"icon": "🌧️", "label": "Днём", "value": "+4° · ветер 5–6 м/с · 🌧️ дождь 70%"}],
+        "Восход 08:21 → закат 16:34", "", "Золотой час будет с 15:36 по 17:00.")
+    assert msg.text == ("Полный прогноз · Чт, 26 ноября · Alkmaar, NL 🇳🇱\n\nВосход 08:21 → закат 16:34\n\n"
+                        "❄️ Утром: -1° · ветер 5–6 м/с\n🌧️ Днём: +4° · ветер 5–6 м/с · 🌧️ дождь 70%\n\n"
+                        "Золотой час будет с 15:36 по 17:00.")
+    assert weather.degrees(-0.3) == "0°" and weather.degrees(1.6) == "+2°"

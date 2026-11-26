@@ -446,6 +446,12 @@ def forecast_periods(data, now, day=0):
     return periods
 
 
+def degrees(value) -> str:
+    """«+2°», «-3°», около нуля — «0°» (не «-0°»)."""
+    value = round(float(value))
+    return "0°" if value == 0 else f"{value:+d}°"
+
+
 def _period_lines(period) -> list:
     """Блок части суток в прогнозе на завтра в стиле уведомлений — «**🌧️ Днём:**», ниже «**Температура:** до
     +18°C», «**Осадки:** 🌧️ дождь 70%», «**Ветер:** 3–5 м/с»: пары (подпись, значение), подпись жирным."""
@@ -537,26 +543,27 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         cc = str(s.get("cc") or "").upper()
         flag = flag_from_cc(cc) or ""
         place = f"{s['city']}{f', {cc}' if cc else ''}{f' {flag}' if flag else ''}"
-        header = f"Полный прогноз • {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
-        periods = [
-            {
-                # Минус хотя бы в часть периода — ❄️ вместо знака погоды («❄️ Ночью»), с дождём ещё «гололёд».
-                "title": period_title(p),
-                "lines": [
-                    f"Температура до {p['tmax']:+.0f}°C"
-                    + (" · гололёд" if p.get("tmin", p["tmax"]) <= 0 and _rain_real(p["rain"], p["rain_mm"]) else ""),
-                    f"Ветер {_speed_range(p['winds'])} м/с",
-                    f"{'🌧️ ' if _rain_real(p['rain'], p['rain_mm']) else ''}Дождь {p['rain']:.0f}%",
-                ],
-            }
-            for p in forecast_periods(data, dt)
-        ]
+        header = f"Полный прогноз · {_WEEKDAY_SHORT[dt.weekday()]}, {dt.day} {_MONTHS[dt.month-1]} · {place}"
+        raw_periods = forecast_periods(data, dt)
+        # Часть суток — одной строкой: «❄️ Утром: -1° · ветер 5–6 м/с»; дождь — только реальный
+        # («· 🌧️ дождь 70%»), с минусом ещё «· гололёд»; без дождя весь день — одной фразой внизу.
+        periods = []
+        for p in raw_periods:
+            wet = _rain_real(p["rain"], p["rain_mm"])
+            icon, _sp, label = period_title(p).partition(" ")
+            parts = [degrees(p["tmax"]), f"ветер {_speed_range(p['winds'])} м/с"]
+            if wet:
+                parts.append(f"🌧️ дождь {p['rain']:.0f}%")
+            if wet and p.get("tmin", p["tmax"]) <= 0:
+                parts.append("гололёд")
+            periods.append({"icon": icon, "label": label, "value": " · ".join(parts)})
+        dry = raw_periods and not any(_rain_real(p["rain"], p["rain_mm"]) for p in raw_periods)
         import vacation
         local = await asyncio.to_thread(vacation.local_tz, cid)  # в отпуске — время места, не Амстердама
         sunrise = _clock((d.get("sunrise") or [""])[0], local)
         sunset = _clock((d.get("sunset") or [""])[0], local)
         sunrise_line = (
-            f"Восход {sunrise} → Закат {sunset}" if sunrise and sunset
+            f"Восход {sunrise} → закат {sunset}" if sunrise and sunset
             else f"Восход {sunrise}" if sunrise
             else f"Закат {sunset}" if sunset
             else ""
@@ -565,6 +572,8 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
         golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(local).date(), local)
         sunset_line = ""
         advice = _qualitative_outlook([day_conditions(data, 1)], "Завтра")
+        if dry:
+            advice = f"Без дождя. {advice}".strip()
         if golden:
             # Золотой час — последним предложением строки «Полезно».
             advice = str(advice or "").strip()
