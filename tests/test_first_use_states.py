@@ -595,52 +595,52 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert _labels(message.reply_markup) == [
         ["🎯 Запустить тренировку"], ["🕵️ Угадай слово"], ["🎚️ Настроить словарь", "#️⃣ Главная"]]
     assert message.text.split("\n\n")[1:] == [
-        "В придаточном предложении глагол стоит в конце: zodra ik thuis ben:\n• Переводится как «как только».",
+        "Zodra → Как только",
+        "Разбор: в придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
         "Пример: Я перезвоню тебе, как только закончу → Ik bel je terug zodra ik klaar ben.",
         "Твой нидерландский · 120 слов · 14 изученных тем"]
 
 
-_DAAROM_CARD = {"meaning": "поэтому", "intro": "Daarom вводит следствие и требует инверсии глагола",
-                "points": ["Переводится как 'Поэтому' и показывает результат или следствие.",
-                           "В начале второго предложения глагол ставится сразу после daarom (инверсия).",
-                           "Не путать с omdat, после которого глагол в конце."],
-                "example": "Ik was moe, daarom ben ik vroeg gaan slapen.",
-                "translation": "Я устал, поэтому рано лёг спать"}
+_BOVENDIEN_CARD = {"pos": "Наречие", "meaning": "Кроме того · к тому же",
+                   "explain": "Добавляет ещё один довод и связывает две мысли. В начале предложения требует "
+                              "инверсии — глагол сразу после bovendien. Не путать с omdat, после которого глагол "
+                              "уходит в конец.",
+                   "example": "Hij was te laat, bovendien vergat hij de sleutel.",
+                   "translation": "Он опоздал, к тому же забыл ключ"}
 
 
-def test_grammar_card_is_term_in_bold_inside_the_sentence_facts_and_b1_example():
+def test_grammar_card_is_term_with_part_of_speech_meanings_breakdown_and_example():
     import live_language
-    card = live_language._clean_card(_DAAROM_CARD)
+    card = live_language._clean_card(_BOVENDIEN_CARD)
     message = menu_ui.learning_menu({
-        "has_material": True, "lang_code": "nl", "stats": {"words": 190, "topics": 33},
-        "live_language": {"id": "daarom", "topic": "Daarom", "meaning": "поэтому", "explain": "", "card": card}})
+        "has_material": True, "lang_code": "nl", "stats": {"words": 192, "topics": 35},
+        "live_language": {"id": "bovendien", "topic": "Bovendien", "meaning": "кроме того", "explain": "",
+                          "card": card}})
     assert message.text == (
         "🇳🇱 Изучаем сегодня · Нидерландский\n\n"
-        "Daarom вводит следствие и требует инверсии глагола:\n"
-        "• Переводится как «поэтому» и показывает результат или следствие.\n"  # ёлочки, со строчной
-        "• В начале второго предложения глагол ставится сразу после daarom (инверсия).\n"
-        "• Не путать с omdat, после которого глагол в конце.\n\n"
-        "Пример: Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik vroeg gaan slapen.\n\n"
-        "Твой нидерландский · 190 слов · 33 изученные темы")
-    assert "Как использовать" not in message.text
+        "Bovendien (наречие) → Кроме того · к тому же\n\n"
+        "Разбор: добавляет ещё один довод и связывает две мысли. В начале предложения требует инверсии — глагол "
+        "сразу после bovendien. Не путать с omdat, после которого глагол уходит в конец.\n\n"
+        "Пример: Он опоздал, к тому же забыл ключ → Hij was te laat, bovendien vergat hij de sleutel.\n\n"
+        "Твой нидерландский · 192 слова · 35 изученных тем")
     raw = message.text.encode("utf-16-le")
     bold = [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le") for e in message.entities if e.type == "bold"]
-    assert "Daarom" in bold and "Пример:" in bold  # тема — жирным прямо в предложении
+    assert "Bovendien" in bold and "Разбор:" in bold and "Пример:" in bold
 
 
 def test_grammar_card_is_built_once_and_rejects_bad_answers(monkeypatch):
     import live_language
-    assert live_language._clean_card({**_DAAROM_CARD, "points": ["Один факт."]}) is None  # нужно 2–3 факта
-    assert live_language._clean_card({**_DAAROM_CARD, "example": "Я устал."}) is None  # пример — на изучаемом
+    assert live_language._clean_card({**_BOVENDIEN_CARD, "explain": ""}) is None  # нужен разбор
+    assert live_language._clean_card({**_BOVENDIEN_CARD, "example": "Он опоздал."}) is None  # пример — на изучаемом
     saved, asked = {}, []
     monkeypatch.setattr(live_language.store, "_load", lambda key: saved.get(key))
     monkeypatch.setattr(live_language.store, "mutate_kv",
                         lambda key, change: saved.__setitem__(key, change(saved.get(key))[0]))
     import ai
-    monkeypatch.setattr(ai, "llm_json", lambda prompt, *_a, **_k: asked.append(prompt) or _DAAROM_CARD)
-    topic = {"id": "daarom", "topic": "Daarom", "meaning": "поэтому", "explain": "…", "example": "", "translation": ""}
-    assert live_language.build_lesson_card(topic)["points"][1].startswith("В начале второго предложения")
+    monkeypatch.setattr(ai, "llm_json", lambda prompt, *_a, **_k: asked.append(prompt) or _BOVENDIEN_CARD)
+    topic = {"id": "bovendien", "topic": "Bovendien", "meaning": "кроме того", "explain": "…", "example": "",
+             "translation": ""}
+    assert live_language.build_lesson_card(topic)["pos"] == "наречие"
     assert live_language.build_lesson_card(topic) is not None and len(asked) == 1  # один раз на тему
-    assert "B1" in asked[0] and "прошедшем времени" in asked[0] and "Переводится как" in asked[0]
+    assert "B1" in asked[0] and "прошедшем времени" in asked[0] and "не путать" in asked[0].casefold()
     assert "не дословно" in asked[0]
-

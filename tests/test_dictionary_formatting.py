@@ -279,31 +279,27 @@ def test_morning_word_shows_deep_dive_and_spoiler_answer():
         "exercise_answer": "Ik lees immers een boek.",
     }])
 
-    assert "🇳🇱 Слово дня" in msg.text
-    assert "Immers → [и́ммерс] · ведь · же" in msg.text
-    assert "В чём суть: Так напоминают о том, что собеседнику уже должно быть известно. Обычно immers стоит в середине предложения." in msg.text
-    assert "Het is immers weekend! → Сейчас ведь выходные! (Когда спишь до обеда)" in msg.text
-    assert "Крючок для памяти" not in msg.text
-    assert "🎯 Твоя очередь: «Я ведь читаю книгу.» → Ik lees immers een boek." in msg.text
-    spoilers = [entity for entity in msg.entities if entity.type == "spoiler"]
-    assert len(spoilers) == 1
+    assert msg.text.startswith("🇳🇱 Слово дня\n\nImmers → Ведь · же\n\n")
+    assert "[и́ммерс]" not in msg.text  # произношения в рассылке нет
+    assert ("Разбор: так напоминают о том, что собеседнику уже должно быть известно. Обычно immers стоит в середине "
+            "предложения.") in msg.text
+    assert "Пример: Je bent immers mijn vriend → Ты же мой друг" in msg.text  # второй пример; первый — викторине
+    assert "Живые примеры" not in msg.text and "Твоя очередь" not in msg.text
+    assert not [entity for entity in msg.entities if entity.type == "spoiler"]
 
 
-def test_dictionary_and_daily_word_use_the_same_saved_card_body():
-    entry = _complete_study_entry("Beperken", "Ограничивать; сокращать")
+def test_daily_word_is_compact_and_dictionary_keeps_the_full_card():
+    entry = {**_complete_study_entry("Beperken", "Ограничивать; сокращать"), "pos": "глагол"}
 
     dictionary_msg = dictionary_ui.dict_category_entry("Глаголы", 0, 1, entry)
-    daily_msg = learning_ui.morning_words("🇳🇱", entries=[entry])
+    daily_msg = learning_ui.morning_words("🇳🇱", entries=[entry], language="Нидерландский",
+                                          stats={"words": 192, "topics": 35})
 
-    dictionary_body = dictionary_msg.text.split("\n\n", 1)[1]
-    daily_body = daily_msg.text.split("\n\n", 1)[1]
-    assert dictionary_body == daily_body
-    assert "Beperken → [произноше́ние] · ограничивать · сокращать" in dictionary_body
-    assert "В чём суть:" in dictionary_body
-    assert "Живые примеры:" in dictionary_body
-    assert "🎯 Твоя очередь:" in dictionary_body
-    assert any(entity.type == "spoiler" for entity in dictionary_msg.entities)
-
+    assert daily_msg.text.startswith("🇳🇱 Слово дня · Нидерландский\n\nBeperken (глагол) → Ограничивать · сокращать")
+    assert "Разбор:" in daily_msg.text and "Пример:" in daily_msg.text
+    assert daily_msg.text.endswith("Твой нидерландский · 192 слова · 35 изученных тем")
+    assert "Живые примеры:" not in daily_msg.text and "Твоя очередь" not in daily_msg.text
+    assert "Живые примеры:" in dictionary_msg.text  # в словаре — полная карточка
 
 def test_new_dictionary_analysis_builds_complete_persistable_card(monkeypatch):
     async def analyze(_prompt, **_kwargs):

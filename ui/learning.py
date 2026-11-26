@@ -1,9 +1,8 @@
 import re
 
-from dictionary_model import study_card_is_complete
 from .builder import MessageBuilder
 from .constants import ui_label
-from .learning_entry import render_learning_entry, render_study_card
+from .learning_entry import render_learning_entry, render_word_card
 
 
 # ================= ТРЕНАЖЁР: 7 ФОРМАТОВ ЗАДАНИЙ =================
@@ -130,10 +129,12 @@ def train_lang_select():
     return b.build()
 
 
-def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", rule=""):
-    """Глубокая карточка одного слова дня."""
+def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", rule="", language="", stats=None):
+    """Рассылка «🇳🇱 Слово дня · Нидерландский»: «**Immers** (наречие) → Ведь · же · действительно», «Разбор:» — суть
+    и как употреблять, один «Пример:» (второй пример карточки — первый остаётся вечерней викторине); без
+    произношения, «Живых примеров» и «Твоей очереди»; курсивом — «Твой нидерландский · 192 слова · 35 изученных тем»."""
     b = MessageBuilder()
-    b.section(f"{flag} Слово дня")
+    b.section(f"{flag} Слово дня" + (f" · {language}" if language else ""))
     if empty_hint:
         b.line("В словаре пока нет одиночных слов для разбора.")
         b.spacer()
@@ -146,11 +147,12 @@ def morning_words(flag, words=None, empty_hint=False, *, entries=None, tip="", r
     if not prepared and words:
         prepared = [{"term": word, "translation": ru} for word, ru in words]
     if prepared:
-        entry = prepared[0]
-        if study_card_is_complete(entry):
-            render_study_card(b, entry)
-        else:
-            render_learning_entry(b, entry)
+        render_word_card(b, prepared[0], explain=True, example_index=1)
+    if stats and stats.get("words") and language:
+        from .menu import learning_stats_line
+        b.spacer()
+        b.italic(learning_stats_line(language, stats.get("words"), stats.get("topics")))
+        b.newline()
     msg = b.build()
     msg.text = msg.text.rstrip("\n")
     return msg

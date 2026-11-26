@@ -32,7 +32,7 @@ from dictionary_model import (
     normalize_term_case,
 )
 from ui.constants import delete_label
-from ui.learning_entry import render_learning_entry, render_study_card
+from ui.learning_entry import render_word_card
 from ui.navigation import back_menu_keyboard, nav_row
 from dictionary_normalize import (  # noqa: F401 — re-exported for callers
     _usable_analysis_result,
@@ -358,21 +358,21 @@ async def try_add_dict_from_chat(bot, cid, text):
     return True
 
 
-def _dict_entry_message(entry, status="added"):
-    """Единая карточка слова: статус, перевод, разбор и один пример."""
+def _dict_entry_message(entry, status="added", words=None):
+    """Карточка слова: «🇳🇱 Добавлено новое слово · Нидерландский», «**De twijfel** (de twijfels) → Сомнение ·
+    колебание», «Разбор:», «Пример:»; words — курсивом внизу «Твой нидерландский · 192 слова»."""
     from ui.builder import MessageBuilder
 
     entry = _apply_known_dutch_verb_card(entry)
     b = MessageBuilder()
     lang = entry.get("lang") if entry.get("lang") in ("nl", "en") else "nl"
     flag = "🇳🇱" if lang == "nl" else "🇬🇧"
-    dictionary_accusative = "нидерландский" if lang == "nl" else "английский"
-    dictionary_prepositional = "нидерландском" if lang == "nl" else "английском"
+    language = "Нидерландский" if lang == "nl" else "Английский"
     titles = {
-        "added": f"Добавлено в {dictionary_accusative} словарь",
-        "updated": f"Обновлено в {dictionary_prepositional} словаре",
-        "found": f"Найдено в {dictionary_prepositional} словаре",
-        "duplicate": f"Уже в {dictionary_prepositional} словаре",
+        "added": f"Добавлено новое слово · {language}",
+        "updated": f"Слово обновлено · {language}",
+        "found": f"Нашлось в словаре · {language}",
+        "duplicate": f"Уже в словаре · {language}",
     }
     if _is_card_placeholder(entry):
         b.text_line(f"⏳ Карточка «{display_term(_entry_term(entry))}» готовится — пришлю её сюда, "
@@ -383,10 +383,12 @@ def _dict_entry_message(entry, status="added"):
     title = titles.get(status, "Найдено")
     b.bold(title)
     b.newline()
-    if study_card_is_complete(entry):
-        render_study_card(b, entry)
-    else:
-        render_learning_entry(b, entry)
+    render_word_card(b, entry)
+    if words:
+        from ui.text import ru_plural
+        b.spacer()
+        b.italic(f"Твой {language.lower()} · {int(words)} {ru_plural(int(words), 'слово', 'слова', 'слов')}")
+        b.newline()
     return b.build_stripped()
 
 
@@ -1296,13 +1298,23 @@ async def _analyze_word(cid, term, lang, *, meaning=None, source_text=""):
         return None, True
 
 
+def _words_count(cid, lang):
+    """Слов в словаре языка — для нижней строки «Твой нидерландский · 192 слова»."""
+    try:
+        import learning
+        return learning._learning_stats(cid, lang if lang in ("nl", "en") else "nl")["words"]
+    except Exception:
+        _log.debug("dictionary: words count unavailable", exc_info=True)
+        return 0
+
+
 def _is_ready_card(entry):
     return bool(entry and entry_is_dictionary_word(entry) and not entry.get("needs_confirmation"))
 
 
 async def _send_saved_word(bot, cid, entry):
     status, saved = _save_normalized_dict_entry(cid, entry)
-    msg = _dict_entry_message(saved, status=status)
+    msg = _dict_entry_message(saved, status=status, words=_words_count(cid, saved.get("lang")))
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     kb = (_dict_duplicate_kb(saved, term_key, show_dictionary=True) if status == "duplicate"
           else _dict_saved_kb(saved, term_key, show_dictionary=True))
@@ -1689,7 +1701,7 @@ async def confirm_pending_dict_add(bot, cid):
         return
     entry = await learning_data_quality.check_new_entry(entry)
     status, saved = _save_normalized_dict_entry(cid, entry)
-    msg = _dict_entry_message(saved, status=status)
+    msg = _dict_entry_message(saved, status=status, words=_words_count(cid, saved.get("lang")))
     term_key = _dict_item_key(saved["lang"], "", _entry_term(saved))[2]
     await bot.send_message(
         chat_id=cid,

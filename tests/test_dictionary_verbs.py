@@ -56,7 +56,7 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert entry["perfect_form"] == "heeft vervangen"
     assert entry["analysis_provider"] == "app_llm"
     assert "🇳🇱 Добавлено" in message.text
-    assert "Vervangen → Заменять, менять" in message.text
+    assert "Vervangen → Заменять · менять" in message.text
     assert "Разбор: сильный глагол" in message.text
     assert "Формы: vervangen · verving · heeft vervangen" in message.text
     assert "Спряжение: ik vervang · jij/u/hij vervangt · wij/jullie/zij vervangen" in message.text
@@ -304,14 +304,13 @@ def test_bevelen_card_uses_verb_analysis_and_related_noun():
     }, status="added")
 
     assert message.text == (
-        "🇳🇱 Добавлено в нидерландский словарь\n\n"
+        "🇳🇱 Добавлено новое слово · Нидерландский\n\n"
         "Bevelen → Приказывать\n\n"
-            "Разбор: глагол\n"
-            "Формы: bevelen · beval · bevolen\n"
-            "Спряжение: ik beveel · jij/u/hij beveelt · wij/jullie/zij bevelen\n"
-            "Пример:\n"
-        "Ik moet hem bevelen om te stoppen. → Мне нужно приказать ему остановиться.\n\n"
-        "het bevel → приказ (множественное число: de bevelen)"
+        "Разбор: глагол\n"
+        "Формы: bevelen · beval · bevolen\n"
+        "Спряжение: ik beveel · jij/u/hij beveelt · wij/jullie/zij bevelen\n"
+        "Пример: Ik moet hem bevelen om te stoppen → Мне нужно приказать ему остановиться\n"
+        "Существительное: het bevel → приказ (de bevelen)"
     )
 
 
@@ -374,7 +373,7 @@ def test_common_dutch_noun_is_added_without_ai_when_providers_are_unavailable(mo
     assert entry["term"] == "Waarde"
     assert entry["article"] == "de"
     assert entry["translation"] == "Ценность; значение"
-    assert "De waarde → Ценность · значение" in dictionary_import._dict_entry_message(
+    assert "De waarde (de waarden) → Ценность · значение" in dictionary_import._dict_entry_message(
         entry, status="added").text
 
 

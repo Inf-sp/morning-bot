@@ -143,17 +143,6 @@ def _grammar_head(phrase) -> tuple:
     return topic, meaning
 
 
-_INTRO_INLINE_MAX = 90  # суть короче — в скобках после темы; длиннее или со своими скобками — строкой ниже
-
-
-def _in_parens(intro) -> str:
-    """Суть в скобки после темы: без точки, русское первое слово — со строчной; иначе ""."""
-    intro = _without_period(intro)
-    if not intro or "(" in intro or len(intro) > _INTRO_INLINE_MAX:
-        return ""
-    return intro[:1].lower() + intro[1:] if re.match(r"[А-ЯЁ]", intro) else intro
-
-
 def _grammar_points(explanation) -> list:
     """Объяснение — пунктами по предложениям, не больше двух: «Неправильный глагол: ik ben, …», «В вопросе с jij —
     ben jij.»."""
@@ -176,15 +165,19 @@ def _grammar_explanation(phrase) -> str:
     return text
 
 
+_EXPLAIN_MAX = 420
+
+
 def _grammar_lesson(phrase) -> dict:
-    """Тема дня → {term, intro, points, example}. Карточка темы (phrase["card"]): суть с темой внутри, 2–3 факта и
-    пример уровня B1 (перевод → фраза); нет карточки — из краткого разбора: первое предложение — суть, остальные —
-    факты, значение — первым фактом."""
+    """Тема дня → {term, pos, meaning, explain, example}: «Bovendien (наречие) → Кроме того · к тому же», один
+    «Разбор» (суть, порядок слов, с чем не путать) и «Пример» (перевод → фраза B1). Карточка темы (phrase["card"]) —
+    из ИИ; нет карточки — из краткого разбора: первое короткое предложение — значение, следующие — разбор."""
     card = phrase.get("card") or {}
     term, meaning = _grammar_head({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")}) \
         if phrase.get("topic") else _grammar_parts(phrase.get("rule"))[0:1] + ("",)
-    if phrase.get("topic") and card.get("intro") and card.get("points"):
-        intro, points = _without_period(card["intro"]), [_with_period(_quotes(point)) for point in card["points"]]
+    pos = str(card.get("pos") or "").strip()
+    if phrase.get("topic") and card.get("explain"):
+        explain = _quotes(card["explain"])
         example, translation = card.get("example"), card.get("translation")
     else:
         explanation = _grammar_explanation(phrase) if phrase.get("topic") and phrase.get("explain") else (
@@ -192,15 +185,20 @@ def _grammar_lesson(phrase) -> dict:
         sentences = _grammar_points(str(explanation or "").split("\n\n")[0])
         if term and not meaning and sentences and len(sentences[0].split()) <= 3 and ":" not in sentences[0]:
             meaning, sentences = _without_period(sentences[0]), sentences[1:]  # «Zodra» + «Как только.» — значение
-        intro, points = (_without_period(sentences[0]).rstrip(" :") if sentences else ""), sentences[1:3]
-        if meaning:  # первым фактом — перевод: «Переводится как «поэтому».»
-            points = [f"Переводится как «{_without_period(meaning)[:1].lower()}{_without_period(meaning)[1:]}».",
-                      *points][:3]
+        explain = ""
+        for sentence in sentences[:3]:  # разбор — до трёх предложений, не длиннее _EXPLAIN_MAX
+            candidate = f"{explain} {_with_period(sentence)}".strip()
+            if len(candidate) > _EXPLAIN_MAX:
+                break
+            explain = candidate
         example, translation = phrase.get("more"), phrase.get("more_translation")
+    meaning = _without_period(meaning)
+    meaning = " · ".join(part.strip() for part in re.split(r"\s*[;,·]\s*", meaning) if part.strip()) if meaning else ""
     # Пример — сначала перевод, потом фраза: «Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik…».
     example = (f"{_without_period(translation)} → {_with_period(example)}" if example and translation
                else _with_period(example) if example else "")
-    return {"term": _without_period(term), "intro": intro, "points": points, "example": example}
+    return {"term": _without_period(term), "pos": pos, "meaning": meaning[:1].upper() + meaning[1:],
+            "explain": explain[:1].upper() + explain[1:], "example": example}
 
 
 def _quotes(text) -> str:
@@ -209,20 +207,6 @@ def _quotes(text) -> str:
         inner = match.group(1)
         return f"«{inner[:1].lower()}{inner[1:]}»" if re.match(r"[А-ЯЁ][а-яё]", inner) else f"«{inner}»"
     return re.sub(r"""(?<![\w])['"]([^'"]{1,40})['"](?![\w])""", fix, str(text or ""))
-
-
-def _bold_term(b, text, term) -> None:
-    """Суть темы, где сама тема — жирным («**Daarom** вводит следствие…»); темы в тексте нет — «**Тема** — суть»."""
-    match = re.search(re.escape(term), text, re.IGNORECASE) if term else None
-    if match:
-        b.text_line(text[:match.start()])
-        b.bold(text[match.start():match.end()])
-        b.text_line(text[match.end():])
-    elif term:
-        b.bold(term)
-        b.text_line(f" — {text[:1].lower()}{text[1:]}" if re.match(r"[А-ЯЁ]", text) else f" — {text}")
-    else:
-        b.text_line(text)
 
 
 def learning_menu(home: dict):
@@ -265,13 +249,19 @@ def learning_menu(home: dict):
     # Грамматика дня (фраза дня — в «Моём дне»): суть одной строкой, где тема — жирным, «…:» и под ней 2–3 факта,
     # что важно знать; «Пример:» — перевод → фраза уровня B1.
     lesson = _grammar_lesson(home.get("live_language") or {})
-    if lesson["intro"] or lesson["term"]:
+    if lesson["term"]:  # «**Bovendien** (наречие) → Кроме того · к тому же»
         b.spacer()
-        _bold_term(b, lesson["intro"] or lesson["term"], lesson["term"])
-        b.text_line(":" if lesson["points"] else ".")
+        b.bold(lesson["term"][:1].upper() + lesson["term"][1:])
+        if lesson["pos"]:
+            b.text_line(f" ({lesson['pos']})")
+        if lesson["meaning"]:
+            b.text_line(f" → {lesson['meaning']}")
         b.newline()
-        for point in lesson["points"]:
-            b.line(f"• {point}")
+    if lesson["explain"]:
+        b.spacer()
+        b.bold("Разбор:")
+        b.text_line(f" {lesson['explain'][:1].lower()}{lesson['explain'][1:]}")
+        b.newline()
     if lesson["example"]:
         b.spacer()
         b.bold("Пример:")

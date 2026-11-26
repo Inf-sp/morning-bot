@@ -368,6 +368,18 @@ async def job_daily_words(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logging.exception("job_daily_words failed for cid=%s", cid)
 
+async def job_evening_quiz(context: ContextTypes.DEFAULT_TYPE):
+    """«Вечернее повторение»: викторина Telegram по утреннему слову дня — тем, у кого включено «Обучение языку»."""
+    import dictionary_morning
+    for cid in access.get_allowed_cids():
+        if not settings.notif_on(cid, "daily_words") or settings.notification_paused(cid, "daily_words"):
+            continue
+        try:
+            await dictionary_morning.send_evening_quiz(context.bot, cid)
+        except Exception:
+            logging.exception("job_evening_quiz failed for cid=%s", cid)
+
+
 @ai.background_job
 async def job_refresh_concerts_cache(context: ContextTypes.DEFAULT_TYPE):
     """Прогревает недельный кэш концертов перед уведомлением «Концерты недели» (пт, с 09:00),
@@ -727,6 +739,7 @@ def _build_application():
         for slot in settings.NOTIF_TIMES[kind][1]:
             jq.run_daily(job, time=_t(slot), days=days, data=slot,
                          **_job_options(f"{kind}_{slot.replace(':', '')}"))
+    jq.run_daily(job_evening_quiz, time=_t(settings.EVENING_QUIZ_TIME), **_job_options("evening_quiz"))
     jq.run_daily(job_weather_warn_tomorrow, time=_t(settings.WARN_TOMORROW_TIME),
                  **_job_options("weather_warn_tomorrow"))
     # «План дня в отпуске» — по местному времени поездки: проверка каждые 15 минут, отправка в выбранный час.

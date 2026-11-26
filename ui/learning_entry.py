@@ -198,3 +198,84 @@ def render_learning_entry(
                 f"{_without_terminal_period(example)} → {_without_terminal_period(example_translation)}"
             )
             builder.newline()
+
+
+_SHORT_POS = ("существительное", "глагол", "прилагательное", "наречие", "предлог", "союз", "выражение", "фраза")
+
+
+def _meanings(value) -> str:
+    """«сомнение; колебание» → «Сомнение · колебание»."""
+    value = re.sub(r"\s*\([^)]*\)", "", str(value or ""))
+    parts = [part.strip() for part in re.split(r"\s*[;·]\s*", value) if part.strip()]
+    if len(parts) == 1 and "," in parts[0]:  # «заменять, менять» — значения через запятую, если каждое короткое
+        pieces = [piece.strip() for piece in parts[0].split(",") if piece.strip()]
+        parts = pieces if all(len(piece.split()) <= 3 for piece in pieces) else parts
+    text = " · ".join(parts)
+    return text[:1].upper() + text[1:]
+
+
+def _noun_plural(entry, breakdown) -> str:
+    plural = str(entry.get("plural") or "").strip()
+    if not plural or _mixed_script(plural) or not breakdown.startswith("существительное"):
+        return ""
+    is_english = str(entry.get("lang") or entry.get("language") or "").casefold() == "en"
+    return plural if is_english or plural.casefold().startswith("de ") else f"de {plural}"
+
+
+def word_example(entry, index=0):
+    """(фраза, перевод) — пример карточки по номеру; второго нет — первый; совсем нет — ("", ""). Неполная карточка
+    (заготовка без проверенного разбора) — только проверенный пример слова."""
+    from dictionary_model import study_card_is_complete
+    examples = [item for item in study_card_data(entry).get("examples") or [] if isinstance(item, dict)
+                and str(item.get("text") or "").strip() and str(item.get("translation") or "").strip()
+                and not _mixed_script(item.get("text"))] if study_card_is_complete(entry) else []
+    if examples:
+        item = examples[min(index, len(examples) - 1)]
+        return str(item["text"]).strip(), str(item["translation"]).strip()
+    return _example(entry, _term(entry))
+
+
+def render_word_card(builder, entry, *, explain=False, example_index=0):
+    """Короткая карточка слова для «Добавлено новое слово» и «Слова дня»:
+    «**De twijfel** (de twijfels) → Сомнение · колебание», «**Разбор:** …», «**Пример:** фраза → перевод».
+
+    explain=False (новое слово) — «Разбор» — грамматика («существительное · de-слово»); explain=True (слово дня) —
+    в скобках часть речи (у существительного — множественное), «Разбор» — суть и как употреблять."""
+    card = study_card_data(entry)
+    term = _term(entry, card.get("term"))
+    breakdown = _breakdown(entry)
+    plural = _noun_plural(entry, breakdown)
+    from dictionary_model import study_card_is_complete
+    explained = explain and study_card_is_complete(entry)  # есть проверенный разбор — часть речи в скобках
+    pos = next((name for name in _SHORT_POS if breakdown.startswith(name)), "") if explained else ""
+    builder.spacer()
+    builder.bold(term[:1].upper() + term[1:])
+    paren = plural or (pos if pos != "существительное" else "")
+    if paren:
+        builder.text_line(f" ({paren})")
+    meanings = _meanings(card.get("translation") or entry.get("translation") or entry.get("ru"))
+    if meanings:
+        builder.text_line(f" → {meanings}")
+    builder.newline()
+    essence = " ".join(part for part in (card.get("essence"), card.get("insight")) if part) if explained else ""
+    builder.spacer()
+    if essence or breakdown:
+        text = essence or breakdown
+        builder.labeled_line("Разбор", text[:1].lower() + text[1:] if essence else text, lowercase=False)
+    forms = _verified_forms(entry)
+    if forms:
+        builder.labeled_line("Формы", " · ".join(forms), lowercase=False)
+    conjugation = present_conjugation(entry)
+    if conjugation:
+        builder.labeled_line("Спряжение", " · ".join(conjugation), lowercase=False)
+    text, translation = word_example(entry, example_index)
+    if text and translation:
+        builder.labeled_line("Пример", f"{_without_terminal_period(text)} → {_without_terminal_period(translation)}",
+                             lowercase=False)
+    related = entry.get("related_noun")
+    if isinstance(related, dict) and related.get("term") and related.get("translation"):
+        # У глагола — его существительное: «**Существительное:** het bevel → приказ (de bevelen)».
+        plural = str(related.get("plural") or "").strip()
+        builder.labeled_line("Существительное", f"{str(related['term']).strip()} → {str(related['translation']).strip()}"
+                             + (f" ({plural})" if plural else ""), lowercase=False)
+    return builder
