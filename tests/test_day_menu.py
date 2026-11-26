@@ -99,7 +99,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
         "dinner": {"name": "Lasagna", "note": ""},
     }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.",
-        stats={"products": 77, "at_home": []})
+        stats={"tomorrow": "Японская", "favorites": 6})
 
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
@@ -108,9 +108,8 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
         "• Завтрак — Crostata (песочный пирог с джемом)\n"
         "• Обед — Pasta al pomodoro (паста с томатами)\n"
         "• Ужин — Lasagna\n\n"
-        "Мои продукты · 77"  # без «3 приёма пищи»
+        "Завтра — японская кухня · 6 любимых кухонь по кругу"  # что будет завтра, а не непонятное число продуктов
     )
-    assert menu_ui.fridge_stats_line(1) == "Мои продукты · 1"
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
@@ -395,13 +394,11 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
     assert asked == [True, True]  # «Из моих продуктов» читает только свою ячейку
 
 
-def test_footer_is_fridge_size_not_matching_products():
-    day = {"cuisine": "french", "dishes": {"lunch": {"name": "Steak frites", "note": "стейк с картофелем фри"}}}
-    # Старый вызов со списком «есть дома» — внизу всё равно только число моих продуктов.
-    msg = menu_ui.day_menu(day, cuisine_label="Французская", stats={"products": 75, "at_home": ["Картофель"]})
-    assert msg.text.endswith("\n\nМои продукты · 75") and "Есть дома" not in msg.text
-
-
+def test_footer_tells_tomorrows_cuisine():
+    assert menu_ui.tomorrow_line("Японская", 2) == "Завтра — японская кухня · 2 любимые кухни по кругу"
+    assert menu_ui.tomorrow_line("Японская", 0) == "Завтра — японская кухня · все кухни по кругу"
+    assert menu_ui.tomorrow_line("Французская", 1) == (
+        "Любимая кухня одна — французская: добавь ещё в Настройках, и меню будет меняться.")
 
 
 def test_menu_dish_recipe_survives_other_cuisine_and_missing_tip(monkeypatch):

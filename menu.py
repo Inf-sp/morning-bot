@@ -75,11 +75,13 @@ def _day_menu_message(menu, cid=None):
     import config
     import day_menu
     import vacation
-    from fridge_model import _fridge_available
     stats = None
-    if cid is not None and not vacation.active(cid):  # в отпуске строки о любимых продуктах нет
-        available = _fridge_available(store.get_list(config.FRIDGE_KEY, str(cid)))
-        stats = {"products": len(available)}
+    if cid is not None and not vacation.active(cid):  # внизу — какая кухня завтра; в отпуске строки нет
+        from datetime import datetime, timedelta
+        import settings as user_settings
+        tomorrow = datetime.now(config.TZ).date() + timedelta(days=1)
+        stats = {"tomorrow": day_menu.cuisine_label(day_menu.home_cuisine(cid, tomorrow)),
+                 "favorites": len(user_settings.cuisines(cid) or [])}
     trip = cid is not None and vacation.active(cid)
     return menu_ui.day_menu(
         menu, cuisine_label=menu.get("cuisine_label") or day_menu.cuisine_label(menu.get("cuisine")),

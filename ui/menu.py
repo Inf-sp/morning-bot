@@ -448,7 +448,8 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
 
     show_mine=False — в отпуске: кнопки «Из моих продуктов» нет (в поездке не готовишь дома).
     trip — в отпуске: «Пробуем в отпуске» — одно блюдо trip_dish и факт о кухне fact (_trip_menu).
-    stats — {"products": N}: курсивная строка внизу — «Мои продукты · N».
+    stats — {"tomorrow": "Японская", "favorites": 6}: курсивом внизу — «Завтра — японская кухня · 6 любимых кухонь
+    по кругу».
     """
     flag = flag or CUISINE_FLAG.get(str((menu or {}).get("cuisine") or ""), "🍳")
     if trip:
@@ -471,15 +472,22 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
         b.line(f"• {label} — {dish['name']}" + (f" ({note[:1].lower()}{note[1:]})" if note else ""))
     if stats:
         b.spacer()
-        b.italic(fridge_stats_line(stats.get("products")))
+        b.italic(tomorrow_line(stats.get("tomorrow"), stats.get("favorites")))
         b.newline()
     return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes],
                                                       show_mine=show_mine))
 
 
-def fridge_stats_line(products, meals=None) -> str:
-    """«Мои продукты · 24» (число приёмов пищи владелец счёл бесполезным и оно не показывается)."""
-    return f"Мои продукты · {int(products or 0)}"
+def tomorrow_line(tomorrow, favorites=0) -> str:
+    """Низ меню дня: какая кухня завтра и сколько любимых идут по кругу — «Завтра — японская кухня · 6 любимых
+    кухонь по кругу»; любимая одна — подсказка добавить ещё; не выбраны — все кухни по кругу."""
+    label = str(tomorrow or "").strip().lower()
+    favorites = int(favorites or 0)
+    if favorites == 1:
+        return f"Любимая кухня одна — {label}: добавь ещё в Настройках, и меню будет меняться."
+    tail = (f"{favorites} {ru_plural(favorites, 'любимая кухня', 'любимые кухни', 'любимых кухонь')} по кругу"
+            if favorites else "все кухни по кругу")
+    return f"Завтра — {label} кухня · {tail}" if label else tail[:1].upper() + tail[1:]
 
 
 def food_menu(idea=None, *, meal="", from_fridge=False):
