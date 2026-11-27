@@ -2,7 +2,7 @@ import re
 
 from .builder import MessageBuilder
 from .constants import ui_label
-from .learning_entry import render_learning_entry, render_word_card
+from .learning_entry import render_word_card
 
 
 # ================= ТРЕНАЖЁР: 7 ФОРМАТОВ ЗАДАНИЙ =================
@@ -91,11 +91,15 @@ def exercise_result(data, is_correct, chosen="", language_report=None):
 
 
 def _render_trainer_entry_card(b, entry, data):
-    render_learning_entry(
-        b, entry,
-        fallback_term=(data.get("term") or data.get("result_correct") or data.get("correct") or ""),
-        fallback_translation=data.get("ru") or "",
-    )
+    """Слово после ответа — как «Слово дня»: «**Opletten** (слабый глагол) → Внимательно следить», формы, спряжение,
+    «Пример:»; отдельной строки «Разбор:» с частью речи нет. Нет записи в словаре — термин из задания."""
+    term = data.get("term") or data.get("result_correct") or data.get("correct") or ""
+    card = {**entry} if entry else {}
+    card.setdefault("term", term)
+    if not card.get("translation") and data.get("ru"):
+        card["translation"] = data["ru"]
+    if card.get("term") or card.get("translation"):
+        render_word_card(b, card, explain=True)
 
 
 def progress_screen(data):

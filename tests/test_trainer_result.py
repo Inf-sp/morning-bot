@@ -18,9 +18,9 @@ def test_result_card_uses_article_plural_and_saved_example():
     })
 
     assert "Правильно:" not in text
-    assert "Het gevolg → Последствие" in text
-    assert "Разбор: существительное · het-слово" in text
-    assert "Множественное число: de gevolgen" in text
+    assert "Het gevolg (de gevolgen) → Последствие" in text
+    assert "Разбор:" not in text  # артикль и множественное — в первой строке
+    assert "Множественное число:" not in text
     assert "Dat kan ernstige gevolgen hebben → Это может иметь серьёзные последствия" in text
 
 
@@ -33,7 +33,7 @@ def test_result_card_shows_only_verified_verb_forms():
                       "translation": "Я завтра еду в Амстердам."}],
     })
 
-    assert "Разбор: неправильный глагол" in text
+    assert "Gaan (неправильный глагол) → Идти" in text
     assert "Формы: gaan · ging · gegaan" in text
     assert "Прошедшее время" not in text
 
@@ -68,7 +68,7 @@ def test_result_card_does_not_attach_an_example_from_another_phrase():
         }],
     })
 
-    assert "Wat balen → Вот досада!" in text
+    assert "Wat balen (фраза) → Вот досада!" in text
     assert "Полезно:" not in text
     assert "wat doe je daar" not in text.casefold()
 
@@ -90,7 +90,7 @@ def test_result_card_hides_unverified_verb_forms_and_marks_close_answer():
     assert text.startswith("🟡 Почти")
     assert "Твой ответ: geschikte" in text
     assert "Почему: Проверь окончание прилагательного." in text
-    assert "Разбор: прилагательное" in text
+    assert "Geschikt (прилагательное) → Подходящий" in text
     assert "Формы:" not in text
 
 
@@ -103,9 +103,9 @@ def test_multiword_term_is_phrase_and_cannot_show_noun_metadata():
                       "translation": "Под средствами на счёте мы понимаем деньги на счёте."}],
     })
 
-    assert "Разбор: фраза" in text
+    assert "(фраза) →" in text
     assert "Множественное число" not in text
-    assert "Geld dat op je rekening staat → Деньги на счёте" in text
+    assert "Geld dat op je rekening staat (фраза) → Деньги на счёте" in text
     assert "Met tegoed bedoelen we geld dat op je rekening staat →" in text
 
 
@@ -117,6 +117,6 @@ def test_translation_comments_are_not_shown_and_mixed_plural_is_hidden():
                       "translation": "Из-за дождя мы остались дома."}],
     })
 
-    assert "Vanwege → Из-за · по причине" in text
+    assert "Vanwege (предлог) → Из-за · по причине" in text
     assert "как door" not in text
     assert "тегоеден" not in text
