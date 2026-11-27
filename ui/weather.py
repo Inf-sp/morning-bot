@@ -84,12 +84,13 @@ def full_forecast(header, current, periods, sunrise_line="", sunset_line="", adv
         b.section(period.get("title") or period.get("label") or "Прогноз")
         for line in period.get("lines") or []:
             b.bullet(line)
-    if sunset_line:
+    if sunset_line:  # «Золотой час будет с 15:35 по 16:59.»
         b.spacer()
         b.line(sunset_line)
-    if advice:
+    if advice:  # совет — последней строкой курсивом
         b.spacer()
-        b.line(advice)
+        b.italic(advice)
+        b.newline()
     return b.build_stripped()
 
 

@@ -597,17 +597,20 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             else ""
         )
         # Вечерний золотой час — по координатам города, без внешних API; идёт в «Полезно».
-        golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), datetime.now(local).date(), local)
-        sunset_line = ""
+        # Золотой час — отдельной строкой под частями суток, если он ещё впереди; совет — курсивом в самом низу.
+        today_local = datetime.now(local)
+        window = None
+        if s.get("lat") is not None and s.get("lon") is not None:
+            window = sun.light_windows(float(s["lat"]), float(s["lon"]), today_local.date(), local)["evening_golden"]
+        if window and window[1] > today_local:
+            golden = sun.golden_hour_line(s.get("lat"), s.get("lon"), today_local.date(), local)
+        else:  # сегодняшний уже прошёл — завтрашний: «Золотой час завтра с 15:34 по 16:58»
+            span = sun.evening_golden_range(s.get("lat"), s.get("lon"), today_local.date() + timedelta(days=1), local)
+            golden = f"Золотой час завтра {span}" if span else ""
+        sunset_line = f"{golden}." if golden else ""
         advice = _qualitative_outlook([day_conditions(data, 1)], "Завтра")
         if dry:
             advice = f"Без дождя. {advice}".strip()
-        if golden:
-            # Золотой час — последним предложением строки «Полезно».
-            advice = str(advice or "").strip()
-            if advice and advice[-1] not in ".!?…":
-                advice += "."
-            advice = f"{advice} {golden}.".strip()
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(weather_ui.WEEK_FORECAST_BUTTON, callback_data="a_w_week")],
             nav_row("m_myday"),

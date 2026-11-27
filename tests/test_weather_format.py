@@ -623,3 +623,18 @@ def test_week_is_a_short_story_with_trend_notes_best_day_and_weekend():
     assert "Пт · ☁️ +1°\n" in text  # без пометки — короткая строка
     dry = _week_days([("Пн", "понедельник", 6, 0, 4, "partly")] * 7)
     assert weather_weekly.week_story(dry)[0] == "Ровно: около +6°. Без дождя всю неделю."
+
+
+def test_full_forecast_golden_hour_is_its_own_line_and_advice_is_italic_last():
+    from ui import weather as weather_ui
+    msg = weather_ui.full_forecast(
+        "Полный прогноз · Пт, 27 ноября · Alkmaar, NL 🇳🇱", None,
+        [{"icon": "❄️", "label": "Вечером", "value": "-1° · ветер 3 м/с"}],
+        "Восход 08:23 → закат 16:33", "Золотой час будет с 15:35 по 16:59.",
+        "Без дождя. Завтра будет прохладно, тёплый слой пригодится.")
+    assert msg.text.endswith("❄️ Вечером: -1° · ветер 3 м/с\n\nЗолотой час будет с 15:35 по 16:59.\n\n"
+                             "Без дождя. Завтра будет прохладно, тёплый слой пригодится.")
+    raw = msg.text.encode("utf-16-le")
+    italic = [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le") for e in msg.entities
+              if e.type == "italic"]
+    assert italic == ["Без дождя. Завтра будет прохладно, тёплый слой пригодится."]
