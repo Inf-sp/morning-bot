@@ -830,7 +830,7 @@ def test_recommendation_cards_have_no_refresh_label():
         assert (second.text, second.callback_data) == (other, callback)
         assert all("Выбрать жанр" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert keyboard.inline_keyboard[-1][0].callback_data == "m_leisure"
-    # «Не интересно» — красная, первой строкой, вместо «Добавить в Моё…».
+    # «Пропустить» — красная, первой строкой, вместо «Добавить в Моё…».
     for keyboard, callback in (
         (leisure_movies._movie_kb(3), "movie_no_3"),
         (leisure_movies._movie_kb(3, kind="tv"), "tv_no_3"),
@@ -838,7 +838,7 @@ def test_recommendation_cards_have_no_refresh_label():
     ):
         dislike = keyboard.inline_keyboard[0][0]
         assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
-            "Не интересно", callback, {"style": "danger"},
+            "Пропустить", callback, {"style": "danger"},
         )
         # «Настроить» на карточках нет — библиотека настраивается из хаба.
         assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)

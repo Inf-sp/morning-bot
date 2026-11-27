@@ -92,7 +92,7 @@ def test_reads_are_a_circular_feed_most_interesting_first(monkeypatch):
                         "Чёрная дыра растёт быстрее моделей.")
     assert [e.url for e in msg.entities if e.type == "text_link"][0] == "https://q.example/bh"
     rows = msg.reply_markup.inline_keyboard
-    assert [b.callback_data for b in rows[0]] == ["lz_rdone_0"]  # «Прочитано» — первой строкой
+    assert [b.callback_data for b in rows[0]] == ["lz_rdone_0"]  # «Пропустить» — красная, первой строкой
     assert [b.callback_data for b in rows[1]] == ["lz_reads_3", "noop", "lz_reads_1"]  # по кругу
     assert rows[1][1].text == "1/4" and [b.callback_data for b in rows[-1]] == ["m_leisure", "m_menu"]
     assert leisure_reads.top("42", date(2026, 10, 19)) == []

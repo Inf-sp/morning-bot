@@ -386,7 +386,7 @@ async def send_favorite_artists_added_card(bot, cid, artists):
 
 def _listen_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Не интересно", callback_data="listen_no", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("Пропустить", callback_data="listen_no", api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("По жанру", callback_data="music_pick")],
         nav_row("m_leisure"),
     ])
@@ -565,7 +565,7 @@ async def listen_dislike(bot, cid, *, status=None):
     rec = store.last_recos.get(str(cid))
     category = rec.get("category") if isinstance(rec, dict) else None
     # store.last_recos живёт в памяти и пустеет после перезапуска (автообновление каждые 5 минут) —
-    # текущий артист берётся и из сохранённой карточки дня, иначе «Не интересно» ничего не скрывало.
+    # текущий артист берётся и из сохранённой карточки дня, иначе «Пропустить» ничего не скрывало.
     artist = (rec["items"][0] if isinstance(rec, dict) and rec.get("kind") == "listen" and rec.get("items")
               else str((_cached_artist(cid) or {}).get("artist") or ""))
     if artist:

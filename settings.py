@@ -811,7 +811,7 @@ async def send_notif_kind(bot, cid, kind, q=None):
         rows.append([InlineKeyboardButton(f"Вывоз мусора: {waste.label(address)}" if address
                                           else "Адрес для вывоза мусора", callback_data="set_waste")])
         if address:
-            rows.append([InlineKeyboardButton("Убрать адрес", callback_data="set_waste_del")])
+            rows.append([InlineKeyboardButton("❌ Убрать адрес", callback_data="set_waste_del")])
     rows.append(nav_row("set_notif"))
     msg = settings_ui.notification_kind(user_notif_label(cid, kind), has_time=len(slots) > 1)
     await rich_delivery.show(bot, cid, msg, reply_markup=InlineKeyboardMarkup(rows), query=q)

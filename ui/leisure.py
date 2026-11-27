@@ -909,7 +909,8 @@ def reads_card(items, index=0) -> MessageSpec:
     if about:
         b.spacer()
         b.line(_finish_sentence(about))
-    rows = [[InlineKeyboardButton("Прочитано", callback_data=f"lz_rdone_{index}")]]  # убирает статью из ленты
+    # «Пропустить» — красная, первой строкой: статья уходит из ленты, на её месте — следующая.
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_rdone_{index}", api_kwargs={"style": "danger"})]]
     if len(items) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_reads_{(index - 1) % len(items)}"),
@@ -1138,7 +1139,7 @@ _RELEASE_TYPES = {"сингл": "Сингл", "EP": "EP"}
 def premiere_card(feed, index=0) -> MessageSpec:
     """Карточка ленты «Премьеры» (feed — [(вид, пункт)], фильмы, сериалы и музыка вперемешку): «🎬 **Имя**» ссылкой,
     первой в метаданных — что это (Фильм, Сериал, Музыкальный альбом), описание в одно-два предложения; сверху
-    красная «Не интересно» (lz_prem_x_<n>), ← n/N → по кругу по всей ленте, «Назад» — в хаб. Картинку (постер,
+    красная «Пропустить» (lz_prem_x_<n>), ← n/N → по кругу по всей ленте, «Назад» — в хаб. Картинку (постер,
     обложку) прикладывает обработчик."""
     b = MessageBuilder()
     if not feed:
@@ -1167,7 +1168,7 @@ def premiere_card(feed, index=0) -> MessageSpec:
     if about:
         b.spacer()
         b.line(about)
-    rows = [[InlineKeyboardButton("Не интересно", callback_data=f"lz_prem_x_{index}",
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{index}",
                                   api_kwargs={"style": "danger"})]]
     if len(feed) > 1:
         rows.append([

@@ -2,7 +2,7 @@
 
 Данные — только из реальных источников, которые уже собирает бот (TMDB,
 книжная витрина премьер) и Apple Music для музыки. Показанные новинки
-идут по кругу без повторов; «Не интересно» убирает новинку навсегда.
+идут по кругу без повторов; «Пропустить» убирает новинку навсегда.
 """
 import asyncio
 import logging
@@ -88,7 +88,7 @@ _CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сер�
 def card_keyboard(kind):
     """«Другой…» открывает выбор жанра под карточкой (там же следующая «Новинка»)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Не интересно", callback_data=f"nov_no_{kind}",
+        [InlineKeyboardButton("Пропустить", callback_data=f"nov_no_{kind}",
                               api_kwargs={"style": "danger"})],
         [InlineKeyboardButton("По жанру", callback_data=f"nov_pick_{kind}")],
         [InlineKeyboardButton(_CONFIGURE_LABEL.get(kind, "🎚️ Настроить"), callback_data=f"lz_cfg_{kind}")],
@@ -150,7 +150,7 @@ async def send_novelty(bot, cid, kind, *, status=None):
 
 
 async def dislike_novelty(bot, cid, kind, *, status=None):
-    """«Не интересно»: новинка уходит в стоп-лист, сразу показывается следующая."""
+    """«Пропустить»: новинка уходит в стоп-лист, сразу показывается следующая."""
     rec = store.last_recos.get(str(cid))
     if kind in KINDS and isinstance(rec, dict) and rec.get("kind") == f"novelty_{kind}" and rec.get("items"):
         recommendation_stoplist.add(cid, _STOP_KIND[kind], rec["items"][0], "hidden")

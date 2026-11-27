@@ -109,7 +109,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Карточка ленты: имя, метаданные, описание; ← 1/7 → по кругу, «Назад» — в хаб.
     # Что это за карточка — первой строкой метаданных, сразу дата премьеры (у тестовых фильмов её нет).
     assert card.text == "🎬 Фильм 0\n\nФильм · дата пока неизвестна\n\nОписание."
-    assert _labels(card.reply_markup) == [["Не интересно"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
+    assert _labels(card.reply_markup) == [["Пропустить"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert _callbacks(card.reply_markup) == ["lz_prem_x_0", "lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
     assert card.reply_markup.inline_keyboard[0][0].api_kwargs == {"style": "danger"}
     raw = card.text.encode("utf-16-le")
@@ -123,7 +123,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
-    assert _labels(tab.reply_markup) == [["Не интересно"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
+    assert _labels(tab.reply_markup) == [["Пропустить"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
 
     album = leisure_ui.premiere_card([("music", {
         "title": "Blue Rev", "artist": "Alvvays", "date": "2026-10-16", "genre_label": "Инди", "country_label": "🇨🇦 CA",
@@ -441,7 +441,7 @@ def test_old_series_list_without_genres_is_rebuilt():
 
 def test_series_card_and_genre_menu_stay_in_series():
     card = leisure_movies._movie_kb(3, kind="tv")
-    assert _labels(card)[:2] == [["Не интересно"], ["По жанру"]]
+    assert _labels(card)[:2] == [["Пропустить"], ["По жанру"]]
     assert _callbacks(card)[:2] == ["tv_no_3", "tv_pick_3"]
     menu = leisure_movies._movie_genre_menu_kb(back="tv_card_3", kind="tv")
     assert _callbacks(menu) == ["tv_g_35", "tv_g_18", "tv_g_10765", "tv_g_9648", "tv_g_80", "tv_g_10759", "tv_g_16",

@@ -333,7 +333,7 @@ def _pools(cid, today, fetch=False, *, music=False) -> dict:
     # Сериал без жанра или страны не попадает ни в хаб, ни в «Премьеры».
     series = [item for item in _cached_series(cid, today) or [] if countries.allowed(item, off)
               and item.get("genres") and countries.title_countries(item)]
-    hidden_titles = _hidden(cid, "movie")  # «Не интересно» в «Премьерах» — не в ленте, не в хабе, не в «Моём дне»
+    hidden_titles = _hidden(cid, "movie")  # «Пропустить» в «Премьерах» — не в ленте, не в хабе, не в «Моём дне»
     movies = [item for item in movies if _identity(item.get("title")) not in hidden_titles]
     series = [item for item in series if _identity(item.get("name")) not in hidden_titles]
     pools = {
@@ -362,7 +362,7 @@ def _hidden(cid, stop_kind) -> set:
 
 
 def hide_premiere(cid, kind, item):
-    """«Не интересно» под премьерой: в стоп-лист навсегда — по названию, как «Новинка»."""
+    """«Пропустить» под премьерой: в стоп-лист навсегда — по названию, как «Новинка»."""
     import recommendation_stoplist
     title = item.get("name") if kind == "series" else item.get("title")
     if str(title or "").strip():
@@ -807,7 +807,7 @@ async def send_week_premieres(bot, cid, arg="", q=None):
     (premieres_feed), ← n/N → по кругу в том же сообщении (lz_prem_<n>). Старые кнопки вида (lz_prem_movie,
     lz_prem_movie_3) открывают ленту на первой карточке этого вида."""
     feed = await asyncio.to_thread(premieres_feed, cid)
-    if arg.startswith("x_"):  # «Не интересно»: премьера уходит навсегда, на её месте — следующая
+    if arg.startswith("x_"):  # «Пропустить»: премьера уходит навсегда, на её месте — следующая
         arg = arg[2:]
         if feed and arg.isdigit():
             await asyncio.to_thread(hide_premiere, cid, *feed[int(arg) % len(feed)])

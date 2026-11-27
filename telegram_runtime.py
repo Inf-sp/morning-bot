@@ -107,7 +107,7 @@ _GREEN_RE = re.compile(
 )
 # «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
 _PREFS_RE = re.compile(r"^Выбрать (?:предпочтения|язык)$")  # «Выбрать язык» в словаре — так же
-_DISLIKE_TOP = ("movie_no_", "tv_no_", "book_no_", "listen_no", "nov_no_", "lz_prem_x_")
+_DISLIKE_TOP = ("movie_no_", "tv_no_", "book_no_", "listen_no", "nov_no_", "lz_prem_x_", "lz_rdone_")  # «Пропустить»
 _BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить(?: .+)?|Показать списком|Показать карточками)$")
 # Синие — только «Главная», «Назад» и «Настроить»; листание и «Показать списком» стандартные.
@@ -179,7 +179,7 @@ def _enhance_markup(markup, level=2):
     add_rows = set()
     refresh_rows = set()
     prefs_rows = set()
-    # «Не интересно» под кино, музыкой и новинкой — самой первой строкой.
+    # «Пропустить» под кино, музыкой и новинкой — самой первой строкой.
     dislike_rows = {
         index for index, row in enumerate(rows)
         if any(str(button.get("callback_data") or "").startswith(_DISLIKE_TOP) for button in row)
