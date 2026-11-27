@@ -246,8 +246,10 @@ def render_word_card(builder, entry, *, explain=False, example_index=0):
     breakdown = _breakdown(entry)
     plural = _noun_plural(entry, breakdown)
     from dictionary_model import study_card_is_complete
-    explained = explain and study_card_is_complete(entry)  # есть проверенный разбор — часть речи в скобках
-    pos = next((name for name in _SHORT_POS if breakdown.startswith(name)), "") if explained else ""
+    explained = explain and study_card_is_complete(entry)  # есть проверенный разбор смысла
+    # Слово дня — часть речи всегда в скобках («Afhankelijk (прилагательное)»), отдельной строки «Разбор:» с одной
+    # частью речи нет; разбор — только смысл слова, когда он есть.
+    pos = next((name for name in _SHORT_POS if breakdown.startswith(name)), "") if explain else ""
     builder.spacer()
     builder.bold(term[:1].upper() + term[1:])
     paren = plural or (pos if pos != "существительное" else "")
@@ -259,7 +261,7 @@ def render_word_card(builder, entry, *, explain=False, example_index=0):
     builder.newline()
     essence = " ".join(part for part in (card.get("essence"), card.get("insight")) if part) if explained else ""
     builder.spacer()
-    if essence or breakdown:
+    if essence or (breakdown and not explain):
         text = essence or breakdown
         builder.labeled_line("Разбор", text[:1].lower() + text[1:] if essence else text, lowercase=False)
     forms = _verified_forms(entry)

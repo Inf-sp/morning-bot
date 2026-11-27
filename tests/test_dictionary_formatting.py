@@ -340,7 +340,7 @@ def test_daily_word_uses_saved_dictionary_word_when_its_study_card_is_incomplete
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert "Ontwikkelen → Развивать" in msg.text
+    assert "Ontwikkelen (глагол) → Развивать" in msg.text
     assert "В словаре пока нет одиночных слов" not in msg.text
     assert words[0]["daily_word_shown_at"]
 
@@ -417,7 +417,7 @@ def test_placeholder_daily_word_uses_compact_saved_word_and_is_not_migrated(monk
 
     msg, _buttons = dictionary_morning._build_morning_word("42", "nl")
 
-    assert "Beperken → Ограничивать" in msg.text
+    assert "Beperken (глагол) → Ограничивать" in msg.text
     assert "русская транскрипция" not in msg.text
     assert words[0]["daily_word_shown_at"]
     assert migrate_legacy_study_card(words[0]) is False
@@ -457,3 +457,13 @@ def test_deleting_a_word_offers_no_green_add_button(monkeypatch):
 
     labels = [[button.text for button in row] for row in shown[0].inline_keyboard]
     assert labels == [["🎚️ Настроить словарь"], ["⬅️ Назад", "#️⃣ Главная"]]  # без «Добавить своё слово»
+
+
+def test_daily_word_without_breakdown_has_part_of_speech_in_parens_and_no_bare_razbor_line():
+    msg = learning_ui.morning_words("🇳🇱", entries=[{
+        "term": "afhankelijk", "translation": "зависимый", "pos": "прилагательное", "breakdown": "прилагательное",
+        "example_nl": "Kinderen zijn afhankelijk van hun ouders.", "example_ru": "Дети зависят от своих родителей."}],
+        language="Нидерландский", stats={"words": 192, "topics": 36})
+    assert msg.text == ("🇳🇱 Слово дня · Нидерландский\n\nAfhankelijk (прилагательное) → Зависимый\n\n"
+                        "Пример: Kinderen zijn afhankelijk van hun ouders → Дети зависят от своих родителей\n\n"
+                        "Твой нидерландский · 192 слова · 36 изученных тем")
