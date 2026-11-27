@@ -233,7 +233,7 @@ def test_send_looks_without_ai_uses_window_weather(monkeypatch):
     monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Городской"])
     monkeypatch.setattr(wardrobe, "save_outfit_feedback", lambda *_a: None)
     monkeypatch.setattr(wardrobe, "_save_cached_look", lambda _cid, ids, look_data: saved.update(ids=ids, look=look_data))
-    monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles: list(wardrobe_stylist.BASE_TRENDS))
+    monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles, *_a: list(wardrobe_stylist.BASE_TRENDS))
     monkeypatch.setattr(ai, "llm_json", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("AI down")))
 
     asyncio.run(wardrobe.send_looks(None, 1, silent=True))
@@ -378,7 +378,7 @@ def test_new_look_button_does_not_ask_the_ai_stylist(monkeypatch):
     monkeypatch.setattr(settings, "wardrobe_styles", lambda _cid: ["Городской"])
     monkeypatch.setattr(wardrobe, "save_outfit_feedback", lambda *_a: None)
     monkeypatch.setattr(wardrobe, "_save_cached_look", lambda _cid, ids, look_data: saved.update(ids=ids, look=look_data))
-    monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles: list(wardrobe_stylist.BASE_TRENDS))
+    monkeypatch.setattr(wardrobe_stylist, "weekly_trends", lambda _styles, *_a: list(wardrobe_stylist.BASE_TRENDS))
     monkeypatch.setattr(ai, "llm_json", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("AI down")))
 
     asked = []
@@ -418,3 +418,17 @@ def test_look_card_ends_with_wardrobe_size_not_tips_or_outfit_count():
               for e in message.entities if e.type == "italic"]
     assert message.text.endswith("\n\nТвой шкаф · 36 вещей") and italic[-1] == "Твой шкаф · 36 вещей"
     assert "сочетание" not in message.text and "образов" not in message.text
+
+
+def test_opening_wardrobe_does_not_wait_for_trend_search_and_limits_the_stylist(monkeypatch):
+    import asyncio
+    import wardrobe
+    import wardrobe_stylist
+    seen = {}
+    monkeypatch.setattr(wardrobe_stylist, "_fetch_trends", lambda *_a: seen.setdefault("search", True) or [])
+    monkeypatch.setattr(wardrobe_stylist.store, "_load", lambda _key: {})
+    assert wardrobe_stylist.weekly_trends(("Городской",), None, False) == list(wardrobe_stylist.BASE_TRENDS)
+    assert "search" not in seen  # пользователь ждёт — без поиска трендов
+    assert wardrobe_stylist.INTERACTIVE_BUDGET_S <= 6
+    assert isinstance(wardrobe._WarmCacheStatus(), wardrobe._WarmCacheStatus)
+    assert asyncio.iscoroutinefunction(wardrobe.send_looks)

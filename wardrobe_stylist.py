@@ -74,8 +74,9 @@ JSON без Markdown: {{"trends":["..."]}}"""
     ))
 
 
-def weekly_trends(styles=(), today=None):
-    """5–7 трендов сезона для стилей пользователя; кэш на неделю, без поиска — база."""
+def weekly_trends(styles=(), today=None, fetch=True):
+    """5–7 трендов сезона для стилей пользователя; кэш на неделю, без поиска — база. fetch=False — пользователь ждёт
+    экран: только кэш или база, без поиска (кэш обновит ночной прогрев)."""
     today = today or util.local_today()
     key = ",".join(sorted(styles)) or "-"
     cache = store._load(config.WARDROBE_TRENDS_CACHE_KEY)
@@ -83,6 +84,8 @@ def weekly_trends(styles=(), today=None):
     entry = (cache.get("styles") or {}).get(key) or {}
     if str(entry.get("expires") or "") > today.isoformat() and entry.get("items"):
         return list(entry["items"])
+    if not fetch:
+        return list(entry.get("items") or BASE_TRENDS)
     try:
         trends = _fetch_trends(today, styles)
     except Exception as exc:
@@ -147,14 +150,18 @@ def _prompt(outfits, ctx, styles, prefs_text, trends):
 JSON без Markdown: {{"choice":1}}"""
 
 
-def choose(outfits, ctx, styles, prefs_text, trends):
-    """{index} или None — тогда карточку собирают правила кода."""
+INTERACTIVE_BUDGET_S = 6  # пользователь ждёт экран: стилист не ответил за 6 с — лучший комплект по оценке кода
+
+
+def choose(outfits, ctx, styles, prefs_text, trends, budget_seconds=20):
+    """{index} или None — тогда карточку собирают правила кода. budget_seconds — сколько ждать ИИ (ночной прогрев —
+    20 с, открытие Гардероба — INTERACTIVE_BUDGET_S)."""
     if len(outfits) < 2:
         return None
     try:
         data = ai.llm_json(
             _prompt(outfits, ctx, styles, prefs_text, trends), 200, tier="smart", module="wardrobe",
-            budget_seconds=20, schema=ai.schema_object({"choice": "integer"}, ("choice",)),
+            budget_seconds=budget_seconds, schema=ai.schema_object({"choice": "integer"}, ("choice",)),
             cache_context={
                 "scenario": "wardrobe_stylist", "outfits": [[it.get("id") for it in o] for o in outfits],
                 "weather": _weather_line(ctx), "styles": list(styles), "preferences": prefs_text,

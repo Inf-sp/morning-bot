@@ -670,9 +670,14 @@ async def send_looks(bot, cid, status=None, kb=None, previous_item_ids=None,
     # образ дня (утренний прогрев, смена погоды, первое открытие, «Собрать образ»).
     pick = None
     if not previous_item_ids:
-        trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles))
+        # Пользователь ждёт экран (открыл Гардероб, погода сменилась) — тренды только из кэша, стилист не дольше
+        # INTERACTIVE_BUDGET_S; ночной прогрев ждёт ИИ дольше и обновляет тренды.
+        interactive = bot is not None and not silent and not isinstance(status, _WarmCacheStatus)
+        trends = await asyncio.to_thread(wardrobe_stylist.weekly_trends, tuple(selected_styles), None,
+                                         not interactive)
         pick = await asyncio.to_thread(
-            wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends)
+            wardrobe_stylist.choose, outfits, weather_ctx, selected_styles, style_block, trends,
+            wardrobe_stylist.INTERACTIVE_BUDGET_S if interactive else 20)
     best = outfits[pick["index"]] if pick else outfits[0]
     best_sorted = sorted(best, key=outfit_display_order)
     item_ids = [it.get("id") for it in best_sorted]
