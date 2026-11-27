@@ -383,7 +383,7 @@ def _dict_entry_message(entry, status="added", words=None):
     title = titles.get(status, "Найдено")
     b.bold(title)
     b.newline()
-    render_word_card(b, entry)
+    render_word_card(b, entry, explain=True)  # как «Слово дня»: часть речи в скобках, «Разбор:» — только смысл
     if words:
         from ui.text import ru_plural
         b.spacer()

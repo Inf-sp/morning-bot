@@ -249,7 +249,8 @@ def render_word_card(builder, entry, *, explain=False, example_index=0):
     explained = explain and study_card_is_complete(entry)  # есть проверенный разбор смысла
     # Слово дня — часть речи всегда в скобках («Afhankelijk (прилагательное)»), отдельной строки «Разбор:» с одной
     # частью речи нет; разбор — только смысл слова, когда он есть.
-    pos = next((name for name in _SHORT_POS if breakdown.startswith(name)), "") if explain else ""
+    pos = ((breakdown if breakdown.endswith("глагол") else  # «сильный глагол» — целиком: это важно для форм
+            next((name for name in _SHORT_POS if breakdown.startswith(name)), "")) if explain else "")
     builder.spacer()
     builder.bold(term[:1].upper() + term[1:])
     paren = plural or (pos if pos != "существительное" else "")

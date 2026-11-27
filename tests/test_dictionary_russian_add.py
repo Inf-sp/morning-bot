@@ -56,7 +56,7 @@ def test_add_mozg_builds_a_dutch_learning_card_without_ai(monkeypatch):
     assert entry["term"] == "Brein"
     assert entry["article"] == "het"
     assert "Het brein (de breinen) → Мозг" in message.text
-    assert "Разбор: существительное · het-слово" in message.text
+    assert "Разбор:" not in message.text
     assert "Mijn brein heeft rust nodig → Моему мозгу нужен отдых" in message.text
 
 
@@ -559,7 +559,6 @@ def test_dictionary_card_renders_normalized_noun_with_related_example():
     assert message.text == (
         "🇳🇱 Добавлено новое слово · Нидерландский\n\n"
         "De walging → Отвращение\n\n"
-        "Разбор: существительное · de-слово\n"
         "Пример: Ze keek met walging naar het eten → Она с отвращением посмотрела на еду"
     )
 
@@ -753,7 +752,7 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
     assert saved[0]["term"] == "Overdag"
     assert saved[0]["translation"] == "Днём"
-    assert "Overdag → Днём" in sent[-1]["text"]
+    assert "Overdag (наречие) → Днём" in sent[-1]["text"]
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
