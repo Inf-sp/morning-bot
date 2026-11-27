@@ -53,7 +53,7 @@ def test_old_system_callback_opens_admin_home_without_system_button(monkeypatch)
     monkeypatch.setattr(admin.service_monitor, "rows", lambda compact=False: ["⚪ Gemini · Везде · лимит неизвестен"])
     monkeypatch.setattr(admin.service_monitor, "attention", lambda: [])
     monkeypatch.setattr(admin.provider_runtime, "states", lambda: [])
-    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True: [])
+    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True, summaries=True: [])
     bot = RecordingBot()
 
     asyncio.run(admin.send_api_ai(bot, "42"))
@@ -550,7 +550,7 @@ def test_admin_home_says_what_to_fix_and_folds_quiet_services(monkeypatch):
     assert service_monitor.attention()[0].startswith("Groq — модель закрыта для ключа")  # не «обнови ключ»
     states["groq"] = {"status": "down", "error_type": "auth", "last_error": "ошибка авторизации"}
     monkeypatch.setattr(admin.service_monitor, "rows", lambda compact=False: ["AI", "🔴 Groq · Резерв 2 · ошибка"])
-    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True: ["x", "y"])
+    monkeypatch.setattr(admin, "_active_error_rows", lambda limit=5, include_hidden=True, summaries=True: ["x", "y"])
     monkeypatch.setattr(admin, "activity_line", lambda: "👥 Сегодня 1 из 2 · ИИ 12 запросов")
     bot = RecordingBot()
     asyncio.run(admin.send_home(bot, "42"))

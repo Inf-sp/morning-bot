@@ -43,3 +43,17 @@ def test_admin_chat_gets_only_critical_not_usage_percent(monkeypatch):
                         lambda _s: {"used": 50, "limit": 50, "period": "day", "share": 1.0})
     assert service_monitor.attention(critical_only=True) == [
         "OpenRouter — лимит на сегодня исчерпан: бот перешёл на резерв"]
+
+
+def test_gemini_timeouts_are_one_summary_line_not_errors(monkeypatch):
+    import admin
+    now = int(time.time())
+    history = [{"ts": now - 60 * i, "event_type": "error", "service": "gemini", "text": "Gemini: сервис не ответил."}
+               for i in range(3)] + [{"ts": now - 30, "event_type": "error", "service": "gemini",
+                                      "text": "Gemini: временно недоступен.", "status_code": 503}]
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: history)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
+    rows = admin._active_error_rows()
+    assert len(rows) == 1 and rows[0].startswith("Gemini · не отвечал · 4 раза за сутки")
+    assert rows[0].endswith("ответы через резерв")
+    assert admin._active_error_rows(summaries=False) == []  # кнопки «⚠️ Ошибки» нет — ошибок бота нет

@@ -111,7 +111,7 @@ def activity_line() -> str:
 
 async def send_home(bot, cid, q=None):
     monitor_rows = service_monitor.rows(compact=True)
-    errors_today = len(_active_error_rows(limit=200, include_hidden=False))
+    errors_today = len(_active_error_rows(limit=200, include_hidden=False, summaries=False))
     kb = InlineKeyboardMarkup([
         # Ошибки за сутки — кнопкой с числом, только когда они есть; сами строки — на экране ошибок.
         *([[InlineKeyboardButton(f"⚠️ Ошибки · {errors_today}", callback_data="adm_logs")]] if errors_today else []),
@@ -714,31 +714,44 @@ def _is_ai_rate_limit(entry) -> bool:
                  or entry.get("status_code") == 429))
 
 
+_TRANSIENT_TEXTS = ("сервис не ответил", "временно недоступен", "временная ошибка", "ошибка сети")
+
+
+def _is_ai_transient(entry) -> bool:
+    """Таймаут, 5xx или обрыв у провайдера ИИ: цепочка сразу берёт резерв — не ошибка бота, а одна строка-сводка."""
+    text = str(entry.get("text") or entry.get("message") or "")
+    return (str(entry.get("service") or "") in provider_runtime.AI_PROVIDERS
+            and (any(marker in text for marker in _TRANSIENT_TEXTS)
+                 or int(entry.get("status_code") or 0) in (408, 500, 502, 503, 504)))
+
+
 def _rate_limit_summary(monitor_errors) -> list:
     """Лимит запросов бесплатного тарифа (429) — ожидаемо, бот отвечает через резерв: не десятки строк, а одна на
     сервис — «Gemini · лимит запросов · 18 раз за сутки, последний 22:57 · ответы через резерв»."""
     counts, last = {}, {}
     for entry in monitor_errors:
-        if _is_ai_rate_limit(entry):
-            service = str(entry.get("service") or "")
-            counts[service] = counts.get(service, 0) + 1
-            last[service] = max(last.get(service, 0), int(entry.get("ts") or 0))
+        kind = "лимит запросов" if _is_ai_rate_limit(entry) else "не отвечал" if _is_ai_transient(entry) else ""
+        if kind:
+            key = (str(entry.get("service") or ""), kind)
+            counts[key] = counts.get(key, 0) + 1
+            last[key] = max(last.get(key, 0), int(entry.get("ts") or 0))
     rows = []
-    for service, count in counts.items():
+    for (service, kind), count in counts.items():
         spec = provider_runtime.SPEC_BY_KEY.get(service)
         label = spec.label if spec else service
-        when = datetime.fromtimestamp(last[service], config.TZ).strftime("%H:%M")
-        rows.append((last[service], f"{label} · лимит запросов · {count} {_plural(count, 'раз', 'раза', 'раз')} "
-                                    f"за сутки, последний {when} · ответы через резерв"))
+        when = datetime.fromtimestamp(last[(service, kind)], config.TZ).strftime("%H:%M")
+        rows.append((last[(service, kind)], f"{label} · {kind} · {count} {_plural(count, 'раз', 'раза', 'раз')} "
+                                            f"за сутки, последний {when} · ответы через резерв"))
     return rows
 
 
-def _active_error_rows(*, limit=40, include_hidden=True):
+def _active_error_rows(*, limit=40, include_hidden=True, summaries=True):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     all_monitor_errors = _active_monitor_errors(cutoff)
     rate_limits = _rate_limit_summary(all_monitor_errors)
-    monitor_errors = [entry for entry in all_monitor_errors if not _is_ai_rate_limit(entry)]
+    monitor_errors = [entry for entry in all_monitor_errors
+                      if not _is_ai_rate_limit(entry) and not _is_ai_transient(entry)]
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
         for entry, count in _collapse_app_errors(errors)
@@ -747,7 +760,9 @@ def _active_error_rows(*, limit=40, include_hidden=True):
         for entry, count in _collapse_monitor_errors(monitor_errors)
     ]
     combined.sort(key=lambda item: item[0], reverse=True)
-    rows = [row for _ts, row in sorted(rate_limits, reverse=True)] + [row for _ts, row in combined[:limit]]
+    # Сводки «лимит / не отвечал · ответы через резерв» — справка, а не ошибки: в счётчик кнопки не входят.
+    rows = ([row for _ts, row in sorted(rate_limits, reverse=True)] if summaries else []) + \
+        [row for _ts, row in combined[:limit]]
     hidden_count = max(0, len(combined) - len(rows))
     if hidden_count and include_hidden:
         rows.append(f"… ещё {hidden_count} ошибок скрыто")
