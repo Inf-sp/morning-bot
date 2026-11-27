@@ -28,3 +28,18 @@ def test_long_outage_is_reported(monkeypatch):
     _state(monkeypatch, {"status": "warning", "error_type": "network", "last_error": "ошибка сети",
                          "incident_started_at": now - 4 * 3600, "last_success": now - 5 * 3600})
     assert service_monitor.attention() == ["Tavily — не отвечает больше 3 часов (ошибка сети)"]
+
+
+def test_admin_chat_gets_only_critical_not_usage_percent(monkeypatch):
+    _state(monkeypatch, {"status": "ok"})
+    monkeypatch.setattr(service_monitor.config, "API_FREE_LIMITS", {"openrouter": ("day", "requests", 50)})
+    monkeypatch.setattr(service_monitor, "_configured", lambda service: service == "openrouter")
+    monkeypatch.setattr(service_monitor.api_usage, "limit_state",
+                        lambda _s: {"used": 42, "limit": 50, "period": "day", "share": 0.84})
+    monkeypatch.setattr(service_monitor.api_usage, "limit_warning", lambda *_a: "OpenRouter — израсходовано 84%")
+    assert service_monitor.attention(critical_only=True) == []  # 84% — не повод писать
+    assert service_monitor.attention() == ["OpenRouter — израсходовано 84%"]  # на экране админки — видно
+    monkeypatch.setattr(service_monitor.api_usage, "limit_state",
+                        lambda _s: {"used": 50, "limit": 50, "period": "day", "share": 1.0})
+    assert service_monitor.attention(critical_only=True) == [
+        "OpenRouter — лимит на сегодня исчерпан: бот перешёл на резерв"]

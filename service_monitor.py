@@ -276,7 +276,7 @@ _TAVILY_LOW_SHARE = 0.1  # меньше 10% месячного лимита — 
 _OUTAGE_ALERT_S = 3 * 3600  # сеть или таймаут: сказать админу, только если сервис молчит дольше 3 часов
 
 
-def attention() -> list[str]:
+def attention(critical_only=False) -> list[str]:
     """Что сделать руками: настроенный сервис не принимает ключ, исчерпал лимит или лежит; Tavily на исходе.
     «Groq — ключ не принимается: обнови GROQ_API_KEY». Всё в порядке — []."""
     current = _load().get("services") or {}
@@ -314,9 +314,16 @@ def attention() -> list[str]:
     for service in config.API_FREE_LIMITS:
         if _configured(service):
             label = SPEC_BY_KEY[service].label if service in SPEC_BY_KEY else service
+            if critical_only:  # админу в чат — только когда лимит кончился, а не «израсходовано 84%»
+                state = api_usage.limit_state(service)
+                if state and state["share"] >= 1:
+                    out.append(f"{label} — лимит на сегодня исчерпан: бот перешёл на резерв")
+                continue
             warning = api_usage.limit_warning(service, label)
             if warning:
                 out.append(warning)
+    if critical_only:
+        return out  # «Tavily — осталось 10%» — только на экране админки
     try:
         budget = api_usage.tavily_budget()
         if _configured("tavily") and budget["total"] and budget["remaining"] < budget["total"] * _TAVILY_LOW_SHARE:
@@ -570,7 +577,9 @@ async def notify_admin(bot) -> bool:
     from ui.builder import MessageBuilder
     if bot is None or not config.ADMIN_CHAT_ID:
         return False
-    items = await asyncio.to_thread(attention)
+    # В чат — только критическое: сервис не работает (ключ, доступ, лимит кончился, молчит дольше 3 часов);
+    # «израсходовано 84%» и «осталось 10%» — только на экране админки.
+    items = await asyncio.to_thread(attention, True)
     fresh = await asyncio.to_thread(_new_alerts, items, datetime.now(config.TZ).date().isoformat())
     if not fresh:
         return False
