@@ -648,7 +648,7 @@ def test_admin_gets_one_alert_per_service_a_day(monkeypatch):
     saved, sent = {}, []
     monkeypatch.setattr(store, "_load", lambda key: saved.get(key))
     monkeypatch.setattr(store, "mutate_kv", lambda key, change: saved.__setitem__(key, change(saved.get(key))[0]))
-    monkeypatch.setattr(service_monitor, "attention", lambda: ["YouTube — израсходовано 82% дневного лимита"])
+    monkeypatch.setattr(service_monitor, "attention", lambda *_a: ["YouTube — лимит на сегодня исчерпан: бот перешёл на резерв"])
     monkeypatch.setattr(service_monitor.config, "ADMIN_CHAT_ID", "42")
 
     class Bot:
@@ -657,7 +657,7 @@ def test_admin_gets_one_alert_per_service_a_day(monkeypatch):
 
     assert asyncio.run(service_monitor.notify_admin(Bot())) is True
     assert asyncio.run(service_monitor.notify_admin(Bot())) is False  # сегодня уже сообщили
-    assert sent[0].startswith("⚠️ Сервисы · нужно внимание\n\n• YouTube — израсходовано 82%")
+    assert sent[0].startswith("⚠️ Сервисы · нужно внимание\n\n• YouTube — лимит на сегодня исчерпан")
     assert "Пользователь ошибок не видит" in sent[0]
 
 
