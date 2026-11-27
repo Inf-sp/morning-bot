@@ -30,10 +30,9 @@ def test_quiz_asks_the_morning_word_with_its_first_example(monkeypatch):
     monkeypatch.setattr(ai, "llm_json", lambda *_a, **_k: {"options": [
         "Скоро будут выходные.", "Выходные уже закончились.", "Я жду выходных."]})
     quiz = dictionary_morning.build_evening_quiz("42", TODAY)
-    assert quiz["question"] == ("Вечернее повторение · 🇳🇱\nСегодня изучали immers.\nЧто означает предложение?\n"
-                                "Het is immers weekend!")
-    assert sorted(quiz["options"]) == sorted(["Сейчас ведь выходные!", "Скоро будут выходные.",
-                                              "Выходные уже закончились.", "Я жду выходных."])
+    assert quiz["question"] == "🇳🇱 Повторение · Immers\n\nHet is immers weekend! → …"
+    assert sorted(quiz["options"]) == sorted(["Сейчас ведь выходные!", "Скоро будут выходные",
+                                              "Выходные уже закончились", "Я жду выходных"])  # без точки
     assert quiz["options"][quiz["correct"]] == "Сейчас ведь выходные!"
 
 

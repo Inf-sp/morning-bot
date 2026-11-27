@@ -233,11 +233,14 @@ def build_evening_quiz(cid, today=None) -> dict | None:
         wrong = (wrong + [option for option in extra if option not in wrong])[:3]
     if len(wrong) < 3:
         return None
+    # Варианты — без точки в конце (как подписи кнопок); «!» и «?» остаются.
+    correct, wrong = correct.rstrip(". "), [option.rstrip(". ") for option in wrong]
     options = [correct, *wrong]
     random.Random(f"{cid}|{today}|order").shuffle(options)
     term = _entry_term(entry)
     flag = _flag(lang)
-    question = f"Вечернее повторение · {flag}\nСегодня изучали {term}.\nЧто означает предложение?\n{sentence}"
+    # «🇳🇱 Повторение · Afhankelijk», пустая строка, фраза → … — что она значит, выбирают в вариантах.
+    question = f"{flag} Повторение · {term[:1].upper()}{term[1:]}\n\n{sentence.rstrip('. ')} → …"
     meaning = _entry_translation(entry)
     return {"question": question[:300], "options": options, "correct": options.index(correct),
             "explanation": f"{term} → {meaning}"[:200]}
