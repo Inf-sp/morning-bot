@@ -54,6 +54,7 @@ OVAPI_STOPS_KEY = "ovapi_stops.json"  # {город: {v, ts, stops{код: на�
 # Автобусы у вокзала: остановки со словом в названии (Station Alkmaar и Station Alkmaar Noord — обе).
 BUS_STOP_NAME = os.environ.get("BUS_STOP_NAME", "Station").strip() or "Station"
 CUISINE_FACTS_KEY = "cuisine_facts.json"  # {кухня: {v, facts[]}} — факты о кухне сверх базы data/cuisine_facts.json
+DISH_HOW_KEY = "dish_how.json"  # {ключ блюда: короткое приготовление} — запасным блюдам меню дня (ночной прогрев)
 ADMIN_ALERTS_KEY = "admin_alerts.json"  # {сервис: дата} — что уже сообщено админу сегодня (одно сообщение на сервис в день)
 API_LIMIT_RESERVE_SHARE = 0.95
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"

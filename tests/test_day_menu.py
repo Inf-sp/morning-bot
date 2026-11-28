@@ -508,3 +508,15 @@ def test_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
     assert kb[0][0].text == "Пропустить" and not kb[0][0].api_kwargs  # стандартного цвета
     assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(show_mine=False).inline_keyboard
                    for b in row)  # в отпуске — нет
+
+
+def test_fallback_dishes_get_short_cooking_from_dictionary(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(day_menu.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(day_menu.store, "mutate_kv", lambda _key, fn: saved.update(fn(dict(saved))[0]))
+    # В словаре ещё нет — без приготовления (шаблоны по типу блюда ошибаются: «овощи» — не «щи»).
+    assert "how" not in day_menu._with_how({"name": "Пхали", "note": "овощи, грецкие орехи, чеснок"})
+    _ai(monkeypatch, {"dishes": [{"name": "Пхали", "how": "Отвари свёклу. Смешай с орехами и чесноком"},
+                                 {"name": "Чужое", "how": "Не из списка."}]})
+    assert day_menu.extend_dish_how(["georgian"]) == 1
+    assert day_menu._with_how({"name": "Пхали", "note": ""})["how"] == "Отвари свёклу. Смешай с орехами и чесноком."
