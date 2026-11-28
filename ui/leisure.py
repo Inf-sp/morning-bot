@@ -757,7 +757,9 @@ def _finish_sentence(text) -> str:
 
 
 _TODAY_LABEL = {"movie": "Фильм дня:", "tv": "Сериал дня:", "music": "Артист дня:", "read": "Статья дня:",
-                "premiere": "Премьера недели:", "concert": "Ближайший концерт:"}
+                "premiere": "Премьера недели:", "concert": "Ближайший концерт:", "game": "Игра дня:"}
+_TODAY_EMOJI = {"premiere": "🆕", "movie": "🎬", "tv": "📺", "music": "🎧", "read": "📰", "game": "🎲",
+                "concert": "🎫"}
 
 
 def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> MessageSpec:
@@ -768,13 +770,18 @@ def leisure_today_screen(picks, *, city="", library=None, reply_markup=None) -> 
     b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     if not picks:
         b.line("Собираю концерты, события и премьеры — загляни чуть позже или открой разделы ниже.")
-    else:
-        first = picks[0]  # одна карточка — раздел по кругу (leisure_hub.next_today_pick)
-        b.bold(first.get("label") or _TODAY_LABEL.get(first.get("kind"), "На сегодня:"))
+    # По одному из каждой категории: «🆕 **Премьера недели:**», ниже «**Имя** · метаданные — описание».
+    for index, pick in enumerate(picks):
+        if index:
+            b.spacer()
+        kind = pick.get("kind")
+        label = (_TODAY_LABEL.get(kind) if kind in ("premiere", "movie", "tv", "music", "read", "game")
+                 else pick.get("label") or _TODAY_LABEL.get(kind))
+        b.text_line(f"{_TODAY_EMOJI.get(kind) or _EVENT_KIND.get(kind, ('✨',))[0]} ")
+        b.bold(label or "На сегодня:")
         b.newline()
-        b.text_line("• ")
-        _today_name(b, {**first, "meta": [*first.get("meta", ()), first.get("runtime")]})
-        about = _hub_about(first.get("about"))
+        _today_name(b, {**pick, "meta": [*pick.get("meta", ()), pick.get("runtime")]})
+        about = _hub_about(pick.get("about"))
         if about:
             b.text_line(f" — {about}")  # регистр не трогаем: описание часто начинается с имени («Пол Атрейдес…»)
         b.newline()

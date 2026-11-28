@@ -531,6 +531,18 @@ def today_options(cid, today) -> dict:
     return {kind: picks for kind, picks in (*groups.items(), ("read", [read] if read else [])) if picks}
 
 
+def today_lineup(data, options, today) -> list:
+    """«Досуг на сегодня» — по одному из каждой категории, по порядку: премьера, фильм, музыка, статья, игра
+    (настольная или PS5). Нет данных категории — её строки нет; премьера — одна, по кругу по дням."""
+    import leisure_games
+    by_kind = {pick["kind"]: pick for pick in data.get("picks") or []}
+    premieres = options.get("premiere") or []
+    lineup = [premieres[today.toordinal() % len(premieres)] if premieres else None,
+              by_kind.get("movie"), by_kind.get("music"), *(options.get("read") or [None])[:1],
+              leisure_games.game_of_day(today)]
+    return [pick for pick in lineup if pick and pick.get("name")]
+
+
 def next_today_pick(cid, options, advance=True):
     """Следующая карточка по кругу: вид — по _ROTATION, внутри вида — следующая из ближайших (номер показа — в
     профиле); advance=False — без сдвига."""
@@ -624,9 +636,9 @@ async def send_hub(bot, cid, q=None):
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     today = _today_and_cc(cid)[0]
     options = await asyncio.to_thread(today_options, cid, today)
-    pick = await asyncio.to_thread(next_today_pick, cid, options)  # каждое открытие — следующая карточка
+    picks = today_lineup(data, options, today)
     msg = leisure_ui.leisure_today_screen(
-        [pick] if pick else [], city=data["city"], library=data["library"],
+        picks, city=data["city"], library=data["library"],
         reply_markup=leisure_ui.leisure_hub_kb(),
     )
     await _show(bot, cid, msg, q)
