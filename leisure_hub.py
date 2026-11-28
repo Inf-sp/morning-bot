@@ -751,19 +751,28 @@ def _trip_footer(cid, cc) -> str:
     return f"Твои артисты отсюда: {', '.join(mine)}" if mine else vacation.fact_of_day(cid, "culture")
 
 
-async def send_concerts(bot, cid, q=None):
-    """«Концерты» в Досуге: любимые артисты и популярное рядом на ближайшие 30 дней."""
-    from telegram import InlineKeyboardMarkup
-    from ui.navigation import nav_row
-    from dataclasses import replace
-    try:
-        # Афиши этой страны ещё нет (новая страна, отпуск, кэш устарел) — собираем сейчас, а не ждём ночи.
-        await asyncio.wait_for(_warm_concerts(cid), 25)
-    except Exception:
-        _log.warning("concerts screen: refresh failed cid=%s", cid, exc_info=True)
-    msg = (await leisure_concerts.build_month_concerts_msg(cid)
-           or leisure_ui.no_month_concerts(leisure_concerts.month_concerts_title(cid)))
-    await _show(bot, cid, replace(msg, reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")])), q)
+async def send_concerts(bot, cid, arg="", q=None):
+    """«Концерты» в Досуге листаются, как премьеры: карточка с фото артиста — «🎫 **Muse**», «Концерт · 4 декабря
+    2026 · Ziggo Dome, Amsterdam · твой артист», фраза об артисте; ← n/N → по кругу (lz_conc_<n>). Сначала твои
+    артисты, затем популярное рядом."""
+    import leisure_events
+    if not str(arg).isdigit():  # открытие: афиши этой страны ещё нет — собираем сейчас, листание не ждёт
+        try:
+            await asyncio.wait_for(_warm_concerts(cid), 25)
+        except Exception:
+            _log.warning("concerts screen: refresh failed cid=%s", cid, exc_info=True)
+    cards = await leisure_concerts.month_concert_cards(cid)
+    index = int(arg) % len(cards) if cards and str(arg).isdigit() else 0
+    image = ""
+    if cards:
+        city = str((store.get_settings(cid) or {}).get("city") or "")
+        try:
+            image = await asyncio.wait_for(asyncio.to_thread(leisure_events.image_for, cards[index], city),
+                                           leisure_events._IMAGE_WAIT)
+        except Exception:
+            _log.debug("concerts: image unavailable", exc_info=True)
+    empty = (leisure_concerts.month_concerts_title(cid), "В ближайшие 30 дней концертов рядом не нашлось.")
+    await _show_card(bot, cid, leisure_ui.event_card(cards, index, prefix="lz_conc_", empty=empty), image, q)
 
 
 _HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на месяц вперёд

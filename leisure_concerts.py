@@ -1226,11 +1226,11 @@ def trip_end(cid, cc):
 
 
 async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title="🎫 Концерты недели",
-                                   min_mine=0, min_popular=0, popular=True):
+                                   min_mine=0, min_popular=0, popular=True, as_items=False):
     """«Концерты недели»: твои артисты и популярное рядом из готовых кэшей.
 
     Концерты уже прогреты отдельным пятничным заданием — в момент рассылки
-    Ticketmaster заново не запрашивается. Нет концертов — None.
+    Ticketmaster заново не запрашивается. Нет концертов — None. as_items — (твои, популярные) вместо сообщения.
     """
     from datetime import datetime, timedelta
 
@@ -1298,6 +1298,8 @@ async def _build_weekly_events_msg(cid, days=_WEEKLY_CONCERT_HORIZON_DAYS, title
     popular = sorted(popular, key=lambda item: item["date"])
     mine = [{**item, "about": note(item).get("about", "")} for item in mine]
     popular = [{**item, "about": note(item).get("about", "")} for item in popular]
+    if as_items:
+        return mine, popular
     return leisure_ui.weekly_concerts_card(mine, popular, title=title)
 
 
@@ -1381,6 +1383,19 @@ async def build_month_concerts_msg(cid):
     AI — только для новых артистов."""
     return await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, month_concerts_title(cid), min_mine=5,
                                           min_popular=_WEEKLY_POPULAR_LIMIT)
+
+
+async def month_concert_cards(cid) -> list:
+    """Экран «Концерты» листается: карточки — сначала твои артисты, затем популярное рядом (те же правила, что у
+    build_month_concerts_msg); нет концертов — []."""
+    found = await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, min_mine=5, min_popular=_WEEKLY_POPULAR_LIMIT,
+                                           as_items=True)
+    mine, popular = found or ([], [])
+    return [{"kind": "concert", "name": item["artist"], "url": item.get("url") or "", "date": item["date"],
+             "end": item["date"], "venue": item.get("venue") or "",
+             "place": ", ".join(part for part in (item.get("venue"), item.get("city")) if part),
+             "mine": flag, "about": item.get("about") or "", "image": "", "time": str(item.get("time") or "")[:5]}
+            for items, flag in ((mine, True), (popular, False)) for item in items]
 
 
 def month_concerts_title(cid) -> str:

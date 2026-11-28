@@ -215,24 +215,37 @@ def test_music_week_is_fixed_from_friday_to_thursday(monkeypatch):
     assert [item["title"] for _day, item in rows] == [f"Альбом {i}" for i in range(7)]
 
 
-def test_concerts_button_opens_month_concerts(monkeypatch):
+def test_concerts_screen_is_a_carousel_of_cards(monkeypatch):
+    import leisure_events
     import leisure_hub
     shown = []
+    cards = [{"kind": "concert", "name": "Placebo", "url": "https://t/1", "date": "2026-12-04", "end": "2026-12-04",
+              "place": "Ziggo Dome, Amsterdam", "mine": True, "about": "Альт-рок с мрачным шармом."},
+             {"kind": "concert", "name": "Muse", "url": "https://t/2", "date": "2026-12-10", "end": "2026-12-10",
+              "place": "Ahoy, Rotterdam", "mine": False, "about": ""}]
 
     async def month(_cid):
-        return leisure_ui.weekly_concerts_card(
-            [{"title": "Placebo", "date": "2026-10-27", "venue": "Ziggo Dome", "city": "Amsterdam"}], [],
-            title="🎫 Концерты на месяц")
+        return list(cards)
 
-    async def show(_bot, _cid, msg, q=None):
+    async def warm(_cid):
+        return None
+
+    async def show(_bot, _cid, msg, _image, _q=None):
         shown.append(msg)
 
-    monkeypatch.setattr(leisure_hub.leisure_concerts, "build_month_concerts_msg", month)
-    monkeypatch.setattr(leisure_hub, "_show", show)
+    monkeypatch.setattr(leisure_hub.leisure_concerts, "month_concert_cards", month)
+    monkeypatch.setattr(leisure_hub, "_warm_concerts", warm)
+    monkeypatch.setattr(leisure_hub, "_show_card", show)
+    monkeypatch.setattr(leisure_events, "image_for", lambda *_a, **_k: "")
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {"city": "Alkmaar"})
     asyncio.run(leisure_hub.send_concerts(None, "42"))
+    asyncio.run(leisure_hub.send_concerts(None, "42", "1"))
 
-    assert shown[0].text.startswith("🎫 Концерты на месяц") and "Placebo" in shown[0].text
-    assert _callbacks(shown[0].reply_markup) == ["m_leisure", "m_menu"]
+    assert "Placebo" in shown[0].text and "твой артист" in shown[0].text and "Muse" not in shown[0].text
+    assert _callbacks(shown[0].reply_markup) == ["lz_conc_1", "noop", "lz_conc_1", "m_leisure", "m_menu"]
+    assert "Muse" in shown[1].text  # листание — следующая карточка
+    for data in ("lz_concerts", "lz_conc_3"):
+        assert routing.resolve_callback_handler(data)["handled"]
 
 
 def test_hub_is_ready_only_with_fresh_caches_and_movie_card(monkeypatch):
@@ -935,3 +948,16 @@ def test_movie_premieres_and_music_releases_are_separate_screens(monkeypatch):
     assert _callbacks(shown[2].reply_markup)[0] == "lz_prem_x_m_0"
     assert leisure_hub._premiere_section("3") == ("k", "3", False)  # старые кнопки из истории — Кино
     assert leisure_hub._premiere_section("x_m_2") == ("m", "2", True)
+
+
+def test_month_concert_cards_put_my_artists_first(monkeypatch):
+    import leisure_concerts
+
+    async def lists(*_a, **_k):
+        return ([{"artist": "Placebo", "date": "2026-12-04", "venue": "Ziggo Dome", "city": "Amsterdam"}],
+                [{"artist": "Muse", "date": "2026-12-01", "venue": "Ahoy", "city": "Rotterdam", "about": "Рок."}])
+
+    monkeypatch.setattr(leisure_concerts, "_build_weekly_events_msg", lists)
+    cards = asyncio.run(leisure_concerts.month_concert_cards("42"))
+    assert [(card["name"], card["mine"], card["place"]) for card in cards] == [
+        ("Placebo", True, "Ziggo Dome, Amsterdam"), ("Muse", False, "Ahoy, Rotterdam")]

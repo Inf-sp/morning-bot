@@ -1046,14 +1046,15 @@ def event_pick(card) -> dict:
             "url": card.get("url") or "", "meta": meta, "about": card.get("about") or ""}
 
 
-def event_card(cards, index=0) -> MessageSpec:
+def event_card(cards, index=0, prefix="lz_ev_", empty=("🎟️ События",
+                                                       "На этой неделе событий пока нет — загляни чуть позже.")) -> MessageSpec:
     """Карточка журнала недели «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome,
     Amsterdam · твой артист» (дата — всегда), описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку
     прикладывает обработчик."""
     b = MessageBuilder()
     if not cards:
-        b.title("🎟️ События")
-        b.line("На этой неделе событий пока нет — загляни чуть позже.")
+        b.title(empty[0])  # «Концерты» — свой заголовок и текст (prefix lz_conc_)
+        b.line(empty[1])
         return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
     index %= len(cards)
     card = cards[index]
@@ -1074,9 +1075,9 @@ def event_card(cards, index=0) -> MessageSpec:
     rows = []
     if len(cards) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"lz_ev_{(index - 1) % len(cards)}"),
+            InlineKeyboardButton("◀️", callback_data=f"{prefix}{(index - 1) % len(cards)}"),
             InlineKeyboardButton(f"{index + 1}/{len(cards)}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"lz_ev_{(index + 1) % len(cards)}"),
+            InlineKeyboardButton("▶️", callback_data=f"{prefix}{(index + 1) % len(cards)}"),
         ])
     rows.append(nav_row("m_leisure"))
     return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))

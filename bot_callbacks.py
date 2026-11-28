@@ -547,6 +547,7 @@ ROUTES = (
     R("lz_rdone_*", lambda c: leisure_hub.read_done(c.bot, c.cid, c.data.removeprefix("lz_rdone_"), q=c.q)),
     R("lz_read_next", lambda c: leisure_hub.send_reads(c.bot, c.cid, q=c.q)),  # старая «Другая статья»
     R("lz_concerts", lambda c: leisure_hub.send_concerts(c.bot, c.cid, q=c.q)),
+    R("lz_conc_*", lambda c: leisure_hub.send_concerts(c.bot, c.cid, c.data.removeprefix("lz_conc_"), q=c.q)),
     R("lz_holidays", lambda c: leisure_hub.send_holidays(c.bot, c.cid, q=c.q)),  # «Праздники» в хабе
     R("vac_train", lambda c: vacation.send_quiz(c.bot, c.cid)),
     R("food_mine", lambda c: c.status(lambda status: menu.send_mine_recipe(c.bot, c.cid, status=status))),
@@ -660,7 +661,7 @@ LEGACY_ALIASES = (
 
 
 # В отпуске у Досуга один экран — досуг страны: старые кнопки премьер, рекомендаций и концертов ведут в него.
-TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_reads*", "lz_rdone*", "lz_read_next", "lz_ev*",
+TRIP_LEISURE_KEYS = ("lz_prem*", "movie_reco", "tv_reco", "music_reco", "lz_concerts", "lz_conc_*", "lz_reads*", "lz_rdone*", "lz_read_next", "lz_ev*",
                      "lz_lib")
 
 
