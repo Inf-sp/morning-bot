@@ -121,7 +121,7 @@ _Главное правило: все активности планируй д�
 - Статьи (`leisure_reads.py`) — экран `📰 Статьи`. Объявления не показываются: анонсы и регистрация на конференции,
   курсы, тренинги, вебинары, распродажи, конкурсы, вакансии, а ещё рецепты и подборки рецептов — ИИ отмечает их при
   переводе (`ad`), без ИИ — по словам в заголовке оригинала (announced, register, webinar, recipes, how to make…;
-  `leisure_reads.is_announcement`). Фотоподборки тоже не показываются — «Photographs of the day», «… in pictures», «The week in wildlife», «Фотографии дня» (`leisure_reads._GALLERY_RE`, отсеиваются ещё при отборе из RSS). Новое и открытия выше в любой теме: discover, first, new study, breakthrough,
+  `leisure_reads.is_announcement`). Фотоподборки тоже не показываются — «Photographs of the day», «… in pictures», «The week in wildlife», «Фотографии дня» (`leisure_reads._GALLERY_RE`, отсеиваются ещё при отборе из RSS). Политических статей нет: выборы, партии, правительство, политики, войны, санкции — по заголовку на английском, нидерландском и русском (`leisure_reads._POLITICS_RE`, `is_political`, ещё при отборе из RSS), а ИИ при переводе отмечает их флагом `ad`. Новое и открытия выше в любой теме: discover, first, new study, breakthrough,
   researchers… (`leisure_reads._DISCOVERY`). Над листанием —
   кнопка `Пропустить` стандартного цвета первой строкой (`lz_rdone_<n>`, `leisure_hub.read_done`): статья уходит из ленты (`hub_reads.read`, и после
   пересборки набора в тот же день), на её месте — следующая; в «показанных» она и так 30 дней. в наборе у статьи заголовок в оригинале, источник · язык (EN) ·

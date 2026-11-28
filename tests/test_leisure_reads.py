@@ -274,3 +274,14 @@ def test_photo_galleries_are_not_articles():
     for title in ("Photographs of the day", "The week in wildlife – in pictures", "Фотографии дня"):
         assert leisure_reads.is_announcement({"original_title": title, "title": title})
     assert not leisure_reads.is_announcement({"original_title": "How black holes grow", "title": "Как растут дыры"})
+
+
+def test_political_articles_are_skipped():
+    for title in ("Trump signs new tariffs", "Election results in the Netherlands", "Kabinet valt over asielbeleid",
+                  "Почему война меняет кино"):
+        assert leisure_reads.is_announcement({"original_title": title, "title": title}), title
+    for title in ("A warm welcome to the new Bauhaus museum", "Award-winning photographer on light",
+                  "How the brain stores memories"):
+        assert not leisure_reads.is_announcement({"original_title": title, "title": title}), title
+    for title in ("Cabinet design by Studio X", "Democratizing type design"):  # дизайн — не политика
+        assert not leisure_reads.is_political({"title": title}), title
