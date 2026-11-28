@@ -57,3 +57,25 @@ def test_gemini_timeouts_are_one_summary_line_not_errors(monkeypatch):
     assert len(rows) == 1 and rows[0].startswith("Gemini · не отвечал · 4 раза за сутки")
     assert rows[0].endswith("ответы через резерв")
     assert admin._active_error_rows(summaries=False) == []  # кнопки «⚠️ Ошибки» нет — ошибок бота нет
+
+
+def test_many_services_timing_out_together_is_one_network_line(monkeypatch):
+    import admin
+    now = int(time.time())
+    history = [{"ts": now - 120 + 10 * i, "event_type": "error", "service": name, "text": f"{label}: сервис не ответил."}
+               for i, (name, label) in enumerate((("serpapi", "SerpApi"), ("firecrawl", "Firecrawl"),
+                                                   ("tavily", "Tavily"), ("youtube", "YouTube")))]
+    monkeypatch.setattr(admin.provider_runtime, "history", lambda limit=200: history)
+    monkeypatch.setattr(admin.tracking, "get_errors", lambda limit=200: [])
+    rows = admin._active_error_rows()
+    assert len(rows) == 1 and rows[0].startswith("Сеть сервера · ") and "не ответили 4 сервиса" in rows[0]
+    assert admin._active_error_rows(summaries=False) == []
+
+
+def test_timeout_cut_by_our_own_deadline_is_not_a_service_incident(monkeypatch):
+    import tracking
+    monkeypatch.setattr(tracking, "remaining_action_seconds", lambda: 0.3)
+    assert provider_runtime._cut_by_own_deadline("ReadTimeout", None)
+    assert not provider_runtime._cut_by_own_deadline("HTTP 503", 503)
+    monkeypatch.setattr(tracking, "remaining_action_seconds", lambda: 8.0)
+    assert not provider_runtime._cut_by_own_deadline("ReadTimeout", None)

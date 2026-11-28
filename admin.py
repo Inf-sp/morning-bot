@@ -725,6 +725,35 @@ def _is_ai_transient(entry) -> bool:
                  or int(entry.get("status_code") or 0) in (408, 500, 502, 503, 504)))
 
 
+_BURST_WINDOW_S = 180
+_BURST_SERVICES = 3
+
+
+def _network_bursts(monitor_errors):
+    """Сразу несколько сервисов не ответили в одни 3 минуты — это сеть сервера или общий срок ответа, а не каждый
+    сервис по отдельности: одна строка «Сеть сервера · 10:33–10:35 · не ответили 7 сервисов: …»."""
+    timeouts = sorted((entry for entry in monitor_errors
+                       if any(marker in str(entry.get("text") or "") for marker in (*_TRANSIENT_TEXTS, "нет соединения"))),
+                      key=lambda entry: int(entry.get("ts") or 0))
+    bursts, used, group = [], set(), []
+    for entry in timeouts + [None]:
+        if entry is not None and (not group or int(entry["ts"]) - int(group[0]["ts"]) <= _BURST_WINDOW_S):
+            group.append(entry)
+            continue
+        services = list(dict.fromkeys(str(item.get("service") or "") for item in group))
+        if len(services) >= _BURST_SERVICES:
+            labels = [(provider_runtime.SPEC_BY_KEY.get(name).label if provider_runtime.SPEC_BY_KEY.get(name)
+                       else name) for name in services]
+            start, end = (datetime.fromtimestamp(int(group[k]["ts"]), config.TZ).strftime("%H:%M") for k in (0, -1))
+            span = start if start == end else f"{start}–{end}"
+            bursts.append((int(group[-1]["ts"]), f"Сеть сервера · {span} · не ответили {len(services)} "
+                                                  f"{_plural(len(services), 'сервис', 'сервиса', 'сервисов')}: "
+                                                  f"{', '.join(labels)} — похоже на сбой связи, не на сами сервисы"))
+            used.update(id(item) for item in group)
+        group = [entry] if entry is not None else []
+    return bursts, used
+
+
 def _rate_limit_summary(monitor_errors) -> list:
     """Лимит запросов бесплатного тарифа (429) — ожидаемо, бот отвечает через резерв: не десятки строк, а одна на
     сервис — «Gemini · лимит запросов · 18 раз за сутки, последний 22:57 · ответы через резерв»."""
@@ -749,9 +778,10 @@ def _active_error_rows(*, limit=40, include_hidden=True, summaries=True):
     cutoff = time.time() - DAY
     errors = [e for e in tracking.get_errors(limit=200) if e.get("ts", 0) >= cutoff]
     all_monitor_errors = _active_monitor_errors(cutoff)
-    rate_limits = _rate_limit_summary(all_monitor_errors)
-    monitor_errors = [entry for entry in all_monitor_errors
-                      if not _is_ai_rate_limit(entry) and not _is_ai_transient(entry)]
+    bursts, in_burst = _network_bursts(all_monitor_errors)
+    rate_limits = _rate_limit_summary([entry for entry in all_monitor_errors if id(entry) not in in_burst]) + bursts
+    monitor_errors = [entry for entry in all_monitor_errors if id(entry) not in in_burst
+                      and not _is_ai_rate_limit(entry) and not _is_ai_transient(entry)]
     combined = [
         (int(entry.get("ts") or 0), _compact_log_row(entry) + _repeat_suffix(count))
         for entry, count in _collapse_app_errors(errors)

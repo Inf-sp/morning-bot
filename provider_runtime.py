@@ -510,6 +510,26 @@ def _update_incident(data: dict, incident_id: str, **values) -> None:
             return
 
 
+_OWN_DEADLINE_SLACK_S = 1.0
+
+
+def _cut_by_own_deadline(error, status_code) -> bool:
+    """Таймаут, когда у действия пользователя или у ИИ-цепочки почти не осталось времени: запрос оборвали мы сами
+    (короткий срок ответа), сервис тут ни при чём — в «Ошибки» и статус сервиса не пишем."""
+    if status_code or "timeout" not in str(error or "").casefold().replace("timed out", "timeout"):
+        return False
+    try:
+        import tracking
+        remaining = tracking.remaining_action_seconds()
+        if remaining is not None and remaining <= _OWN_DEADLINE_SLACK_S:
+            return True
+        import ai
+        ai_remaining = ai._remaining_seconds()
+        return ai_remaining is not None and ai_remaining <= _OWN_DEADLINE_SLACK_S
+    except Exception:
+        return False
+
+
 def record_result(
     provider: str, ok: bool, *, status_code=None, error="", headers=None,
     quota_remaining=None, quota_total=None, checked_at=None, latency_ms=None,
@@ -524,6 +544,8 @@ def record_result(
     """
     if provider not in SPEC_BY_KEY:
         return
+    if not ok and _cut_by_own_deadline(error, status_code):
+        return  # таймаут из-за нашего же срока ответа пользователю, а не сбой сервиса — не инцидент
     now = int(checked_at or time.time())
     if real_request is None:
         # Health probes must not silently clear a rate-limit incident. Product
