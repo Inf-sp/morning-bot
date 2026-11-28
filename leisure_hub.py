@@ -497,55 +497,63 @@ _ROTATION_KEY = "hub_rotation"  # профиль: номер следующег�
 _ROTATION_DEPTH = 3  # из каждого вида — до трёх ближайших карточек по кругу
 
 
-def _read_pick(item):
-    """Статья → строка «Статей дня»: «**Заголовок** · Quanta · 8 мин — о чём»."""
-    if not item or not str(item.get("link") or "").startswith("http"):
-        return None
-    minutes = int(item.get("minutes") or 0)
-    return {"kind": "read", "name": item.get("title") or "", "url": item["link"],
-            "meta": [item.get("source") or "", f"{minutes} мин" if minutes else ""], "about": item.get("about") or ""}
+_TODAY_PREMIERES_MAX = 3  # «Премьеры недели» хаба — не больше трёх, каждый день другие
 
 
-_TODAY_PREMIERES = ("movie", "music", "series")  # «Премьеры недели» — по одной: фильм, альбом, сериал
-_TODAY_READS = 3
+def pick_premieres(cards, today, count=_TODAY_PREMIERES_MAX) -> list:
+    """Премьеры недели на сегодня: виды вперемешку (фильм, альбом, сериал — по кругу), каждый день следующие три
+    по кругу; в ленте уже первыми — любимые артисты и сериалы, затем популярное."""
+    by_kind = {}
+    for card in cards:
+        by_kind.setdefault(card.get("premiere"), []).append(card)
+    mixed = []
+    while any(by_kind.values()):
+        for kind in ("movie", "music", "series", *[kind for kind in by_kind if kind not in ("movie", "music", "series")]):
+            if by_kind.get(kind):
+                mixed.append(by_kind[kind].pop(0))
+    if len(mixed) <= count:
+        return mixed
+    start = today.toordinal() * count % len(mixed)
+    return [mixed[(start + offset) % len(mixed)] for offset in range(count)]
+
+
+def leisure_fact(today) -> str:
+    """Факт дня о кино, музыке, книгах и играх под заголовком хаба — проверенный список, по кругу по дням."""
+    import json
+    import os
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "data", "leisure_facts.json"), encoding="utf-8") as file:
+            facts = [str(fact).strip() for fact in json.load(file) if str(fact).strip()]
+    except (OSError, ValueError):
+        return ""
+    return facts[today.toordinal() % len(facts)] if facts else ""
 
 
 def today_options(cid, today) -> dict:
-    """{вид: [карточки]} из ленты «Событий» и набора статей — готовые кэши, без сети и AI. «premieres» — по одной
-    премьере недели каждого вида, «reads» — три статьи дня из разных тем."""
+    """{вид: [карточки]} из ленты «Событий» — готовые кэши, без сети и AI. «premieres» — до трёх премьер недели
+    на сегодня (pick_premieres)."""
     import leisure_events
-    import leisure_reads
     try:
         cards = leisure_events.feed(cid)
     except Exception:
         _log.warning("leisure today: events unavailable cid=%s", cid, exc_info=True)
         cards = []
     groups = {"concert": [], "event": [], "premiere": []}
-    firsts = {}
     for card in cards:
-        if card["kind"] == "read":  # статьи — своим блоком ниже
+        if card["kind"] == "read":  # статьи — экраном «Статьи»
             continue
-        if card["kind"] == "premiere":
-            firsts.setdefault(card.get("premiere"), card)
         group = card["kind"] if card["kind"] in ("concert", "premiere") else "event"
         if len(groups[group]) < _ROTATION_DEPTH:
             groups[group].append(leisure_ui.event_pick(card))
-    try:
-        reads = [pick for pick in map(_read_pick, leisure_reads.top_mixed(cid, today, _TODAY_READS)) if pick]
-    except Exception:
-        reads = []
-    premieres = [leisure_ui.today_premiere(firsts[kind]) for kind in _TODAY_PREMIERES if kind in firsts]
-    return {kind: picks for kind, picks in (*groups.items(), ("read", reads[:1]), ("reads", reads),
-                                            ("premieres", premieres)) if picks}
+    premieres = [leisure_ui.today_premiere(card)
+                 for card in pick_premieres([card for card in cards if card["kind"] == "premiere"], today)]
+    return {kind: picks for kind, picks in (*groups.items(), ("premieres", premieres)) if picks}
 
 
-def today_lineup(data, options, _today=None) -> dict:
-    """«🍿 Досуг»: премьеры недели (фильм, альбом, сериал — по одной), фильм, сериал, артист дня и три
-    статьи дня. Нет данных блока — его нет."""
-    by_kind = {pick["kind"]: pick for pick in data.get("picks") or [] if pick.get("name")}
-    return {"premieres": [pick for pick in options.get("premieres") or [] if pick.get("name")],
-            "movie": by_kind.get("movie"), "tv": by_kind.get("tv"), "music": by_kind.get("music"),
-            "reads": [pick for pick in options.get("reads") or [] if pick.get("name")]}
+def today_lineup(data, options, today=None) -> dict:
+    """«🍿 Досуг на сегодня»: факт дня и до трёх премьер недели. Нет премьер — их блока нет."""
+    return {"fact": leisure_fact(today) if today else "",
+            "premieres": [pick for pick in options.get("premieres") or [] if pick.get("name")]}
 
 
 def next_today_pick(cid, options, advance=True):
@@ -641,7 +649,7 @@ async def send_hub(bot, cid, q=None):
         util.build_off_loop(("hub_reads", str(cid)), leisure_reads.build, cid)
     today = _today_and_cc(cid)[0]
     options = await asyncio.to_thread(today_options, cid, today)
-    picks = today_lineup(data, options, today)
+    picks = today_lineup(data, options, today)  # факт дня и премьеры; статьи, фильм и музыка — кнопками
     msg = leisure_ui.leisure_today_screen(
         picks, city=data["city"], library=data["library"],
         reply_markup=leisure_ui.leisure_hub_kb(),

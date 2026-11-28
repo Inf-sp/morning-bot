@@ -756,27 +756,24 @@ def _finish_sentence(text) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
-_TODAY_PREMIERE_TYPE = {"movie": "Фильм", "series": "Сериал", "music": "Альбом"}
-_TODAY_ABOUT_MAX = 120  # описание в Досуге — одно предложение, не длиннее
-
-
-def _capital(value) -> str:
-    value = " ".join(str(value or "").split())
-    return value[:1].upper() + value[1:]
+_TODAY_PREMIERE_TYPE = {"movie": "фильм", "series": "сериал", "music": "альбом"}
+_TODAY_ABOUT_MAX = 160  # описание премьеры в хабе — одно предложение, не длиннее
 
 
 def today_premiere(card) -> dict:
-    """Премьера «Событий» → карточка «Премьер недели»: «Билли и мир магии», «Фильм · Анимация · 25 ноября», описание;
-    у альбома — «Stray Kids — SUIATSU», «Альбом · Поп · 25 ноября». Жанр — один, страны нет."""
+    """Премьера «Событий» → строка «Премьер недели»: «**Билли и мир магии** (фильм · приключения · анимация ·
+    🇺🇸 USA · 25 ноября) — описание»; у альбома — «**Stray Kids** (альбом «SUIATSU» · Поп · 🇰🇷 KR · 25 ноября)».
+    Жанров — не больше двух."""
     kind = card.get("premiere")
     values = [" ".join(str(value).split()) for value in card.get("meta") or () if str(value or "").strip()]
-    name = " ".join(str(card.get("name") or "").split())
+    label = _TODAY_PREMIERE_TYPE.get(kind, "фильм")
     if kind == "music" and values and values[0].startswith("«"):
-        name, values = f"{name} — {values[0].strip('«»')}", values[1:]
-    genre = values[0].split(" · ")[0] if values and not re.search(r"\d|сезон|[\U0001F1E6-\U0001F1FF]", values[0]) else ""
-    return {"kind": "premiere", "name": name, "url": card.get("url") or "",
-            "meta": [_TODAY_PREMIERE_TYPE.get(kind, "Фильм"), genre, _event_date_label(card.get("date"))],
-            "about": card.get("about") or ""}
+        label, values = f"{label} {values[0]}", values[1:]
+    meta = [label]
+    for value in values:
+        meta += value.split(" · ")[:2] if " · " in value else [value]
+    return {"kind": "premiere", "name": card.get("name") or "", "url": card.get("url") or "",
+            "meta": [*meta, _event_date_label(card.get("date"))], "about": card.get("about") or ""}
 
 
 def _one_sentence(text) -> str:
@@ -790,51 +787,35 @@ def _one_sentence(text) -> str:
     return _finish_sentence(text)
 
 
-def _today_card(b: MessageBuilder, pick, prefix="") -> None:
-    """Карточка в три строки: «**Фильм · Патерсон**» (ссылкой), «2016 · Драма · 1 ч 58 мин», одно предложение."""
-    name = " ".join(str(pick.get("name") or "").split())
-    url = str(pick.get("url") or "").strip()
-    if prefix:
-        b.bold(f"{prefix} · ")
-    b.bold_link(name, url) if url.startswith("http") else b.bold(name)
-    b.newline()
-    values = [_capital(value) for value in (*(pick.get("meta") or ()), pick.get("runtime")) if str(value or "").strip()]
-    if values:
-        b.line(" · ".join(values))
-    about = _one_sentence(pick.get("about"))
-    if about:
-        b.line(about)
-
-
-_TODAY_CHOICE = (("movie", "Фильм"), ("tv", "Сериал"), ("music", "Музыка"))
-
-
 def leisure_today_screen(lineup, *, city="", library=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг» — персональная подборка на сегодня короткими карточками: «Премьеры недели», «Выбор дня» (фильм,
-    сериал, артист), «Статьи дня» (до трёх: заголовок и «источник · минуты»); внизу курсивом библиотека."""
+    """«🍿 Досуг на сегодня · Alkmaar», ниже обычным текстом факт дня (кино, музыка, книги, игры), «**Премьеры
+    недели:**» — до трёх пунктов «• **Имя** (вид · жанры · страна · дата) — описание»; внизу курсивом библиотека.
+    Фильм, сериал, музыка и статьи — кнопками разделов."""
     b = MessageBuilder()
-    b.title("🍿 Досуг")
+    b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
     lineup = lineup or {}
-    sections = []
-    if lineup.get("premieres"):
-        sections.append(("Премьеры недели", [(pick, "") for pick in lineup["premieres"]]))
-    choice = [(lineup[kind], label) for kind, label in _TODAY_CHOICE if lineup.get(kind)]
-    if choice:
-        sections.append(("Выбор дня", choice))
-    reads = [({**pick, "about": ""}, "") for pick in (lineup.get("reads") or [])[:3]]
-    if reads:
-        sections.append(("Статьи дня", reads))
-    if not sections:
-        b.line("Собираю премьеры, фильмы и статьи — загляни чуть позже или открой разделы ниже.")
-    for index, (heading, cards) in enumerate(sections):
-        if index:
+    if lineup.get("fact"):
+        b.line(lineup["fact"])
+    premieres = lineup.get("premieres") or []
+    if premieres:
+        if lineup.get("fact"):
             b.spacer()
-        b.bold(heading)
+        b.bold("Премьеры недели:")
         b.newline()
-        for number, (pick, prefix) in enumerate(cards):
-            if number:
-                b.spacer()
-            _today_card(b, pick, prefix)
+        for pick in premieres:
+            b.text_line("• ")
+            name = " ".join(str(pick.get("name") or "").split())
+            url = str(pick.get("url") or "").strip()
+            b.bold_link(name, url) if url.startswith("http") else b.bold(name)
+            values = [" ".join(str(value).split()) for value in pick.get("meta") or () if str(value or "").strip()]
+            if values:
+                b.text_line(f" ({' · '.join(values)})")
+            about = _one_sentence(pick.get("about"))
+            if about:
+                b.text_line(f" — {about}")
+            b.newline()
+    if not lineup.get("fact") and not premieres:
+        b.line("Собираю премьеры недели — загляни чуть позже или открой разделы ниже.")
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))

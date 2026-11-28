@@ -508,7 +508,7 @@ def test_empty_hub_refreshes_day_cards_in_background_without_waiting(monkeypatch
     monkeypatch.setattr(vacation, "active", lambda _cid: False)
     asyncio.run(leisure_hub.send_hub(None, "cards-42"))
     # Карточки «Фильм / Сериал / Музыка» — фоном для их кнопок; экран не ждёт и показывает свежее.
-    assert refreshed == ["cards-42"] and "Премьеры недели\nДюна\nФильм" in shown[0]
+    assert refreshed == ["cards-42"] and "Премьеры недели:\n• Дюна (фильм)" in shown[0]
 
 
 def _today_picks(monkeypatch):
@@ -533,22 +533,25 @@ def _today_picks(monkeypatch):
     return leisure_hub.today_data("42", day=date(2026, 10, 13))
 
 
-def test_today_screen_is_one_card_and_stats(monkeypatch):
+def test_today_screen_has_fact_premieres_and_library(monkeypatch):
     data = _today_picks(monkeypatch)
-    msg = leisure_ui.leisure_today_screen({"movie": data["picks"][0]}, city=data["city"], library=data["library"])
-
+    premiere = {"kind": "premiere", "name": "Билли и мир магии", "url": "https://y/t",
+                "meta": ["фильм", "приключения", "анимация", "🇺🇸 USA", "25 ноября"],
+                "about": "Билли открывает в себе магию и попадает в Хекс, мир ведьм. Второе предложение."}
+    msg = leisure_ui.leisure_today_screen({"fact": "Tuschinski открылся в 1921 году.", "premieres": [premiere]},
+                                          city=data["city"], library=data["library"])
     assert msg.text == (
-        "🍿 Досуг\n\n"
-        "Выбор дня\n"
-        "Фильм · Восставший\n"
-        "2026 · История · DE · 1 ч 52 мин\n"
-        "Историческая драма о восстании.\n\n"  # одно предложение
+        "🍿 Досуг на сегодня · Alkmaar\n\n"
+        "Tuschinski открылся в 1921 году.\n\n"
+        "Премьеры недели:\n"
+        "• Билли и мир магии (фильм · приключения · анимация · 🇺🇸 USA · 25 ноября) — Билли открывает в себе магию "
+        "и попадает в Хекс, мир ведьм.\n\n"
         "Твоя библиотека · 55 фильмов · 42 артиста"
-    )  # короткая карточка: название, метаданные, одно предложение
-    assert [pick["name"] for pick in data["picks"]] == ["Восставший", "Нили", "Focus Group"]
+    )  # без «Выбора дня» и «Статей дня»
+    assert [pick["name"] for pick in data["picks"]] == ["Восставший", "Нили", "Focus Group"]  # для кнопок разделов
     raw = msg.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in msg.entities]
-    assert ("text_link", "Восставший") in marked
+    assert ("text_link", "Билли и мир магии") in marked
     assert [e.type for e in msg.entities][-1] == "italic"
 
 
@@ -566,18 +569,12 @@ def test_hub_card_rotates_through_sections_on_every_open(monkeypatch):
     assert leisure_hub._ROTATION == ("concert", "premiere", "read")
     del options["read"]  # нет статьи — вид пропускается
     assert leisure_hub.next_today_pick("42", options, advance=False)["name"] in {"c1", "c2", "e1", "p1", "p2", "p3"}
-    read = {"kind": "read", "name": "Как растут чёрные дыры", "url": "https://q.co/a",
-            "meta": ["Quanta", "8 мин"], "about": "Чёрные дыры растут быстрее моделей"}
-    text = leisure_ui.leisure_today_screen({"reads": [read, {**read, "name": "Вторая"}]}).text
-    assert text.endswith("Статьи дня\nКак растут чёрные дыры\nQuanta · 8 мин\n\nВторая\nQuanta · 8 мин")  # без анонса
 
 
 def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     data = _today_picks(monkeypatch)
 
-    # Карточка сериала — без описания строка не ломается.
-    msg = leisure_ui.leisure_today_screen({"tv": data["picks"][1]}, city="Alkmaar")
-    assert msg.text == "🍿 Досуг\n\nВыбор дня\nСериал · Нили\n2025 · Драма"
+    assert data["picks"][1]["meta"][:2] == ["2025", "драма"]  # сериал — год и жанр, без канала
 
     kb = leisure_ui.leisure_hub_kb()
     assert _labels(kb)[:3] == [["🎬 Кино"], ["🎧 Музыка"], ["📰 Статьи"]]  # в один столбец
@@ -602,7 +599,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
     asyncio.run(leisure_hub.send_hub(bot, "42"))
 
     text = bot.sent[0]["text"]
-    assert text.startswith("🍿 Досуг\n\n") and "Восставший" in text
+    assert text.startswith("🍿 Досуг на сегодня · Alkmaar\n\n") and "Восставший" not in text  # фильм — кнопкой
     assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_kb_kino"
 
 
@@ -637,12 +634,11 @@ def test_music_line_shows_the_latest_album_and_its_date(monkeypatch):
     monkeypatch.setattr(countries, "artist_latest_album", lambda name, fetch=True: albums.get(name, {}))
     data = _today_picks(monkeypatch)
 
-    assert "Музыка · Focus Group\n«Blue Rev» · Инди · 2022" in leisure_ui.leisure_today_screen(
-        {"music": data["picks"][2]}).text  # без биографии: релиз, жанр, год
+    assert data["picks"][2]["meta"] == ["«Blue Rev»", "Инди", "2022"]  # без биографии: релиз, жанр, год
     this_year = date.today().replace(month=1, day=9).isoformat()
     albums["Focus Group"] = {"title": "Signal", "date": this_year}
     data = _today_picks(monkeypatch)
-    assert "«Signal» · Инди · 9 января" in leisure_ui.leisure_today_screen({"music": data["picks"][2]}).text  # в этом году — дата
+    assert data["picks"][2]["meta"][-1] == "9 января"  # в этом году — дата
 
 
 def test_premiere_of_day_picks_one_todays_premiere_by_personal_priority(monkeypatch):
@@ -695,8 +691,7 @@ def test_premiere_line_in_my_day():
 
 def test_today_screen_shows_country_without_flag_emoji(monkeypatch):
     data = _today_picks(monkeypatch)
-    lineup = leisure_hub.today_lineup(data, {})
-    text = leisure_ui.leisure_today_screen(lineup, city=data["city"]).text
+    text = " · ".join(" · ".join(str(value) for value in pick["meta"]) for pick in data["picks"]) + " · "
     assert "🇩🇪" not in text and "🇺🇸" not in text and "🇬🇧" not in text  # страна есть, флагов нет
     assert "· DE ·" in text and "USA" not in text and "UK" not in text  # страна — только неожиданная
 
@@ -892,28 +887,22 @@ def test_movie_premiere_of_the_day_is_only_a_really_new_release():
     assert leisure_hub.is_new_release({"date": "2026-11-25"})  # старый кэш без поля — по дате проката
 
 
-def test_hub_lists_premieres_film_series_artist_and_three_reads():
-    data = {"picks": [{"kind": "movie", "name": "Патерсон", "meta": ["2016", "драма"], "runtime": "1 ч 58 мин",
-                       "about": "Водитель автобуса пишет стихи и находит поэзию в повседневной жизни. Второе."},
-                      {"kind": "tv", "name": "Нили", "meta": ["2025"]},
-                      {"kind": "music", "name": "Kesha", "meta": ["Поп", "2025"]}]}
-    card = {"kind": "premiere", "premiere": "movie", "name": "Билли и мир магии", "url": "https://y/t",
-            "date": "2026-11-25", "meta": ["анимация · приключения · семейный", "🇺🇸 USA"],
-            "about": "Девочка открывает в себе магические способности и попадает в мир ведьм. Там она ищет тайны."}
+def test_hub_lists_up_to_three_premieres_new_every_day():
+    from datetime import date
+    cards = [{"kind": "premiere", "premiere": kind, "name": f"{kind}{n}", "date": "2026-11-25", "meta": []}
+             for kind in ("movie", "music", "series") for n in range(3)]
+    today = date(2026, 11, 28)
+    first = [card["name"] for card in leisure_hub.pick_premieres(cards, today)]
+    second = [card["name"] for card in leisure_hub.pick_premieres(cards, date(2026, 11, 29))]
+    assert len(first) == 3 and len({name[:-1] for name in first}) == 3  # три разных вида
+    assert not set(first) & set(second)  # назавтра — другие
     album = {"kind": "premiere", "premiere": "music", "name": "Stray Kids", "date": "2026-11-25",
-             "meta": ["«SUIATSU»", "Поп", "🇰🇷 KR"], "about": "Новый релиз южнокорейской группы."}
-    options = {"premieres": [leisure_ui.today_premiere(card), leisure_ui.today_premiere(album)],
-               "reads": [{"kind": "read", "name": f"Статья {n}", "meta": ["Dezeen", "2 мин"], "about": "x"}
-                         for n in range(4)]}
-    text = leisure_ui.leisure_today_screen(leisure_hub.today_lineup(data, options)).text
-    assert text.startswith(
-        "🍿 Досуг\n\nПремьеры недели\nБилли и мир магии\nФильм · Анимация · 25 ноября\n"
-        "Девочка открывает в себе магические способности и попадает в мир ведьм.\n\n"
-        "Stray Kids — SUIATSU\nАльбом · Поп · 25 ноября\nНовый релиз южнокорейской группы.\n\n"
-        "Выбор дня\nФильм · Патерсон\n2016 · Драма · 1 ч 58 мин\n"
-        "Водитель автобуса пишет стихи и находит поэзию в повседневной жизни.\n\n"
-        "Сериал · Нили\n2025\n\nМузыка · Kesha\nПоп · 2025\n\nСтатьи дня\nСтатья 0\nDezeen · 2 мин")
-    assert text.count("Статья ") == 3 and "Игра дня" not in text and "🇺🇸" not in text
+             "meta": ["«SUIATSU»", "Поп", "🇰🇷 KR"], "about": "Динамичный альбом с энергичными битами."}
+    lineup = leisure_hub.today_lineup({}, {"premieres": [leisure_ui.today_premiere(album)]}, today)
+    text = leisure_ui.leisure_today_screen(lineup).text
+    assert "• Stray Kids (альбом «SUIATSU» · Поп · 🇰🇷 KR · 25 ноября) — Динамичный альбом с энергичными битами." in text
+    assert lineup["fact"] and lineup["fact"] in text  # факт дня — под заголовком
+    assert "Выбор дня" not in text and "Статьи дня" not in text
 
 def test_reads_of_the_day_come_from_different_themes(monkeypatch):
     import leisure_reads
