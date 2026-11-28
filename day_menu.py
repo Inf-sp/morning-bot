@@ -22,8 +22,9 @@ MEALS = ("breakfast", "lunch", "dinner")
 MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
 _NAME_MAX = 60
 _NOTE_MAX = 100
-_HOW_MAX = 360  # короткое приготовление под блюдом: 2–3 предложения
-_HOME_MENU_VERSION = 3  # 3 — приготовление и у запасных блюд; 2 — у блюд короткое приготовление (how) прямо в меню, кнопок рецептов нет
+_HOW_MAX = 260  # короткое приготовление после названия блюда: одно-два предложения
+_HOW_SENTENCES = 2
+_HOME_MENU_VERSION = 4  # 4 — приготовление одним-двумя предложениями; 3 — приготовление и у запасных блюд; 2 — у блюд короткое приготовление (how) прямо в меню, кнопок рецептов нет
 _TRIP_NOTE_MAX = 240  # в отпуске описание блюда — одно-два предложения
 _TRIP_MENU_VERSION = 3  # 3 — ещё второе: десерт, напиток или закуска (extra); 2 — местное название и эмодзи
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
@@ -292,12 +293,22 @@ _HOW_BATCH = 50  # ночной прогрев: столько запасных 
 _HOW_BATCHES = 2
 
 
+def short_how(text) -> str:
+    """Приготовление — не больше двух предложений и _HOW_MAX символов, с точкой в конце; длиннее — ""."""
+    text = " ".join(str(text or "").split()).strip()
+    sentences = [part for part in re.split(r"(?<=[.!?…])\s+", text) if part]
+    text = " ".join(sentences[:_HOW_SENTENCES]).rstrip(" .")
+    if not text or len(text) > _HOW_MAX:
+        return ""
+    return text if text[-1:] in "!?…" else f"{text}."
+
+
 def _with_how(dish) -> dict:
     """Запасное блюдо с коротким приготовлением из словаря (dish_how.json); в словаре ещё нет — без него."""
     if not dish.get("name"):
         return dish
     saved = store._load(config.DISH_HOW_KEY) or {}
-    how = saved.get(_dish_key(dish["name"])) if isinstance(saved, dict) else ""
+    how = short_how(saved.get(_dish_key(dish["name"]))) if isinstance(saved, dict) else ""
     return {**dish, "how": how} if how else dish
 
 
@@ -318,7 +329,7 @@ def extend_dish_how(cuisines=(), dishes=()) -> int:
     if not batch:
         return 0
     prompt = (
-        "Для каждого домашнего блюда напиши короткое приготовление по-русски: 2–3 коротких предложения, до 300 "
+        "Для каждого домашнего блюда напиши короткое приготовление по-русски: одно-два коротких предложения, до 200 "
         "символов, повелительно и конкретно — что и как нарезать, на каком огне (слабый, средний, сильный) и сколько "
         "минут, чем закончить («Нарежь баранину кубиками и обжарь на сильном огне 5 минут. Добавь тархун и ткемали, "
         "туши под крышкой на слабом огне 1 час.»); главные продукты называй прямо в шагах; без «ты», без "
@@ -338,9 +349,9 @@ def extend_dish_how(cuisines=(), dishes=()) -> int:
     added = {}
     for row in (data.get("dishes") if isinstance(data, dict) else None) or []:
         key = _dish_key((row or {}).get("name")) if isinstance(row, dict) else ""
-        how = _clean(row.get("how"), _HOW_MAX) if key else ""
+        how = short_how(row.get("how")) if key else ""
         if key in wanted and how and re.search(r"[а-яё]", how, re.I) and not re.search(r"\bты\b", how, re.I):
-            added[key] = how if how[-1:] in "!?…" else f"{how}."
+            added[key] = how
     if not added:
         return 0
 
@@ -458,7 +469,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
            "ингредиента через запятую («помидоры, сыр, базилик»), сложное — коротко вкус или соус («курица в "
            "чесночно-сливочном соусе»); не повторяй то, что и так ясно из name; грамотно и верно по сути, не "
            "выдумывай (брай — мясо на открытом огне, а не тушёное).\n"
-           "how — короткое приготовление по-русски: 2–3 коротких предложения, до 300 символов, повелительно и "
+           "how — короткое приготовление по-русски: одно-два коротких предложения, до 200 символов, повелительно и "
            "конкретно — что и как нарезать, на каком огне (слабый, средний, сильный) и сколько минут, чем закончить "
            "(«Нарежь баранину кубиками и обжарь на сильном огне 5 минут. Добавь тархун и ткемали, туши под крышкой "
            "на слабом огне 1 час.»); главные продукты называй прямо в шагах; без «ты», без отдельного списка "
@@ -507,7 +518,7 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 8, "trip": trip,
+                "language": "ru", "schema_version": 9, "trip": trip,
             },
         )
     except Exception as error:
@@ -565,9 +576,9 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
                     "emoji": emoji if 0 < len(emoji) <= 4 and not re.search(r"\w", emoji) else ""}
         else:  # описание без пересказа названия: «Блины с творогом, тонкие блины с творогом» → только название
             dish = {"name": name, "note": "" if note_repeats_name(name, note) else note}
-            how = _clean(raw.get("how"), _HOW_MAX)
+            how = short_how(raw.get("how"))
             if how:
-                dish["how"] = how if how[-1:] in "!?…" else f"{how}."
+                dish["how"] = how
             else:  # ИИ не дал приготовления — из словаря запасных блюд, если это блюдо там есть
                 dish = _with_how(dish)
         used.add(dish["name"].casefold())

@@ -534,3 +534,10 @@ def test_menu_asks_short_cooking_for_dishes_left_without_it(monkeypatch):
     monkeypatch.setattr(day_menu.ai, "llm_json", lambda *_a, **_k: next(answers))
     dish = day_menu.build_day_menu("42", now=NOW, cuisine="georgian")["dishes"]["dinner"]
     assert dish["how"] == "Отвари потроха 40 минут. Обжарь с луком и орехами."
+
+
+def test_short_cooking_is_one_or_two_sentences():
+    assert day_menu.short_how("Обжарь лук 5 минут. Добавь рис и залей водой. Вари 15 минут") == (
+        "Обжарь лук 5 минут. Добавь рис и залей водой.")
+    assert day_menu.short_how("Запеки 20 минут") == "Запеки 20 минут."
+    assert day_menu.short_how("Очень " * 60) == ""
