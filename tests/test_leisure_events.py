@@ -91,3 +91,11 @@ def test_city_event_photo_matches_its_topic_not_the_square(monkeypatch):
     assert leisure_events.topic_of({"kind": "city", "name": "Kerstmarkt Alkmaar"}, "Alkmaar") == "christmas market"
     poster = {"kind": "festival", "name": "Winterfest", "image": "https://fest.nl/poster-2026.jpg"}
     assert leisure_events.image_for(poster, "Alkmaar") == "https://fest.nl/poster-2026.jpg"  # у фестиваля — афиша
+
+
+def test_my_day_feed_skips_premieres_and_reads_which_may_go_online(monkeypatch):
+    _stub(monkeypatch)
+    monkeypatch.setattr(leisure_events, "_premieres", lambda *_a: (_ for _ in ()).throw(AssertionError("no premieres")))
+    monkeypatch.setattr(leisure_events, "_reads", lambda *_a: (_ for _ in ()).throw(AssertionError("no reads")))
+    names = [card["name"] for card in leisure_events.feed("42", parts=("concerts", "city"))]
+    assert names == ["Vermeer", "Muse", "Winterfest"]

@@ -473,7 +473,7 @@ def _event_of_day(cid, day=None):
     (афиша города и кэш концертов, без сети и AI); сегодня ничего — None."""
     try:
         import leisure_events
-        cards = leisure_events.feed(cid)
+        cards = leisure_events.feed(cid, parts=("concerts", "city"))  # без премьер и статей — без сети
     except Exception:
         _log.warning("myday: events unavailable", exc_info=True)
         return None

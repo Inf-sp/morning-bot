@@ -115,13 +115,17 @@ def _reads(cid, today) -> list:
     return cards
 
 
-def feed(cid) -> list:
-    """Лента «Событий» на неделю по дате (уже вышедшее и идущее — как сегодня), без пустых имён и повторов."""
+def feed(cid, parts=None) -> list:
+    """Лента «Событий» на неделю по дате (уже вышедшее и идущее — как сегодня), без пустых имён и повторов.
+    parts — только эти части («concerts», «city»…): «Моему дню» премьеры и статьи не нужны, а сборка премьер
+    при пустом кэше идёт в сеть за чартами музыки."""
     today, cc = _today(cid)
     cards = []
     for name, build in (("concerts", lambda: _concerts(cid, today, cc)), ("city", lambda: _city(cid, today)),
                         ("holidays", lambda: _holidays(cid, today)), ("premieres", lambda: _premieres(cid, today)),
                         ("reads", lambda: _reads(cid, today))):
+        if parts is not None and name not in parts:
+            continue
         try:
             cards += build()
         except Exception:
