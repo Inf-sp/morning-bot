@@ -291,13 +291,12 @@ def learning_menu(home: dict):
                  if stats.get("theme") else learning_stats_line(title, stats.get("words"), stats.get("topics")))
         b.newline()
 
-    skip = ([[InlineKeyboardButton("Пропустить", callback_data="a_learn_skip")]]
-            if (stats or {}).get("theme") else [])  # тема изучена — гаснет в «Темах обучения», сразу следующая
-    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*skip, *ikb([
+    # Кнопки «Пропустить» нет; старая a_learn_skip из истории чата по-прежнему отмечает тему изученной.
+    return b.build_stripped(reply_markup=ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
-    ]).inline_keyboard]))
+    ]))
 
 
 def learning_theme_line(language, words, theme) -> str:

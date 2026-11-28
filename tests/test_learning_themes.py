@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 
 import learning_themes
 import live_language
+import routing
 from ui import menu as menu_ui
 
 
@@ -51,14 +52,13 @@ def test_topic_of_day_follows_enabled_themes_and_skip_marks_the_theme_learned(mo
     assert lexical["id"] == "nl-theme-29" and lexical["topic"] == "Werk en carrière"  # тема лексики — из самой темы
 
 
-def test_learning_screen_has_skip_and_theme_in_the_footer():
+def test_learning_screen_has_no_skip_and_theme_in_the_footer():
     msg = menu_ui.learning_menu({"has_material": True, "lang_code": "nl",
                                  "live_language": {"rule": "_Zodra_ — как только. Глагол в конце."},
                                  "stats": {"words": 192, "topics": 37, "theme": "Связь предложений (Tijd)"}})
     assert msg.text.endswith("Твой нидерландский · 192 слова · Связь предложений (Tijd)")
-    first = msg.reply_markup.inline_keyboard[0][0]
-    assert first.text == "Пропустить" and first.callback_data == "a_learn_skip"
-    assert not first.api_kwargs  # стандартного цвета
+    assert "a_learn_skip" not in [b.callback_data for row in msg.reply_markup.inline_keyboard for b in row]
+    assert routing.resolve_callback_handler("a_learn_skip")["handled"]  # старая кнопка из истории чата работает
 
 
 def test_explanation_ends_with_a_period():
