@@ -437,23 +437,6 @@ def _trip_menu(dish, *, cuisine_label, intro, flag, fact, trip_stats=None, eatin
     ]))
 
 
-_HINT_WORDS_MAX = 7
-
-
-def _dish_hint(name, note) -> str:
-    """Скобки после названия: простое блюдо — 2–3 ингредиента («яйца, помидоры, кинза»), сложное — вкус или соус
-    («курица в чесночно-сливочном соусе»). Без них, если пояснение пересказывает название («Блины с творогом,
-    тонкие блины с творогом») или длиннее семи слов."""
-    note = _cooking_text(note)
-    if not note or len(note.split()) > _HINT_WORDS_MAX:
-        return ""
-    stems = lambda text: [word[:5] for word in re.findall(r"[а-яёa-z]{4,}", str(text).casefold())]  # noqa: E731
-    name_stems, note_stems = set(stems(name)), stems(note)
-    if note_stems and sum(stem in name_stems for stem in note_stems) * 2 >= len(note_stems):
-        return ""
-    return note
-
-
 def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=None, trip=False, trip_dish=None,
              fact="", trip_stats=None, eating_out="", trip_extra=None):
     """Главный экран Кухни: кухня дня, тон меню под заголовком, блюда без рецептов, статистика внизу.
@@ -475,11 +458,10 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
-    # «**Завтрак — Яичница с томатами (яйца, помидоры, кинза)**», ниже — короткое приготовление обычным текстом.
+    # «**Завтрак — Лаваш с сыром**» без пояснения в скобках, ниже — короткое приготовление обычным текстом.
     for label, dish in rows:
-        note = _dish_hint(dish["name"], dish.get("note"))
         b.spacer()
-        b.bold(f"{label} — {dish['name']}" + (f" ({note[:1].lower()}{note[1:]})" if note else ""))
+        b.bold(f"{label} — {dish['name']}")
         b.newline()
         how = _cooking_text(dish.get("how"))
         if how:

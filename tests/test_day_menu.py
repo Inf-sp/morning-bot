@@ -105,9 +105,9 @@ def test_day_menu_screen_shows_dishes_with_short_cooking_and_no_meal_buttons():
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
         "Свежие продукты и простые сочетания.\n\n"
-        "Завтрак — Crostata (песочный пирог с джемом)\n"
+        "Завтрак — Crostata\n"
         "Раскатай тесто, выложи джем и запеки 25 минут при 180 °C.\n\n"
-        "Обед — Pasta al pomodoro (паста с томатами)\n\n"
+        "Обед — Pasta al pomodoro\n\n"
         "Ужин — Lasagna\n\n"
         "Завтра — японская кухня · Кулинарное путешествие по 6 кухням мира"  # что будет завтра, а не непонятное число продуктов
     )
@@ -204,7 +204,6 @@ def test_ai_how_is_saved_with_a_period_and_old_menu_is_rebuilt(monkeypatch):
     monkeypatch.setattr(settings, "food_restrictions", lambda _cid: [])
     dish = day_menu.build_day_menu("42", now=NOW, cuisine="georgian")["dishes"]["dinner"]
     assert dish["how"].endswith("прогрей 5 минут.")
-    assert menu_ui._dish_hint("Пхали", "овощи, грецкие орехи, чеснок") == "овощи, грецкие орехи, чеснок"
 
 
 def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
@@ -520,3 +519,18 @@ def test_fallback_dishes_get_short_cooking_from_dictionary(monkeypatch):
                                  {"name": "Чужое", "how": "Не из списка."}]})
     assert day_menu.extend_dish_how(["georgian"]) == 1
     assert day_menu._with_how({"name": "Пхали", "note": ""})["how"] == "Отвари свёклу. Смешай с орехами и чесноком."
+
+
+def test_menu_asks_short_cooking_for_dishes_left_without_it(monkeypatch):
+    import settings
+    saved = {}
+    _profile(monkeypatch)
+    monkeypatch.setattr(day_menu.store, "_load", lambda _key: saved)
+    monkeypatch.setattr(day_menu.store, "mutate_kv", lambda _key, fn: saved.update(fn(dict(saved))[0]))
+    monkeypatch.setattr(settings, "food_meals", lambda _cid: ["dinner"])
+    monkeypatch.setattr(settings, "food_restrictions", lambda _cid: [])
+    answers = iter([{"dinner": {"name": "Kuchmachi"}},  # ИИ меню без how
+                    {"dishes": [{"name": "Kuchmachi", "how": "Отвари потроха 40 минут. Обжарь с луком и орехами"}]}])
+    monkeypatch.setattr(day_menu.ai, "llm_json", lambda *_a, **_k: next(answers))
+    dish = day_menu.build_day_menu("42", now=NOW, cuisine="georgian")["dishes"]["dinner"]
+    assert dish["how"] == "Отвари потроха 40 минут. Обжарь с луком и орехами."
