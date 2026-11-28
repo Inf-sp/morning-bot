@@ -44,6 +44,27 @@ def _works_level(level) -> str:
     return f"{level[:1].lower()}{level[1:]}" if level else ""
 
 
+def _works_group(b, works_list) -> None:
+    """Несколько работ — одним блоком: «🚧 **Работы на ЖД:**», пункты «• Amsterdam – Enkhuizen · до 30 ноября»,
+    ниже общее «Меньше поездов на обоих направлениях.»; что с поездами разное — у каждого пункта своё."""
+    from util import local_today
+    today = local_today()
+    levels = {_works_level(works.get("level")) for works in works_list}
+    same = len(levels) == 1 and "" not in levels
+    b.text_line("🚧 ")
+    b.bold("Работы на ЖД:")
+    b.newline()
+    for works in works_list:
+        section = _works_section(works.get("title")).replace(" - ", " – ")
+        period = _works_period(works.get("start"), works.get("end"), today)
+        level = "" if same else _works_level(works.get("level"))
+        b.line("• " + " · ".join(part for part in (section, period, level) if part))
+    if same:
+        level = next(iter(levels))
+        where = "на обоих направлениях" if len(works_list) == 2 else "на всех направлениях"
+        b.line(f"{level[:1].upper()}{level[1:]} {where}.")
+
+
 def _works_text(works, today=None) -> str:
     """«Haarlem - Alkmaar до 30 ноября · меньше поездов»: участок и даты слитно, дальше — что с поездами."""
     period = _works_period(works.get("start"), works.get("end"), today)
@@ -306,7 +327,7 @@ def day_summary(
     # Порядок — по срочности: что меняет планы (работы на ЖД), погода, праздники, фраза, затем событие, кино,
     # статья, город в цифрах и последней — цитата. Цитата — только если сводка не длиннее _MAX_BLOCKS строк: в насыщенный день она лишняя.
     blocks = sum((
-        len(rail_works or []), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
+        bool(rail_works), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
         bool(word_line or movie_rebus),
         bool(str((vacation.get("try_dish") or {}).get("name") or "").strip()),
         bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(event), bool(read),
@@ -314,14 +335,16 @@ def day_summary(
     ))
 
     # Плановые работы NS на станциях города — только в дни работ.
-    for works in rail_works or []:
+    works_list = [works for works in rail_works or [] if _works_text(works)]
+    if len(works_list) == 1:
         # Одной строкой: «Haarlem - Alkmaar до 30 ноября · меньше поездов» (идут — без начала).
         from util import local_today
-        text = _works_text(works, local_today())
-        if text:
-            b.text_line("🚧 ")
-            b.labeled_line("Работы на ЖД", text, lowercase=False)
-            b.spacer()
+        b.text_line("🚧 ")
+        b.labeled_line("Работы на ЖД", _works_text(works_list[0], local_today()), lowercase=False)
+        b.spacer()
+    elif works_list:
+        _works_group(b, works_list)
+        b.spacer()
 
     if weather_line:
         _compact_line(b, weather_icon, "Погода", weather_line)

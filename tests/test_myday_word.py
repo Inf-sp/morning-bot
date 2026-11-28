@@ -175,8 +175,9 @@ def test_day_summary_drops_the_quote_on_a_busy_day():
     assert calm.text.endswith("💭 «Цитата» © Автор")
     busy = myday_ui.day_summary(
         "Пт", "Alkmaar", weather_line="до +15°C", word_line="Doe maar → Не торопись",
-        holidays=["Сегодня: Sint Maarten — день святого Мартина", "Сегодня: Lichtjesavond — вечер огней"],
-        rail_works=[{"title": "Alkmaar – Uitgeest"}, {"title": "Haarlem – Alkmaar"}],
+        holidays=["Сегодня: Sint Maarten — день святого Мартина", "Сегодня: Lichtjesavond — вечер огней",
+                  "Сегодня: Kermis — ярмарка"],
+        rail_works=[{"title": "Alkmaar – Uitgeest"}, {"title": "Haarlem – Alkmaar"}],  # одним блоком
         premiere={"kind": "series", "name": "Медведь", "season_number": 5},
         event={"kind": "concert", "name": "Muse", "url": "https://t", "date": "2026-11-28", "place": "Ziggo Dome"},
         read={"title": "DNA repair", "link": "https://q", "source": "Quanta", "minutes": 8},
