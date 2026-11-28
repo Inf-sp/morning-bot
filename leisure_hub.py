@@ -497,50 +497,55 @@ _ROTATION_KEY = "hub_rotation"  # профиль: номер следующег�
 _ROTATION_DEPTH = 3  # из каждого вида — до трёх ближайших карточек по кругу
 
 
-def _read_pick(cid, today):
-    import leisure_reads
-    item = next(iter(leisure_reads.top(cid, today)), None)
+def _read_pick(item):
+    """Статья → строка «Статей дня»: «**Заголовок** · Quanta · 8 мин — о чём»."""
     if not item or not str(item.get("link") or "").startswith("http"):
         return None
     minutes = int(item.get("minutes") or 0)
     return {"kind": "read", "name": item.get("title") or "", "url": item["link"],
-            "meta": [item.get("source") or "", leisure_ui._event_date_label(item.get("published")),
-                     item.get("lang") or "", f"{minutes} мин" if minutes else ""],
-            "about": item.get("about") or ""}
+            "meta": [item.get("source") or "", f"{minutes} мин" if minutes else ""], "about": item.get("about") or ""}
+
+
+_TODAY_PREMIERES = ("movie", "music", "series")  # «Премьеры недели» — по одной: фильм, альбом, сериал
+_TODAY_READS = 3
 
 
 def today_options(cid, today) -> dict:
-    """{вид ротации: [карточки]} из ленты «Событий» и набора статей — готовые кэши, без сети и AI."""
+    """{вид: [карточки]} из ленты «Событий» и набора статей — готовые кэши, без сети и AI. «premieres» — по одной
+    премьере недели каждого вида, «reads» — три статьи дня из разных тем."""
     import leisure_events
+    import leisure_reads
     try:
         cards = leisure_events.feed(cid)
     except Exception:
         _log.warning("leisure today: events unavailable cid=%s", cid, exc_info=True)
         cards = []
     groups = {"concert": [], "event": [], "premiere": []}
+    firsts = {}
     for card in cards:
-        if card["kind"] == "read":  # статья дня — своей карточкой ниже
+        if card["kind"] == "read":  # статьи — своим блоком ниже
             continue
+        if card["kind"] == "premiere":
+            firsts.setdefault(card.get("premiere"), card)
         group = card["kind"] if card["kind"] in ("concert", "premiere") else "event"
         if len(groups[group]) < _ROTATION_DEPTH:
             groups[group].append(leisure_ui.event_pick(card))
     try:
-        read = _read_pick(cid, today)
+        reads = [pick for pick in map(_read_pick, leisure_reads.top_mixed(cid, today, _TODAY_READS)) if pick]
     except Exception:
-        read = None
-    return {kind: picks for kind, picks in (*groups.items(), ("read", [read] if read else [])) if picks}
+        reads = []
+    premieres = [leisure_ui.today_premiere(firsts[kind]) for kind in _TODAY_PREMIERES if kind in firsts]
+    return {kind: picks for kind, picks in (*groups.items(), ("read", reads[:1]), ("reads", reads),
+                                            ("premieres", premieres)) if picks}
 
 
-def today_lineup(data, options, today) -> list:
-    """«Досуг на сегодня» — по одному из каждой категории, по порядку: премьера, фильм, музыка, статья, игра
-    (настольная или PS5). Нет данных категории — её строки нет; премьера — одна, по кругу по дням."""
-    import leisure_games
-    by_kind = {pick["kind"]: pick for pick in data.get("picks") or []}
-    premieres = options.get("premiere") or []
-    lineup = [premieres[today.toordinal() % len(premieres)] if premieres else None,
-              by_kind.get("movie"), by_kind.get("music"), *(options.get("read") or [None])[:1],
-              leisure_games.game_of_day(today)]
-    return [pick for pick in lineup if pick and pick.get("name")]
+def today_lineup(data, options, _today=None) -> dict:
+    """«Досуг на сегодня»: премьеры недели (фильм, альбом, сериал — по одной), фильм, сериал, артист дня и три
+    статьи дня. Нет данных блока — его нет."""
+    by_kind = {pick["kind"]: pick for pick in data.get("picks") or [] if pick.get("name")}
+    return {"premieres": [pick for pick in options.get("premieres") or [] if pick.get("name")],
+            "movie": by_kind.get("movie"), "tv": by_kind.get("tv"), "music": by_kind.get("music"),
+            "reads": [pick for pick in options.get("reads") or [] if pick.get("name")]}
 
 
 def next_today_pick(cid, options, advance=True):

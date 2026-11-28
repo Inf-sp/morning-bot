@@ -326,7 +326,7 @@ def build(cid, now=None, force=False) -> dict:
     seen = {link: day for link, day in (saved.get("seen") or {}).items() if cutoff <= day < now.date().isoformat()}
     chosen = themes(cid)
     first = theme_of(now.date(), chosen)
-    picked = [item for theme in (first, *(theme for theme in chosen if theme != first))
+    picked = [{**item, "theme": theme} for theme in (first, *(theme for theme in chosen if theme != first))
               for item in _candidates(theme, now, seen, per_theme(len(chosen)))]
     if not picked:
         return saved
@@ -340,7 +340,8 @@ def build(cid, now=None, force=False) -> dict:
               "text": item["text"], "minutes": _minutes(item["link"]),
               "image": _image(item["link"], item.get("summary")),
               "published": item["published"].date().isoformat() if item.get("published") else "",
-              "about": about.get(item["link"], ""), "ad": bool((texts.get(item["link"]) or {}).get("ad"))}
+              "about": about.get(item["link"], ""), "ad": bool((texts.get(item["link"]) or {}).get("ad")),
+              "theme": item["theme"]}
              for item in picked]
     _PAGES.clear()
     entry = {"v": _VERSION, "date": now.date().isoformat(), "themes": list(chosen), "items": items, "index": 0,
@@ -426,6 +427,23 @@ def top(cid, today=None, limit=_TOP) -> list:
     items = [item for item in items if ready(item) and item.get("link") not in done]  # без картинки или перевода — нет
     ranked = sorted(enumerate(items), key=lambda pair: (-max(_score(pair[1], theme) for theme in _THEMES), pair[0]))
     return [dict(item) for _, item in ranked[:limit]]
+
+
+def item_theme(item) -> str:
+    """Тема статьи: из набора дня, у старого набора — тема с наибольшим совпадением интересов."""
+    return item.get("theme") or max(_THEMES, key=lambda theme: _score(item, theme))
+
+
+def top_mixed(cid, today=None, count=3) -> list:
+    """«Статьи дня» хаба: самые интересные, по одной из разных тем; тем меньше — добираются следующие по интересу."""
+    ranked = top(cid, today, limit=_PER_DAY)
+    first, seen = [], set()
+    for item in ranked:
+        if item_theme(item) not in seen:
+            seen.add(item_theme(item))
+            first.append(item)
+    rest = [item for item in ranked if item not in first]
+    return [*first, *rest][:count]
 
 
 def mark_read(cid, link) -> None:
