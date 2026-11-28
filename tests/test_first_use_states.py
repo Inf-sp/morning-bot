@@ -596,66 +596,64 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
         ["🎯 Запустить тренировку"], ["🕵️ Угадай слово"], ["🎚️ Настроить словарь", "#️⃣ Главная"]]
     assert message.text.split("\n\n")[1:] == [
         "Zodra → Как только",
-        "Разбор: в придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-        "Пример: Я перезвоню тебе, как только закончу → Ik bel je terug zodra ik klaar ben.",
+        "В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
+        "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу",
         "Твой нидерландский · 120 слов · 14 изученных тем"]
 
 
-_BOVENDIEN_CARD = {"pos": "Наречие", "meaning": "Кроме того · к тому же",
-                   "explain": "Добавляет ещё один довод и связывает две мысли. В начале предложения требует "
-                              "инверсии — глагол сразу после bovendien. Не путать с omdat, после которого глагол "
-                              "уходит в конец.",
-                   "example": "Hij was te laat, bovendien vergat hij de sleutel.",
-                   "translation": "Он опоздал, к тому же забыл ключ"}
+_BOVENDIEN_CARD = {"pos": "Наречие", "meaning": "Кстати · впрочем",
+                   "explain": "Используй trouwens, когда хочешь добавить вспомнившуюся информацию к уже начатой теме. "
+                              "Если поставить слово в начало предложения, после него обычно следует глагол.",
+                   "examples": [{"text": "Hij had trouwens het boek al gelezen.",
+                                 "translation": "Он, кстати, уже прочитал книгу."},
+                                {"text": "Trouwens, heb je hem al gebeld?", "translation": "Кстати, ты ему уже звонил?"}]}
 
 
-def test_grammar_card_is_term_with_part_of_speech_meanings_breakdown_and_example():
+def test_grammar_card_is_term_with_part_of_speech_meanings_explanation_and_two_examples():
     import live_language
     card = live_language._clean_card(_BOVENDIEN_CARD)
     message = menu_ui.learning_menu({
-        "has_material": True, "lang_code": "nl", "stats": {"words": 192, "topics": 35},
-        "live_language": {"id": "bovendien", "topic": "Bovendien", "meaning": "кроме того", "explain": "",
-                          "card": card}})
+        "has_material": True, "lang_code": "nl", "stats": {"words": 192, "topics": 37},
+        "live_language": {"id": "trouwens", "topic": "Trouwens", "meaning": "кстати", "explain": "", "card": card}})
     assert message.text == (
         "🇳🇱 Изучаем сегодня · Нидерландский\n\n"
-        "Bovendien (нар.) → Кроме того · к тому же\n\n"
-        "Разбор: добавляет ещё один довод и связывает две мысли. В начале предложения требует инверсии — глагол "
-        "сразу после bovendien. Не путать с omdat, после которого глагол уходит в конец.\n\n"
-        "Пример: Он опоздал, к тому же забыл ключ → Hij was te laat, bovendien vergat hij de sleutel.\n\n"
-        "Твой нидерландский · 192 слова · 35 изученных тем")
+        "Trouwens (нар.) → Кстати · впрочем\n\n"
+        "Используй trouwens, когда хочешь добавить вспомнившуюся информацию к уже начатой теме. Если поставить "
+        "слово в начало предложения, после него обычно следует глагол.\n\n"
+        "Примеры:\n"
+        "• Hij had trouwens het boek al gelezen → Он, кстати, уже прочитал книгу\n"
+        "• Trouwens, heb je hem al gebeld? → Кстати, ты ему уже звонил?\n\n"
+        "Твой нидерландский · 192 слова · 37 изученных тем")
+    assert "Разбор" not in message.text
     raw = message.text.encode("utf-16-le")
     bold = [raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le") for e in message.entities if e.type == "bold"]
-    assert "Bovendien" in bold and "Разбор:" in bold and "Пример:" in bold
+    assert "Trouwens" in bold and "Примеры:" in bold
 
 
 def test_grammar_card_is_built_once_and_rejects_bad_answers(monkeypatch):
     import live_language
-    assert live_language._clean_card({**_BOVENDIEN_CARD, "explain": ""}) is None  # нужен разбор
-    assert live_language._clean_card({**_BOVENDIEN_CARD, "example": "Он опоздал."}) is None  # пример — на изучаемом
+    assert live_language._clean_card({**_BOVENDIEN_CARD, "explain": ""}) is None  # нужно объяснение
+    assert live_language._clean_card({**_BOVENDIEN_CARD, "examples": [
+        {"text": "Он опоздал.", "translation": "Он опоздал."}]}) is None  # пример — на изучаемом языке
+    old = {"explain": "Связывает мысли.", "example": "Hij was te laat.", "translation": "Он опоздал"}
+    assert live_language._clean_card(old)["examples"] == [{"text": "Hij was te laat.", "translation": "Он опоздал"}]
     saved, asked = {}, []
     monkeypatch.setattr(live_language.store, "_load", lambda key: saved.get(key))
     monkeypatch.setattr(live_language.store, "mutate_kv",
                         lambda key, change: saved.__setitem__(key, change(saved.get(key))[0]))
     import ai
     monkeypatch.setattr(ai, "llm_json", lambda prompt, *_a, **_k: asked.append(prompt) or _BOVENDIEN_CARD)
-    topic = {"id": "bovendien", "topic": "Bovendien", "meaning": "кроме того", "explain": "…", "example": "",
+    topic = {"id": "trouwens", "topic": "Trouwens", "meaning": "кстати", "explain": "…", "example": "",
              "translation": ""}
-    assert live_language.build_lesson_card(topic)["pos"] == "наречие"
+    assert len(live_language.build_lesson_card(topic)["examples"]) == 2
     assert live_language.build_lesson_card(topic) is not None and len(asked) == 1  # один раз на тему
-    assert "B1" in asked[0] and "прошедшем времени" in asked[0] and "не путать" in asked[0].casefold()
-    assert "не дословно" in asked[0]
+    assert "B1" in asked[0] and "ровно два" in asked[0] and "не дословно" in asked[0]
 
-
-def test_grammar_breakdown_has_no_secret_label_and_meanings_after_the_first_are_lowercase():
+def test_grammar_explanation_has_no_secret_label_and_meanings_after_the_first_are_lowercase():
     import live_language
-    card = live_language._clean_card({**_BOVENDIEN_CARD, "meaning": "Кроме того · К тому же",
-                                      "explain": "Добавляет ещё один аргумент. Секрет: после глагола тоже возможно — "
-                                                 "Het is bovendien te duur."})
+    card = live_language._clean_card({**_BOVENDIEN_CARD, "meaning": "Кстати · Впрочем",
+                                      "explain": "Добавляет мысль к теме. Секрет: в начале — с инверсией."})
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": {
-        "id": "bovendien", "topic": "Bovendien", "card": card}}).text
-    assert "Bovendien (нар.) → Кроме того · к тому же" in text
-    assert "Секрет" not in text and "Разбор: добавляет ещё один аргумент. После глагола тоже возможно" in text
-    # Уже сохранённая карточка со «Секрет:» — тоже без подписи.
-    saved = {**card, "explain": "Связывает мысли. Совет: не путать с omdat."}
-    assert "Совет" not in menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": {
-        "id": "bovendien", "topic": "Bovendien", "card": saved}}).text
+        "id": "trouwens", "topic": "Trouwens", "card": card}}).text
+    assert "Trouwens (нар.) → Кстати · впрочем" in text
+    assert "Секрет" not in text and "Добавляет мысль к теме. В начале — с инверсией." in text

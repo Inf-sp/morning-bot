@@ -176,9 +176,11 @@ def _grammar_lesson(phrase) -> dict:
     term, meaning = _grammar_head({**phrase, "meaning": card.get("meaning") or phrase.get("meaning")}) \
         if phrase.get("topic") else _grammar_parts(phrase.get("rule"))[0:1] + ("",)
     pos = str(card.get("pos") or "").strip()
+    pairs = []
     if phrase.get("topic") and card.get("explain"):
         import live_language  # уже сохранённые карточки — тоже без «Секрет:» и «Совет:»
         explain = _quotes(live_language.strip_labels(card["explain"]))
+        pairs = [(item.get("text"), item.get("translation")) for item in card.get("examples") or []]
         example, translation = card.get("example"), card.get("translation")
     else:
         explanation = _grammar_explanation(phrase) if phrase.get("topic") and phrase.get("explain") else (
@@ -197,11 +199,15 @@ def _grammar_lesson(phrase) -> dict:
     parts = [part.strip() for part in re.split(r"\s*[;,·]\s*", meaning) if part.strip()] if meaning else []
     # Значения через « · »: первое — с заглавной, остальные — со строчной («Кроме того · к тому же»), аббревиатуры как есть.
     meaning = " · ".join([*parts[:1], *(part if part[:2].isalpha() and part[:2].isupper() else part[:1].lower() + part[1:] for part in parts[1:])])
-    # Пример — сначала перевод, потом фраза: «Я устал, поэтому рано лёг спать → Ik was moe, daarom ben ik…».
-    example = (f"{_without_period(translation)} → {_with_period(example)}" if example and translation
-               else _with_period(example) if example else "")
+    # Примеры — фраза → перевод, без точки в конце: «Hij had trouwens het boek al gelezen → Он, кстати, уже прочитал
+    # книгу»; у карточки — два разных (середина и начало предложения, утверждение и вопрос), без неё — один.
+    pairs = pairs or ([(example, translation)] if example and translation else [])
+    examples = [f"{_without_period(text)} → {_without_period(meaning_ru)}" for text, meaning_ru in pairs[:2]
+                if text and meaning_ru]
+    if not examples and example:
+        examples = [_without_period(example)]
     return {"term": _without_period(term), "pos": pos, "meaning": meaning[:1].upper() + meaning[1:],
-            "explain": explain[:1].upper() + explain[1:], "example": example}
+            "explain": explain[:1].upper() + explain[1:], "examples": examples}
 
 
 def _quotes(text) -> str:
@@ -261,15 +267,19 @@ def learning_menu(home: dict):
         if lesson["meaning"]:
             b.text_line(f" → {lesson['meaning']}")
         b.newline()
-    if lesson["explain"]:
+    if lesson["explain"]:  # объяснение — обычным текстом, без подписи «Разбор:»
         b.spacer()
-        b.bold("Разбор:")
-        b.text_line(f" {lesson['explain'][:1].lower()}{lesson['explain'][1:]}")
+        b.line(lesson["explain"])
+    if len(lesson["examples"]) > 1:
+        b.spacer()
+        b.bold("Примеры:")
         b.newline()
-    if lesson["example"]:
+        for line in lesson["examples"]:
+            b.line(f"• {line}")
+    elif lesson["examples"]:
         b.spacer()
         b.bold("Пример:")
-        b.text_line(f" {lesson['example']}")
+        b.text_line(f" {lesson['examples'][0]}")
         b.newline()
     stats = home.get("stats")
     if stats:  # статистика — последней строкой курсивом
