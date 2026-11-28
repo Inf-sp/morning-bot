@@ -481,8 +481,7 @@ ROUTES = (
     # (предпочтения не меняются). m_food_next — новое меню той же кухни. food_meal_* — старые сообщения.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
     R("food_skip", _replaced(_food_skip)),
-    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
-                                                         show_mine=not vacation.active(c.cid)))),
+    R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(show_mine=not vacation.active(c.cid)))),
     R("food_go_*", _picked(_food_recipe)),
     # «Другое блюдо» в отпуске: следующее блюдо на месте прежнего.
     R("food_trip_next", _replaced(lambda c: c.status(

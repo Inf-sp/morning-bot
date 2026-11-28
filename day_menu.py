@@ -1,9 +1,9 @@
 """Меню на день: одна кухня, три типичных блюда — завтрак, обед, ужин.
 
-Главный экран Готовки предлагает готовое решение на день, без рецептов. Кухня
+Главный экран Готовки предлагает готовое решение на день: у каждого блюда — короткое приготовление (how). Кухня
 дня идёт по кругу из предпочтений; блюда подбирает AI одним запросом из
 типичных для кухни вариантов, ответ проверяет код. Без AI — встроенный список
-типичных блюд. Полный рецепт блюда собирается отдельно по кнопке приёма пищи.
+типичных блюд (без короткого приготовления). Полный рецепт (dish_recipe) — для старых кнопок приёма пищи.
 """
 import logging
 import re
@@ -22,6 +22,8 @@ MEALS = ("breakfast", "lunch", "dinner")
 MEAL_HOURS = {"breakfast": 8, "lunch": 13, "dinner": 18}
 _NAME_MAX = 60
 _NOTE_MAX = 100
+_HOW_MAX = 360  # короткое приготовление под блюдом: 2–3 предложения
+_HOME_MENU_VERSION = 2  # 2 — у блюд короткое приготовление (how) прямо в меню, кнопок рецептов нет
 _TRIP_NOTE_MAX = 240  # в отпуске описание блюда — одно-два предложения
 _TRIP_MENU_VERSION = 3  # 3 — ещё второе: десерт, напиток или закуска (extra); 2 — местное название и эмодзи
 _HISTORY_MAX = 93  # три блюда на день — месяц без повторов
@@ -242,6 +244,8 @@ def get_cached_day_menu(cid, now=None) -> dict | None:
     if "top" in menu:  # набор отпуска: приём пищи без блюда пропускается, но хоть одно блюдо должно быть
         return menu if trip_dish(menu).get("name") else None
     meals = _settings().food_meals(cid)
+    if menu.get("v") != _HOME_MENU_VERSION:
+        return None  # меню старого вида — без короткого приготовления — собрать заново
     if not fits_meal(dishes.get("breakfast") or {}, "breakfast"):
         return None  # меню, собранное до правила «завтрак до 10 минут» (кростата, блины), — собрать заново
     return menu if all((dishes.get(meal) or {}).get("name") for meal in meals) else None
@@ -354,7 +358,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
     lines = "\n".join(f"- {meal}: {examples(meal)}" for meal in meals)
     limits = (f"Обязательные ограничения в еде: {restrictions_text}. Блюдо, которое их нарушает, — ошибка.\n"
               if restrictions_text else "")
-    dish_shape = '{"name":"","original":"","emoji":"","note":""}' if trip else '{"name":"","note":""}'
+    dish_shape = '{"name":"","original":"","emoji":"","note":""}' if trip else '{"name":"","note":"","how":""}'
     json_shape = ",".join(f'"{meal}":{dish_shape}' for meal in meals) \
         + (f',"top":"один из: {", ".join(meals)}","extra":{{"kind":"десерт / напиток / закуска","name":"",'
            f'"original":"","note":""}}' if trip else "")
@@ -386,9 +390,13 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
         + (_TRIP_DISH_RULES + _TRIP_EXTRA_RULE if trip else
            "name — настоящее общепринятое название блюда, как в кулинарной книге, без выдуманных добавок (для "
            "итальянской, французской и мексиканской кухни — оригинальное латиницей, для остальных — по-русски); "
-           "note — что это за блюдо, по-русски, 2–6 слов, без точки и не списком ингредиентов: основа и способ готовки, которых "
-           "нет в названии, — не повторяй слова из name («Сырники» → «жареные лепёшки из творога», а не «сырники из "
-           "творога»); грамотно и верно по сути, не выдумывай (брай — мясо на открытом огне, а не тушёное).\n")
+           "note — пояснение в скобках после названия, по-русски строчными, без точки: простое блюдо — 2–3 основных "
+           "ингредиента через запятую («помидоры, сыр, базилик»), сложное — коротко вкус или соус («курица в "
+           "чесночно-сливочном соусе»); не повторяй то, что и так ясно из name; грамотно и верно по сути, не "
+           "выдумывай (брай — мясо на открытом огне, а не тушёное).\n"
+           "how — короткое приготовление по-русски: 2–3 коротких предложения, до 300 символов, повелительно («Обжарь "
+           "лук 5–7 минут. Добавь рис…»), с временем и огнём, где важно; без «ты», без списка ингредиентов "
+           "отдельно и без советов.\n")
         + f"JSON без markdown: {{{json_shape}}}"
     )
 
@@ -427,13 +435,13 @@ def _ai_dishes(cid, cuisine, available, avoided_names, meals=MEALS, restrictions
         data = ai.llm_json(
             # В отпуске ответ длинный (местное название, эмодзи, описание до 200 символов): 900 токенов
             # обрывали JSON у моделей с рассуждением — вся цепочка падала, блюда не было.
-            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label, trip), 2400 if trip else 500,
+            _prompt(cuisine, available, avoided_names, meals, restrictions_text, label, trip), 2400 if trip else 1400,
             tier="cheap", module="food",
             fallback_allowed=True, privacy_level="personal", allow_personal_openrouter=True,
             cache_context={
                 "scenario": "food_day_menu", "cuisine": cuisine, "available": available,
                 "avoid": avoided_names[-60:], "meals": list(meals), "restrictions": restrictions_text,
-                "language": "ru", "schema_version": 6, "trip": trip,
+                "language": "ru", "schema_version": 7, "trip": trip,
             },
         )
     except Exception as error:
@@ -491,12 +499,17 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
                     "emoji": emoji if 0 < len(emoji) <= 4 and not re.search(r"\w", emoji) else ""}
         else:  # описание без пересказа названия: «Блины с творогом, тонкие блины с творогом» → только название
             dish = {"name": name, "note": "" if note_repeats_name(name, note) else note}
+            how = _clean(raw.get("how"), _HOW_MAX)
+            if how:
+                dish["how"] = how if how[-1:] in "!?…" else f"{how}."
         used.add(dish["name"].casefold())
         dishes[meal] = dish
         from_ai.add(meal)
     # Описания от ИИ — без опечаток; запасные блюда из списка уже выверены.
     dishes = _proofread_notes(dishes, from_ai)
     menu = {"date": day.isoformat(), "cuisine": cuisine, "dishes": dishes}
+    if not trip:
+        menu["v"] = _HOME_MENU_VERSION
     if trip:  # блюдо «попробовать сегодня» для «Моего дня»: отметка AI, без неё — ужин или последнее
         top = str(data.get("top") or "").strip().casefold()
         menu["top"] = top if top in dishes else ("dinner" if "dinner" in dishes else next(reversed(dishes), ""))
@@ -595,12 +608,6 @@ def warm_day_menu(cid, now=None) -> bool:
     except Exception as error:
         _log.warning("day menu warm failed cid=%s: %r", cid, error)
         return False
-    if menu and not menu.get("trip_v"):  # рецепты блюд — заранее: нажатие «Завтрак» отвечает сразу из кэша
-        for meal in menu.get("dishes") or {}:
-            try:
-                dish_recipe(cid, meal, now=now)
-            except Exception as error:
-                _log.warning("dish recipe warm failed cid=%s meal=%s: %r", cid, meal, error)
     # Факты о кухнях: кухня меню и выбранные в Настройках — до 50 на каждую (один запрос, пока не набралось).
     try:
         import settings as user_settings

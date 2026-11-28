@@ -439,14 +439,11 @@ _HINT_WORDS_MAX = 7
 
 
 def _dish_hint(name, note) -> str:
-    """Короткое «что это» после названия: «Као пад (тайский жареный рис)». Без него, если пояснение — список
-    ингредиентов («сыр, зелень, хлеб»), пересказ названия («Блины с творогом, тонкие блины с творогом») или длиннее
-    семи слов."""
+    """Скобки после названия: простое блюдо — 2–3 ингредиента («яйца, помидоры, кинза»), сложное — вкус или соус
+    («курица в чесночно-сливочном соусе»). Без них, если пояснение пересказывает название («Блины с творогом,
+    тонкие блины с творогом») или длиннее семи слов."""
     note = _cooking_text(note)
-    parts = [part.strip() for part in note.split(",") if part.strip()]
-    if not note or (len(parts) >= 2 and all(len(part.split()) <= 2 for part in parts)):
-        return ""
-    if len(note.split()) > _HINT_WORDS_MAX:
+    if not note or len(note.split()) > _HINT_WORDS_MAX:
         return ""
     stems = lambda text: [word[:5] for word in re.findall(r"[а-яёa-z]{4,}", str(text).casefold())]  # noqa: E731
     name_stems, note_stems = set(stems(name)), stems(note)
@@ -476,31 +473,32 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
-    if rows:  # «Меню на день — рецепт по кнопке ниже:», ниже «• Обед — Као пад (тайский жареный рис)»
-        b.spacer()
-        b.bold("Меню на день — рецепт по кнопке ниже:")
-        b.newline()
+    # «**Завтрак — Яичница с томатами (яйца, помидоры, кинза)**», ниже — короткое приготовление обычным текстом.
     for label, dish in rows:
         note = _dish_hint(dish["name"], dish.get("note"))
-        b.line(f"• {label} — {dish['name']}" + (f" ({note[:1].lower()}{note[1:]})" if note else ""))
+        b.spacer()
+        b.bold(f"{label} — {dish['name']}" + (f" ({note[:1].lower()}{note[1:]})" if note else ""))
+        b.newline()
+        how = _cooking_text(dish.get("how"))
+        if how:
+            b.line(how)
     if stats:
         b.spacer()
         b.italic(tomorrow_line(stats.get("tomorrow"), stats.get("favorites")))
         b.newline()
-    return b.build_stripped(reply_markup=food_card_kb([meal for meal, _label in _MEAL_NAMES if meal in dishes],
-                                                      show_mine=show_mine))
+    return b.build_stripped(reply_markup=food_card_kb(show_mine=show_mine))
 
 
 def tomorrow_line(tomorrow, favorites=0) -> str:
-    """Низ меню дня: какая кухня завтра и сколько любимых идут по кругу — «Завтра — японская кухня · 6 любимых
-    кухонь по кругу»; любимая одна — подсказка добавить ещё; не выбраны — все кухни по кругу."""
+    """Низ меню дня: какая кухня завтра и по скольким любимым идёт круг — «Завтра — японская кухня · Кулинарное
+    путешествие по 7 кухням мира»; любимая одна — подсказка добавить ещё; не выбраны — «по всем кухням мира»."""
     label = str(tomorrow or "").strip().lower()
     favorites = int(favorites or 0)
     if favorites == 1:
         return f"Любимая кухня одна — {label}: добавь ещё в Настройках, и меню будет меняться."
-    tail = (f"{favorites} {ru_plural(favorites, 'любимая кухня', 'любимые кухни', 'любимых кухонь')} по кругу"
-            if favorites else "все кухни по кругу")
-    return f"Завтра — {label} кухня · {tail}" if label else tail[:1].upper() + tail[1:]
+    tail = (f"Кулинарное путешествие по {favorites} {ru_plural(favorites, 'кухне', 'кухням', 'кухням')} мира"
+            if favorites else "Кулинарное путешествие по всем кухням мира")
+    return f"Завтра — {label} кухня · {tail}" if label else tail
 
 
 def food_menu(idea=None, *, meal="", from_fridge=False):
@@ -599,15 +597,12 @@ def fridge_empty_for_mine():
     ]))
 
 
-def food_card_kb(meals=None, show_mine=True):
-    """Кнопки меню дня: рецепт каждого блюда (только выбранные приёмы пищи), «Из моих продуктов» (кроме отпуска)."""
-    meals = meals or [meal for meal, _label in _MEAL_NAMES]
-    rows = [
-        [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
-    ]
-    if show_mine:  # «Пропустить» — красная, первой строкой: меню следующей любимой кухни (в отпуске кнопки нет)
-        rows.insert(0, [InlineKeyboardButton("Пропустить", callback_data="food_skip")])
-    if show_mine:
+def food_card_kb(show_mine=True):
+    """Кнопки меню дня: «Пропустить» и «Из моих продуктов» (кроме отпуска). Кнопок «Завтрак / Обед / Ужин» нет —
+    короткое приготовление уже в меню; старые кнопки a_recipe_* из истории чата открывают полный рецепт."""
+    rows = []
+    if show_mine:  # «Пропустить» — первой строкой: меню следующей любимой кухни (в отпуске кнопки нет)
+        rows.append([InlineKeyboardButton("Пропустить", callback_data="food_skip")])
         # Рецепт из моих продуктов под время суток (меню дня — из любых продуктов).
         rows.append([InlineKeyboardButton("🥕 Из моих продуктов", callback_data="food_mine")])
     rows.append([InlineKeyboardButton("🎚️ Настроить продукты", callback_data="as_fridge_home"),

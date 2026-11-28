@@ -93,9 +93,10 @@ def test_other_menu_does_not_repeat_current_dishes(monkeypatch):
     assert not first_names & {dish["name"] for dish in second["dishes"].values()}
 
 
-def test_day_menu_screen_lists_three_dishes_without_recipes():
+def test_day_menu_screen_shows_dishes_with_short_cooking_and_no_meal_buttons():
     msg = menu_ui.day_menu({"cuisine": "italian", "dishes": {
-        "breakfast": {"name": "Crostata", "note": "Песочный пирог с джемом"},
+        "breakfast": {"name": "Crostata", "note": "Песочный пирог с джемом",
+                      "how": "Раскатай тесто, выложи джем и запеки 25 минут при 180 °C."},
         "lunch": {"name": "Pasta al pomodoro", "note": "паста с томатами"},
         "dinner": {"name": "Lasagna", "note": ""},
     }}, cuisine_label="Итальянская", intro="Свежие продукты и простые сочетания.",
@@ -104,21 +105,20 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
         "Свежие продукты и простые сочетания.\n\n"
-        "Меню на день — рецепт по кнопке ниже:\n"
-        "• Завтрак — Crostata (песочный пирог с джемом)\n"
-        "• Обед — Pasta al pomodoro (паста с томатами)\n"
-        "• Ужин — Lasagna\n\n"
-        "Завтра — японская кухня · 6 любимых кухонь по кругу"  # что будет завтра, а не непонятное число продуктов
+        "Завтрак — Crostata (песочный пирог с джемом)\n"
+        "Раскатай тесто, выложи джем и запеки 25 минут при 180 °C.\n\n"
+        "Обед — Pasta al pomodoro (паста с томатами)\n\n"
+        "Ужин — Lasagna\n\n"
+        "Завтра — японская кухня · Кулинарное путешествие по 6 кухням мира"  # что будет завтра, а не непонятное число продуктов
     )
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
-        [("Пропустить", "food_skip")],  # красная, первой строкой: меню следующей кухни
-        [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
+        [("Пропустить", "food_skip")],  # первой строкой: меню следующей кухни; кнопок приёмов пищи нет
         [("🥕 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
     # В отпуске дома не готовишь — кнопки «Из моих продуктов» нет.
-    away = menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
+    away = menu_ui.food_card_kb(show_mine=False).inline_keyboard
     assert "food_mine" not in [b.callback_data for row in away for b in row]
 
 
@@ -142,9 +142,9 @@ def test_other_menu_picker_lists_cuisines_and_starts_new_day_menu(monkeypatch):
     assert calls == [(None, "georgian", True), (None, None, True)]
 
 
-def test_meal_button_builds_recipe_of_that_menu_dish(monkeypatch):
+def test_old_meal_button_builds_recipe_of_that_menu_dish(monkeypatch):
     _profile(monkeypatch, {"cooking_day_menu": {
-        "date": datetime.now(config.TZ).date().isoformat(), "cuisine": "italian",
+        "date": datetime.now(config.TZ).date().isoformat(), "cuisine": "italian", "v": day_menu._HOME_MENU_VERSION,
         "dishes": {"breakfast": {"name": "Ricotta e miele", "note": "рикотта"},
                    "lunch": {"name": "Pasta al pomodoro", "note": ""},
                    "dinner": {"name": "Lasagna", "note": ""}},
@@ -191,8 +191,20 @@ def test_menu_has_only_chosen_meals_and_matching_buttons(monkeypatch):
     msg = menu_ui.day_menu(menu_data, cuisine_label="Итальянская")
 
     assert list(menu_data["dishes"]) == ["dinner"]
-    assert "Завтрак" not in msg.text and "• Ужин — " in msg.text
-    assert [(b.text, b.callback_data) for b in msg.reply_markup.inline_keyboard[1]] == [("Ужин", "a_recipe_dinner")]
+    assert "Завтрак" not in msg.text and "\n\nУжин — " in msg.text
+    assert not any(b.callback_data.startswith("a_recipe_") for row in msg.reply_markup.inline_keyboard for b in row)
+
+
+def test_ai_how_is_saved_with_a_period_and_old_menu_is_rebuilt(monkeypatch):
+    import settings
+    _profile(monkeypatch)
+    _ai(monkeypatch, {"dinner": {"name": "Shkmeruli", "note": "курица в чесночно-сливочном соусе",
+                                 "how": "Обжарь курицу до готовности. Залей чесночными сливками и прогрей 5 минут"}})
+    monkeypatch.setattr(settings, "food_meals", lambda _cid: ["dinner"])
+    monkeypatch.setattr(settings, "food_restrictions", lambda _cid: [])
+    dish = day_menu.build_day_menu("42", now=NOW, cuisine="georgian")["dishes"]["dinner"]
+    assert dish["how"].endswith("прогрей 5 минут.")
+    assert menu_ui._dish_hint("Пхали", "овощи, грецкие орехи, чеснок") == "овощи, грецкие орехи, чеснок"
 
 
 def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
@@ -396,8 +408,8 @@ def test_fridge_recipe_cache_is_separate_and_follows_menu_cuisine(monkeypatch):
 
 
 def test_footer_tells_tomorrows_cuisine():
-    assert menu_ui.tomorrow_line("Японская", 2) == "Завтра — японская кухня · 2 любимые кухни по кругу"
-    assert menu_ui.tomorrow_line("Японская", 0) == "Завтра — японская кухня · все кухни по кругу"
+    assert menu_ui.tomorrow_line("Японская", 2) == "Завтра — японская кухня · Кулинарное путешествие по 2 кухням мира"
+    assert menu_ui.tomorrow_line("Японская", 0) == "Завтра — японская кухня · Кулинарное путешествие по всем кухням мира"
     assert menu_ui.tomorrow_line("Французская", 1) == (
         "Любимая кухня одна — французская: добавь ещё в Настройках, и меню будет меняться.")
 
@@ -492,7 +504,7 @@ def test_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
     assert day_menu.next_cuisine("42", "french") == "japanese"
     assert day_menu.next_cuisine("42", "thai") == "french"  # по кругу
     assert day_menu.next_cuisine("42", "italian") == "french"  # не из любимых — первая любимая
-    kb = menu_ui.food_card_kb(["lunch"]).inline_keyboard
+    kb = menu_ui.food_card_kb().inline_keyboard
     assert kb[0][0].text == "Пропустить" and not kb[0][0].api_kwargs  # стандартного цвета
-    assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
+    assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(show_mine=False).inline_keyboard
                    for b in row)  # в отпуске — нет
