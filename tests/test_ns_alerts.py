@@ -131,17 +131,16 @@ def test_planned_works_only_on_their_dates():
     assert ns_api.parse_works(RAW, _date(2026, 10, 10)) is None  # сбой — не плановые работы
 
 
-def test_day_summary_shows_works_period_above_weather():
+def test_day_summary_shows_works_period_under_weather():
     msg = myday_ui.day_summary("Сб, 10 окт", "Alkmaar", weather_line="до +15°C", rail_works=[
         {"title": "Alkmaar – Den Helder", "start": _date(2026, 10, 10), "end": _date(2026, 10, 12)},
         {"title": "Alkmaar – Uitgeest", "start": _date(2026, 9, 30), "end": _date(2026, 10, 2)},
     ])
 
-    # Что меняет планы — первым, погода под ним.
     # Несколько работ — одним блоком с пунктами.
-    assert msg.text.split("\n\n")[1:] == ["🚧 Работы на ЖД:\n• Alkmaar – Den Helder · с 10 по 12 октября\n"
-                                          "• Alkmaar – Uitgeest · с 30 сентября по 2 октября",
-                                          "🌡️ Погода: до +15°C"]
+    assert msg.text.split("\n\n")[1:] == ["🌡️ Погода: до +15°C",  # погода — первой, работы под ней
+                                          "🚧 Работы на ЖД:\n• Alkmaar – Den Helder · с 10 по 12 октября\n"
+                                          "• Alkmaar – Uitgeest · с 30 сентября по 2 октября"]
     same = myday_ui.day_summary("Сб", "Alkmaar", rail_works=[
         {"title": "Amsterdam – Amsterdam Sloterdijk", "start": _date(2026, 10, 10), "end": _date(2026, 10, 10),
          "level": "Меньше поездов."},

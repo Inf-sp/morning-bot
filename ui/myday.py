@@ -324,7 +324,7 @@ def day_summary(
     b.newline()
     b.spacer()
 
-    # Порядок — по срочности: что меняет планы (работы на ЖД), погода, праздники, фраза, затем событие, кино,
+    # Порядок: погода, что меняет планы (работы на ЖД), праздники, фраза, затем событие, кино,
     # статья, город в цифрах и последней — цитата. Цитата — только если сводка не длиннее _MAX_BLOCKS строк: в насыщенный день она лишняя.
     blocks = sum((
         bool(rail_works), bool(weather_line), len(holidays or []), bool(vacation.get("country_lines")),
@@ -333,6 +333,9 @@ def day_summary(
         bool(str(vacation.get("country_fact") or "").strip()), bool(premiere), bool(event), bool(read),
         bool(city_fact),
     ))
+
+    if weather_line:
+        _compact_line(b, weather_icon, "Погода", weather_line)
 
     # Плановые работы NS на станциях города — только в дни работ.
     works_list = [works for works in rail_works or [] if _works_text(works)]
@@ -346,8 +349,6 @@ def day_summary(
         _works_group(b, works_list)
         b.spacer()
 
-    if weather_line:
-        _compact_line(b, weather_icon, "Погода", weather_line)
 
     # Праздники страны и события города — в день праздника и накануне.
     for line in holidays or []:  # «🎉 Сегодня: Koningsdag — День короля» — подпись жирной, как у остальных строк
