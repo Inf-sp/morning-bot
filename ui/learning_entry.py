@@ -201,6 +201,18 @@ def render_learning_entry(
 
 
 _SHORT_POS = ("существительное", "глагол", "прилагательное", "наречие", "предлог", "союз", "выражение", "фраза")
+# Часть речи в скобках — сокращённо, как в словарях: «Het brein (сущ.)», «Opletten (слаб. гл.)».
+POS_ABBR = {"существительное": "сущ.", "глагол": "гл.", "сильный глагол": "сильн. гл.", "слабый глагол": "слаб. гл.",
+            "неправильный глагол": "непр. гл.", "глагольная конструкция": "гл. констр.", "прилагательное": "прил.",
+            "наречие": "нар.", "предлог": "предл.", "союз": "союз", "местоимение": "мест.", "числительное": "числ.",
+            "частица": "част.", "междометие": "межд.", "выражение": "выраж.", "фраза": "фраза",
+            "разговорная фраза": "разг. фраза"}
+
+
+def pos_abbr(value) -> str:
+    """«существительное» → «сущ.»; неизвестное — как есть."""
+    value = str(value or "").strip().lower()
+    return POS_ABBR.get(value, value)
 
 
 def _meanings(value) -> str:
@@ -253,7 +265,9 @@ def render_word_card(builder, entry, *, explain=False, example_index=0):
             next((name for name in _SHORT_POS if breakdown.startswith(name)), "")) if explain else "")
     builder.spacer()
     builder.bold(term[:1].upper() + term[1:])
-    paren = plural or (pos if pos != "существительное" else "")
+    # Слово дня, тренажёр, новое слово — сокращённая часть речи («сущ.», «нар.»); без разбора (explain=False) —
+    # множественное у существительного.
+    paren = pos_abbr(pos) if pos else plural
     if paren:
         builder.text_line(f" ({paren})")
     meanings = _meanings(card.get("translation") or entry.get("translation") or entry.get("ru"))

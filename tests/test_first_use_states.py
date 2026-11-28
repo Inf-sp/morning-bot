@@ -618,7 +618,7 @@ def test_grammar_card_is_term_with_part_of_speech_meanings_breakdown_and_example
                           "card": card}})
     assert message.text == (
         "🇳🇱 Изучаем сегодня · Нидерландский\n\n"
-        "Bovendien (наречие) → Кроме того · к тому же\n\n"
+        "Bovendien (нар.) → Кроме того · к тому же\n\n"
         "Разбор: добавляет ещё один довод и связывает две мысли. В начале предложения требует инверсии — глагол "
         "сразу после bovendien. Не путать с omdat, после которого глагол уходит в конец.\n\n"
         "Пример: Он опоздал, к тому же забыл ключ → Hij was te laat, bovendien vergat hij de sleutel.\n\n"
@@ -653,7 +653,7 @@ def test_grammar_breakdown_has_no_secret_label_and_meanings_after_the_first_are_
                                                  "Het is bovendien te duur."})
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": {
         "id": "bovendien", "topic": "Bovendien", "card": card}}).text
-    assert "Bovendien (наречие) → Кроме того · к тому же" in text
+    assert "Bovendien (нар.) → Кроме того · к тому же" in text
     assert "Секрет" not in text and "Разбор: добавляет ещё один аргумент. После глагола тоже возможно" in text
     # Уже сохранённая карточка со «Секрет:» — тоже без подписи.
     saved = {**card, "explain": "Связывает мысли. Совет: не путать с omdat."}

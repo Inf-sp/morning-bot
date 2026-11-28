@@ -55,7 +55,7 @@ def test_add_mozg_builds_a_dutch_learning_card_without_ai(monkeypatch):
     assert entry["lang"] == "nl"
     assert entry["term"] == "Brein"
     assert entry["article"] == "het"
-    assert "Het brein (de breinen) → Мозг" in message.text
+    assert "Het brein (сущ.) → Мозг" in message.text
     assert "Разбор:" not in message.text
     assert "Mijn brein heeft rust nodig → Моему мозгу нужен отдых" in message.text
 
@@ -86,7 +86,7 @@ def test_add_mozg_from_chat_saves_brein_in_active_dictionary(monkeypatch):
 
     assert saved[0]["lang"] == "nl"
     assert saved[0]["term"] == "Brein"
-    assert "Het brein (de breinen) → Мозг" in sent[-1]["text"]
+    assert "Het brein (сущ.) → Мозг" in sent[-1]["text"]
 
 
 def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch):
@@ -119,7 +119,7 @@ def test_add_razum_never_asks_for_translation_when_ai_is_unavailable(monkeypatch
 
     assert saved[0]["term"] == "Verstand"
     assert saved[0]["article"] == "het"
-    assert "Het verstand (de verstanden) → Разум" in sent[-1]["text"]
+    assert "Het verstand (сущ.) → Разум" in sent[-1]["text"]
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 
@@ -338,7 +338,7 @@ def test_queued_russian_add_is_saved_and_removed_after_retry(monkeypatch):
     assert processed == 1
     assert "dictionary_pending_analysis" not in dictionary_import.store.get_profile(cid)
     assert dictionary_import.store.get_list(dictionary_import.config.DICT_KEY, cid)[0]["term"] == "Wijsheid"
-    assert "De wijsheid (de wijsheden) → Мудрость" in sent[-1]["text"]
+    assert "De wijsheid (сущ.) → Мудрость" in sent[-1]["text"]
 
 
 def test_short_add_command_strips_telegram_markdown(monkeypatch):
@@ -558,7 +558,7 @@ def test_dictionary_card_renders_normalized_noun_with_related_example():
 
     assert message.text == (
         "🇳🇱 Добавлено новое слово · Нидерландский\n\n"
-        "De walging → Отвращение\n\n"
+        "De walging (сущ.) → Отвращение\n\n"
         "Пример: Ze keek met walging naar het eten → Она с отвращением посмотрела на еду"
     )
 
@@ -752,7 +752,7 @@ def test_bare_add_overdag_is_saved_and_shows_card_without_ai(monkeypatch):
     asyncio.run(bot_text.handle(update, context, remove_keyboard))
     assert saved[0]["term"] == "Overdag"
     assert saved[0]["translation"] == "Днём"
-    assert "Overdag (наречие) → Днём" in sent[-1]["text"]
+    assert "Overdag (нар.) → Днём" in sent[-1]["text"]
     assert "Сейчас не удалось проверить" not in sent[-1]["text"]
 
 

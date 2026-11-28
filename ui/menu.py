@@ -255,8 +255,9 @@ def learning_menu(home: dict):
     if lesson["term"]:  # «**Bovendien** (наречие) → Кроме того · к тому же»
         b.spacer()
         b.bold(lesson["term"][:1].upper() + lesson["term"][1:])
-        if lesson["pos"]:
-            b.text_line(f" ({lesson['pos']})")
+        if lesson["pos"]:  # сокращённо, как в словарях: «(нар.)», «(союз)»
+            from .learning_entry import pos_abbr
+            b.text_line(f" ({pos_abbr(lesson['pos'])})")
         if lesson["meaning"]:
             b.text_line(f" → {lesson['meaning']}")
         b.newline()

@@ -56,8 +56,8 @@ def test_strong_verb_is_enriched_and_rendered_compactly(monkeypatch):
     assert entry["perfect_form"] == "heeft vervangen"
     assert entry["analysis_provider"] == "app_llm"
     assert "🇳🇱 Добавлено" in message.text
-    assert "Vervangen (сильный глагол) → Заменять · менять" in message.text
-    assert "Vervangen (сильный глагол) → Заменять · менять" in message.text
+    assert "Vervangen (сильн. гл.) → Заменять · менять" in message.text
+    assert "Vervangen (сильн. гл.) → Заменять · менять" in message.text
     assert "Формы: vervangen · verving · heeft vervangen" in message.text
     assert "Спряжение: ik vervang · jij/u/hij vervangt · wij/jullie/zij vervangen" in message.text
     assert "Ik ga mijn oude telefoon vervangen → Я собираюсь заменить свой старый телефон" in message.text
@@ -83,7 +83,7 @@ def test_weak_verb_example_with_conjugated_stem_passes_validation(monkeypatch):
     text = dictionary_import._dict_entry_message(entry).text
 
     assert "Формы: werken · werkte · heeft gewerkt" in text
-    assert "Werken (слабый глагол) → Работать" in text
+    assert "Werken (слаб. гл.) → Работать" in text
     assert "Спряжение: ik werk · jij/u/hij werkt · wij/jullie/zij werken" in text
     assert "Ik werk vandaag thuis → Сегодня я работаю дома" in text
 
@@ -101,7 +101,7 @@ def test_separable_verb_aanraden_keeps_its_example_in_the_card():
 
     text = dictionary_import._dict_entry_message(entry, status="found").text
 
-    assert "Aanraden (глагол) → Советовать · рекомендовать" in text
+    assert "Aanraden (гл.) → Советовать · рекомендовать" in text
     assert "Разбор:" not in text
     assert "Ik raad je deze film aan → Я рекомендую тебе этот фильм" in text
 
@@ -305,7 +305,7 @@ def test_bevelen_card_uses_verb_analysis_and_related_noun():
 
     assert message.text == (
         "🇳🇱 Добавлено новое слово · Нидерландский\n\n"
-        "Bevelen (глагол) → Приказывать\n\n"
+        "Bevelen (гл.) → Приказывать\n\n"
         "Формы: bevelen · beval · bevolen\n"
         "Спряжение: ik beveel · jij/u/hij beveelt · wij/jullie/zij bevelen\n"
         "Пример: Ik moet hem bevelen om te stoppen → Мне нужно приказать ему остановиться\n"
@@ -372,7 +372,7 @@ def test_common_dutch_noun_is_added_without_ai_when_providers_are_unavailable(mo
     assert entry["term"] == "Waarde"
     assert entry["article"] == "de"
     assert entry["translation"] == "Ценность; значение"
-    assert "De waarde (de waarden) → Ценность · значение" in dictionary_import._dict_entry_message(
+    assert "De waarde (сущ.) → Ценность · значение" in dictionary_import._dict_entry_message(
         entry, status="added").text
 
 
