@@ -42,6 +42,7 @@ import weather
 import yearly_tops
 from util import ack_loading as _ack
 from ui import menu as menu_ui
+from ui import leisure as leisure_ui
 
 _log = logging.getLogger(__name__)
 
@@ -530,6 +531,10 @@ ROUTES = (
     # «Новых премьер» и «Другого варианта» больше нет: старые кнопки из истории чата открывают хаб.
     R(("lz_more", "lz_today_*"), lambda c: leisure_hub.send_hub(c.bot, c.cid, q=c.q)),
     R("lz_lib", lambda c: leisure_hub.send_library_menu(c.bot, c.cid, q=c.q)),
+    # Кино / Музыка в хабе: кнопки разделов на месте, «Назад» — кнопки хаба.
+    R("lz_kb", _swap_kb(lambda c: leisure_ui.leisure_hub_kb())),
+    R("lz_kb_kino", _swap_kb(lambda c: leisure_ui.leisure_section_kb("kino"))),
+    R("lz_kb_music", _swap_kb(lambda c: leisure_ui.leisure_section_kb("music"))),
     R("lz_rt", lambda c: leisure_hub.send_read_themes(c.bot, c.cid, q=c.q)),  # темы статей
     R("lz_rt_*", lambda c: leisure_hub.send_read_themes(c.bot, c.cid, c.data.removeprefix("lz_rt_"), q=c.q)),
     R("lz_country", lambda c: leisure_hub.send_trip_country(c.bot, c.cid, q=c.q)),  # «О стране» в Досуге отпуска

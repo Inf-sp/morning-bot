@@ -470,10 +470,8 @@ def _movie_pick(kind, cached):
     year = str(tm.get("year") or tm.get("release_date") or "")[:4]
     codes = countries.title_countries(tm)  # страна кратко, без флага: «DE»
     genre = str(tm.get("genres") or "").split(",")[0].strip()  # один главный жанр
-    meta = [genre, _unusual(countries.short_label(codes[0]) if codes else "")]
-    if kind == "tv":
-        meta = [tm.get("network") or "", *meta]
-    meta = [year if year.isdigit() else "", *meta]  # год — сразу после названия: «Восставший · 2026 · драма»
+    # Досуг — коротко: год · главный жанр (у фильма ещё длительность); страна — только неожиданная.
+    meta = [year if year.isdigit() else "", genre, _unusual(countries.short_label(codes[0]) if codes else "")]
     return {"kind": kind, "name": tm.get("name") or it.get("title") or "", "url": url, "meta": meta,
             "runtime": leisure_ui.runtime_label(minutes) if kind == "movie" else "", "about": tm.get("overview") or ""}
 
@@ -481,11 +479,13 @@ def _movie_pick(kind, cached):
 def _music_pick(artist):
     import countries
     album = countries.artist_latest_album(artist.get("artist"), fetch=False)  # ищется в фоне при подборе
+    genre = next((label for key, label, _p in leisure_music._MUSIC_GENRES
+                  if key == str(artist.get("genre") or "").casefold()), "")
+    released = leisure_ui.album_meta(album)  # [«Альбом», дата или год]
+    # Без биографии: имя, релиз, жанр и дата — «Kesha» · «Gag Order» · Поп · 2025.
     return {"kind": "music", "name": artist.get("artist") or "",
             "url": leisure_ui.youtube_music_link(artist.get("artist")),
-            "meta": [_unusual(str(artist.get("country_label") or "").split(" ", 1)[-1]),  # «🇨🇦 CA» → «CA»
-                     *leisure_ui.album_meta(album)],
-            "about": artist.get("desc") or ""}
+            "meta": [*released[:1], genre, *released[1:]], "about": ""}
 
 
 # «Досуг на сегодня» — одна карточка, по кругу при каждом открытии (даже в течение дня), только свежее: ближайший
@@ -540,7 +540,7 @@ def today_options(cid, today) -> dict:
 
 
 def today_lineup(data, options, _today=None) -> dict:
-    """«Досуг на сегодня»: премьеры недели (фильм, альбом, сериал — по одной), фильм, сериал, артист дня и три
+    """«🍿 Досуг»: премьеры недели (фильм, альбом, сериал — по одной), фильм, сериал, артист дня и три
     статьи дня. Нет данных блока — его нет."""
     by_kind = {pick["kind"]: pick for pick in data.get("picks") or [] if pick.get("name")}
     return {"premieres": [pick for pick in options.get("premieres") or [] if pick.get("name")],
@@ -627,7 +627,7 @@ def premiere_of_day(cid, day=None):
 
 
 async def send_hub(bot, cid, q=None):
-    """«🍿 Досуг на сегодня»: одна свежая карточка по кругу при каждом открытии (концерт → мероприятие → премьера
+    """«🍿 Досуг»: персональная подборка на сегодня короткими карточками (премьеры → выбор дня → статьи
     → статья) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
     import vacation
     if vacation.active(cid):

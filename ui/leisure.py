@@ -756,88 +756,90 @@ def _finish_sentence(text) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
-_TODAY_SINGLE = (("movie", "Фильм:"), ("tv", "Сериал:"), ("music", "Артист дня:"))
-_TODAY_PREMIERE_TYPE = {"movie": "фильм", "series": "сериал", "music": "альбом"}
+_TODAY_PREMIERE_TYPE = {"movie": "Фильм", "series": "Сериал", "music": "Альбом"}
+_TODAY_ABOUT_MAX = 120  # описание в Досуге — одно предложение, не длиннее
+
+
+def _capital(value) -> str:
+    value = " ".join(str(value or "").split())
+    return value[:1].upper() + value[1:]
 
 
 def today_premiere(card) -> dict:
-    """Премьера «Событий» → строка «Премьер недели»: «**Имя** (фильм · приключения · анимация · 🇺🇸 USA · 25 ноября)
-    — описание». Жанров — не больше двух; у альбома — «альбом «Название»»."""
+    """Премьера «Событий» → карточка «Премьер недели»: «Билли и мир магии», «Фильм · Анимация · 25 ноября», описание;
+    у альбома — «Stray Kids — SUIATSU», «Альбом · Поп · 25 ноября». Жанр — один, страны нет."""
     kind = card.get("premiere")
     values = [" ".join(str(value).split()) for value in card.get("meta") or () if str(value or "").strip()]
-    label = _TODAY_PREMIERE_TYPE.get(kind, "фильм")
+    name = " ".join(str(card.get("name") or "").split())
     if kind == "music" and values and values[0].startswith("«"):
-        label, values = f"{label} {values[0]}", values[1:]
-    meta = [label]
-    for value in values:
-        meta += value.split(" · ")[:2] if " · " in value else [value]
-    return {"kind": "premiere", "name": card.get("name") or "", "url": card.get("url") or "",
-            "meta": [*meta, _event_date_label(card.get("date"))], "about": card.get("about") or ""}
+        name, values = f"{name} — {values[0].strip('«»')}", values[1:]
+    genre = values[0].split(" · ")[0] if values and not re.search(r"\d|сезон|[\U0001F1E6-\U0001F1FF]", values[0]) else ""
+    return {"kind": "premiere", "name": name, "url": card.get("url") or "",
+            "meta": [_TODAY_PREMIERE_TYPE.get(kind, "Фильм"), genre, _event_date_label(card.get("date"))],
+            "about": card.get("about") or ""}
 
 
-def _today_about(b: MessageBuilder, pick) -> None:
-    about = _hub_about(pick.get("about"))
+def _one_sentence(text) -> str:
+    """Первое предложение описания, до _TODAY_ABOUT_MAX символов (длиннее — по слову, с «…»); не русский — ""."""
+    text = _hub_about(text)
+    if not text:
+        return ""
+    text = re.split(r"(?<=[.!?…])\s+", text)[0]
+    if len(text) > _TODAY_ABOUT_MAX:
+        text = text[:_TODAY_ABOUT_MAX].rsplit(" ", 1)[0].rstrip(",;:—- ") + "…"
+    return _finish_sentence(text)
+
+
+def _today_card(b: MessageBuilder, pick, prefix="") -> None:
+    """Карточка в три строки: «**Фильм · Патерсон**» (ссылкой), «2016 · Драма · 1 ч 58 мин», одно предложение."""
+    name = " ".join(str(pick.get("name") or "").split())
+    url = str(pick.get("url") or "").strip()
+    if prefix:
+        b.bold(f"{prefix} · ")
+    b.bold_link(name, url) if url.startswith("http") else b.bold(name)
+    b.newline()
+    values = [_capital(value) for value in (*(pick.get("meta") or ()), pick.get("runtime")) if str(value or "").strip()]
+    if values:
+        b.line(" · ".join(values))
+    about = _one_sentence(pick.get("about"))
     if about:
-        b.text_line(f" — {_finish_sentence(about)}")  # регистр не трогаем: описание часто начинается с имени
-    b.newline()
+        b.line(about)
 
 
-def _today_bullets(b: MessageBuilder, label, picks, *, brackets=False) -> None:
-    """«**Премьеры недели:**» и ниже «• **Имя** (метаданные) — описание» (статьи — «· метаданные»)."""
-    b.bold(label)
-    b.newline()
-    for pick in picks:
-        b.text_line("• ")
-        if brackets:
-            _today_name(b, {**pick, "meta": ()})
-            values = [" ".join(str(value).split()) for value in pick.get("meta") or () if str(value or "").strip()]
-            if values:
-                b.text_line(f" ({' · '.join(values)})")
-        else:
-            _today_name(b, pick)
-        _today_about(b, pick)
+_TODAY_CHOICE = (("movie", "Фильм"), ("tv", "Сериал"), ("music", "Музыка"))
 
 
 def leisure_today_screen(lineup, *, city="", library=None, reply_markup=None) -> MessageSpec:
-    """«🍿 Досуг на сегодня · Alkmaar»: «Премьеры недели:» (фильм, альбом, сериал списком), «Фильм:», «Сериал:»,
-    «Артист дня:» — строкой сразу после подписи, «Статьи дня:» — три списком; подписи жирные, без значков. Внизу
-    курсивом статистика библиотеки."""
+    """«🍿 Досуг» — персональная подборка на сегодня короткими карточками: «Премьеры недели», «Выбор дня» (фильм,
+    сериал, артист), «Статьи дня» (до трёх: заголовок и «источник · минуты»); внизу курсивом библиотека."""
     b = MessageBuilder()
-    b.title("🍿 Досуг на сегодня" + (f" · {str(city).strip()}" if str(city or "").strip() else ""))
+    b.title("🍿 Досуг")
     lineup = lineup or {}
-    blocks = []
+    sections = []
     if lineup.get("premieres"):
-        blocks.append(lambda: _today_bullets(b, "Премьеры недели:", lineup["premieres"], brackets=True))
-    for kind, label in _TODAY_SINGLE:
-        if lineup.get(kind):
-            blocks.append(lambda pick=lineup[kind], label=label: _today_single(b, label, pick))
-    if lineup.get("reads"):
-        blocks.append(lambda: _today_bullets(b, "Статьи дня:", lineup["reads"]))
-    if not blocks:
+        sections.append(("Премьеры недели", [(pick, "") for pick in lineup["premieres"]]))
+    choice = [(lineup[kind], label) for kind, label in _TODAY_CHOICE if lineup.get(kind)]
+    if choice:
+        sections.append(("Выбор дня", choice))
+    reads = [({**pick, "about": ""}, "") for pick in (lineup.get("reads") or [])[:3]]
+    if reads:
+        sections.append(("Статьи дня", reads))
+    if not sections:
         b.line("Собираю премьеры, фильмы и статьи — загляни чуть позже или открой разделы ниже.")
-    for index, block in enumerate(blocks):
+    for index, (heading, cards) in enumerate(sections):
         if index:
             b.spacer()
-        block()
+        b.bold(heading)
+        b.newline()
+        for number, (pick, prefix) in enumerate(cards):
+            if number:
+                b.spacer()
+            _today_card(b, pick, prefix)
     if library:
         b.spacer()
         b.italic(library_stats_line(library.get("movies"), library.get("artists")))
         b.newline()
     return b.build_stripped(reply_markup=reply_markup)
-
-
-def _today_single(b: MessageBuilder, label, pick) -> None:
-    """«**Фильм:** Восставший · 2026 · драма · DE · 1 ч 52 мин — описание» — одной строкой."""
-    b.bold(label)
-    b.text_line(" ")
-    name = " ".join(str(pick.get("name") or "").split())
-    url = str(pick.get("url") or "").strip()
-    b.link(name, url) if url else b.text_line(name)
-    values = [" ".join(str(value).split()) for value in (*(pick.get("meta") or ()), pick.get("runtime"))
-              if str(value or "").strip()]
-    if values:
-        b.text_line(" · " + " · ".join(values))
-    _today_about(b, pick)
 
 
 def _trip_titles(b: MessageBuilder, label, items) -> None:
@@ -975,17 +977,27 @@ def reads_card(items, index=0) -> MessageSpec:
 
 
 def leisure_hub_kb():
-    """Широкая «События» сверху (концерты, фестивали, выставки, праздники, город и премьеры одной лентой), ниже
-    Фильм | Сериал | Музыка в три столбца и широкая «Статьи» (старые «Премьеры / Концерты / Праздники» работают)."""
+    """Кино | Музыка | Статьи: Кино и Музыка меняют кнопки на свои разделы на месте (lz_kb_kino, lz_kb_music),
+    Статьи — сразу лента. Старые кнопки (lz_prem, movie_reco, tv_reco, music_reco) работают."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 Премьеры", callback_data="lz_prem")],  # события — в «Моём дне» и «Плане на завтра»
-        [InlineKeyboardButton("🎬 Фильм", callback_data="movie_reco"),
-         InlineKeyboardButton("📺 Сериал", callback_data="tv_reco"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="music_reco")],
-        [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="lz_kb_kino"),
+         InlineKeyboardButton("🎧 Музыка", callback_data="lz_kb_music"),
+         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
+
+
+def leisure_section_kb(section):
+    """Разделы под хабом: Кино — Премьеры · Фильм · Сериал; Музыка — Релизы · Артист дня · Концерты; «Назад» —
+    снова кнопки хаба (lz_kb)."""
+    rows = {
+        "kino": [("Премьеры", "lz_prem_movie"), ("Фильм", "movie_reco"), ("Сериал", "tv_reco")],
+        "music": [("Релизы", "lz_prem_music"), ("Артист дня", "music_reco"), ("Концерты", "lz_concerts")],
+    }.get(section, [])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data) for text, data in rows],
+                                 [InlineKeyboardButton("⬅️ Назад", callback_data="lz_kb"),
+                                  InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
 
 _EVENT_KIND = {"concert": ("🎫", "Концерт"), "festival": ("🎪", "Фестиваль"), "exhibition": ("🖼️", "Выставка"),
