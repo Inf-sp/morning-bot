@@ -344,7 +344,9 @@ def _deezer_photo(name) -> str:
     if "error" in data:
         raise RuntimeError(f"deezer error: {data['error']}")
     wanted = _artist_key(name)
-    row = next((row for row in data.get("data") or [] if _artist_key(row.get("name")) == wanted), None) or {}
+    # Одноимённых артистов несколько («U2» — и группа, и малоизвестные тёзки): берём самого известного.
+    same = [row for row in data.get("data") or [] if _artist_key(row.get("name")) == wanted]
+    row = max(same, key=lambda row: int(row.get("nb_fan") or 0), default={})
     url = str(row.get("picture_xl") or row.get("picture_big") or "")
     return "" if "/artist//" in url or not url.startswith("https://") else url  # пустой md5 — заглушка Deezer
 

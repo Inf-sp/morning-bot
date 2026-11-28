@@ -99,3 +99,28 @@ def test_my_day_feed_skips_premieres_and_reads_which_may_go_online(monkeypatch):
     monkeypatch.setattr(leisure_events, "_reads", lambda *_a: (_ for _ in ()).throw(AssertionError("no reads")))
     names = [card["name"] for card in leisure_events.feed("42", parts=("concerts", "city"))]
     assert names == ["Vermeer", "Muse", "Winterfest"]
+
+
+def test_concert_image_never_searches_wikipedia_by_artist_name(monkeypatch):
+    import countries
+    asked = []
+    monkeypatch.setattr(countries, "artist_photo", lambda *_a, **_k: "")
+    monkeypatch.setattr(countries, "wiki_image", lambda query, fetch=True: asked.append(query) or "")
+    card = {"kind": "concert", "name": "U2", "venue": "Johan Cruijff ArenA", "place": "Johan Cruijff ArenA, Amsterdam"}
+    leisure_events.image_for(card, "Alkmaar")
+    assert "U2" not in asked and asked[0] == "Johan Cruijff ArenA Alkmaar"
+
+
+def test_deezer_photo_takes_the_most_famous_namesake(monkeypatch):
+    import countries
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"name": "U2", "nb_fan": 12, "picture_xl": "https://e-cdns/artist/aaa/x.jpg"},
+                             {"name": "U2", "nb_fan": 4_000_000, "picture_xl": "https://e-cdns/artist/bbb/x.jpg"}]}
+
+    monkeypatch.setattr(countries.requests, "get", lambda *_a, **_k: Response())
+    assert countries._deezer_photo("U2") == "https://e-cdns/artist/bbb/x.jpg"

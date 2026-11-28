@@ -214,7 +214,9 @@ def _plain_about(card, city) -> str:
 def _image_queries(card, city) -> list:
     """Запросы картинки к Википедии: само событие, площадка в городе, город (последний — почти всегда есть)."""
     queries = []
-    if card["kind"] != "read":
+    # У концерта по имени артиста Википедия находит не то («U2» — самолёт-разведчик): фото — только Deezer, дальше —
+    # площадка и город.
+    if card["kind"] not in ("read", "concert"):
         queries.append(f"{card['name']} {city}".strip() if card["kind"] in ("festival", "city", "exhibition")
                        else card["name"])
     place = str(card.get("venue") or card.get("place") or "").strip()
