@@ -105,7 +105,7 @@ def test_day_menu_screen_shows_dishes_with_short_cooking_and_no_meal_buttons():
     assert msg.text == (
         "🇮🇹 Меню на сегодня · Итальянская кухня\n\n"
         "Свежие продукты и простые сочетания.\n\n"
-        "Завтрак — Crostata\n"
+        "Завтрак — Crostata: "
         "Раскатай тесто, выложи джем и запеки 25 минут при 180 °C.\n\n"
         "Обед — Pasta al pomodoro\n\n"
         "Ужин — Lasagna\n\n"

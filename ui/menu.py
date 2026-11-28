@@ -458,14 +458,14 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     dishes = (menu or {}).get("dishes") or {}
     rows = [(label, dishes.get(meal) or {}) for meal, label in _MEAL_NAMES]
     rows = [(label, dish) for label, dish in rows if dish.get("name")]
-    # «**Завтрак — Лаваш с сыром**» без пояснения в скобках, ниже — короткое приготовление обычным текстом.
+    # «**Завтрак — Лаваш с сыром:** Разогрей лаваш…» — приготовление той же строкой сразу после двоеточия.
     for label, dish in rows:
         b.spacer()
-        b.bold(f"{label} — {dish['name']}")
-        b.newline()
         how = _cooking_text(dish.get("how"))
+        b.bold(f"{label} — {dish['name']}" + (":" if how else ""))
         if how:
-            b.line(how)
+            b.text_line(f" {how}")
+        b.newline()
     if stats:
         b.spacer()
         b.italic(tomorrow_line(stats.get("tomorrow"), stats.get("favorites")))
