@@ -567,7 +567,8 @@ def test_without_film_series_is_main_and_premieres_button_is_first(monkeypatch):
     assert msg.text == "🍿 Досуг\n\nВыбор дня\nСериал · Нили\n2025 · Драма"
 
     kb = leisure_ui.leisure_hub_kb()
-    assert _labels(kb)[0] == ["🎬 Кино", "🎧 Музыка", "📰 Статьи"]
+    assert _labels(kb)[:3] == [["🎬 Кино"], ["🎧 Музыка"], ["📰 Статьи"]]  # в один столбец
+    assert [len(row) for row in leisure_ui.leisure_section_kb("kino").inline_keyboard][:3] == [1, 1, 1]
     assert _callbacks(leisure_ui.leisure_section_kb("kino"))[:3] == ["lz_prem_movie", "movie_reco", "tv_reco"]
     assert _callbacks(leisure_ui.leisure_section_kb("music"))[:3] == ["lz_prem_music", "music_reco", "lz_concerts"]
     for old in ("lz_kb", "lz_kb_kino", "lz_kb_music", "lz_prem", "lz_concerts", "lz_holidays", "lz_ev_3",

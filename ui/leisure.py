@@ -980,9 +980,9 @@ def leisure_hub_kb():
     """Кино | Музыка | Статьи: Кино и Музыка меняют кнопки на свои разделы на месте (lz_kb_kino, lz_kb_music),
     Статьи — сразу лента. Старые кнопки (lz_prem, movie_reco, tv_reco, music_reco) работают."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Кино", callback_data="lz_kb_kino"),
-         InlineKeyboardButton("🎧 Музыка", callback_data="lz_kb_music"),
-         InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
+        [InlineKeyboardButton("🎬 Кино", callback_data="lz_kb_kino")],  # в один столбец
+        [InlineKeyboardButton("🎧 Музыка", callback_data="lz_kb_music")],
+        [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
     ])
@@ -995,7 +995,7 @@ def leisure_section_kb(section):
         "kino": [("Премьеры", "lz_prem_movie"), ("Фильм", "movie_reco"), ("Сериал", "tv_reco")],
         "music": [("Релизы", "lz_prem_music"), ("Артист дня", "music_reco"), ("Концерты", "lz_concerts")],
     }.get(section, [])
-    return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data) for text, data in rows],
+    return InlineKeyboardMarkup([*([InlineKeyboardButton(text, callback_data=data)] for text, data in rows),
                                  [InlineKeyboardButton("⬅️ Назад", callback_data="lz_kb"),
                                   InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")]])
 
