@@ -166,7 +166,8 @@ def _candidates(theme, now, seen, limit=_PER_THEME) -> list:
     for source, url in SOURCES[theme]:
         for item in _feed(source, url):
             day = _published(item.get("date"))
-            if item["link"] not in seen and (day is None or day >= since):
+            if (item["link"] not in seen and (day is None or day >= since)
+                    and not _GALLERY_RE.search(str(item.get("title") or ""))):  # фотоподборки — не статьи
                 found.append({**item, "published": day})
     found.sort(key=lambda item: (-_score(item, theme), -(item["published"] or since).timestamp()))
     picked, sources = [], set()
@@ -362,9 +363,16 @@ _AD_RE = re.compile(r"\b(?:announc\w*|register|registration|webinar|sponsored|gi
                     r"best [\w-]+ to (?:buy|make))\b", re.I)
 
 
+# Фотоподборки вместо статьи («Photographs of the day», «The week in wildlife – in pictures») — в Досуге не нужны.
+_GALLERY_RE = re.compile(r"\b(?:(?:photo(?:graph)?s?|pictures?|images?) of the (?:day|week)|in pictures|"
+                         r"week in (?:wildlife|pictures|photos)|фото(?:графи\w*)? (?:дня|недели)|фотоподборк\w*)",
+                         re.I)
+
+
 def is_announcement(item) -> bool:
-    """Объявление вместо статьи: так решил ИИ при переводе или это видно по заголовку оригинала."""
-    return bool(item.get("ad")) or bool(_AD_RE.search(str(item.get("original_title") or item.get("title") or "")))
+    """Не статья: объявление (так решил ИИ при переводе или видно по заголовку оригинала) или фотоподборка."""
+    titles = f"{item.get('original_title') or ''} {item.get('title') or ''}"
+    return bool(item.get("ad")) or bool(_AD_RE.search(titles)) or bool(_GALLERY_RE.search(titles))
 
 
 def ready(item) -> bool:

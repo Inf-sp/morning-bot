@@ -268,3 +268,9 @@ def test_recipes_are_not_articles_and_discoveries_rank_higher():
     found = {"title": "Scientists discover a new state of matter", "summary": ""}
     plain = {"title": "A quiet walk in the park", "summary": ""}
     assert leisure_reads._score(found, "science") > leisure_reads._score(plain, "science")
+
+
+def test_photo_galleries_are_not_articles():
+    for title in ("Photographs of the day", "The week in wildlife – in pictures", "Фотографии дня"):
+        assert leisure_reads.is_announcement({"original_title": title, "title": title})
+    assert not leisure_reads.is_announcement({"original_title": "How black holes grow", "title": "Как растут дыры"})
