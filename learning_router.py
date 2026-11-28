@@ -139,6 +139,26 @@ async def handle_action(bot, cid, q, act, run_with_status):
     elif act.startswith("dictseedlvl_"):
         _, lang, level = act.split("_", 2)
         await dictionary_seed.seed_set_level(bot, cid, lang, level, q=q)
+    elif act == "learn_skip":  # «Пропустить» на экране Обучения: тема изучена, сразу следующая
+        import asyncio
+        import menu as main_menu
+        await asyncio.to_thread(learning.skip_theme, cid)
+        text, entities, kb = main_menu.menu_screen("m_learn", cid)
+        try:
+            await q.message.edit_text(text, entities=entities, reply_markup=kb)
+        except Exception:
+            await bot.send_message(chat_id=cid, text=text, entities=entities, reply_markup=kb)
+    elif act == "lthemes":
+        await dictionary.send_learning_themes(bot, cid, q=q)
+    elif act.startswith("lthemes_c_"):
+        await dictionary.send_learning_theme_category(bot, cid, act[len("lthemes_c_"):], q=q)
+    elif act.startswith("lthemes_t_"):
+        import learning_themes
+        number = act[len("lthemes_t_"):]
+        found = learning_themes.theme(number)
+        if found:
+            learning_themes.toggle(cid, int(number))
+            await dictionary.send_learning_theme_category(bot, cid, found[1], q=q)
     elif act in ("dictlang_nl_keep", "dictlang_en_keep"):
         await dictionary.send_dict_lang(bot, cid, act.split("_")[1])
     elif act == "dictlang_active":

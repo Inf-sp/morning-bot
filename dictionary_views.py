@@ -99,6 +99,8 @@ async def send_dict_lang(bot, cid, lang, back="m_learn", q=None, page=0):
     rows.append([InlineKeyboardButton("✅ Добавить своё слово", callback_data=f"a_dictadd_smart_{lang}")])
     # Язык и уровень обучения (по уровню подбирается и грамматика дня) — зелёная, сразу под «Добавить».
     rows.append([InlineKeyboardButton("📝 Выбрать язык", callback_data="set_learning_dict")])
+    if lang == "nl":  # темы «Изучаем сегодня»: включить или выключить, изученные гаснут
+        rows.append([InlineKeyboardButton("Темы обучения", callback_data="a_lthemes")])
     for category in _DICT_VISIBLE_CATEGORY_ORDER:
         index = _DICT_CATEGORY_ORDER.index(category)
         count = sum(1 for item in entries if _dictionary_category(item) == category)
@@ -699,3 +701,35 @@ async def send_dict_entry_view_by_id(bot, cid, page, word_id, q=None):
 # В конце: learning_dictionary сам импортирует имена отсюда, поэтому к этому моменту
 # они уже должны быть определены (иначе цикл ломается при импорте dictionary_views первым).
 import learning_dictionary  # noqa: E402
+
+
+# ---------- «Темы обучения»: категории → темы ✅ / □ ----------
+async def send_learning_themes(bot, cid, q=None):
+    """«Настроить словарь → Темы обучения»: пять категорий с числом включённых тем."""
+    import learning_themes
+    from ui import learning as learning_ui
+    rows = [[InlineKeyboardButton(f"{full} · {on} из {total}", callback_data=f"a_lthemes_c_{number}")]
+            for number, full, _short in learning_themes.CATEGORIES
+            for on, total in [learning_themes.category_summary(cid, number)]]
+    rows.append(nav_row("a_dictlang_nl"))
+    msg = learning_ui.learning_themes_home()
+    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)
+
+
+async def send_learning_theme_category(bot, cid, category, q=None):
+    """Темы категории: ✅ — включена и не изучена (зелёная), □ — выключена или изучена; нажатие переключает."""
+    import learning_themes
+    from ui import learning as learning_ui
+    found = next((item for item in learning_themes.CATEGORIES if item[0] == int(category)), None)
+    if not found:
+        await send_learning_themes(bot, cid, q=q)
+        return
+    current = learning_themes.state(cid)
+    rows = [[InlineKeyboardButton(("✅ " if learning_themes.is_on(cid, theme[0]) else "□ ") + theme[2],
+                                  callback_data=f"a_lthemes_t_{theme[0]}")]
+            for theme in learning_themes.THEMES if theme[1] == found[0]]
+    rows.append(nav_row("a_lthemes"))
+    themes = [(theme[2], theme[3], theme[0] in current["done"]) for theme in learning_themes.THEMES
+              if theme[1] == found[0]]
+    msg = learning_ui.learning_theme_category(found[1], themes)
+    await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)

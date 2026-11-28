@@ -854,6 +854,8 @@ from dictionary_views import (  # noqa: E402 — after definitions dictionary_vi
     _show_screen,
     send_dict,
     send_dict_lang,
+    send_learning_themes,
+    send_learning_theme_category,
     send_dict_category,
     send_dict_category_list,
     check_dictionary_entry,

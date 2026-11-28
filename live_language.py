@@ -24,7 +24,11 @@ def grammar_topics(language) -> tuple:
         data = json.loads(_TOPICS_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return ()
-    return tuple(data.get(language) or ())
+    topics = tuple(data.get(language) or ())
+    if language == "nl" and topics:  # темы лексики и коммуникации — темой дня из самой темы обучения
+        import learning_themes
+        topics += tuple(learning_themes.theme_topic(theme[0]) for theme in learning_themes.THEMES if not theme[4])
+    return topics
 
 
 def grammar_of_day(cid, language="nl", renew=False) -> dict:
@@ -42,6 +46,10 @@ def grammar_of_day(cid, language="nl", renew=False) -> dict:
     level = store.get_level(cid, _LANGUAGE_NAMES.get(language, language))
     allowed = _LEVEL_TOPICS.get(level, _LEVEL_TOPICS["simple"])
     by_id = {topic["id"]: topic for topic in topics}
+    if language == "nl":
+        themed = _theme_pick(cid, by_id, progress, allowed, today, renew)
+        if themed is not None:
+            return themed
     if (not renew and progress.get("date") == today and progress.get("id") in by_id
             and by_id[progress["id"]]["level"] in allowed):
         return _as_card(by_id[progress["id"]])
@@ -61,6 +69,39 @@ def grammar_of_day(cid, language="nl", renew=False) -> dict:
 
     store.mutate_profile(cid, save)
     return _as_card(chosen)
+
+
+def _theme_pick(cid, by_id, progress, allowed, today, renew) -> dict | None:
+    """Тема дня по темам обучения (`learning_themes`): из включённых и не изученных, по порядку списка; внутри темы —
+    её грамматические темы уровня (нет на уровне — любые), ещё не показанные. Все показаны — тема изучена, дальше
+    следующая. Все темы выключены или изучены — None (обычный круг по уровню)."""
+    import learning_themes
+    current = progress.get("id")
+    enabled = learning_themes.enabled(cid)
+    if (not renew and progress.get("date") == today and current in by_id
+            and learning_themes.theme_of(current) in enabled):
+        return _as_card(by_id[current])
+    seen = set(progress.get("seen") or [])
+    for number in enabled:
+        theme = learning_themes.theme(number)
+        pool = [by_id[topic_id] for topic_id in theme[4] if topic_id in by_id] \
+            or [by_id.get(f"{learning_themes.THEME_TOPIC_PREFIX}{number}") or learning_themes.theme_topic(number)]
+        leveled = [topic for topic in pool if topic["level"] in allowed] or pool
+        fresh = [topic for topic in leveled if topic["id"] not in seen and topic["id"] != current]
+        if not fresh:
+            learning_themes.mark_done(cid, number)  # всё в теме показано — изучена
+            continue
+        chosen = fresh[0]
+
+        def save(profile):
+            all_progress = dict(profile.get("grammar_progress") or {})
+            all_progress["nl"] = {**(all_progress.get("nl") or {}), "date": today, "id": chosen["id"],
+                                  "seen": [*sorted(seen), chosen["id"]]}
+            return {**profile, "grammar_progress": all_progress}, None
+
+        store.mutate_profile(cid, save)
+        return _as_card(chosen)
+    return None
 
 
 def _as_card(topic) -> dict:

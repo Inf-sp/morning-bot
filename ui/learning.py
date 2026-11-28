@@ -1,6 +1,6 @@
 import re
 
-from .builder import MessageBuilder
+from .builder import MessageBuilder, MessageSpec
 from .constants import ui_label
 from .learning_entry import render_word_card
 
@@ -248,4 +248,28 @@ def removed_from_training(term):
     b.text_line("❌ Слово ")
     b.bold(str(term or "").strip())
     b.text_line(" было удалено из обучения")
+    return b.build_stripped()
+
+
+def learning_themes_home() -> MessageSpec:
+    b = MessageBuilder()
+    b.section("🧠 Темы обучения")
+    b.line("Из включённых тем собирается «Изучаем сегодня» — по порядку, тема за темой.")
+    b.spacer()
+    b.italic("«Пропустить» на экране Обучения отмечает тему изученной — здесь её можно включить снова.")
+    b.newline()
+    return b.build_stripped()
+
+
+def learning_theme_category(title, themes) -> MessageSpec:
+    """Категория: темы строками «**Perfectum** — Voltooid tegenwoordige tijd · изучена», кнопки — переключатели."""
+    b = MessageBuilder()
+    b.section(f"🧠 {title}")
+    for name, about, done in themes:
+        b.bold(name)
+        b.text_line(f" — {about}" + (" · изучена" if done else ""))
+        b.newline()
+    b.spacer()
+    b.italic("Зелёные — в обучении, остальные выключены или изучены. Нажми, чтобы включить или выключить.")
+    b.newline()
     return b.build_stripped()

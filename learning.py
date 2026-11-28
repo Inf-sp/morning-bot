@@ -166,8 +166,26 @@ def build_learning_home(cid):
         "example_translation": str(example.get("translation") or "").strip(),
         "note": str(entry.get("breakdown") or "").strip(),
         "live_language": phrase,
-        "stats": _learning_stats(cid, lang_code),
+        "stats": {**_learning_stats(cid, lang_code), "theme": _theme_label(phrase)},
     }
+
+
+def _theme_label(phrase) -> str:
+    """«Связь предложений — Aanvulling» — тема обучения темы дня (нидерландский), для нижней строки; иначе ""."""
+    import learning_themes
+    return learning_themes.label(learning_themes.theme_of((phrase or {}).get("id")) or 0)
+
+
+def skip_theme(cid):
+    """«Пропустить»: тема обучения темы дня — изучена (в настройках тем гаснет), сразу следующая тема."""
+    import learning_themes
+    lang_code = _active_language_code(cid)
+    phrase = live_language.grammar_of_day(cid, lang_code)
+    number = learning_themes.theme_of((phrase or {}).get("id"))
+    if number:
+        learning_themes.mark_done(cid, number)
+    live_language.grammar_of_day(cid, lang_code, renew=True)
+    return build_learning_home(cid)
 
 
 def _learning_stats(cid, lang_code):

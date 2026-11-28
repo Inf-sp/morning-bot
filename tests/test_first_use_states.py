@@ -121,6 +121,7 @@ def test_dictionary_contains_only_dictionary_actions(monkeypatch):
     assert rows == [
         ["✅ Добавить своё слово"],
         ["📝 Выбрать язык"],  # язык и уровень обучения — сразу под «Добавить»
+        ["Темы обучения"],  # включить и выключить темы «Изучаем сегодня»
         ["✨ Сгенерировать набор слов"],
         ["⬅️ Назад", "#️⃣ Главная"],
     ]
@@ -145,7 +146,8 @@ def test_dictionary_home_opens_categories_instead_of_old_word_grid(monkeypatch):
     rows = _labels(bot.message["reply_markup"])
     assert rows[0] == ["✅ Добавить своё слово"]
     assert rows[1] == ["📝 Выбрать язык"]
-    assert rows[2:8] == [
+    assert rows[2] == ["Темы обучения"]
+    assert rows[3:9] == [
         [f"{category} · 1"]
         for category in learning_dictionary._DICT_VISIBLE_CATEGORY_ORDER[:6]
     ]

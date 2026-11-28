@@ -282,16 +282,25 @@ def learning_menu(home: dict):
         b.text_line(f" {lesson['examples'][0]}")
         b.newline()
     stats = home.get("stats")
-    if stats:  # статистика — последней строкой курсивом
+    if stats:  # последней строкой курсивом — слова и тема обучения («Связь предложений — Aanvulling»)
         b.spacer()
-        b.italic(learning_stats_line(title, stats.get("words"), stats.get("topics")))
+        b.italic(learning_theme_line(title, stats.get("words"), stats.get("theme"))
+                 if stats.get("theme") else learning_stats_line(title, stats.get("words"), stats.get("topics")))
         b.newline()
 
-    return b.build_stripped(reply_markup=ikb([
+    skip = ([[InlineKeyboardButton("Пропустить", callback_data="a_learn_skip", api_kwargs={"style": "danger"})]]
+            if (stats or {}).get("theme") else [])  # тема изучена — гаснет в «Темах обучения», сразу следующая
+    return b.build_stripped(reply_markup=InlineKeyboardMarkup([*skip, *ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
         [(ui_label("game", "Угадай слово"), "a_game")],
         [("🎚️ Настроить словарь", f"a_dictlang_{code}_from_menu"), ("#️⃣ Главная", "m_menu")],
-    ]))
+    ]).inline_keyboard]))
+
+
+def learning_theme_line(language, words, theme) -> str:
+    """«Твой нидерландский · 192 слова · Связь предложений — Aanvulling»."""
+    words = int(words or 0)
+    return f"Твой {str(language).lower()} · {words} {ru_plural(words, 'слово', 'слова', 'слов')} · {theme}"
 
 
 def _trip_learning(home: dict):
