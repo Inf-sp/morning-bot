@@ -628,7 +628,7 @@ def premiere_of_day(cid, day=None):
 
 async def send_hub(bot, cid, q=None):
     """«🍿 Досуг»: персональная подборка на сегодня короткими карточками (премьеры → выбор дня → статьи
-    → статья) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
+    дня) из кэшей, без нового сбора; в отпуске — досуг страны поездки."""
     import vacation
     if vacation.active(cid):
         await _show(bot, cid, await asyncio.to_thread(_trip_screen, cid, vacation.trip_leisure(cid)), q)
