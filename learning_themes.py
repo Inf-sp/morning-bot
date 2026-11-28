@@ -171,9 +171,3 @@ def mark_done(cid, number) -> None:
     import settings as user_settings
     if theme(number):
         user_settings.set_(cid, DONE_KEY, sorted(state(cid)["done"] | {int(number)}))
-
-
-def category_summary(cid, category) -> tuple:
-    """(включено, всего) тем в категории."""
-    numbers = [theme[0] for theme in THEMES if theme[1] == category]
-    return sum(1 for number in numbers if is_on(cid, number)), len(numbers)

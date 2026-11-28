@@ -705,12 +705,11 @@ import learning_dictionary  # noqa: E402
 
 # ---------- «Темы обучения»: категории → темы ✅ / □ ----------
 async def send_learning_themes(bot, cid, q=None):
-    """«Настроить словарь → Темы обучения»: пять категорий с числом включённых тем."""
+    """«Настроить словарь → Темы обучения»: пять категорий, без числа тем на кнопках."""
     import learning_themes
     from ui import learning as learning_ui
-    rows = [[InlineKeyboardButton(f"{full} · {on} из {total}", callback_data=f"a_lthemes_c_{number}")]
-            for number, full, _short in learning_themes.CATEGORIES
-            for on, total in [learning_themes.category_summary(cid, number)]]
+    rows = [[InlineKeyboardButton(full, callback_data=f"a_lthemes_c_{number}")]
+            for number, full, _short in learning_themes.CATEGORIES]
     rows.append(nav_row("a_dictlang_nl"))
     msg = learning_ui.learning_themes_home()
     await _show_screen(bot, cid, msg.text, msg.entities, InlineKeyboardMarkup(rows), q=q)

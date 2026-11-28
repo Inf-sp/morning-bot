@@ -79,3 +79,18 @@ def test_blijven_card_without_ai_has_one_meaning_full_explanation_and_period():
     assert "Не путай с обычным значением blijven — «оставаться»." in msg.text
     assert "Пример: Je moet blijven oefenen → Тебе нужно продолжать тренироваться.\n" in msg.text
     assert msg.text.endswith("Грамматика (Werkwoordconstructies)")
+
+
+def test_themes_button_is_green_under_language_and_categories_have_no_counts(monkeypatch):
+    import asyncio
+    import dictionary_views
+    import telegram_runtime
+    assert telegram_runtime._PREFS_RE.match("Темы обучения")  # зелёная, рядом с «Выбрать язык»
+    shown = []
+
+    async def show(_bot, _cid, _text, _entities, markup, q=None):
+        shown.append([b.text for row in markup.inline_keyboard for b in row])
+
+    monkeypatch.setattr(dictionary_views, "_show_screen", show)
+    asyncio.run(dictionary_views.send_learning_themes(None, "42"))
+    assert shown[0][:5] == [full for _n, full, _s in learning_themes.CATEGORIES]  # без «· 12 из 16»
