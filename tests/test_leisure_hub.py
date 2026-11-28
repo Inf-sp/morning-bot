@@ -242,7 +242,7 @@ def test_concerts_screen_is_a_carousel_of_cards(monkeypatch):
     asyncio.run(leisure_hub.send_concerts(None, "42", "1"))
 
     assert "Placebo" in shown[0].text and "твой артист" in shown[0].text and "Muse" not in shown[0].text
-    assert _callbacks(shown[0].reply_markup) == ["lz_conc_1", "noop", "lz_conc_1", "m_leisure", "m_menu"]
+    assert _callbacks(shown[0].reply_markup) == ["lz_conc_x_0", "lz_conc_1", "noop", "lz_conc_1", "m_leisure", "m_menu"]
     assert "Muse" in shown[1].text  # листание — следующая карточка
     for data in ("lz_concerts", "lz_conc_3"):
         assert routing.resolve_callback_handler(data)["handled"]
@@ -961,3 +961,28 @@ def test_month_concert_cards_put_my_artists_first(monkeypatch):
     cards = asyncio.run(leisure_concerts.month_concert_cards("42"))
     assert [(card["name"], card["mine"], card["place"]) for card in cards] == [
         ("Placebo", True, "Ziggo Dome, Amsterdam"), ("Muse", False, "Ahoy, Rotterdam")]
+
+
+def test_skip_hides_the_concert_and_shows_the_next(monkeypatch):
+    import leisure_concerts
+    import leisure_events
+    import leisure_hub
+    profile, shown = {}, []
+    monkeypatch.setattr(leisure_concerts.store, "get_profile", lambda _cid: profile)
+    monkeypatch.setattr(leisure_concerts.store, "mutate_profile",
+                        lambda _cid, change: profile.update(change(dict(profile))[0]))
+
+    async def lists(*_a, **_k):
+        return ([{"artist": "U2", "date": "2027-06-05", "venue": "Johan Cruijff ArenA", "city": "Amsterdam"}],
+                [{"artist": "Muse", "date": "2026-12-10", "venue": "Ahoy", "city": "Rotterdam"}])
+
+    async def show(_bot, _cid, msg, _image, _q=None):
+        shown.append(msg)
+
+    monkeypatch.setattr(leisure_concerts, "_build_weekly_events_msg", lists)
+    monkeypatch.setattr(leisure_hub, "_show_card", show)
+    monkeypatch.setattr(leisure_events, "image_for", lambda *_a, **_k: "")
+    monkeypatch.setattr(leisure_hub.store, "get_settings", lambda _cid: {})
+    asyncio.run(leisure_hub.send_concerts(None, "42", "x_0"))
+    assert "Muse" in shown[0].text and "U2" not in shown[0].text
+    assert [card["name"] for card in asyncio.run(leisure_concerts.month_concert_cards("42"))] == ["Muse"]

@@ -756,13 +756,18 @@ async def send_concerts(bot, cid, arg="", q=None):
     2026 · Ziggo Dome, Amsterdam · твой артист», фраза об артисте; ← n/N → по кругу (lz_conc_<n>). Сначала твои
     артисты, затем популярное рядом."""
     import leisure_events
-    if not str(arg).isdigit():  # открытие: афиши этой страны ещё нет — собираем сейчас, листание не ждёт
+    skip = str(arg).startswith("x_")  # «Пропустить» (lz_conc_x_<n>): концерт уходит, на его месте — следующий
+    arg = str(arg)[2:] if skip else str(arg)
+    if not arg.isdigit():  # открытие: афиши этой страны ещё нет — собираем сейчас, листание не ждёт
         try:
             await asyncio.wait_for(_warm_concerts(cid), 25)
         except Exception:
             _log.warning("concerts screen: refresh failed cid=%s", cid, exc_info=True)
     cards = await leisure_concerts.month_concert_cards(cid)
-    index = int(arg) % len(cards) if cards and str(arg).isdigit() else 0
+    if skip and cards and arg.isdigit():
+        await asyncio.to_thread(leisure_concerts.hide_concert, cid, cards[int(arg) % len(cards)])
+        cards = await leisure_concerts.month_concert_cards(cid)
+    index = int(arg) % len(cards) if cards and arg.isdigit() else 0
     image = ""
     if cards:
         city = str((store.get_settings(cid) or {}).get("city") or "")
@@ -772,7 +777,8 @@ async def send_concerts(bot, cid, arg="", q=None):
         except Exception:
             _log.debug("concerts: image unavailable", exc_info=True)
     empty = (leisure_concerts.month_concerts_title(cid), "В ближайшие 30 дней концертов рядом не нашлось.")
-    await _show_card(bot, cid, leisure_ui.event_card(cards, index, prefix="lz_conc_", empty=empty), image, q)
+    await _show_card(bot, cid, leisure_ui.event_card(cards, index, prefix="lz_conc_", empty=empty, skip=True),
+                     image, q)
 
 
 _HOLIDAYS_DAYS = 30  # «Праздники» в Досуге — на месяц вперёд

@@ -1047,7 +1047,8 @@ def event_pick(card) -> dict:
 
 
 def event_card(cards, index=0, prefix="lz_ev_", empty=("🎟️ События",
-                                                       "На этой неделе событий пока нет — загляни чуть позже.")) -> MessageSpec:
+                                                       "На этой неделе событий пока нет — загляни чуть позже."),
+               skip=False) -> MessageSpec:
     """Карточка журнала недели «🎟️ События»: «🎫 **Muse**» ссылкой, «Концерт · 4 декабря 2026 · Ziggo Dome,
     Amsterdam · твой артист» (дата — всегда), описание; ← n/N → по кругу (lz_ev_<n>), «Назад» — в хаб. Картинку
     прикладывает обработчик."""
@@ -1072,7 +1073,8 @@ def event_card(cards, index=0, prefix="lz_ev_", empty=("🎟️ События",
     if about:
         b.spacer()
         b.line(_finish_sentence(about))
-    rows = []
+    # «Пропустить» у концертов (skip) — первой строкой: концерт уходит, на его месте — следующий.
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"{prefix}x_{index}")]] if skip else []
     if len(cards) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"{prefix}{(index - 1) % len(cards)}"),

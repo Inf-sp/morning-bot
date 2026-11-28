@@ -1391,6 +1391,25 @@ async def month_concert_cards(cid) -> list:
     found = await _build_weekly_events_msg(cid, _MONTH_CONCERT_DAYS, min_mine=5, min_popular=_WEEKLY_POPULAR_LIMIT,
                                            as_items=True)
     mine, popular = found or ([], [])
+    hidden = set((store.get_profile(cid) or {}).get(HIDDEN_CONCERTS_KEY) or [])
+    return [card for card in _concert_cards(mine, popular) if concert_key(card) not in hidden]
+
+
+HIDDEN_CONCERTS_KEY = "hidden_concerts"  # профиль: «Пропустить» на экране «Концерты» — артист|дата
+
+
+def concert_key(card) -> str:
+    return f"{_concert_identity_text(card.get('name'))}|{str(card.get('date') or '')[:10]}"
+
+
+def hide_concert(cid, card) -> None:
+    """«Пропустить»: этот концерт больше не показывается на экране «Концерты» (последние 200)."""
+    key = concert_key(card)
+    store.mutate_profile(cid, lambda profile: ({**profile, HIDDEN_CONCERTS_KEY: [
+        *[value for value in profile.get(HIDDEN_CONCERTS_KEY) or [] if value != key], key][-200:]}, None))
+
+
+def _concert_cards(mine, popular) -> list:
     return [{"kind": "concert", "name": item["artist"], "url": item.get("url") or "", "date": item["date"],
              "end": item["date"], "venue": item.get("venue") or "",
              "place": ", ".join(part for part in (item.get("venue"), item.get("city")) if part),

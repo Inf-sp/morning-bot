@@ -107,7 +107,7 @@ _GREEN_RE = re.compile(
 )
 # «Выбрать предпочтения» — зелёная, сразу под «Добавить…».
 _PREFS_RE = re.compile(r"^(?:Выбрать (?:предпочтения|язык)|Темы обучения)$")  # в словаре — «Выбрать язык» и «Темы обучения»
-_DISLIKE_TOP = ("movie_no_", "tv_no_", "book_no_", "listen_no", "nov_no_", "lz_prem_x_", "lz_rdone_", "w_look", "food_skip",
+_DISLIKE_TOP = ("movie_no_", "tv_no_", "book_no_", "listen_no", "nov_no_", "lz_prem_x_", "lz_conc_x_", "lz_rdone_", "w_look", "food_skip",
                 "a_learn_skip")  # «Пропустить» (a_learn_skip — только старые сообщения)
 _BACK_HOME_RE = re.compile(r"^(?:Главная|Назад)$")
 _NAV_RE = re.compile(r"^(?:Главная|Назад|Настроить(?: .+)?|Показать списком|Показать карточками)$")
