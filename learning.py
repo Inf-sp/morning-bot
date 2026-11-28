@@ -171,7 +171,7 @@ def build_learning_home(cid):
 
 
 def _theme_label(phrase) -> str:
-    """«Связь предложений — Aanvulling» — тема обучения темы дня (нидерландский), для нижней строки; иначе ""."""
+    """«Связь предложений (Aanvulling)» — тема обучения темы дня (нидерландский), для нижней строки; иначе ""."""
     import learning_themes
     return learning_themes.label(learning_themes.theme_of((phrase or {}).get("id")) or 0)
 

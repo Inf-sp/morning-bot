@@ -28,7 +28,7 @@ def test_every_grammar_topic_belongs_to_exactly_one_of_40_themes():
     mapped = [topic_id for theme in learning_themes.THEMES for topic_id in theme[4]]
     assert len(learning_themes.THEMES) == 40 and len(learning_themes.CATEGORIES) == 5
     assert sorted(mapped) == sorted(topic["id"] for topic in topics)  # каждая — ровно в одной теме
-    assert learning_themes.theme_of("nl-201") == 22 and learning_themes.label(22) == "Связь предложений — Aanvulling"
+    assert learning_themes.theme_of("nl-201") == 22 and learning_themes.label(22) == "Связь предложений (Aanvulling)"
 
 
 def test_topic_of_day_follows_enabled_themes_and_skip_marks_the_theme_learned(monkeypatch):
@@ -52,8 +52,17 @@ def test_topic_of_day_follows_enabled_themes_and_skip_marks_the_theme_learned(mo
 def test_learning_screen_has_red_skip_and_theme_in_the_footer():
     msg = menu_ui.learning_menu({"has_material": True, "lang_code": "nl",
                                  "live_language": {"rule": "_Zodra_ — как только. Глагол в конце."},
-                                 "stats": {"words": 192, "topics": 37, "theme": "Связь предложений — Tijd"}})
-    assert msg.text.endswith("Твой нидерландский · 192 слова · Связь предложений — Tijd")
+                                 "stats": {"words": 192, "topics": 37, "theme": "Связь предложений (Tijd)"}})
+    assert msg.text.endswith("Твой нидерландский · 192 слова · Связь предложений (Tijd)")
     first = msg.reply_markup.inline_keyboard[0][0]
     assert first.text == "Пропустить" and first.callback_data == "a_learn_skip"
     assert first.api_kwargs == {"style": "danger"}
+
+
+def test_explanation_ends_with_a_period():
+    import live_language as ll
+    card = ll._clean_card({"explain": "Используй trouwens, когда хочешь добавить мысль. Сразу после него идёт глагол",
+                           "examples": [{"text": "Trouwens, heb je hem gebeld?", "translation": "Кстати, звонил?"}]})
+    text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl",
+                                  "live_language": {"id": "nl-201", "topic": "Trouwens", "card": card}}).text
+    assert "Сразу после него идёт глагол.\n" in text

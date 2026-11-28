@@ -18,7 +18,7 @@ def test_result_card_uses_article_plural_and_saved_example():
     })
 
     assert "Правильно:" not in text
-    assert "Het gevolg (сущ.) → Последствие" in text
+    assert "Het gevolg (de gevolgen) → Последствие" in text
     assert "Разбор:" not in text  # артикль и множественное — в первой строке
     assert "Множественное число:" not in text
     assert "Dat kan ernstige gevolgen hebben → Это может иметь серьёзные последствия" in text

@@ -372,7 +372,7 @@ def test_common_dutch_noun_is_added_without_ai_when_providers_are_unavailable(mo
     assert entry["term"] == "Waarde"
     assert entry["article"] == "de"
     assert entry["translation"] == "Ценность; значение"
-    assert "De waarde (сущ.) → Ценность · значение" in dictionary_import._dict_entry_message(
+    assert "De waarde (de waarden) → Ценность · значение" in dictionary_import._dict_entry_message(
         entry, status="added").text
 
 

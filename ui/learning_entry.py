@@ -267,7 +267,9 @@ def render_word_card(builder, entry, *, explain=False, example_index=0):
     builder.bold(term[:1].upper() + term[1:])
     # Слово дня, тренажёр, новое слово — сокращённая часть речи («сущ.», «нар.»); без разбора (explain=False) —
     # множественное у существительного.
-    paren = pos_abbr(pos) if pos else plural
+    # У существительного в скобках — множественное («Het brein (de breinen)»), нет его — «(сущ.)»; у остальных —
+    # сокращённая часть речи («нар.», «слаб. гл.»).
+    paren = plural or (pos_abbr(pos) if pos else "")
     if paren:
         builder.text_line(f" ({paren})")
     meanings = _meanings(card.get("translation") or entry.get("translation") or entry.get("ru"))

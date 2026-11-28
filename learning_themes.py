@@ -105,12 +105,12 @@ def theme_topic(number) -> dict:
 
 
 def label(number) -> str:
-    """«Связь предложений — Aanvulling» — для нижней строки «Обучения»."""
+    """«Связь предложений (Aanvulling)» — для нижней строки «Обучения»."""
     found = theme(number)
     if not found:
         return ""
     short = next(short for cat, _full, short in CATEGORIES if cat == found[1])
-    return f"{short} — {found[2]}"
+    return f"{short} ({found[2]})"
 
 
 def _numbers(cid, key) -> set:

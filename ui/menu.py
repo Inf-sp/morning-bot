@@ -267,9 +267,9 @@ def learning_menu(home: dict):
         if lesson["meaning"]:
             b.text_line(f" → {lesson['meaning']}")
         b.newline()
-    if lesson["explain"]:  # объяснение — обычным текстом, без подписи «Разбор:»
+    if lesson["explain"]:  # объяснение — обычным текстом, без подписи «Разбор:», с точкой в конце
         b.spacer()
-        b.line(lesson["explain"])
+        b.line(_with_period(lesson["explain"]))
     if len(lesson["examples"]) > 1:
         b.spacer()
         b.bold("Примеры:")
@@ -282,7 +282,7 @@ def learning_menu(home: dict):
         b.text_line(f" {lesson['examples'][0]}")
         b.newline()
     stats = home.get("stats")
-    if stats:  # последней строкой курсивом — слова и тема обучения («Связь предложений — Aanvulling»)
+    if stats:  # последней строкой курсивом — слова и тема обучения («Связь предложений (Aanvulling)»)
         b.spacer()
         b.italic(learning_theme_line(title, stats.get("words"), stats.get("theme"))
                  if stats.get("theme") else learning_stats_line(title, stats.get("words"), stats.get("topics")))
