@@ -837,9 +837,8 @@ def test_recommendation_cards_have_no_refresh_label():
         (leisure_music._listen_kb(), "listen_no"),
     ):
         dislike = keyboard.inline_keyboard[0][0]
-        assert (dislike.text, dislike.callback_data, dislike.api_kwargs) == (
-            "Пропустить", callback, {"style": "danger"},
-        )
+        assert (dislike.text, dislike.callback_data) == ("Пропустить", callback)
+        assert not dislike.api_kwargs  # стандартного цвета
         # «Настроить» на карточках нет — библиотека настраивается из хаба.
         assert all("Настроить" not in b.text for row in keyboard.inline_keyboard for b in row)
         assert all("Добавить в Мо" not in b.text for row in keyboard.inline_keyboard for b in row)

@@ -54,7 +54,7 @@ def test_movie_novelty_card_says_now_in_cinema_and_has_actions(monkeypatch):
     assert [(row[0].text, row[0].callback_data) for row in rows[:2]] == [
         ("Пропустить", "nov_no_movie"), ("По жанру", "nov_pick_movie"),
     ]
-    assert rows[0][0].api_kwargs == {"style": "danger"}
+    assert not rows[0][0].api_kwargs  # стандартного цвета
     picker = leisure_novelty.genre_picker(CID, "movie", back="nov_card_movie").inline_keyboard
     assert picker[0][0].text == "🆕 Новинка" and all("Любой" not in r[0].text for r in picker)
     assert picker[-1][0].callback_data == "nov_card_movie"

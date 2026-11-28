@@ -333,7 +333,7 @@ def _movie_kb(i, category=None, kind="movie"):
     prefix = "tv" if kind == "tv" else "movie"
     rows = [
         # «Пропустить» — первой: в чёрный список, сразу следующая рекомендация.
-        [InlineKeyboardButton("Пропустить", callback_data=f"{prefix}_no_{i}", api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("Пропустить", callback_data=f"{prefix}_no_{i}")],
         # «По жанру» меняет кнопки под карточкой на выбор жанра (*_pick_*).
         [InlineKeyboardButton("По жанру", callback_data=f"{prefix}_pick_{i}")],
     ]  # «Настроить» на карточке нет — библиотека настраивается из хаба

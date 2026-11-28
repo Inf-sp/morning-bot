@@ -288,7 +288,7 @@ def learning_menu(home: dict):
                  if stats.get("theme") else learning_stats_line(title, stats.get("words"), stats.get("topics")))
         b.newline()
 
-    skip = ([[InlineKeyboardButton("Пропустить", callback_data="a_learn_skip", api_kwargs={"style": "danger"})]]
+    skip = ([[InlineKeyboardButton("Пропустить", callback_data="a_learn_skip")]]
             if (stats or {}).get("theme") else [])  # тема изучена — гаснет в «Темах обучения», сразу следующая
     return b.build_stripped(reply_markup=InlineKeyboardMarkup([*skip, *ikb([
         [("🎯 Запустить тренировку", f"a_train_{code}")],
@@ -606,7 +606,7 @@ def food_card_kb(meals=None, show_mine=True):
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
     ]
     if show_mine:  # «Пропустить» — красная, первой строкой: меню следующей любимой кухни (в отпуске кнопки нет)
-        rows.insert(0, [InlineKeyboardButton("Пропустить", callback_data="food_skip", api_kwargs={"style": "danger"})])
+        rows.insert(0, [InlineKeyboardButton("Пропустить", callback_data="food_skip")])
     if show_mine:
         # Рецепт из моих продуктов под время суток (меню дня — из любых продуктов).
         rows.append([InlineKeyboardButton("🥕 Из моих продуктов", callback_data="food_mine")])

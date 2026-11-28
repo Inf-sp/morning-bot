@@ -88,8 +88,7 @@ _CONFIGURE_LABEL = {"movie": "🎚️ Настроить фильмы и сер�
 def card_keyboard(kind):
     """«Другой…» открывает выбор жанра под карточкой (там же следующая «Новинка»)."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Пропустить", callback_data=f"nov_no_{kind}",
-                              api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("Пропустить", callback_data=f"nov_no_{kind}")],
         [InlineKeyboardButton("По жанру", callback_data=f"nov_pick_{kind}")],
         [InlineKeyboardButton(_CONFIGURE_LABEL.get(kind, "🎚️ Настроить"), callback_data=f"lz_cfg_{kind}")],
         nav_row("m_leisure"),

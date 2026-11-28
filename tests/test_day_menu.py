@@ -493,6 +493,6 @@ def test_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
     assert day_menu.next_cuisine("42", "thai") == "french"  # по кругу
     assert day_menu.next_cuisine("42", "italian") == "french"  # не из любимых — первая любимая
     kb = menu_ui.food_card_kb(["lunch"]).inline_keyboard
-    assert kb[0][0].text == "Пропустить" and kb[0][0].api_kwargs == {"style": "danger"}
+    assert kb[0][0].text == "Пропустить" and not kb[0][0].api_kwargs  # стандартного цвета
     assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
                    for b in row)  # в отпуске — нет

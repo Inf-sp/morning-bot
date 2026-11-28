@@ -111,7 +111,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert card.text == "🎬 Фильм 0\n\nФильм · дата пока неизвестна\n\nОписание."
     assert _labels(card.reply_markup) == [["Пропустить"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
     assert _callbacks(card.reply_markup) == ["lz_prem_x_0", "lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
-    assert card.reply_markup.inline_keyboard[0][0].api_kwargs == {"style": "danger"}
+    assert not card.reply_markup.inline_keyboard[0][0].api_kwargs  # стандартного цвета
     raw = card.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in card.entities]
     assert ("bold", "Фильм 0") in marked

@@ -917,7 +917,7 @@ def reads_card(items, index=0) -> MessageSpec:
         b.spacer()
         b.line(_finish_sentence(about))
     # «Пропустить» — красная, первой строкой: статья уходит из ленты, на её месте — следующая.
-    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_rdone_{index}", api_kwargs={"style": "danger"})]]
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_rdone_{index}")]]
     if len(items) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_reads_{(index - 1) % len(items)}"),
@@ -1175,8 +1175,7 @@ def premiere_card(feed, index=0) -> MessageSpec:
     if about:
         b.spacer()
         b.line(about)
-    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{index}",
-                                  api_kwargs={"style": "danger"})]]
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{index}")]]
     if len(feed) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_prem_{(index - 1) % len(feed)}"),
