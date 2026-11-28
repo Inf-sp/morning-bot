@@ -148,7 +148,7 @@ def _grammar_points(explanation) -> list:
     ben jij.»."""
     sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z])", str(explanation or "").strip())
                  if part.strip()]
-    return [_with_period(sentence) for sentence in sentences[:3]]
+    return [_with_period(sentence) for sentence in sentences[:_EXPLAIN_SENTENCES]]
 
 
 def _grammar_explanation(phrase) -> str:
@@ -165,7 +165,8 @@ def _grammar_explanation(phrase) -> str:
     return text
 
 
-_EXPLAIN_MAX = 420
+_EXPLAIN_MAX = 560
+_EXPLAIN_SENTENCES = 5  # объяснение: что показывает, как строится, мини-примеры, что спрягается, с чем не путать
 
 
 def _grammar_lesson(phrase) -> dict:
@@ -189,20 +190,22 @@ def _grammar_lesson(phrase) -> dict:
         if term and not meaning and sentences and len(sentences[0].split()) <= 3 and ":" not in sentences[0]:
             meaning, sentences = _without_period(sentences[0]), sentences[1:]  # «Zodra» + «Как только.» — значение
         explain = ""
-        for sentence in sentences[:3]:  # разбор — до трёх предложений, не длиннее _EXPLAIN_MAX
+        for sentence in sentences[:_EXPLAIN_SENTENCES]:  # разбор — до пяти предложений, не длиннее _EXPLAIN_MAX
             candidate = f"{explain} {_with_period(sentence)}".strip()
             if len(candidate) > _EXPLAIN_MAX:
                 break
             explain = candidate
         example, translation = phrase.get("more"), phrase.get("more_translation")
+        # Без карточки ИИ значения темы — разные смыслы («продолжать, оставаться»): показываем главное, первое.
+        meaning = re.split(r"\s*[;,·]\s*", str(meaning or ""))[0]
     meaning = _without_period(meaning)
     parts = [part.strip() for part in re.split(r"\s*[;,·]\s*", meaning) if part.strip()] if meaning else []
     # Значения через « · »: первое — с заглавной, остальные — со строчной («Кроме того · к тому же»), аббревиатуры как есть.
     meaning = " · ".join([*parts[:1], *(part if part[:2].isalpha() and part[:2].isupper() else part[:1].lower() + part[1:] for part in parts[1:])])
-    # Примеры — фраза → перевод, без точки в конце: «Hij had trouwens het boek al gelezen → Он, кстати, уже прочитал
-    # книгу»; у карточки — два разных (середина и начало предложения, утверждение и вопрос), без неё — один.
+    # Примеры — фраза → перевод с точкой: «Je moet blijven oefenen → Тебе нужно продолжать тренироваться.»; у
+    # карточки — два разных (середина и начало предложения, утверждение и вопрос), без неё — один.
     pairs = pairs or ([(example, translation)] if example and translation else [])
-    examples = [f"{_without_period(text)} → {_without_period(meaning_ru)}" for text, meaning_ru in pairs[:2]
+    examples = [f"{_without_period(text)} → {_with_period(meaning_ru)}" for text, meaning_ru in pairs[:2]
                 if text and meaning_ru]
     if not examples and example:
         examples = [_without_period(example)]
@@ -261,7 +264,7 @@ def learning_menu(home: dict):
     if lesson["term"]:  # «**Bovendien** (наречие) → Кроме того · к тому же»
         b.spacer()
         b.bold(lesson["term"][:1].upper() + lesson["term"][1:])
-        if lesson["pos"]:  # сокращённо, как в словарях: «(нар.)», «(союз)»
+        if lesson["pos"] and len(lesson["term"].split()) == 1:  # «(нар.)», «(союз)»; у конструкции — без него
             from .learning_entry import pos_abbr
             b.text_line(f" ({pos_abbr(lesson['pos'])})")
         if lesson["meaning"]:

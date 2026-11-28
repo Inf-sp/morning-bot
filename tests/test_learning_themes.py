@@ -1,4 +1,4 @@
-"""Темы обучения: 40 тем B1, включение и выключение, «Пропустить», подпись темы внизу «Обучения»."""
+"""Темы обучения: 41 тема B1, включение и выключение, «Пропустить», подпись темы внизу «Обучения»."""
 import json
 import os
 from pathlib import Path
@@ -26,7 +26,7 @@ def _settings(monkeypatch):
 def test_every_grammar_topic_belongs_to_exactly_one_of_40_themes():
     topics = json.loads(Path("grammar_topics.json").read_text(encoding="utf-8"))["nl"]
     mapped = [topic_id for theme in learning_themes.THEMES for topic_id in theme[4]]
-    assert len(learning_themes.THEMES) == 40 and len(learning_themes.CATEGORIES) == 5
+    assert len(learning_themes.THEMES) == 41 and len(learning_themes.CATEGORIES) == 5
     assert sorted(mapped) == sorted(topic["id"] for topic in topics)  # каждая — ровно в одной теме
     assert learning_themes.theme_of("nl-201") == 22 and learning_themes.label(22) == "Связь предложений (Aanvulling)"
 
@@ -37,9 +37,11 @@ def test_topic_of_day_follows_enabled_themes_and_skip_marks_the_theme_learned(mo
     assert learning_themes.theme_of(first["id"]) == 1  # по порядку: Werkwoordstijden
     learning_themes.mark_done("42", 1)  # «Пропустить»
     nxt = live_language.grammar_of_day("42", "nl", renew=True)
-    assert learning_themes.theme_of(nxt["id"]) == 2 and not learning_themes.is_on("42", 1)
-    learning_themes.toggle("42", 2)  # выключил в настройках
-    assert learning_themes.theme_of(live_language.grammar_of_day("42", "nl", renew=True)["id"]) == 3
+    # Следом — Werkwoordconstructies (№ 41 стоит сразу за временами), затем Perfectum.
+    assert learning_themes.theme_of(nxt["id"]) == 41 and not learning_themes.is_on("42", 1)
+    assert learning_themes.theme_of("nl-223") == 41  # blijven + infinitief — конструкция, не время
+    learning_themes.toggle("42", 41)  # выключил в настройках
+    assert learning_themes.theme_of(live_language.grammar_of_day("42", "nl", renew=True)["id"]) == 2
     learning_themes.toggle("42", 1)  # включил снова — изученная снова в обучении
     assert learning_themes.is_on("42", 1) and 1 not in learning_themes.state("42")["done"]
     for number in range(1, 29):
@@ -66,3 +68,14 @@ def test_explanation_ends_with_a_period():
     text = menu_ui.learning_menu({"has_material": True, "lang_code": "nl",
                                   "live_language": {"id": "nl-201", "topic": "Trouwens", "card": card}}).text
     assert "Сразу после него идёт глагол.\n" in text
+
+
+def test_blijven_card_without_ai_has_one_meaning_full_explanation_and_period():
+    from ui import menu as menu_ui
+    topic = next(item for item in live_language.grammar_topics("nl") if item["id"] == "nl-223")
+    msg = menu_ui.learning_menu({"has_material": True, "lang_code": "nl", "live_language": live_language._as_card(topic),
+                                 "stats": {"words": 192, "theme": learning_themes.label(41)}})
+    assert "Blijven + infinitief → Продолжать что-то делать\n\n" in msg.text
+    assert "Не путай с обычным значением blijven — «оставаться»." in msg.text
+    assert "Пример: Je moet blijven oefenen → Тебе нужно продолжать тренироваться.\n" in msg.text
+    assert msg.text.endswith("Грамматика (Werkwoordconstructies)")

@@ -599,7 +599,7 @@ def test_learning_home_keeps_trainer_and_detective_as_wide_actions():
     assert message.text.split("\n\n")[1:] == [
         "Zodra → Как только",
         "В придаточном предложении глагол стоит в конце: zodra ik thuis ben.",
-        "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу",
+        "Пример: Ik bel je terug zodra ik klaar ben → Я перезвоню тебе, как только закончу.",
         "Твой нидерландский · 120 слов · 14 изученных тем"]
 
 
@@ -623,7 +623,7 @@ def test_grammar_card_is_term_with_part_of_speech_meanings_explanation_and_two_e
         "Используй trouwens, когда хочешь добавить вспомнившуюся информацию к уже начатой теме. Если поставить "
         "слово в начало предложения, после него обычно следует глагол.\n\n"
         "Примеры:\n"
-        "• Hij had trouwens het boek al gelezen → Он, кстати, уже прочитал книгу\n"
+        "• Hij had trouwens het boek al gelezen → Он, кстати, уже прочитал книгу.\n"
         "• Trouwens, heb je hem al gebeld? → Кстати, ты ему уже звонил?\n\n"
         "Твой нидерландский · 192 слова · 37 изученных тем")
     assert "Разбор" not in message.text
