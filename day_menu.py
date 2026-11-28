@@ -208,7 +208,16 @@ def day_cuisine(cid, day) -> str:
     trip = vacation.cuisine(cid)
     if trip:
         return trip
-    return home_cuisine(cid, day)
+    saved = (store.get_profile(cid) or {}).get("cooking_day_menu") or {}
+    from datetime import timedelta
+    previous = saved.get("cuisine") if saved.get("date") == (day - timedelta(days=1)).isoformat() else ""
+    return planned_cuisine(cid, day, previous)
+
+
+def planned_cuisine(cid, day, previous="") -> str:
+    """Кухня дома на этот день по кругу; если вчера (после «Пропустить») уже была она — следующая, без повтора."""
+    cuisine = home_cuisine(cid, day)
+    return next_cuisine(cid, cuisine) if previous and cuisine == previous else cuisine
 
 
 def next_cuisine(cid, current) -> str:

@@ -80,7 +80,8 @@ def _day_menu_message(menu, cid=None):
         from datetime import datetime, timedelta
         import settings as user_settings
         tomorrow = datetime.now(config.TZ).date() + timedelta(days=1)
-        stats = {"tomorrow": day_menu.cuisine_label(day_menu.home_cuisine(cid, tomorrow)),
+        # Завтра — та кухня, что реально будет: после «Пропустить» сегодня — без повтора сегодняшней.
+        stats = {"tomorrow": day_menu.cuisine_label(day_menu.planned_cuisine(cid, tomorrow, menu.get("cuisine"))),
                  "favorites": len(user_settings.cuisines(cid) or [])}
     trip = cid is not None and vacation.active(cid)
     return menu_ui.day_menu(

@@ -541,3 +541,18 @@ def test_short_cooking_is_one_or_two_sentences():
         "Обжарь лук 5 минут. Добавь рис и залей водой.")
     assert day_menu.short_how("Запеки 20 минут") == "Запеки 20 минут."
     assert day_menu.short_how("Очень " * 60) == ""
+
+
+def test_tomorrow_never_repeats_todays_cuisine_after_skip(monkeypatch):
+    from datetime import date
+    monkeypatch.setattr(day_menu._settings(), "cuisines", lambda _cid: ["italian", "georgian", "japanese"])
+    today = date(2026, 11, 28)
+    tomorrow = date(2026, 11, 29)
+    planned = day_menu.home_cuisine("42", tomorrow)
+    skipped_to = day_menu.next_cuisine("42", day_menu.home_cuisine("42", today))
+    assert skipped_to == planned  # «Пропустить» сегодня дал завтрашнюю кухню
+    assert day_menu.planned_cuisine("42", tomorrow, skipped_to) == day_menu.next_cuisine("42", planned)
+    _profile(monkeypatch, {"cooking_day_menu": {"date": today.isoformat(), "cuisine": skipped_to}})
+    import vacation
+    monkeypatch.setattr(vacation, "cuisine", lambda _cid: "")
+    assert day_menu.day_cuisine("42", tomorrow) != skipped_to
