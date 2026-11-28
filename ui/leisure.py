@@ -961,8 +961,9 @@ def leisure_hub_kb():
     """Кино | Музыка | Статьи: Кино и Музыка меняют кнопки на свои разделы на месте (lz_kb_kino, lz_kb_music),
     Статьи — сразу лента. Старые кнопки (lz_prem, movie_reco, tv_reco, music_reco) работают."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Кино", callback_data="lz_kb_kino")],  # в один столбец
-        [InlineKeyboardButton("🎧 Музыка", callback_data="lz_kb_music")],
+        # Кино и Музыка сразу открывают свои премьеры; под «Пропустить» — кнопки раздела.
+        [InlineKeyboardButton("🎬 Кино", callback_data="lz_prem_movie")],  # в один столбец
+        [InlineKeyboardButton("🎧 Музыка", callback_data="lz_prem_music")],
         [InlineKeyboardButton("📰 Статьи", callback_data="lz_reads")],
         [InlineKeyboardButton("🎚️ Настроить библиотеку", callback_data="lz_lib"),
          InlineKeyboardButton("#️⃣ Главная", callback_data="m_menu")],
@@ -1185,6 +1186,11 @@ def premiere_date(kind, item) -> str:
 _RELEASE_TYPES = {"сингл": "Сингл", "EP": "EP"}
 
 
+# Под «Пропустить» в премьерах — разделы: Кино — фильм и сериал дня, Музыка — концерты и артист дня.
+_SECTION_BUTTONS = {"k": (("Фильм", "movie_reco"), ("Сериал", "tv_reco")),
+                    "m": (("Концерты", "lz_concerts"), ("Артист дня", "music_reco"))}
+
+
 def premiere_card(feed, index=0, section="k") -> MessageSpec:
     """Карточка премьер раздела (feed — [(вид, пункт)]): Кино (section «k» — фильмы и сериалы) или Музыка («m» —
     релизы). «🎬 **Имя**» ссылкой, первой в метаданных — что это (Фильм, Сериал, Музыкальный альбом), описание в
@@ -1194,7 +1200,9 @@ def premiere_card(feed, index=0, section="k") -> MessageSpec:
     if not feed:
         b.title("🎧 Релизы недели" if section == "m" else "🎬 Премьеры недели")
         b.line("Новых релизов на этой неделе пока нет." if section == "m" else "Премьер на эту неделю пока нет.")
-        return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
+        return b.build_stripped(reply_markup=InlineKeyboardMarkup([  # разделы — и без премьер
+            *([InlineKeyboardButton(text, callback_data=data)] for text, data in _SECTION_BUTTONS.get(section, ())),
+            nav_row("m_leisure")]))
     index %= len(feed)
     kind, item = feed[index]
     kind = kind if kind in WEEK_PAGES else "movie"
@@ -1217,7 +1225,8 @@ def premiere_card(feed, index=0, section="k") -> MessageSpec:
     if about:
         b.spacer()
         b.line(about)
-    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{section}_{index}")]]
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{section}_{index}")],
+            *([InlineKeyboardButton(text, callback_data=data)] for text, data in _SECTION_BUTTONS[section])]
     if len(feed) > 1:
         rows.append([
             InlineKeyboardButton("◀️", callback_data=f"lz_prem_{section}_{(index - 1) % len(feed)}"),

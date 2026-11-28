@@ -109,8 +109,14 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Карточка ленты: имя, метаданные, описание; ← 1/7 → по кругу, «Назад» — в хаб.
     # Что это за карточка — первой строкой метаданных, сразу дата премьеры (у тестовых фильмов её нет).
     assert card.text == "🎬 Фильм 0\n\nФильм · дата пока неизвестна\n\nОписание."
-    assert _labels(card.reply_markup) == [["Пропустить"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(card.reply_markup) == ["lz_prem_x_k_0", "lz_prem_k_6", "noop", "lz_prem_k_1", "m_leisure", "m_menu"]
+    # Под «Пропустить» — разделы Кино: фильм и сериал дня.
+    assert _labels(card.reply_markup) == [["Пропустить"], ["Фильм"], ["Сериал"], ["◀️", "1/7", "▶️"],
+                                          ["⬅️ Назад", "#️⃣ Главная"]]
+    assert _callbacks(card.reply_markup) == ["lz_prem_x_k_0", "movie_reco", "tv_reco", "lz_prem_k_6", "noop",
+                                             "lz_prem_k_1", "m_leisure", "m_menu"]
+    music = leisure_ui.premiere_card([("music", {"title": "SUIATSU", "artist": "Stray Kids"})], 0, "m")
+    assert _labels(music.reply_markup)[:3] == [["Пропустить"], ["Концерты"], ["Артист дня"]]
+    assert _labels(leisure_ui.premiere_card([], 0, "m").reply_markup)[:2] == [["Концерты"], ["Артист дня"]]
     assert not card.reply_markup.inline_keyboard[0][0].api_kwargs  # стандартного цвета
     raw = card.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in card.entities]
@@ -123,7 +129,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     raw = tab.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in tab.entities]
     assert ("bold", "Суд") in marked and ("text_link", "Суд") in marked  # имя — жирная ссылка
-    assert _labels(tab.reply_markup) == [["Пропустить"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
+    assert _labels(tab.reply_markup) == [["Пропустить"], ["Фильм"], ["Сериал"], ["⬅️ Назад", "#️⃣ Главная"]]  # одна — без стрелок
 
     album = leisure_ui.premiere_card([("music", {
         "title": "Blue Rev", "artist": "Alvvays", "date": "2026-10-16", "genre_label": "Инди", "country_label": "🇨🇦 CA",
@@ -134,7 +140,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
                           "Мечтательный инди-поп с шумными гитарами. Третий альбом группы.")
     empty = leisure_ui.premiere_card([])
     assert empty.text == "🎬 Премьеры недели\n\nПремьер на эту неделю пока нет."
-    assert _callbacks(empty.reply_markup) == ["m_leisure", "m_menu"]
+    assert _callbacks(empty.reply_markup) == ["movie_reco", "tv_reco", "m_leisure", "m_menu"]  # разделы — и без премьер
 
 
 def test_premieres_feed_mixes_three_best_of_each_kind_newest_first(monkeypatch):
@@ -600,7 +606,7 @@ def test_hub_open_reads_caches_without_network_or_ai(monkeypatch):
 
     text = bot.sent[0]["text"]
     assert text.startswith("🍿 Досуг на сегодня · Alkmaar\n\n") and "Восставший" not in text  # фильм — кнопкой
-    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_kb_kino"
+    assert _callbacks(bot.sent[0]["reply_markup"])[0] == "lz_prem_movie"  # Кино — сразу премьеры
 
 
 def test_runtime_label_and_weekday_limit():
