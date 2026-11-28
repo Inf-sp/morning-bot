@@ -581,7 +581,7 @@ async def send_weather(bot, cid, mode="today", status=None, reply_markup=None):
             icon, _sp, label = period_title(p).partition(" ")
             parts = [degrees(p["tmax"]), f"ветер {_speed_range(p['winds'])} м/с"]
             if wet:
-                parts.append(f"🌧️ дождь {p['rain']:.0f}%")
+                parts.append(f"дождь {p['rain']:.0f}%")  # значок дождя — уже в начале строки
             if wet and p.get("tmin", p["tmax"]) <= 0:
                 parts.append("гололёд")
             periods.append({"icon": icon, "label": label, "value": " · ".join(parts)})
