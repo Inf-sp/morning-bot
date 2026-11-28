@@ -462,7 +462,8 @@ def day_menu(menu, *, cuisine_label, intro="", flag="", show_mine=True, stats=No
     for label, dish in rows:
         b.spacer()
         how = _cooking_text(dish.get("how"))
-        b.bold(f"{label} — {dish['name']}" + (":" if how else ""))
+        name = re.sub(r"\s*\([^)]*\)", "", str(dish["name"])).strip() or dish["name"]  # без пояснения в скобках
+        b.bold(f"{label} — {name}" + (":" if how else ""))
         if how:
             b.text_line(f" {how}")
         b.newline()

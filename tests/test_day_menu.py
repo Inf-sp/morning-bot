@@ -555,3 +555,11 @@ def test_tomorrow_never_repeats_todays_cuisine_after_skip(monkeypatch):
     import vacation
     monkeypatch.setattr(vacation, "cuisine", lambda _cid: "")
     assert day_menu.day_cuisine("42", tomorrow) != skipped_to
+
+
+def test_dish_name_has_no_description_in_brackets():
+    assert day_menu.dish_name("Чакапули (баранина с тархуном и ткемали)") == "Чакапули"
+    msg = menu_ui.day_menu({"cuisine": "georgian", "dishes": {
+        "breakfast": {"name": "Лаваш с сыром (горячий лаваш с сулугуни)", "note": "горячий лаваш с сулугуни"}}},
+        cuisine_label="Грузинская")
+    assert "Завтрак — Лаваш с сыром" in msg.text and "(" not in msg.text

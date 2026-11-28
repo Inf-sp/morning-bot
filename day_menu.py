@@ -302,6 +302,11 @@ _HOW_BATCH = 50  # ночной прогрев: столько запасных 
 _HOW_BATCHES = 2
 
 
+def dish_name(name) -> str:
+    """Название блюда без пояснения в скобках: «Чакапули (баранина с тархуном)» → «Чакапули»."""
+    return re.sub(r"\s*\([^)]*\)", "", str(name or "")).strip() or str(name or "").strip()
+
+
 def short_how(text) -> str:
     """Приготовление — не больше двух предложений и _HOW_MAX символов, с точкой в конце; длиннее — ""."""
     text = " ".join(str(text or "").split()).strip()
@@ -472,7 +477,7 @@ def _prompt(cuisine, available, avoided_names, meals=MEALS, restrictions_text=""
            "традиционные блюда не из примеров.\n" if avoided_names else "") +
         f"{limits}{fridge}{avoid}"
         + (_TRIP_DISH_RULES + _TRIP_EXTRA_RULE if trip else
-           "name — настоящее общепринятое название блюда, как в кулинарной книге, без выдуманных добавок (для "
+           "name — настоящее общепринятое название блюда, как в кулинарной книге, без пояснений в скобках и выдуманных добавок (для "
            "итальянской, французской и мексиканской кухни — оригинальное латиницей, для остальных — по-русски); "
            "note — пояснение в скобках после названия, по-русски строчными, без точки: простое блюдо — 2–3 основных "
            "ингредиента через запятую («помидоры, сыр, базилик»), сложное — коротко вкус или соус («курица в "
@@ -567,6 +572,7 @@ def build_day_menu(cid, now=None, cuisine=None, avoid=()) -> dict:
     for meal in meals:
         raw = data.get(meal) if isinstance(data.get(meal), dict) else {}
         name, note = _clean(raw.get("name"), _NAME_MAX), _clean(raw.get("note"), _TRIP_NOTE_MAX if trip else _NOTE_MAX)
+        name = dish_name(name)  # «Лаваш с сыром (горячий лаваш с сулугуни)» → «Лаваш с сыром»
         fits = (bool(name) and fits_restrictions({"name": name, "note": note}, restrictions)
                 and (trip or fits_meal({"name": name}, meal)))  # завтрак — не дольше 10 минут
         if label and fits and name.casefold() not in used:
