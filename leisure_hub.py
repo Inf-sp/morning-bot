@@ -819,37 +819,55 @@ _PREMIERE_NOTES_WAIT = 10  # описания ленты при открытии
 _NOTES_TASKS = {}  # запрос описаний чата уже идёт: листание не плодит запросы к AI
 
 
+PREMIERE_SECTIONS = {"k": ("movie", "series"), "m": ("music",)}  # Кино — фильмы и сериалы, Музыка — релизы
+
+
+def _premiere_section(arg) -> tuple:
+    """lz_prem_* → (раздел, номер, пропустить): «movie» / «series» / «k_3» — Кино, «music» / «m_3» — Музыка,
+    «x_k_3» — «Пропустить»; старые «3», «x_3» и голая lz_prem — Кино."""
+    skip = arg.startswith("x_")
+    arg = arg[2:] if skip else arg
+    head, _sep, rest = arg.partition("_")
+    if head in ("k", "m"):
+        return head, rest, skip
+    if head == "music":
+        return "m", "", skip
+    return "k", arg if arg.isdigit() else "", skip
+
+
 async def send_week_premieres(bot, cid, arg="", q=None):
-    """«🆕 Премьеры»: лента карточек с постером или обложкой — фильмы, сериалы и музыка вперемешку
-    (premieres_feed), ← n/N → по кругу в том же сообщении (lz_prem_<n>). Старые кнопки вида (lz_prem_movie,
-    lz_prem_movie_3) открывают ленту на первой карточке этого вида."""
-    feed = await asyncio.to_thread(premieres_feed, cid)
-    if arg.startswith("x_"):  # «Пропустить»: премьера уходит навсегда, на её месте — следующая
-        arg = arg[2:]
-        if feed and arg.isdigit():
-            await asyncio.to_thread(hide_premiere, cid, *feed[int(arg) % len(feed)])
-            feed = await asyncio.to_thread(premieres_feed, cid)
-    if any(not item.get("note") for _kind, item in feed):
+    """Премьеры — два отдельных экрана: Кино (фильмы и сериалы, lz_prem_movie, листание lz_prem_k_<n>) и Музыка
+    (релизы, lz_prem_music, lz_prem_m_<n>); музыка не попадает в кино и наоборот. Карточка с постером или
+    обложкой, ← n/N → по кругу внутри раздела в том же сообщении."""
+    section, number, skip = _premiere_section(arg)
+    kinds = PREMIERE_SECTIONS[section]
+
+    async def load():
+        full = await asyncio.to_thread(premieres_feed, cid)
+        return full, [entry for entry in full if entry[0] in kinds]
+
+    full, feed = await load()
+    if skip and feed and number.isdigit():  # «Пропустить»: премьера уходит навсегда, на её месте — следующая
+        await asyncio.to_thread(hide_premiere, cid, *feed[int(number) % len(feed)])
+        full, feed = await load()
+    if any(not item.get("note") for _kind, item in full):
         task = _NOTES_TASKS.get(str(cid))
         if task is None or task.done():
-            task = _NOTES_TASKS[str(cid)] = util.background(describe_premieres(feed), "premiere notes")
-        if not arg.isdigit():  # открытие ленты ждёт описания; листание — нет
+            task = _NOTES_TASKS[str(cid)] = util.background(describe_premieres(full), "premiere notes")
+        if not number.isdigit():  # открытие ленты ждёт описания; листание — нет
             try:
                 await asyncio.wait_for(asyncio.shield(task), _PREMIERE_NOTES_WAIT)
-                feed = await asyncio.to_thread(premieres_feed, cid)
+                full, feed = await load()
             except Exception:
                 _log.info("premieres: notes not ready cid=%s", cid)
-    kinds = [kind for kind, _item in feed]
-    head = arg.partition("_")[0]
-    index = (int(arg) % len(feed) if feed and arg.isdigit()
-             else kinds.index(head) if head in kinds else 0)
+    index = int(number) % len(feed) if feed and number.isdigit() else 0
     kind, item = feed[index] if feed else ("", {})
     if kind in ("movie", "series") and not item.get("trailer_url") and item.get("id"):
         item = {**item, "trailer_url": await _premiere_trailer(kind, item)}
         feed[index] = (kind, item)
     image = await _premiere_image(kind, item) if feed else ""
-    await _show_card(bot, cid, leisure_ui.premiere_card(feed, index), image, q)
-    if any(not item.get("country_label") for _kind, item in feed):  # страна — в фоне, к следующему открытию
+    await _show_card(bot, cid, leisure_ui.premiere_card(feed, index, section), image, q)
+    if any(not item.get("country_label") for _kind, item in full):  # страна — в фоне, к следующему открытию
         util.background(asyncio.to_thread(premieres_feed, cid, None, True), "premiere countries")
     _refresh_favorite_releases(cid)  # релизы любимых сегодня ещё не проверялись — в фоне, к следующему открытию
 

@@ -1201,15 +1201,15 @@ def premiere_date(kind, item) -> str:
 _RELEASE_TYPES = {"сингл": "Сингл", "EP": "EP"}
 
 
-def premiere_card(feed, index=0) -> MessageSpec:
-    """Карточка ленты «Премьеры» (feed — [(вид, пункт)], фильмы, сериалы и музыка вперемешку): «🎬 **Имя**» ссылкой,
-    первой в метаданных — что это (Фильм, Сериал, Музыкальный альбом), описание в одно-два предложения; сверху
-    красная «Пропустить» (lz_prem_x_<n>), ← n/N → по кругу по всей ленте, «Назад» — в хаб. Картинку (постер,
-    обложку) прикладывает обработчик."""
+def premiere_card(feed, index=0, section="k") -> MessageSpec:
+    """Карточка премьер раздела (feed — [(вид, пункт)]): Кино (section «k» — фильмы и сериалы) или Музыка («m» —
+    релизы). «🎬 **Имя**» ссылкой, первой в метаданных — что это (Фильм, Сериал, Музыкальный альбом), описание в
+    одно-два предложения; сверху «Пропустить» (lz_prem_x_<раздел>_<n>), ← n/N → по кругу внутри раздела
+    (lz_prem_<раздел>_<n>), «Назад» — в хаб. Картинку (постер, обложку) прикладывает обработчик."""
     b = MessageBuilder()
     if not feed:
-        b.title("🆕 Премьеры недели")
-        b.line("Премьер на эту неделю пока нет.")
+        b.title("🎧 Релизы недели" if section == "m" else "🎬 Премьеры недели")
+        b.line("Новых релизов на этой неделе пока нет." if section == "m" else "Премьер на эту неделю пока нет.")
         return b.build_stripped(reply_markup=InlineKeyboardMarkup([nav_row("m_leisure")]))
     index %= len(feed)
     kind, item = feed[index]
@@ -1233,12 +1233,12 @@ def premiere_card(feed, index=0) -> MessageSpec:
     if about:
         b.spacer()
         b.line(about)
-    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{index}")]]
+    rows = [[InlineKeyboardButton("Пропустить", callback_data=f"lz_prem_x_{section}_{index}")]]
     if len(feed) > 1:
         rows.append([
-            InlineKeyboardButton("◀️", callback_data=f"lz_prem_{(index - 1) % len(feed)}"),
+            InlineKeyboardButton("◀️", callback_data=f"lz_prem_{section}_{(index - 1) % len(feed)}"),
             InlineKeyboardButton(f"{index + 1}/{len(feed)}", callback_data="noop"),
-            InlineKeyboardButton("▶️", callback_data=f"lz_prem_{(index + 1) % len(feed)}"),
+            InlineKeyboardButton("▶️", callback_data=f"lz_prem_{section}_{(index + 1) % len(feed)}"),
         ])
     rows.append(nav_row("m_leisure"))
     return b.build_stripped(reply_markup=InlineKeyboardMarkup(rows))

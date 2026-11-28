@@ -110,7 +110,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     # Что это за карточка — первой строкой метаданных, сразу дата премьеры (у тестовых фильмов её нет).
     assert card.text == "🎬 Фильм 0\n\nФильм · дата пока неизвестна\n\nОписание."
     assert _labels(card.reply_markup) == [["Пропустить"], ["◀️", "1/7", "▶️"], ["⬅️ Назад", "#️⃣ Главная"]]
-    assert _callbacks(card.reply_markup) == ["lz_prem_x_0", "lz_prem_6", "noop", "lz_prem_1", "m_leisure", "m_menu"]
+    assert _callbacks(card.reply_markup) == ["lz_prem_x_k_0", "lz_prem_k_6", "noop", "lz_prem_k_1", "m_leisure", "m_menu"]
     assert not card.reply_markup.inline_keyboard[0][0].api_kwargs  # стандартного цвета
     raw = card.text.encode("utf-16-le")
     marked = [(e.type, raw[e.offset * 2:(e.offset + e.length) * 2].decode("utf-16-le")) for e in card.entities]
@@ -133,7 +133,7 @@ def test_week_premieres_list_the_same_items_hub_shows_each_day(monkeypatch):
     assert album.text == ("🎧 Alvvays — «Blue Rev»\n\nМузыкальный альбом · 16 октября 2026 · Инди · 🇨🇦 CA\n\n"
                           "Мечтательный инди-поп с шумными гитарами. Третий альбом группы.")
     empty = leisure_ui.premiere_card([])
-    assert empty.text == "🆕 Премьеры недели\n\nПремьер на эту неделю пока нет."
+    assert empty.text == "🎬 Премьеры недели\n\nПремьер на эту неделю пока нет."
     assert _callbacks(empty.reply_markup) == ["m_leisure", "m_menu"]
 
 
@@ -470,7 +470,7 @@ def test_premieres_open_waits_for_notes_and_fetches_country_in_background(monkey
     monkeypatch.setattr(leisure_hub, "_refresh_favorite_releases", lambda _cid: None)
 
     async def main():
-        await leisure_hub.send_week_premieres(None, "notes-42")
+        await leisure_hub.send_week_premieres(None, "notes-42", "music")
         for _ in range(5):
             await asyncio.sleep(0.01)
 
@@ -908,3 +908,30 @@ def test_reads_of_the_day_come_from_different_themes(monkeypatch):
              {"title": "c", "link": "3", "theme": "design"}, {"title": "d", "link": "4", "theme": "photo"}]
     monkeypatch.setattr(leisure_reads, "top", lambda *_a, **_k: items)
     assert [item["link"] for item in leisure_reads.top_mixed("42")] == ["1", "3", "4"]
+
+
+def test_movie_premieres_and_music_releases_are_separate_screens(monkeypatch):
+    feed = [("movie", {"title": "Wicked", "date": "2026-11-25"}), ("music", {"title": "SUIATSU", "artist": "Stray Kids"}),
+            ("series", {"name": "Нили", "release_date": "2026-11-26"})]
+    shown = []
+    monkeypatch.setattr(leisure_hub, "premieres_feed", lambda *_a, **_k: list(feed))
+    monkeypatch.setattr(leisure_hub, "describe_premieres", lambda _feed: asyncio.sleep(0))
+    monkeypatch.setattr(leisure_hub, "_refresh_favorite_releases", lambda _cid: None)
+
+    async def show(_bot, _cid, msg, _image, _q=None):
+        shown.append(msg)
+
+    async def no_image(*_a):
+        return ""
+
+    monkeypatch.setattr(leisure_hub, "_show_card", show)
+    monkeypatch.setattr(leisure_hub, "_premiere_image", no_image)
+    for arg in ("movie", "k_1", "music"):
+        asyncio.run(leisure_hub.send_week_premieres(None, "42", arg))
+    kino, kino_next, music = (msg.text for msg in shown)
+    assert "Wicked" in kino and "1/2" in str(_labels(shown[0].reply_markup))
+    assert "Нили" in kino_next and "SUIATSU" not in kino + kino_next  # в Кино музыки нет
+    assert "SUIATSU" in music and "Wicked" not in music
+    assert _callbacks(shown[2].reply_markup)[0] == "lz_prem_x_m_0"
+    assert leisure_hub._premiere_section("3") == ("k", "3", False)  # старые кнопки из истории — Кино
+    assert leisure_hub._premiere_section("x_m_2") == ("m", "2", True)
