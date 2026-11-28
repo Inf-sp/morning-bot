@@ -126,7 +126,7 @@ def notice(title, text):
 
 
 def card_refresh_menu(status="", *, title="🔄 Обновить карточки",
-                      hint="Выбери карточку для принудительного обновления кэша."):
+                      hint="Раздел соберётся заново, без сохранённого — если там пусто или устарело."):
     b = MessageBuilder()
     b.bold(title)
     b.newline()

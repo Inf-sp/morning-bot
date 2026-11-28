@@ -269,7 +269,7 @@ async def send_leisure_refresh_menu(bot, cid, q=None, *, status=""):
     rows += [[InlineKeyboardButton(label, callback_data=f"adm_refresh_card_lz_{key}")] for key, label in _LEISURE_PARTS]
     rows.append(nav_row("adm_refresh_cards"))
     await _show(bot, cid, ui.card_refresh_menu(status, title="🍿 Обновить Досуг",
-                                               hint="Выбери, что обновить: весь Досуг или одну часть."),
+                                               hint="Весь Досуг или одна часть — соберётся заново, без сохранённого."),
                 InlineKeyboardMarkup(rows), q)
 
 
