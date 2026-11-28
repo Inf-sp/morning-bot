@@ -784,12 +784,12 @@ async def send_notif(bot, cid, q=None):
                            reply_markup=kb, transient=True)
 
 async def send_notif_kind(bot, cid, kind, q=None):
-    """Экран одной рассылки: «Присылать» (вкл/выкл) и варианты времени."""
+    """Экран одной рассылки: «✅ Включено» (зелёная) / «□ Включить» и варианты времени."""
     if kind not in dict(NOTIF_TYPES):
         await send_notif(bot, cid, q)
         return
     on = notif_on(cid, kind)
-    rows = [[InlineKeyboardButton(("✅ " if on else "□ ") + "Присылать", callback_data=f"set_notiftgl_{kind}")]]
+    rows = [[InlineKeyboardButton("✅ Включено" if on else "□ Включить", callback_data=f"set_notiftgl_{kind}")]]
     current = notif_time(cid, kind)
     slots = NOTIF_TIMES.get(kind, ("", ()))[1]
     for slot in slots if len(slots) > 1 else ():  # одно время (праздники — 18:00) не выбирается

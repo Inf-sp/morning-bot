@@ -63,7 +63,7 @@ def test_notification_screen_toggles_and_picks_time(monkeypatch):
     assert saved["notif_time_evening_weather"] == "18:00" and saved["notif_evening_weather"] is True
     text, labels, callbacks = shown[-1]
     assert text.startswith("🔔 План на завтра · 18:00")
-    assert labels[:4] == [["✅ Присылать"], ["✅ 18:00"], ["□ 20:00"], ["□ 21:00"]]
+    assert labels[:4] == [["✅ Включено"], ["✅ 18:00"], ["□ 20:00"], ["□ 21:00"]]
     assert callbacks[-1] == ["set_notif", "m_menu"]
 
 
