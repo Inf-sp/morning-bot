@@ -113,7 +113,6 @@ def test_day_menu_screen_shows_dishes_with_short_cooking_and_no_meal_buttons():
     )
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
-        [("Пропустить", "food_skip")],  # первой строкой: меню следующей кухни; кнопок приёмов пищи нет
         [("🥕 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
     ]
@@ -497,16 +496,16 @@ def test_cuisine_fact_rotates_daily_without_repeats(monkeypatch):
     assert day_menu.cuisine_fact("42", "unknown") == ""
 
 
-def test_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
+def test_old_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
     import settings
     monkeypatch.setattr(settings, "cuisines", lambda _cid: ["french", "japanese", "thai"])
     assert day_menu.next_cuisine("42", "french") == "japanese"
     assert day_menu.next_cuisine("42", "thai") == "french"  # по кругу
     assert day_menu.next_cuisine("42", "italian") == "french"  # не из любимых — первая любимая
-    kb = menu_ui.food_card_kb().inline_keyboard
-    assert kb[0][0].text == "Пропустить" and not kb[0][0].api_kwargs  # стандартного цвета
-    assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(show_mine=False).inline_keyboard
-                   for b in row)  # в отпуске — нет
+    for show_mine in (True, False):  # кнопки «Пропустить» нет; старая из истории чата — работает
+        assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(show_mine).inline_keyboard
+                       for b in row)
+    assert routing.resolve_callback_handler("food_skip")["handled"]
 
 
 def test_fallback_dishes_get_short_cooking_from_dictionary(monkeypatch):
