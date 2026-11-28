@@ -344,6 +344,14 @@ def _food_recipe(c):
         cuisine=None if cuisine in ("", "any") else cuisine))
 
 
+def _food_skip(c):
+    """«Пропустить» под меню дня: меню следующей любимой кухни на весь день."""
+    import day_menu
+    current = (day_menu.get_cached_day_menu(c.cid) or {}).get("cuisine")
+    return c.status(lambda status: menu.send_food_menu(
+        c.bot, c.cid, status=status, refresh=True, cuisine=day_menu.next_cuisine(c.cid, current)))
+
+
 def _card_args(c):
     """token, short_id, genre_index, page из «op:token:id:genre:page»."""
     _op, token, short_id, genre_index, page = c.data.split(":", 4)
@@ -472,6 +480,7 @@ ROUTES = (
     # Старая «Другое меню на сегодня» (food_pick) из истории чата: кухня → новое меню на день на месте прежнего
     # (предпочтения не меняются). m_food_next — новое меню той же кухни. food_meal_* — старые сообщения.
     R(("food_pick", "food_meal_*"), _swap_kb(lambda c: menu_ui.food_cuisine_kb(settings.CUISINE_OPTIONS))),
+    R("food_skip", _replaced(_food_skip)),
     R("food_card", _swap_kb(lambda c: menu_ui.food_card_kb(settings.food_meals(c.cid),
                                                          show_mine=not vacation.active(c.cid)))),
     R("food_go_*", _picked(_food_recipe)),

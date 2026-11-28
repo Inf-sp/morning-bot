@@ -605,6 +605,8 @@ def food_card_kb(meals=None, show_mine=True):
     rows = [
         [InlineKeyboardButton(label, callback_data=f"a_recipe_{meal}") for meal, label in _MEAL_NAMES if meal in meals],
     ]
+    if show_mine:  # «Пропустить» — красная, первой строкой: меню следующей любимой кухни (в отпуске кнопки нет)
+        rows.insert(0, [InlineKeyboardButton("Пропустить", callback_data="food_skip", api_kwargs={"style": "danger"})])
     if show_mine:
         # Рецепт из моих продуктов под время суток (меню дня — из любых продуктов).
         rows.append([InlineKeyboardButton("🥕 Из моих продуктов", callback_data="food_mine")])

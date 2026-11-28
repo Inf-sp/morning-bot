@@ -289,11 +289,11 @@ def build_wardrobe_keyboard(cid=None):
     # Чемодан дома — в «Настройки → ✈️ Отпуск»; в Гардеробе он только в отпуске («Мой чемодан»).
     # «Новый образ» — весь образ заново (стандартного цвета). Кнопок отдельных вещей нет; старые w_sw_<n> из
     # истории чата по-прежнему меняют одну вещь.
-    rows = [
-        [("Новый образ", "w_look")],
-        [("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")],
-    ]
-    return _kb(rows)
+    # «Пропустить» — красная, первой строкой: образ не подошёл — сразу новый (тот же w_look, что «Новый образ»).
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Пропустить", callback_data="w_look", api_kwargs={"style": "danger"})],
+        *_kb([[("🎚️ Настроить шкаф", "w_closet"), ("#️⃣ Главная", "m_menu")]]).inline_keyboard,
+    ])
 
 
 _wardrobe_home_kb = build_wardrobe_keyboard

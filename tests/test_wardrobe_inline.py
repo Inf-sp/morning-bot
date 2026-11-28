@@ -268,7 +268,7 @@ def test_cached_home_edits_once_without_loading_message(monkeypatch):
 
 def test_wardrobe_home_actions_use_one_column():
     assert _labels(wardrobe.build_wardrobe_keyboard()) == [
-        ["Новый образ"],  # без образа — только он
+        ["Пропустить"],  # красная, первой строкой: сразу новый образ
         ["🎚️ Настроить шкаф", "#️⃣ Главная"],
     ]
     assert "📝 Выбрать предпочтения" not in sum(_labels(wardrobe.build_wardrobe_keyboard()), [])
@@ -629,7 +629,7 @@ def test_old_item_buttons_still_swap_one_item(monkeypatch):
     import vacation
     monkeypatch.setattr(vacation, "active", lambda _cid: False)
     kb = wardrobe.build_wardrobe_keyboard("42")
-    assert _labels(kb)[0] == ["Новый образ"]  # кнопок вещей под образом нет; старые w_sw_<n> работают
+    assert _labels(kb)[0] == ["Пропустить"]  # кнопок вещей под образом нет; старые w_sw_<n> работают
     assert wardrobe_ui.item_button_label("Nike Air Max", "Обувь") == "Обувь"
 
     tee, shirt, polo = ({"id": n, "zone": "Верх", "name": n} for n in ("tee", "shirt", "polo"))

@@ -208,6 +208,15 @@ def day_cuisine(cid, day) -> str:
     return home_cuisine(cid, day)
 
 
+def next_cuisine(cid, current) -> str:
+    """«Пропустить» в Кухне: следующая любимая кухня после current (по кругу); любимых нет — следующая из всех."""
+    pool = _settings().cuisines(cid) or [key for key, _label in _settings().CUISINE_OPTIONS]
+    if not pool:
+        return current
+    index = pool.index(current) if current in pool else -1
+    return pool[(index + 1) % len(pool)]
+
+
 def home_cuisine(cid, day) -> str:
     pool = _settings().cuisines(cid) or [key for key, _label in _settings().CUISINE_OPTIONS]
     return pool[day.toordinal() % len(pool)]

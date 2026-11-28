@@ -112,6 +112,7 @@ def test_day_menu_screen_lists_three_dishes_without_recipes():
     )
     rows = [[(b.text, b.callback_data) for b in row] for row in msg.reply_markup.inline_keyboard]
     assert rows == [
+        [("Пропустить", "food_skip")],  # красная, первой строкой: меню следующей кухни
         [("Завтрак", "a_recipe_breakfast"), ("Обед", "a_recipe_lunch"), ("Ужин", "a_recipe_dinner")],
         [("🥕 Из моих продуктов", "food_mine")],
         [("🎚️ Настроить продукты", "as_fridge_home"), ("#️⃣ Главная", "m_menu")],
@@ -191,7 +192,7 @@ def test_menu_has_only_chosen_meals_and_matching_buttons(monkeypatch):
 
     assert list(menu_data["dishes"]) == ["dinner"]
     assert "Завтрак" not in msg.text and "• Ужин — " in msg.text
-    assert [(b.text, b.callback_data) for b in msg.reply_markup.inline_keyboard[0]] == [("Ужин", "a_recipe_dinner")]
+    assert [(b.text, b.callback_data) for b in msg.reply_markup.inline_keyboard[1]] == [("Ужин", "a_recipe_dinner")]
 
 
 def test_vegetarian_menu_replaces_meat_dishes(monkeypatch):
@@ -483,3 +484,15 @@ def test_cuisine_fact_rotates_daily_without_repeats(monkeypatch):
     assert len(set(shown)) == 3  # новый день — новый факт
     assert day_menu.cuisine_fact("42", "italian", days[-1]) == shown[-1]  # весь день — один
     assert day_menu.cuisine_fact("42", "unknown") == ""
+
+
+def test_skip_in_kitchen_goes_to_the_next_favourite_cuisine(monkeypatch):
+    import settings
+    monkeypatch.setattr(settings, "cuisines", lambda _cid: ["french", "japanese", "thai"])
+    assert day_menu.next_cuisine("42", "french") == "japanese"
+    assert day_menu.next_cuisine("42", "thai") == "french"  # по кругу
+    assert day_menu.next_cuisine("42", "italian") == "french"  # не из любимых — первая любимая
+    kb = menu_ui.food_card_kb(["lunch"]).inline_keyboard
+    assert kb[0][0].text == "Пропустить" and kb[0][0].api_kwargs == {"style": "danger"}
+    assert not any(b.callback_data == "food_skip" for row in menu_ui.food_card_kb(["lunch"], show_mine=False).inline_keyboard
+                   for b in row)  # в отпуске — нет
